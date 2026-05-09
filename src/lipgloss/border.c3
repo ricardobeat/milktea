@@ -70,9 +70,7 @@ fn String Border.wrap(self, String input) {
     line_start = 0;
     for (usz i = 0; i <= input.len; i++) {
         if (i == input.len || input[i] == '\n') {
-            String line = input[line_start..(i == 0 ? 0 : i - 1)];
-            // Re-slice; using exclusive form is simpler:
-            line = input[line_start:i - line_start];
+            String line = input[line_start:i - line_start];
             out.append_string(self.left);
             out.append_string(line);
             for (usz p = (usz)string_width(line); p < max_width; p++) out.append_char(' ');

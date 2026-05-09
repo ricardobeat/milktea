@@ -60,6 +60,11 @@ fn int string_width(String s) {
             if (cp >= 0xf900 && cp <= 0xfaff) { w += 2; continue; }
             // Enclosed CJK
             if (cp >= 0x3000 && cp <= 0x303f) { w += 2; continue; }
+            // Narrow symbols (width 1 in most terminals)
+            if (cp >= 0x2100 && cp <= 0x21ff) { w += 1; continue; } // Letterlike, Number Forms, Arrows
+            if (cp >= 0x2200 && cp <= 0x22ff) { w += 1; continue; } // Mathematical Operators
+            if (cp >= 0x2300 && cp <= 0x23ff) { w += 1; continue; } // Miscellaneous Technical
+            if (cp >= 0x25a0 && cp <= 0x25ff) { w += 1; continue; } // Geometric Shapes
             // Box drawing and block elements are narrow (width 1)
             if (cp >= 0x2500 && cp <= 0x257f) { w += 1; continue; }
             if (cp >= 0x2580 && cp <= 0x259f) { w += 1; continue; }
@@ -190,7 +195,9 @@ fn String Style.render(self, String input) {
         for (int j = 0; j < self.pad_left; j++) styled.append_char(' ');
         styled.append_string(line);
         int current_len = string_width(line) + self.pad_left;
-        for (int j = current_len; j < target_width; j++) styled.append_char(' ');
+        int pad_end = target_width - self.pad_right;
+        if (pad_end < current_len) pad_end = current_len;
+        for (int j = current_len; j < pad_end; j++) styled.append_char(' ');
         for (int j = 0; j < self.pad_right; j++) styled.append_char(' ');
 
         String styled_str = styled.str_view();
