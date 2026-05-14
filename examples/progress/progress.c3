@@ -120,7 +120,7 @@ fn tea::View ProgressModel.view(ProgressModel* self) @dynamic {
 
 fn int main() {
     ProgressModel m = {};
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }

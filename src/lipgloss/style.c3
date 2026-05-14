@@ -148,6 +148,37 @@ fn Style Style.set_border(self, Border b) {
     return s;
 }
 
+// Shorthand methods — shorter names for common operations.
+// These coexist with the longer names for backwards compatibility.
+
+fn Style Style.with_fg(self, String hex) {
+    return self.foreground(color_hex(hex));
+}
+
+fn Style Style.with_bg(self, String hex) {
+    return self.background(color_hex(hex));
+}
+
+fn Style Style.with_bold(self, bool v) {
+    return self.set_bold(v);
+}
+
+fn Style Style.with_italic(self, bool v) {
+    return self.set_italic(v);
+}
+
+fn Style Style.with_underline(self, bool v) {
+    return self.set_underline(v);
+}
+
+fn Style Style.with_border(self, Border b) {
+    return self.set_border(b);
+}
+
+fn Style Style.with_width(self, int width) {
+    return self.set_width(width);
+}
+
 fn String Style.render(self, String input) {
     DString out = dstring::temp();
 

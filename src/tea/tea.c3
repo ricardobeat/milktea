@@ -1,5 +1,8 @@
 module tea;
 
+import std::core::dstring;
+import std::thread;
+
 // Cursor shapes (matches Go tea.CursorShape constants)
 enum CursorShape : int {
     CURSOR_BLOCK,
@@ -40,6 +43,39 @@ fn Cursor new_cursor(int x, int y) {
     return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
 }
 
+// View builder methods — enable fluent declarative View construction.
+// Example: return new_view("hello").set_cursor(5, 3).set_alt_screen(true);
+
+fn View View.set_cursor(self, int x, int y) {
+    View v = self;
+    v.has_cursor = true;
+    v.cursor = new_cursor(x, y);
+    return v;
+}
+
+fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink) {
+    View v = self;
+    v.has_cursor = true;
+    v.cursor = { .x = x, .y = y, .shape = shape, .blink = blink };
+    return v;
+}
+
+fn View View.set_alt_screen(self, bool on) {
+    View v = self;
+    v.alt_screen = on;
+    return v;
+}
+
+// viewf creates a formatted View (shorthand for new_view + string::tformat).
+fn View viewf(String fmt, args...) {
+    return new_view(string::tformat(fmt, ...args));
+}
+
+// view_alto creates an alt-screen View with formatted content.
+fn View view_alto(String fmt, args...) {
+    return new_alt_screen_view(string::tformat(fmt, ...args));
+}
+
 enum MsgKind : char {
     NONE,
     KEY,
@@ -73,76 +109,14 @@ interface Model {
     fn Cmd init();
     fn Cmd update(Msg msg);
     fn View view();
+    fn void on_mount() @optional;
+    fn void on_destroy() @optional;
+    fn void on_focus() @optional;
+    fn void on_blur() @optional;
 }
 
-fn Msg make_quit_msg() @local {
-    return { .kind = MsgKind.QUIT };
-}
-
-// Batch system: run multiple Cmds, dispatch each result
+// Constants
 const sz MAX_BATCH = 16;
-
-Cmd[MAX_BATCH] g_batch_cmds;
-int g_batch_count = 0;
-
-fn Msg make_batch_msg() @local {
-    return { .kind = MsgKind.BATCH };
-}
-
-fn Cmd batch(Cmd[] cmds) {
-    Cmd[16] filtered;
-    int count = 0;
-    for (sz i = 0; i < cmds.len && count < 16; i++) {
-        if (cmds[i] != null) {
-            filtered[count] = cmds[i];
-            count++;
-        }
-    }
-    if (count == 0) return null;
-    if (count == 1) return filtered[0];
-    for (int i = 0; i < count; i++) {
-        g_batch_cmds[g_batch_count++] = filtered[i];
-    }
-    return &make_batch_msg;
-}
-
-fn Cmd quit() {
-    return &make_quit_msg;
-}
-
-// Returns true if QUIT was seen.
-fn bool dispatch(Model model, Msg m) @local {
-    if (m.kind == MsgKind.QUIT) return true;
-    if (m.kind == MsgKind.BATCH) {
-        Cmd[16] cmds;
-        int count = g_batch_count;
-        for (int i = 0; i < count; i++) cmds[i] = g_batch_cmds[i];
-        g_batch_count = 0;
-        for (int i = 0; i < count; i++) {
-            Msg sub = cmds[i]();
-            if (sub.kind != MsgKind.NONE) {
-                if (dispatch(model, sub)) return true;
-            }
-        }
-        return false;
-    }
-    Cmd c = model.update(m);
-    int chain = 0;
-    while (c != null && chain < 16) {
-        Msg next = c();
-        if (next.kind == MsgKind.QUIT) return true;
-        if (next.kind == MsgKind.NONE) break;
-        if (next.kind == MsgKind.BATCH) {
-            if (dispatch(model, next)) return true;
-            break;
-        }
-        c = model.update(next);
-        chain++;
-    }
-    return false;
-}
-
-// Timer system
 const sz MAX_TIMERS = 32;
 
 struct TimerEntry {
@@ -151,58 +125,351 @@ struct TimerEntry {
     Cmd callback;
 }
 
-TimerEntry[MAX_TIMERS] g_timers;
+// Program holds all mutable runtime state for a running TUI.
+// Replaces the previous global batch/timer state, enabling
+// sequential multi-instance use and proper testability.
+struct Program {
+    Model model;
+    Cmd[MAX_BATCH] batch_cmds;
+    int batch_count;
+    TimerEntry[MAX_TIMERS] timers;
+    bool in_alt_screen;
+    char[256] pending;
+    sz pending_len;
 
+    // Test / injection support
+    bool test_mode;
+    int inject_width;
+    int inject_height;
+    DString* output_buf;
+    char[4096] inject_input;
+    sz inject_input_len;
+    sz inject_input_pos;
+    // Ring buffer for Send()-injected messages.
+    Msg[MAX_BATCH] send_queue;
+    int send_head;
+    int send_tail;
+
+    // Threaded input reader
+    InputQueue* input_queue;
+    thread::Thread reader_thread;
+}
+
+// ============================================================
+// InputQueue — lock-free-ish ring buffer for raw stdin bytes.
+// The reader thread pushes; the main event loop drains.
+// ============================================================
+
+const sz INPUT_BUF_SIZE = 4096;
+
+struct InputQueue {
+    char[INPUT_BUF_SIZE] buf;
+    sz head;
+    sz tail;
+    thread::Mutex mu;
+    bool closed;
+}
+
+fn InputQueue*? input_queue_new() {
+    InputQueue* q = mem::new(InputQueue)!!;
+    q.mu.init()!;
+    return q;
+}
+
+fn void input_queue_destroy(InputQueue* q) {
+    q.mu.lock();
+    q.closed = true;
+    q.mu.unlock();
+    q.mu.destroy();
+    mem::free(q);
+}
+
+fn void input_queue_push(InputQueue* q, char[] data) {
+    q.mu.lock();
+    defer q.mu.unlock();
+    for (sz i = 0; i < data.len; i++) {
+        sz next = (q.head + 1) % INPUT_BUF_SIZE;
+        if (next == q.tail) break; // full, drop remaining
+        q.buf[q.head] = data[i];
+        q.head = next;
+    }
+}
+
+fn sz input_queue_drain(InputQueue* q, char[] out) {
+    q.mu.lock();
+    defer q.mu.unlock();
+    sz count = 0;
+    while (count < out.len && q.tail != q.head) {
+        out[count] = q.buf[q.tail];
+        q.tail = (q.tail + 1) % INPUT_BUF_SIZE;
+        count++;
+    }
+    return count;
+}
+
+fn bool input_queue_is_closed(InputQueue* q) {
+    q.mu.lock();
+    bool c = q.closed;
+    q.mu.unlock();
+    return c;
+}
+
+// ============================================================
+// input_reader_thread — reads stdin, pushes bytes into InputQueue.
+// Runs on a dedicated thread so the event loop is never blocked
+// by stdout writes.
+// ============================================================
+
+fn int input_reader_fn(void* arg) {
+    InputQueue* q = (InputQueue*)arg;
+    char[256] tmp;
+
+    while (!input_queue_is_closed(q)) {
+        PollFd pfd;
+        pfd.fd = STDIN_FILENO;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        int r = poll(&pfd, 1, 50); // 50ms timeout
+        if (r <= 0) continue;
+
+        sz n = read(STDIN_FILENO, &tmp[0], 256);
+        if (n <= 0) break;
+
+        input_queue_push(q, tmp[:n]);
+    }
+    return 0;
+}
+
+// Global pointer to the currently running program.
+// Set during Program.run(), cleared on exit.
+// Safe because only one program can run at a time (one terminal).
+Program* g_program = null;
+
+fn Msg make_quit_msg() @local {
+    return { .kind = MsgKind.QUIT };
+}
+
+fn Msg make_batch_msg() @local {
+    return { .kind = MsgKind.BATCH };
+}
+
+// batch collects non-null Cmds and returns a Cmd that dispatches them concurrently.
+// Uses the global program pointer to store the batch, which is safe because
+// batch() is always called from within the event loop (during model.Update).
+<*
+  @require cmds.len > 0
+  @require cmds.len <= MAX_BATCH
+*>
+fn Cmd batch(Cmd[] cmds) {
+    Cmd[MAX_BATCH] filtered;
+    int count = 0;
+    for (sz i = 0; i < cmds.len && count < MAX_BATCH; i++) {
+        if (cmds[i] != null) {
+            filtered[count] = cmds[i];
+            count++;
+        }
+    }
+    if (count == 0) return null;
+    if (count == 1) return filtered[0];
+    if (g_program == null) return filtered[0];
+    for (int i = 0; i < count; i++) {
+        g_program.batch_cmds[g_program.batch_count++] = filtered[i];
+    }
+    return &make_batch_msg;
+}
+
+fn Cmd quit() {
+    return &make_quit_msg;
+}
+
+// ============================================================
+// Program options — configure a Program before run()
+// ============================================================
+
+// with_window_size sets a fixed window size, bypassing the TTY query.
+fn void with_window_size(Program* self, int w, int h) {
+    self.inject_width = w;
+    self.inject_height = h;
+}
+
+// with_test_mode enables test mode: skips raw mode, cursor control,
+// focus/mouse sequences, signal handling, and TTY queries.
+// Output is captured to the given DString instead of stdout.
+fn void with_test_mode(Program* self, DString* output) {
+    self.test_mode = true;
+    self.output_buf = output;
+}
+
+// with_input injects raw input bytes that the event loop will consume
+// instead of reading from stdin.
+fn void with_input(Program* self, char[] data) {
+    sz len = data.len;
+    if (len > self.inject_input.len) len = self.inject_input.len;
+    for (sz i = 0; i < len; i++) {
+        self.inject_input[i] = data[i];
+    }
+    self.inject_input_len = len;
+    self.inject_input_pos = 0;
+}
+
+// ============================================================
+// Send — inject a message into the running event loop
+// ============================================================
+
+// send enqueues a message for the event loop to process.
+// Thread-safe for the single-producer case (call from any goroutine).
+// In test mode, the message is placed in a ring buffer consumed by run().
+fn void Program.send(Program* self, Msg msg) {
+    int next = (self.send_head + 1) % (int)MAX_BATCH;
+    if (next == self.send_tail) return; // full, drop
+    self.send_queue[self.send_head] = msg;
+    self.send_head = next;
+}
+
+// send_recv dequeues a previously sent message. Returns true if a message
+// was available, false if the queue is empty.
+fn bool Program.send_recv(Program* self, Msg* out) {
+    if (self.send_tail == self.send_head) return false;
+    *out = self.send_queue[self.send_tail];
+    self.send_tail = (self.send_tail + 1) % (int)MAX_BATCH;
+    return true;
+}
+
+// dispatch processes a message through the model, returning true if QUIT was seen.
+fn bool dispatch(Program* self, Model model, Msg m) @local {
+    if (m.kind == MsgKind.QUIT) return true;
+    if (m.kind == MsgKind.BATCH) {
+        Cmd[MAX_BATCH] cmds;
+        int count = self.batch_count;
+        for (sz i = 0; i < count; i++) cmds[i] = self.batch_cmds[i];
+        self.batch_count = 0;
+        for (int i = 0; i < count; i++) {
+            Msg sub = cmds[i]();
+            if (sub.kind != MsgKind.NONE) {
+                if (dispatch(self, model, sub)) return true;
+            }
+        }
+        return false;
+    }
+    Cmd c = model.update(m);
+    int chain = 0;
+    while (c != null && chain < MAX_BATCH) {
+        Msg next = c();
+        if (next.kind == MsgKind.QUIT) return true;
+        if (next.kind == MsgKind.NONE) break;
+        if (next.kind == MsgKind.BATCH) {
+            if (dispatch(self, model, next)) return true;
+            break;
+        }
+        c = model.update(next);
+        chain++;
+    }
+    return false;
+}
+
+// emit_sgr writes an SGR sequence to the program's output.
+fn void Program.emit_sgr(Program* self, String seq) {
+    if (self.test_mode) {
+        if (self.output_buf != null) {
+            self.output_buf.append_string(seq);
+        }
+    } else {
+        write_stdout((char[])seq);
+    }
+}
+
+// tick registers a timer that fires after delay_ms, then calls callback.
+<*
+  @require delay_ms > 0
+  @require callback != null
+*>
 fn Cmd tick(sz delay_ms, Cmd callback) {
+    if (g_program == null) return null;
     sz deadline = time_ms() + delay_ms;
     for (sz i = 0; i < MAX_TIMERS; i++) {
-        if (!g_timers[i].active) {
-            g_timers[i].active = true;
-            g_timers[i].deadline_ms = deadline;
-            g_timers[i].callback = callback;
+        if (!g_program.timers[i].active) {
+            g_program.timers[i].active = true;
+            g_program.timers[i].deadline_ms = deadline;
+            g_program.timers[i].callback = callback;
             break;
         }
     }
     return null;
 }
 
-fn void? run(Model model) {
-    TtyState saved = raw_mode_enter()!;
-    defer raw_mode_restore(saved);
-    defer show_cursor();
-    defer disable_focus();
-    defer disable_mouse();
-    hide_cursor();
-    enable_focus();
-    setup_sigwinch();
+// run executes the event loop for the program.
+fn void? Program.run(Program* self) {
+    g_program = self;
+    self.batch_count = 0;
+    self.pending_len = 0;
+    self.in_alt_screen = false;
+    self.send_head = 0;
+    self.send_tail = 0;
+    for (sz i = 0; i < MAX_TIMERS; i++) { self.timers[i] = {}; }
+    defer { g_program = null; }
 
-    // Track alt screen state. The renderer enters/exits alt screen
-    // based on the View's alt_screen flag, matching Go's architecture.
-    bool in_alt_screen = false;
+    if (!self.test_mode) {
+        TtyState saved = raw_mode_enter()!;
+        defer raw_mode_restore(saved);
+        defer show_cursor();
+        defer disable_focus();
+        defer disable_mouse();
+        hide_cursor();
+        enable_focus();
+        setup_sigwinch();
+
+        // Start the reader thread so stdin reads never block the event loop.
+        InputQueue*? q = input_queue_new();
+        if (catch err = q) return;
+        self.input_queue = q;
+        thread::Thread.create(&input_reader_fn, self.input_queue)!!;
+        defer {
+            input_queue_destroy(self.input_queue);
+            self.input_queue = null;
+        };
+    }
+
     defer {
-        if (in_alt_screen) exit_alt_screen();
+        self.model.on_destroy();
+    };
+    defer {
+        if (self.in_alt_screen) {
+            if (self.test_mode) {
+                if (self.output_buf != null) {
+                    self.output_buf.append_string(SGR_ALT_OFF);
+                }
+            } else {
+                exit_alt_screen();
+            }
+        }
     };
 
-    WinSize initial_ws = get_window_size();
+    // Determine initial window size
+    WinSize initial_ws;
+    if (self.inject_width > 0 && self.inject_height > 0) {
+        initial_ws.ws_col = (ushort)self.inject_width;
+        initial_ws.ws_row = (ushort)self.inject_height;
+    } else if (!self.test_mode) {
+        initial_ws = get_window_size();
+    } else {
+        initial_ws.ws_col = 80;
+        initial_ws.ws_row = 24;
+    }
     Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
-    if (dispatch(model, init_wmsg)) return;
+    if (dispatch(self, self.model, init_wmsg)) return;
 
-    Cmd c0 = model.init();
+    Cmd c0 = self.model.init();
     if (c0 != null) {
         Msg m0 = c0();
-        if (m0.kind != MsgKind.NONE && dispatch(model, m0)) return;
+        if (m0.kind != MsgKind.NONE && dispatch(self, self.model, m0)) return;
     }
-    @pool() {
-        View v = model.view();
-        if (v.alt_screen && !in_alt_screen) {
-            enter_alt_screen();
-            in_alt_screen = true;
-        }
-        render_view(v);
-    };
 
-    char[256] pending;
-    sz pending_len = 0;
+    self.model.on_mount();
+
+    // Render initial view
+    self.render_current_view();
+
     char[64] tmp;
 
     while (true) {
@@ -210,59 +477,66 @@ fn void? run(Model model) {
         bool dirty = false;
         sz now = time_ms();
         for (sz i = 0; i < MAX_TIMERS; i++) {
-            if (g_timers[i].active && now >= g_timers[i].deadline_ms) {
-                Cmd cb = g_timers[i].callback;
-                g_timers[i].active = false;
+            if (self.timers[i].active && now >= self.timers[i].deadline_ms) {
+                Cmd cb = self.timers[i].callback;
+                self.timers[i].active = false;
                 Msg m = cb();
-                if (m.kind != MsgKind.NONE && dispatch(model, m)) return;
+                if (m.kind != MsgKind.NONE && dispatch(self, self.model, m)) return;
                 dirty = true;
-                now = time_ms(); // refresh after dispatch may register new timers
+                now = time_ms();
             }
         }
 
-        // Calculate poll timeout from nearest timer
-        int timeout = 50;
-        now = time_ms();
-        for (sz i = 0; i < MAX_TIMERS; i++) {
-            if (g_timers[i].active) {
-                sz wait = (sz)(g_timers[i].deadline_ms - now);
-                if (wait < 0) wait = 0;
-                if (wait < (sz)timeout) timeout = (int)wait;
-            }
+        // Read input — from injected buffer, the reader thread queue, or stdin
+        sz n = 0;
+        if (self.test_mode) {
+            n = self.drain_inject_input(tmp[..]);
+        } else if (self.input_queue != null) {
+            n = input_queue_drain(self.input_queue, tmp[..]);
+        } else {
+            // Fallback (shouldn't happen in normal use)
+            n = read_stdin_timeout(tmp[..], 0);
         }
 
-        sz n = read_stdin_timeout(tmp[..], timeout);
+        // Drain Send()-injected messages
+        Msg injected;
+        while (self.send_recv(&injected)) {
+            if (dispatch(self, self.model, injected)) return;
+            dirty = true;
+        }
 
-        if (g_win_resized) {
+        if (!self.test_mode && g_win_resized) {
             g_win_resized = false;
             WinSize ws = get_window_size();
             Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)ws.ws_col, (int)ws.ws_row } };
-            if (dispatch(model, wm)) return;
+            if (dispatch(self, self.model, wm)) return;
             dirty = true;
         }
 
         if (n > 0) {
-            for (sz i = 0; i < n && pending_len < pending.len; i++) {
-                pending[pending_len++] = tmp[(sz)i];
+            for (sz i = 0; i < n && self.pending_len < self.pending.len; i++) {
+                self.pending[self.pending_len++] = tmp[(sz)i];
             }
         }
 
-        while (pending_len > 0) {
-            ParseResult pr = parse_key(pending[:pending_len]);
+        while (self.pending_len > 0) {
+            ParseResult pr = parse_key(self.pending[:self.pending_len]);
             if (pr.consumed == 0) break;
 
-            for (sz i = pr.consumed; i < pending_len; i++) {
-                pending[i - pr.consumed] = pending[i];
+            for (sz i = pr.consumed; i < self.pending_len; i++) {
+                self.pending[i - pr.consumed] = self.pending[i];
             }
-            pending_len -= pr.consumed;
+            self.pending_len -= pr.consumed;
 
             if (pr.key.code == KeyCode.NONE && pr.kind == MsgKind.KEY) continue;
 
             Msg m;
             if (pr.kind == MsgKind.FOCUS) {
                 m.kind = MsgKind.FOCUS;
+                self.model.on_focus();
             } else if (pr.kind == MsgKind.BLUR) {
                 m.kind = MsgKind.BLUR;
+                self.model.on_blur();
             } else if (pr.kind == MsgKind.MOUSE) {
                 m.kind = MsgKind.MOUSE;
                 m.mouse = pr.mouse;
@@ -270,22 +544,54 @@ fn void? run(Model model) {
                 m.kind = MsgKind.KEY;
                 m.key = pr.key;
             }
-            if (dispatch(model, m)) return;
+            if (dispatch(self, self.model, m)) return;
             dirty = true;
         }
 
         if (dirty) {
-            @pool() {
-                View v = model.view();
-                if (v.alt_screen && !in_alt_screen) {
-                    enter_alt_screen();
-                    in_alt_screen = true;
-                } else if (!v.alt_screen && in_alt_screen) {
-                    exit_alt_screen();
-                    in_alt_screen = false;
-                }
-                render_view(v);
-            };
+            self.render_current_view();
         }
     }
+}
+
+// render_current_view renders the model's current view, handling
+// alt-screen transitions and output routing (stdout vs capture buffer).
+fn void Program.render_current_view(Program* self) {
+    @pool() {
+        View v = self.model.view();
+        if (v.alt_screen && !self.in_alt_screen) {
+            self.emit_sgr(SGR_ALT_ON);
+            self.in_alt_screen = true;
+        } else if (!v.alt_screen && self.in_alt_screen) {
+            self.emit_sgr(SGR_ALT_OFF);
+            self.in_alt_screen = false;
+        }
+        if (self.test_mode) {
+            if (self.output_buf != null) {
+                render_view_to(v, self.output_buf);
+            }
+        } else {
+            render_view(v);
+        }
+    };
+}
+
+// drain_inject_input copies bytes from the injected input buffer into buf.
+// Returns the number of bytes copied (0 when exhausted).
+fn sz Program.drain_inject_input(Program* self, char[] buf) {
+    sz remaining = self.inject_input_len - self.inject_input_pos;
+    if (remaining == 0) return 0;
+    sz n = remaining;
+    if (n > buf.len) n = buf.len;
+    for (sz i = 0; i < n; i++) {
+        buf[i] = self.inject_input[self.inject_input_pos + i];
+    }
+    self.inject_input_pos += n;
+    return n;
+}
+
+// run is a convenience wrapper that creates a Program and runs it.
+fn void? run(Model model) {
+    Program p = { .model = model };
+    return p.run();
 }

@@ -153,6 +153,9 @@ fn ParseResult make_mouse(MouseButton button, MouseAction action, int row, int c
     return { MsgKind.MOUSE, { NONE, 0, false, false, false }, { button, action, row, col, shift, alt, ctrl }, consumed };
 }
 
+<*
+  @ensure return.consumed <= buf.len
+*>
 fn ParseResult parse_key(char[] buf) {
     // Empty buffer
     if (buf.len == 0) {

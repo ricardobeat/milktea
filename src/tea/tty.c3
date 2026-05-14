@@ -7,8 +7,8 @@ const int STDOUT_FILENO = 1;
 const int TCSANOW = 0;
 const short POLLIN = 1;
 
-// macOS constants for now
-const ulong TIOCGWINSZ = 0x40087468;
+// TIOCGWINSZ is provided by <sys/ioctl.h> in tty_winsize.c — not needed here.
+// SIGWINCH is 28 on both macOS and Linux.
 const int SIGWINCH = 28;
 
 extern fn int tcgetattr(int fd, char* termios_buf);
@@ -113,6 +113,6 @@ fn void write_stdout(char[] bytes) {
     while (written < bytes.len) {
         sz n = write(STDOUT_FILENO, &bytes[written], bytes.len - written);
         if (n <= 0) break;
-        written += (sz)n;
+        written += n;
     }
 }

@@ -208,7 +208,7 @@ fn tea::View InputsModel.view(InputsModel* self) @dynamic {
 fn int main() {
     InputsModel m = {};
 
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }

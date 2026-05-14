@@ -103,7 +103,7 @@ fn tea::View TimerModel.view(TimerModel* self) @dynamic {
 
 fn int main() {
     TimerModel m = { .seconds = 60, .running = true };
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }

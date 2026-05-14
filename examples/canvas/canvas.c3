@@ -88,7 +88,7 @@ fn tea::View CanvasModel.view(CanvasModel* self) @dynamic {
 
 fn int main() {
     CanvasModel m = {};
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }

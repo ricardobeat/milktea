@@ -44,7 +44,7 @@ fn tea::View Counter.view(Counter* self) @dynamic {
 
 fn int main() {
     Counter c = {};
-    if (catch err = tea::run((tea::Model)&c)) {
+    if (catch err = tea::@run_program(&c)) {
         io::printfn("Error: %s", err);
         return 1;
     }

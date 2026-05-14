@@ -138,7 +138,7 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
 
 fn int main() {
     ChatModel m = {};
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }

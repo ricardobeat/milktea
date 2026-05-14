@@ -135,7 +135,7 @@ fn int main() {
     tea::enter_alt_screen();
     tea::enable_mouse();
 
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         tea::disable_mouse();
         io::printfn("Error: %s", err);
         return 1;

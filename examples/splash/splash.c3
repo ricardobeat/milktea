@@ -36,16 +36,7 @@ fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
         return tea::tick(33, &on_tick);
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
-    tea::KeyMsg k = msg.key;
-    switch (k.code) {
-        case tea::KeyCode.CTRL_C:
-        case tea::KeyCode.ESC:
-            return tea::quit();
-        case tea::KeyCode.RUNE:
-            if (k.rune == 'q') return tea::quit();
-        default:
-    }
-    return null;
+    return tea::quit();
 }
 
 // HSV to RGB. h in [0,1], s in [0,1], v in [0,1]
@@ -85,6 +76,12 @@ fn RgbColor hsv_to_rgb(double h, double s, double v) {
     }
 
     return { .r = clamp_color((int)(r * 255)), .g = clamp_color((int)(g * 255)), .b = clamp_color((int)(b * 255)) };
+}
+
+fn void SplashModel.on_mount(SplashModel* self) @dynamic {
+}
+
+fn void SplashModel.on_destroy(SplashModel* self) @dynamic {
 }
 
 fn tea::View SplashModel.view(SplashModel* self) @dynamic {
@@ -135,7 +132,7 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
 
 fn int main() {
     SplashModel m = {};
-    if (catch err = tea::run((tea::Model)&m)) {
+    if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }
