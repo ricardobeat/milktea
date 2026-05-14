@@ -84,6 +84,12 @@ fn void SplashModel.on_mount(SplashModel* self) @dynamic {
 fn void SplashModel.on_destroy(SplashModel* self) @dynamic {
 }
 
+fn void SplashModel.on_focus(SplashModel* self) @dynamic {
+}
+
+fn void SplashModel.on_blur(SplashModel* self) @dynamic {
+}
+
 fn tea::View SplashModel.view(SplashModel* self) @dynamic {
     int w = self.width;
     int h = self.height;

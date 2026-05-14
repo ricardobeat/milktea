@@ -22,7 +22,7 @@ macro @program(#model) {
 //       io::printfn("Error: %s", err);
 //   }
 macro @run_program(#model) {
-    var p = @program(#model);
+    Program p = { .model = (Model)#model };
     return p.run();
 }
 
@@ -37,7 +37,7 @@ macro @run_program(#model) {
 //   p.send({ .kind = MsgKind.QUIT });
 //   p.run();
 macro @test_program(#model, #output, #w, #h) {
-    var p = @program(#model);
+    Program p = { .model = (Model)#model };
     with_test_mode(&p, #output);
     with_window_size(&p, #w, #h);
     return p;

@@ -1,6 +1,8 @@
 {
   "langrev": "1",
   "warnings": [ "no-unused-parameter", "no-unused-import" ],
+  "macos-min-version": "15.0",
+  "cflags": "-mmacosx-version-min=15.0",
   "sources": [ "src/**" ],
   "targets": {
     "tea": {

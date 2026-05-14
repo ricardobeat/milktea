@@ -151,12 +151,14 @@ struct Program {
     int send_tail;
 
     // Threaded input reader
-    InputQueue* input_queue;
     thread::Thread reader_thread;
 }
 
+// File-scope input queue — not inside Program to avoid copies.
+InputQueue g_input_queue;
+
 // ============================================================
-// InputQueue — lock-free-ish ring buffer for raw stdin bytes.
+// InputQueue — ring buffer for raw stdin bytes.
 // The reader thread pushes; the main event loop drains.
 // ============================================================
 
@@ -170,10 +172,11 @@ struct InputQueue {
     bool closed;
 }
 
-fn InputQueue*? input_queue_new() {
-    InputQueue* q = mem::new(InputQueue)!!;
+fn void? input_queue_init(InputQueue* q) {
+    q.head = 0;
+    q.tail = 0;
+    q.closed = false;
     q.mu.init()!;
-    return q;
 }
 
 fn void input_queue_destroy(InputQueue* q) {
@@ -181,7 +184,6 @@ fn void input_queue_destroy(InputQueue* q) {
     q.closed = true;
     q.mu.unlock();
     q.mu.destroy();
-    mem::free(q);
 }
 
 fn void input_queue_push(InputQueue* q, char[] data) {
@@ -409,29 +411,31 @@ fn void? Program.run(Program* self) {
     for (sz i = 0; i < MAX_TIMERS; i++) { self.timers[i] = {}; }
     defer { g_program = null; }
 
+    TtyState saved;
     if (!self.test_mode) {
-        TtyState saved = raw_mode_enter()!;
-        defer raw_mode_restore(saved);
-        defer show_cursor();
-        defer disable_focus();
-        defer disable_mouse();
+        saved = raw_mode_enter()!;
         hide_cursor();
         enable_focus();
         setup_sigwinch();
 
         // Start the reader thread so stdin reads never block the event loop.
-        InputQueue*? q = input_queue_new();
-        if (catch err = q) return;
-        self.input_queue = q;
-        thread::Thread.create(&input_reader_fn, self.input_queue)!!;
-        defer {
-            input_queue_destroy(self.input_queue);
-            self.input_queue = null;
-        };
+        input_queue_init(&g_input_queue)!;
+        thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!!;
     }
 
+    // Defers live at function scope so they run after the event loop exits,
+    // not when the if-block above closes (C3 defer is block-scoped).
     defer {
-        self.model.on_destroy();
+        if (!self.test_mode) {
+            input_queue_destroy(&g_input_queue);
+            disable_mouse();
+            disable_focus();
+            show_cursor();
+            raw_mode_restore(saved);
+        }
+    };
+    defer {
+        if (&self.model.on_destroy) self.model.on_destroy();
     };
     defer {
         if (self.in_alt_screen) {
@@ -465,7 +469,7 @@ fn void? Program.run(Program* self) {
         if (m0.kind != MsgKind.NONE && dispatch(self, self.model, m0)) return;
     }
 
-    self.model.on_mount();
+    if (&self.model.on_mount) self.model.on_mount();
 
     // Render initial view
     self.render_current_view();
@@ -491,11 +495,8 @@ fn void? Program.run(Program* self) {
         sz n = 0;
         if (self.test_mode) {
             n = self.drain_inject_input(tmp[..]);
-        } else if (self.input_queue != null) {
-            n = input_queue_drain(self.input_queue, tmp[..]);
         } else {
-            // Fallback (shouldn't happen in normal use)
-            n = read_stdin_timeout(tmp[..], 0);
+            n = input_queue_drain(&g_input_queue, tmp[..]);
         }
 
         // Drain Send()-injected messages
@@ -533,10 +534,10 @@ fn void? Program.run(Program* self) {
             Msg m;
             if (pr.kind == MsgKind.FOCUS) {
                 m.kind = MsgKind.FOCUS;
-                self.model.on_focus();
+                if (&self.model.on_focus) self.model.on_focus();
             } else if (pr.kind == MsgKind.BLUR) {
                 m.kind = MsgKind.BLUR;
-                self.model.on_blur();
+                if (&self.model.on_blur) self.model.on_blur();
             } else if (pr.kind == MsgKind.MOUSE) {
                 m.kind = MsgKind.MOUSE;
                 m.mouse = pr.mouse;
