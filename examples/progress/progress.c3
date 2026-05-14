@@ -67,7 +67,7 @@ fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String ProgressModel.view(ProgressModel* self) @dynamic {
+fn tea::View ProgressModel.view(ProgressModel* self) @dynamic {
     lipgloss::Style title = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#00d7ff"))
         .set_bold(true)
@@ -115,20 +115,16 @@ fn String ProgressModel.view(ProgressModel* self) @dynamic {
         content.append_string(hint.render("  |  f fast  |  s slow  |  r restart  |  q quit"));
     }
 
-    return box_style.render(content.str_view());
+    return tea::new_alt_screen_view(box_style.render(content.str_view()));
 }
 
 fn int main() {
     ProgressModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Done!");
     return 0;
 }

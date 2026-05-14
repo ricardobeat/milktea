@@ -47,7 +47,7 @@ fn tea::Cmd CanvasModel.update(CanvasModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String CanvasModel.view(CanvasModel* self) @dynamic {
+fn tea::View CanvasModel.view(CanvasModel* self) @dynamic {
     lipgloss::Color front_color = self.flip ? lipgloss::color_hex("#ff00ff") : lipgloss::color_hex("#00d7ff");
     lipgloss::Color back_color = self.flip ? lipgloss::color_hex("#00d7ff") : lipgloss::color_hex("#ff00ff");
 
@@ -83,20 +83,16 @@ fn String CanvasModel.view(CanvasModel* self) @dynamic {
     out.append_string(joined);
     out.append_char('\n');
     out.append_string(hint.render("Press any key to swap layers | q quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     CanvasModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

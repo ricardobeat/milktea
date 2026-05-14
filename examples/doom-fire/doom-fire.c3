@@ -124,7 +124,7 @@ fn tea::Cmd FireModel.update(FireModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String FireModel.view(FireModel* self) @dynamic {
+fn tea::View FireModel.view(FireModel* self) @dynamic {
     int rows = FIRE_H / 2;
     if (rows > self.height - 2) rows = self.height - 2;
     if (rows < 1) rows = 1;
@@ -156,20 +156,16 @@ fn String FireModel.view(FireModel* self) @dynamic {
 
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
     out.append_string(hint.render("DOOM Fire | q/ESC quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     FireModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

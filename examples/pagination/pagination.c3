@@ -77,7 +77,7 @@ fn tea::Cmd PaginationModel.update(PaginationModel* self, tea::Msg msg) @dynamic
     return null;
 }
 
-fn String PaginationModel.view(PaginationModel* self) @dynamic {
+fn tea::View PaginationModel.view(PaginationModel* self) @dynamic {
     lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true).padding(0, 0, 1, 0);
     lipgloss::Style cursor_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
     lipgloss::Style check_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00"));
@@ -111,20 +111,16 @@ fn String PaginationModel.view(PaginationModel* self) @dynamic {
     out.append_string(num_style.render(string::tformat("%d-%d of %d", page_start + 1, page_end, TOTAL_ITEMS)));
     out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  PgUp/PgDn pages  |  q quit"));
 
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     PaginationModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
 
     int count = 0;
     for (int i = 0; i < TOTAL_ITEMS; i++) {

@@ -52,7 +52,7 @@ fn tea::Cmd FullscreenModel.update(FullscreenModel* self, tea::Msg msg) @dynamic
     return null;
 }
 
-fn String FullscreenModel.view(FullscreenModel* self) @dynamic {
+fn tea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
     lipgloss::Style number = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#ff5555"))
         .set_bold(true);
@@ -72,20 +72,16 @@ fn String FullscreenModel.view(FullscreenModel* self) @dynamic {
 
     out.append_char('\n');
     out.append_string(label.render("Press ESC or q to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     FullscreenModel m = { .countdown = 10 };
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Time's up!");
     return 0;
 }

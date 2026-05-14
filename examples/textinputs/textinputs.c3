@@ -6,14 +6,13 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
-
 struct TextInput {
     char[256] buf;
     usz len;
     usz cursor;
     String placeholder;
     bool focused;
+    bool is_password;
 }
 
 fn void TextInput.clear(TextInput* self) {
@@ -52,32 +51,48 @@ fn String TextInput.text(TextInput* self) {
     return (String)self.buf[:self.len];
 }
 
-fn String TextInput.view(TextInput* self, bool show_cursor) {
-    lipgloss::Style focused_style = lipgloss::new_style()
-        .foreground(lipgloss::color_hex("#ffffff"))
-        .padding(0, 1, 0, 1)
-        .set_border(lipgloss::rounded_border());
-    lipgloss::Style unfocused_style = lipgloss::new_style()
-        .foreground(lipgloss::color_hex("#888888"))
-        .padding(0, 1, 0, 1)
-        .set_border(lipgloss::normal_border());
-
-    lipgloss::Style s = self.focused ? focused_style : unfocused_style;
-    lipgloss::Style placeholder_style = lipgloss::new_style().foreground(lipgloss::color_hex("#444444"));
-
-    String display;
-    if (self.len > 0) {
-        display = self.text();
-    } else {
-        display = placeholder_style.render(self.placeholder);
+fn String TextInput.display_text(TextInput* self) {
+    if (self.len == 0) return self.placeholder;
+    if (self.is_password) {
+        DString hidden = dstring::temp();
+        for (usz i = 0; i < self.len; i++) hidden.append_char('*');
+        return hidden.str_view();
     }
+    return self.text();
+}
+
+// cursor_x returns the 0-indexed column offset of the cursor within the
+// input's rendered text. This is relative to where the input text starts,
+// NOT relative to the line start.
+fn int TextInput.cursor_x(TextInput* self) {
+    if (self.len > 0 && self.cursor < self.len) {
+        return (int)self.cursor;
+    }
+    return (int)self.len;
+}
+
+fn String TextInput.view(TextInput* self, bool focused) {
+    String display = self.display_text();
 
     DString out = dstring::temp();
-    out.append_string(display);
-    if (self.focused && show_cursor) {
-        out.append_string("▎");
+
+    // Color based on state
+    int r, g, b;
+    if (self.len > 0 && focused) {
+        r = 255; g = 255; b = 255;  // white for focused with text
+    } else if (self.len > 0) {
+        r = 136; g = 136; b = 136; // gray for blurred with text
+    } else {
+        r = 68; g = 68; b = 68;    // dim for placeholder
     }
-    return s.render(out.str_view());
+    out.append_string(string::tformat("\x1b[38;2;%d;%d;%dm", r, g, b));
+
+    // Text content (cursor is positioned via terminal ANSI, not inline)
+    out.append_string(display);
+
+    // Reset ANSI codes.
+    out.append_string("\x1b[0m");
+    return out.str_view();
 }
 
 struct InputsModel {
@@ -86,7 +101,6 @@ struct InputsModel {
     bool submitted;
     int width;
     int height;
-    int cursor_visible;
 }
 
 fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
@@ -94,12 +108,8 @@ fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
     self.inputs[0].focused = true;
     self.inputs[1].placeholder = "Email";
     self.inputs[2].placeholder = "Password";
-    self.cursor_visible = 1;
-    return tea::tick(500, &on_tick);
-}
-
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
+    self.inputs[2].is_password = true;
+    return null;
 }
 
 fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
@@ -107,11 +117,6 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
         return null;
-    }
-
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
-        self.cursor_visible = 1 - self.cursor_visible;
-        return tea::tick(500, &on_tick);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -157,11 +162,9 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String InputsModel.view(InputsModel* self) @dynamic {
+fn tea::View InputsModel.view(InputsModel* self) @dynamic {
     lipgloss::Style title = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true).padding(0, 0, 1, 0);
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
-
-    bool show = self.cursor_visible != 0;
 
     DString out = dstring::temp();
     out.append_string(title.render("Sign Up"));
@@ -169,30 +172,47 @@ fn String InputsModel.view(InputsModel* self) @dynamic {
     out.append_char('\n');
 
     String[3] labels = { "Nickname:", "Email:", "Password:" };
+    // 0-indexed column where each input's text begins (label chars + trailing space)
+    int[3] label_cols = { 10, 7, 10 };
+
+    // Title.render with bottom padding (pad_bottom=1) produces 2 lines,
+    // plus 2 explicit newlines → lines 0,1,2 are occupied,
+    // so inputs start at content row 3 (0-indexed).
+    int base_row = 3;
+
+    int cursor_x = 0;
+    int cursor_y = 0;
+
     for (int i = 0; i < 3; i++) {
         out.append_string(labels[i]);
         out.append_char(' ');
-        out.append_string(self.inputs[i].view(show));
+
+        if (i == self.focus) {
+            cursor_y = base_row + i;
+            cursor_x = label_cols[i] + self.inputs[i].cursor_x();
+        }
+
+        out.append_string(self.inputs[i].view(self.inputs[i].focused));
         out.append_char('\n');
     }
 
     out.append_char('\n');
     out.append_string(hint.render("TAB/↑↓ switch fields | ENTER submit | ESC quit"));
 
-    return out.str_view();
+    tea::View v = tea::new_alt_screen_view(out.str_view());
+    v.has_cursor = true;
+    v.cursor = tea::new_cursor(cursor_x, cursor_y);
+    return v;
 }
 
 fn int main() {
     InputsModel m = {};
-    tea::enter_alt_screen();
 
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     if (m.submitted) {
         io::printfn("Submitted!");
         io::printfn("  Nickname: %s", m.inputs[0].text());

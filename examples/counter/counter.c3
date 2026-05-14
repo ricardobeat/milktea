@@ -29,7 +29,7 @@ fn tea::Cmd Counter.update(Counter* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String Counter.view(Counter* self) @dynamic {
+fn tea::View Counter.view(Counter* self) @dynamic {
     lipgloss::Style box = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#00d7ff"))
         .set_bold(true)
@@ -39,7 +39,7 @@ fn String Counter.view(Counter* self) @dynamic {
     String label = string::tformat("Counter: %d", self.value);
     String hint  = "\nUse ↑↓ to change, q to quit";
     String content = string::tformat("%s%s", label, hint);
-    return box.render(content);
+    return tea::new_view(box.render(content));
 }
 
 fn int main() {

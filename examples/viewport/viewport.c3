@@ -85,7 +85,7 @@ fn String lorem_line(int i) {
     return fragments[i % 10];
 }
 
-fn String ViewportModel.view(ViewportModel* self) @dynamic {
+fn tea::View ViewportModel.view(ViewportModel* self) @dynamic {
     lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true).padding(0, 2, 0, 0);
     lipgloss::Style line_style = lipgloss::new_style().foreground(lipgloss::color_hex("#cccccc"));
     lipgloss::Style dim_style = lipgloss::new_style().foreground(lipgloss::color_hex("#444444"));
@@ -124,20 +124,16 @@ fn String ViewportModel.view(ViewportModel* self) @dynamic {
     out.append_char('\n');
     out.append_string(dim_style.render(string::tformat(" %s %d%%  |  ↑↓ j/k scroll  |  PgUp/PgDn  |  Home/End  |  q quit", bar, pct)));
 
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     ViewportModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

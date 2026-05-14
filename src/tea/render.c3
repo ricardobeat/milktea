@@ -11,18 +11,61 @@ const String SGR_FOCUS_ON = "\x1b[?1004h";
 const String SGR_FOCUS_OFF = "\x1b[?1004l";
 const String SGR_MOUSE_SGR_ON = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const String SGR_MOUSE_SGR_OFF = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+const String SGR_CURSOR_BLINK_OFF = "\x1b[?12l";
+const String SGR_CURSOR_BLINK_ON = "\x1b[?12h";
 
-fn void render_frame(String frame) {
-    DString out = dstring::temp();
+// cursor_style_seq returns the ANSI escape to set cursor shape.
+// Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
+fn String cursor_style_seq(CursorShape shape, bool blink) {
+    int style = ((int)shape * 2) + 1;
+    if (!blink) style++;
+    return string::tformat("\x1b[%d q", style);
+}
+
+// render_view_to writes the full rendered output for a View into [out].
+// Split from render_view so tests can inspect the buffer without touching stdout.
+fn void render_view_to(View v, DString* out) {
+    // Hide cursor while rendering to avoid flicker
     out.append_string(SGR_HIDE_CURSOR);
+
+    // Clear screen and move to home position
     out.append_string(SGR_CLEAR_HOME);
+
+    // Write content, converting \n to \r\n for proper terminal line endings
+    String frame = v.content;
     for (usz i = 0; i < frame.len; i++) {
         if (frame[i] == '\n' && (i == 0 || frame[i - 1] != '\r')) {
             out.append_char('\r');
         }
         out.append_char(frame[i]);
     }
+
+    // Position cursor if the View requests it.
+    // Cursor x,y are 0-indexed relative to the content's top-left corner.
+    // After SGR_CLEAR_HOME, content starts at terminal position (1,1),
+    // so we add 1 to convert to 1-indexed terminal coordinates.
+    if (v.has_cursor) {
+        int term_row = v.cursor.y + 1;
+        int term_col = v.cursor.x + 1;
+        out.append_string(cursor_to(term_row, term_col));
+
+        // Set cursor shape and blink
+        out.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
+        if (v.cursor.blink) {
+            out.append_string(SGR_CURSOR_BLINK_ON);
+        } else {
+            out.append_string(SGR_CURSOR_BLINK_OFF);
+        }
+    }
+
+    // Show cursor
     out.append_string(SGR_SHOW_CURSOR);
+}
+
+// render_view renders a View to stdout.
+fn void render_view(View v) {
+    DString out = dstring::temp();
+    render_view_to(v, &out);
     write_stdout((char[])out.str_view());
 }
 

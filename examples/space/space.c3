@@ -94,7 +94,7 @@ fn String gray_fg(int level) {
     return string::tformat("\x1b[38;5;%dm", idx);
 }
 
-fn String SpaceModel.view(SpaceModel* self) @dynamic {
+fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
     int w = self.width;
     int h = self.height - 1;
     if (w < 10) w = 80;
@@ -153,21 +153,17 @@ fn String SpaceModel.view(SpaceModel* self) @dynamic {
 
         out.append_char('\n');
         out.append_string(title.render("SPACE   q/ESC quit"));
-        return out.str_view();
+        return tea::new_alt_screen_view(out.str_view());
     };
 }
 
 fn int main() {
     SpaceModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

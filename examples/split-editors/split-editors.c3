@@ -171,7 +171,7 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String SplitModel.view(SplitModel* self) @dynamic {
+fn tea::View SplitModel.view(SplitModel* self) @dynamic {
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
     bool show_cursor = self.cursor_blink != 0;
 
@@ -196,19 +196,15 @@ fn String SplitModel.view(SplitModel* self) @dynamic {
 
     out.append_char('\n');
     out.append_string(hint.render(string::tformat("TAB: switch | Ctrl+N: add | Ctrl+W: close | ESC: quit | Panes: %d", self.count)));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     SplitModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

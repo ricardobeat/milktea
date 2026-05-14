@@ -64,7 +64,7 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String TimerModel.view(TimerModel* self) @dynamic {
+fn tea::View TimerModel.view(TimerModel* self) @dynamic {
     int minutes = self.seconds / 60;
     int secs = self.seconds % 60;
 
@@ -98,20 +98,16 @@ fn String TimerModel.view(TimerModel* self) @dynamic {
 
     out.append_char('\n');
     out.append_string(subtle.render("r to reset  |  q to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     TimerModel m = { .seconds = 60, .running = true };
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

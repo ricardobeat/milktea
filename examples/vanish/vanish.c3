@@ -19,22 +19,18 @@ fn tea::Cmd VanishModel.update(VanishModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String VanishModel.view(VanishModel* self) @dynamic {
-    if (self.quitting) return "";
-    return "Press any key to quit. Your terminal will be clean.";
+fn tea::View VanishModel.view(VanishModel* self) @dynamic {
+    if (self.quitting) return tea::new_alt_screen_view("");
+    return tea::new_alt_screen_view("Press any key to quit. Your terminal will be clean.");
 }
 
 fn int main() {
     VanishModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     // Nothing printed after exit — terminal is clean
     return 0;
 }

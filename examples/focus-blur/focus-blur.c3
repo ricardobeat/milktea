@@ -56,7 +56,7 @@ fn tea::Cmd FocusModel.update(FocusModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String FocusModel.view(FocusModel* self) @dynamic {
+fn tea::View FocusModel.view(FocusModel* self) @dynamic {
     lipgloss::Style focused_style = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#00ff00"))
         .set_bold(true)
@@ -79,20 +79,16 @@ fn String FocusModel.view(FocusModel* self) @dynamic {
     out.append_char('\n');
     out.append_char('\n');
     out.append_string(hint.render(string::tformat("Focus reporting: %s\nPress t to toggle | q to quit", self.reporting ? "ON" : "OFF")));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     FocusModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

@@ -48,7 +48,7 @@ fn tea::Cmd SpinnerModel.update(SpinnerModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String SpinnerModel.view(SpinnerModel* self) @dynamic {
+fn tea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
     String[12] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙" };
     String spin = frames[self.frame % 12];
 
@@ -63,20 +63,16 @@ fn String SpinnerModel.view(SpinnerModel* self) @dynamic {
     out.append_string(title.render(string::tformat("%s  Loading...", spin)));
     out.append_char('\n');
     out.append_string(subtle.render("Press q to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     SpinnerModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Done!");
     return 0;
 }

@@ -77,7 +77,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String Model.view(Model* self) @dynamic {
+fn tea::View Model.view(Model* self) @dynamic {
     String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
     String spin = frames[self.spin_frame % 8];
 
@@ -112,20 +112,16 @@ fn String Model.view(Model* self) @dynamic {
     out.append_string(step_view);
     out.append_char('\n');
     out.append_string(hint.render("q to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     Model m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

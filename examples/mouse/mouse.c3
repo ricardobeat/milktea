@@ -75,7 +75,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String Model.view(Model* self) @dynamic {
+fn tea::View Model.view(Model* self) @dynamic {
     lipgloss::Style title_style = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#00d7ff"))
         .set_bold(true);
@@ -127,7 +127,7 @@ fn String Model.view(Model* self) @dynamic {
 
     out.append_string("\n\n");
     out.append_string(hint_style.render("Click/drag to track  |  c to clear  |  q to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
@@ -137,13 +137,11 @@ fn int main() {
 
     if (catch err = tea::run((tea::Model)&m)) {
         tea::disable_mouse();
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
     tea::disable_mouse();
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

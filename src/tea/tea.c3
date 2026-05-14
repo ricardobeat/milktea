@@ -1,5 +1,45 @@
 module tea;
 
+// Cursor shapes (matches Go tea.CursorShape constants)
+enum CursorShape : int {
+    CURSOR_BLOCK,
+    CURSOR_UNDERLINE,
+    CURSOR_BAR,
+}
+
+// Cursor represents a cursor on the terminal screen.
+// x, y are 0-indexed relative to the top-left corner of the View content.
+struct Cursor {
+    int x;
+    int y;
+    CursorShape shape;
+    bool blink;
+}
+
+// View represents a terminal view with content, optional cursor, and settings.
+// This mirrors Go's tea.View struct.
+struct View {
+    String content;
+    Cursor cursor;
+    bool has_cursor;
+    bool alt_screen;
+}
+
+// new_view creates a View with the given content and default settings (no cursor, no alt screen).
+fn View new_view(String content) {
+    return { .content = content };
+}
+
+// new_alt_screen_view creates a View with alt screen enabled.
+fn View new_alt_screen_view(String content) {
+    return { .content = content, .alt_screen = true };
+}
+
+// new_cursor creates a Cursor at the given position with default shape (blinking block).
+fn Cursor new_cursor(int x, int y) {
+    return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
+}
+
 enum MsgKind : char {
     NONE,
     KEY,
@@ -32,7 +72,7 @@ alias Cmd = fn Msg();
 interface Model {
     fn Cmd init();
     fn Cmd update(Msg msg);
-    fn String view();
+    fn View view();
 }
 
 fn Msg make_quit_msg() @local {
@@ -136,6 +176,13 @@ fn void? run(Model model) {
     enable_focus();
     setup_sigwinch();
 
+    // Track alt screen state. The renderer enters/exits alt screen
+    // based on the View's alt_screen flag, matching Go's architecture.
+    bool in_alt_screen = false;
+    defer {
+        if (in_alt_screen) exit_alt_screen();
+    };
+
     WinSize initial_ws = get_window_size();
     Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
     if (dispatch(model, init_wmsg)) return;
@@ -146,7 +193,12 @@ fn void? run(Model model) {
         if (m0.kind != MsgKind.NONE && dispatch(model, m0)) return;
     }
     @pool() {
-        render_frame(model.view());
+        View v = model.view();
+        if (v.alt_screen && !in_alt_screen) {
+            enter_alt_screen();
+            in_alt_screen = true;
+        }
+        render_view(v);
     };
 
     char[256] pending;
@@ -224,7 +276,15 @@ fn void? run(Model model) {
 
         if (dirty) {
             @pool() {
-                render_frame(model.view());
+                View v = model.view();
+                if (v.alt_screen && !in_alt_screen) {
+                    enter_alt_screen();
+                    in_alt_screen = true;
+                } else if (!v.alt_screen && in_alt_screen) {
+                    exit_alt_screen();
+                    in_alt_screen = false;
+                }
+                render_view(v);
             };
         }
     }

@@ -87,7 +87,7 @@ fn RgbColor hsv_to_rgb(double h, double s, double v) {
     return { .r = clamp_color((int)(r * 255)), .g = clamp_color((int)(g * 255)), .b = clamp_color((int)(b * 255)) };
 }
 
-fn String SplashModel.view(SplashModel* self) @dynamic {
+fn tea::View SplashModel.view(SplashModel* self) @dynamic {
     int w = self.width;
     int h = self.height;
     if (w < 2) w = 80;
@@ -130,20 +130,16 @@ fn String SplashModel.view(SplashModel* self) @dynamic {
 
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff")).set_bold(true);
     out.append_string(hint.render("Press any key to quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     SplashModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

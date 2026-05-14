@@ -128,7 +128,7 @@ fn tea::Cmd PickerModel.update(PickerModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String PickerModel.view(PickerModel* self) @dynamic {
+fn tea::View PickerModel.view(PickerModel* self) @dynamic {
     lipgloss::Style title = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true).padding(0, 0, 1, 0);
     lipgloss::Style cursor_s = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
     lipgloss::Style dir_s = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff"));
@@ -141,7 +141,7 @@ fn String PickerModel.view(PickerModel* self) @dynamic {
 
     if (self.has_error) {
         out.append_string("Error reading directory");
-        return out.str_view();
+        return tea::new_alt_screen_view(out.str_view());
     }
 
     int visible = self.height - 5;
@@ -166,20 +166,16 @@ fn String PickerModel.view(PickerModel* self) @dynamic {
 
     out.append_char('\n');
     out.append_string(hint.render("Enter: open/select | b: back | q: quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     PickerModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     if (m.selected.len > 0) {
         io::printfn("Selected: %s", m.selected);
     } else {

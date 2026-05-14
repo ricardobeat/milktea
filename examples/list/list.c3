@@ -57,7 +57,7 @@ fn tea::Cmd ListModel.update(ListModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String ListModel.view(ListModel* self) @dynamic {
+fn tea::View ListModel.view(ListModel* self) @dynamic {
     lipgloss::Style cursor_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
     lipgloss::Style selected_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00"));
     lipgloss::Style dim_style = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
@@ -107,7 +107,7 @@ fn String ListModel.view(ListModel* self) @dynamic {
     out.append_char('\n');
     out.append_string(hint_style.render("↑↓ navigate  |  ENTER select  |  q/ESC quit"));
     
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
@@ -134,12 +134,10 @@ fn int main() {
     tea::enter_alt_screen();
     
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
     
-    tea::exit_alt_screen();
     
     if (m.selected >= 0) {
         io::printfn("\nYou selected: %s\n", m.items[m.selected]);

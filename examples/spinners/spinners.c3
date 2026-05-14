@@ -55,7 +55,7 @@ struct SpinnerDef {
     int count;
 }
 
-fn String SpinnersModel.view(SpinnersModel* self) @dynamic {
+fn tea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
     SpinnerDef[6] spinners;
     spinners[0] = { .name = "Dots",    .frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" }, .count = 8 };
     spinners[1] = { .name = "Lines",   .frames = { "-", "\\", "|", "/", "-", "\\", "|", "/" }, .count = 4 };
@@ -96,20 +96,16 @@ fn String SpinnersModel.view(SpinnersModel* self) @dynamic {
     content.append_char('\n');
     content.append_string(label.render("Press q or ESC to quit"));
 
-    return box_style.render(content.str_view());
+    return tea::new_alt_screen_view(box_style.render(content.str_view()));
 }
 
 fn int main() {
     SpinnersModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

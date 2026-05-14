@@ -61,7 +61,7 @@ fn String tab_content(int tab) {
     }
 }
 
-fn String TabsModel.view(TabsModel* self) @dynamic {
+fn tea::View TabsModel.view(TabsModel* self) @dynamic {
     lipgloss::Style active_tab = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#ffffff"))
         .background(lipgloss::color_hex("#00d7ff"))
@@ -101,20 +101,16 @@ fn String TabsModel.view(TabsModel* self) @dynamic {
     out.append_char('\n');
     out.append_string(hint_style.render("← → switch tabs | q quit"));
 
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     TabsModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }

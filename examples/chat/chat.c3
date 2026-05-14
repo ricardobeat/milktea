@@ -88,7 +88,7 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-fn String ChatModel.view(ChatModel* self) @dynamic {
+fn tea::View ChatModel.view(ChatModel* self) @dynamic {
     lipgloss::Style you_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
     lipgloss::Style sys_style = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
     lipgloss::Style input_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff"));
@@ -133,20 +133,16 @@ fn String ChatModel.view(ChatModel* self) @dynamic {
     out.append_string(border_style.render(input_line.str_view()));
     out.append_char('\n');
     out.append_string(hint_style.render("ENTER send | ESC quit"));
-    return out.str_view();
+    return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
     ChatModel m = {};
-    tea::enter_alt_screen();
-
     if (catch err = tea::run((tea::Model)&m)) {
-        tea::exit_alt_screen();
         io::printfn("Error: %s", err);
         return 1;
     }
 
-    tea::exit_alt_screen();
     io::printn("Bye!");
     return 0;
 }
