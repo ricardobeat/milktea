@@ -80,7 +80,7 @@ fn Msg make_quit_msg() @local {
 }
 
 // Batch system: run multiple Cmds, dispatch each result
-const usz MAX_BATCH = 16;
+const sz MAX_BATCH = 16;
 
 Cmd[MAX_BATCH] g_batch_cmds;
 int g_batch_count = 0;
@@ -92,7 +92,7 @@ fn Msg make_batch_msg() @local {
 fn Cmd batch(Cmd[] cmds) {
     Cmd[16] filtered;
     int count = 0;
-    for (usz i = 0; i < cmds.len && count < 16; i++) {
+    for (sz i = 0; i < cmds.len && count < 16; i++) {
         if (cmds[i] != null) {
             filtered[count] = cmds[i];
             count++;
@@ -143,19 +143,19 @@ fn bool dispatch(Model model, Msg m) @local {
 }
 
 // Timer system
-const usz MAX_TIMERS = 32;
+const sz MAX_TIMERS = 32;
 
 struct TimerEntry {
     bool active;
-    usz deadline_ms;
+    sz deadline_ms;
     Cmd callback;
 }
 
 TimerEntry[MAX_TIMERS] g_timers;
 
-fn Cmd tick(usz delay_ms, Cmd callback) {
-    usz deadline = time_ms() + delay_ms;
-    for (usz i = 0; i < MAX_TIMERS; i++) {
+fn Cmd tick(sz delay_ms, Cmd callback) {
+    sz deadline = time_ms() + delay_ms;
+    for (sz i = 0; i < MAX_TIMERS; i++) {
         if (!g_timers[i].active) {
             g_timers[i].active = true;
             g_timers[i].deadline_ms = deadline;
@@ -202,14 +202,14 @@ fn void? run(Model model) {
     };
 
     char[256] pending;
-    usz pending_len = 0;
+    sz pending_len = 0;
     char[64] tmp;
 
     while (true) {
         // Fire expired timers
         bool dirty = false;
-        usz now = time_ms();
-        for (usz i = 0; i < MAX_TIMERS; i++) {
+        sz now = time_ms();
+        for (sz i = 0; i < MAX_TIMERS; i++) {
             if (g_timers[i].active && now >= g_timers[i].deadline_ms) {
                 Cmd cb = g_timers[i].callback;
                 g_timers[i].active = false;
@@ -223,15 +223,15 @@ fn void? run(Model model) {
         // Calculate poll timeout from nearest timer
         int timeout = 50;
         now = time_ms();
-        for (usz i = 0; i < MAX_TIMERS; i++) {
+        for (sz i = 0; i < MAX_TIMERS; i++) {
             if (g_timers[i].active) {
-                isz wait = (isz)(g_timers[i].deadline_ms - now);
+                sz wait = (sz)(g_timers[i].deadline_ms - now);
                 if (wait < 0) wait = 0;
-                if (wait < (isz)timeout) timeout = (int)wait;
+                if (wait < (sz)timeout) timeout = (int)wait;
             }
         }
 
-        isz n = read_stdin_timeout(tmp[..], timeout);
+        sz n = read_stdin_timeout(tmp[..], timeout);
 
         if (g_win_resized) {
             g_win_resized = false;
@@ -242,8 +242,8 @@ fn void? run(Model model) {
         }
 
         if (n > 0) {
-            for (isz i = 0; i < n && pending_len < pending.len; i++) {
-                pending[pending_len++] = tmp[(usz)i];
+            for (sz i = 0; i < n && pending_len < pending.len; i++) {
+                pending[pending_len++] = tmp[(sz)i];
             }
         }
 
@@ -251,7 +251,7 @@ fn void? run(Model model) {
             ParseResult pr = parse_key(pending[:pending_len]);
             if (pr.consumed == 0) break;
 
-            for (usz i = pr.consumed; i < pending_len; i++) {
+            for (sz i = pr.consumed; i < pending_len; i++) {
                 pending[i - pr.consumed] = pending[i];
             }
             pending_len -= pr.consumed;

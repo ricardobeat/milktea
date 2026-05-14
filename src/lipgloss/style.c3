@@ -5,7 +5,7 @@ import std::core::dstring;
 fn int string_width(String s) {
     int w = 0;
     bool in_ansi = false;
-    usz i = 0;
+    sz i = 0;
     while (i < s.len) {
         if (s[i] == '\x1b') {
             in_ansi = true;
@@ -153,9 +153,9 @@ fn String Style.render(self, String input) {
 
     // Split input into lines.
     String[256] lines;
-    usz line_count = 0;
-    usz line_start = 0;
-    for (usz i = 0; i <= input.len; i++) {
+    sz line_count = 0;
+    sz line_start = 0;
+    for (sz i = 0; i <= input.len; i++) {
         if (i == input.len || input[i] == '\n') {
             lines[line_count] = input[line_start:i - line_start];
             line_count++;
@@ -168,7 +168,7 @@ fn String Style.render(self, String input) {
     int target_width = self.width;
     if (target_width <= 0) {
         target_width = 0;
-        for (usz i = 0; i < line_count; i++) {
+        for (sz i = 0; i < line_count; i++) {
             int line_width = string_width(lines[i]) + self.pad_left + self.pad_right;
             if (line_width > target_width) target_width = line_width;
         }
@@ -187,7 +187,7 @@ fn String Style.render(self, String input) {
     }
 
     // Content lines.
-    for (usz i = 0; i < line_count; i++) {
+    for (sz i = 0; i < line_count; i++) {
         String line = lines[i];
 
         // Build styled line: pad_left + line + pad to width + pad_right.

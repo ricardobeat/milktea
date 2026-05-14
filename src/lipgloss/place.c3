@@ -7,11 +7,11 @@ import std::core::dstring;
 fn String join_horizontal(String left, String right, int gap) {
     String[128] left_lines;
     String[128] right_lines;
-    usz left_count = 0;
-    usz right_count = 0;
+    sz left_count = 0;
+    sz right_count = 0;
 
-    usz start = 0;
-    for (usz i = 0; i <= left.len; i++) {
+    sz start = 0;
+    for (sz i = 0; i <= left.len; i++) {
         if (i == left.len || left[i] == '\n') {
             if (left_count < left_lines.len) {
                 left_lines[left_count] = left[start:i - start];
@@ -22,7 +22,7 @@ fn String join_horizontal(String left, String right, int gap) {
         }
     }
     start = 0;
-    for (usz i = 0; i <= right.len; i++) {
+    for (sz i = 0; i <= right.len; i++) {
         if (i == right.len || right[i] == '\n') {
             if (right_count < right_lines.len) {
                 right_lines[right_count] = right[start:i - start];
@@ -35,7 +35,7 @@ fn String join_horizontal(String left, String right, int gap) {
 
     // Find max width of left lines
     int max_left_w = 0;
-    for (usz i = 0; i < left_count; i++) {
+    for (sz i = 0; i < left_count; i++) {
         int w = string_width(left_lines[i]);
         if (w > max_left_w) max_left_w = w;
     }
@@ -61,9 +61,9 @@ fn String join_horizontal(String left, String right, int gap) {
 fn String place(int width, int height, String content) {
     // Split content into lines
     String[256] lines;
-    usz line_count = 0;
-    usz start = 0;
-    for (usz i = 0; i <= content.len; i++) {
+    sz line_count = 0;
+    sz start = 0;
+    for (sz i = 0; i <= content.len; i++) {
         if (i == content.len || content[i] == '\n') {
             lines[line_count] = content[start:i - start];
             line_count++;
@@ -74,7 +74,7 @@ fn String place(int width, int height, String content) {
 
     // Find max content width
     int content_w = 0;
-    for (usz i = 0; i < line_count; i++) {
+    for (sz i = 0; i < line_count; i++) {
         int w = string_width(lines[i]);
         if (w > content_w) content_w = w;
     }
@@ -94,7 +94,7 @@ fn String place(int width, int height, String content) {
     }
 
     // Content lines
-    for (usz i = 0; i < line_count; i++) {
+    for (sz i = 0; i < line_count; i++) {
         for (int j = 0; j < pad_left; j++) out.append_char(' ');
         out.append_string(lines[i]);
         int w = string_width(lines[i]);

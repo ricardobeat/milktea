@@ -12,7 +12,7 @@ const int BUF_SIZE = 4096;
 
 struct Editor {
     char[BUF_SIZE] buf;
-    usz len;
+    sz len;
     int cursor;
     bool focused;
     String label;
@@ -20,7 +20,7 @@ struct Editor {
 
 fn void Editor.insert(Editor* self, char c) {
     if (self.len >= BUF_SIZE - 1) return;
-    for (usz i = self.len; i > (usz)self.cursor; i--) {
+    for (sz i = self.len; i > (sz)self.cursor; i--) {
         self.buf[i] = self.buf[i - 1];
     }
     self.buf[self.cursor] = c;
@@ -30,7 +30,7 @@ fn void Editor.insert(Editor* self, char c) {
 
 fn void Editor.backspace(Editor* self) {
     if (self.cursor == 0) return;
-    for (usz i = (usz)self.cursor; i < self.len; i++) {
+    for (sz i = (sz)self.cursor; i < self.len; i++) {
         self.buf[i - 1] = self.buf[i];
     }
     self.len--;
@@ -58,17 +58,17 @@ fn String Editor.view(Editor* self, int height, bool show_cursor) {
 
     // Show lines up to height
     String txt = self.text();
-    usz line_num = 1;
-    usz line_start = 0;
+    sz line_num = 1;
+    sz line_start = 0;
     int lines_shown = 0;
     int max_lines = height - 4;
     if (max_lines < 1) max_lines = 1;
 
     // Find which line cursor is on for scrolling
     int cursor_line = 0;
-    usz pos = 0;
-    for (usz i = 0; i < self.len; i++) {
-        if (i == (usz)self.cursor) break;
+    sz pos = 0;
+    for (sz i = 0; i < self.len; i++) {
+        if (i == (sz)self.cursor) break;
         if (self.buf[i] == '\n') cursor_line++;
     }
 
@@ -78,12 +78,12 @@ fn String Editor.view(Editor* self, int height, bool show_cursor) {
         skip = cursor_line - max_lines + 2;
     }
 
-    for (usz i = 0; i <= txt.len; i++) {
+    for (sz i = 0; i <= txt.len; i++) {
         if (i == txt.len || txt[i] == '\n') {
             if (line_num - 1 >= skip && lines_shown < max_lines) {
                 content.append_string(string::tformat("%2d ", line_num));
                 content.append_string(txt[line_start:i - line_start]);
-                if (self.focused && show_cursor && line_num - 1 == cursor_line && (usz)self.cursor == i) {
+                if (self.focused && show_cursor && line_num - 1 == cursor_line && (sz)self.cursor == i) {
                     content.append_string("▎");
                 }
                 content.append_char('\n');

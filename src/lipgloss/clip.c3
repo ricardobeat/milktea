@@ -9,7 +9,7 @@ fn String clip_lines(String input, int max_lines) {
 
     // Count newlines and find line starts
     int total_lines = 1;
-    for (usz i = 0; i < input.len; i++) {
+    for (sz i = 0; i < input.len; i++) {
         if (input[i] == '\n') total_lines++;
     }
 
@@ -17,7 +17,7 @@ fn String clip_lines(String input, int max_lines) {
 
     // Skip lines from the top
     int skip = total_lines - max_lines;
-    usz pos = 0;
+    sz pos = 0;
     for (int l = 0; l < skip && pos < input.len; l++) {
         while (pos < input.len && input[pos] != '\n') pos++;
         if (pos < input.len) pos++; // skip the newline itself

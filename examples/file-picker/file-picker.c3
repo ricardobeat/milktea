@@ -34,7 +34,7 @@ fn void load_dir(PickerModel* self, String path) {
 
     @pool() {
         char[512] path_buf;
-        for (usz i = 0; i < path.len && i < 511; i++) {
+        for (sz i = 0; i < path.len && i < 511; i++) {
             path_buf[i] = path[i];
             path_buf[i + 1] = 0;
         }
@@ -49,7 +49,7 @@ fn void load_dir(PickerModel* self, String path) {
             self.is_dirs[self.count] = (dir_flags[i] != 0);
 
             int offset = i * 64;
-            usz j = 0;
+            sz j = 0;
             while (j < 63 && name_buf[offset + j] != 0) {
                 self.names[self.count][j] = name_buf[offset + j];
                 j++;
@@ -108,7 +108,7 @@ fn tea::Cmd PickerModel.update(PickerModel* self, tea::Msg msg) @dynamic {
             if (k.rune == 'q') return tea::quit();
             if (k.rune == 'b') {
                 if (self.current_dir.len > 1) {
-                    usz last_slash = self.current_dir.len - 1;
+                    sz last_slash = self.current_dir.len - 1;
                     while (last_slash > 0 && self.current_dir[last_slash] != '/') last_slash--;
                     if (last_slash > 0) {
                         load_dir(self, (String)self.current_dir[:last_slash]);

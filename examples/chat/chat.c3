@@ -11,8 +11,8 @@ const int BUF_SIZE = 512;
 
 struct ChatModel {
     char[BUF_SIZE] input_buf;
-    usz input_len;
-    usz input_cursor;
+    sz input_len;
+    sz input_cursor;
     String[64] messages;
     String[64] senders;
     int msg_count;
@@ -63,7 +63,7 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
             }
         case tea::KeyCode.BACKSPACE:
             if (self.input_cursor > 0) {
-                for (usz i = self.input_cursor; i < self.input_len; i++) {
+                for (sz i = self.input_cursor; i < self.input_len; i++) {
                     self.input_buf[i - 1] = self.input_buf[i];
                 }
                 self.input_len--;
@@ -76,7 +76,7 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
         case tea::KeyCode.RUNE:
             if (k.rune == 'q' && self.input_len == 0) return tea::quit();
             if (self.input_len < BUF_SIZE - 1) {
-                for (usz i = self.input_len; i > self.input_cursor; i--) {
+                for (sz i = self.input_len; i > self.input_cursor; i--) {
                     self.input_buf[i] = self.input_buf[i - 1];
                 }
                 self.input_buf[self.input_cursor] = k.rune;

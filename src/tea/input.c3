@@ -67,7 +67,7 @@ struct ParseResult {
     MsgKind kind;
     KeyMsg key;
     MouseMsg mouse;
-    usz consumed;
+    sz consumed;
 }
 
 const int CSI_MAX_PARAMS = 8;
@@ -77,7 +77,7 @@ struct CSIParse {
     int param_count;
     char final_byte;
     char private_prefix; // '<', '?', '>', '=' or 0 if none
-    usz consumed;
+    sz consumed;
     bool valid;
 }
 
@@ -92,7 +92,7 @@ fn CSIParse parse_csi(char[] buf) {
     // buf starts after ESC [
     if (buf.len == 0) return csi;
 
-    usz pos = 0;
+    sz pos = 0;
 
     // Check for private mode prefix (< ? > =)
     if (buf[0] == '<' || buf[0] == '?' || buf[0] == '>' || buf[0] == '=') {
@@ -145,11 +145,11 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
     return default_val;
 }
 
-fn ParseResult make_key(KeyCode code, char rune, bool ctrl, bool alt, bool shift, usz consumed) {
+fn ParseResult make_key(KeyCode code, char rune, bool ctrl, bool alt, bool shift, sz consumed) {
     return { MsgKind.KEY, { code, rune, ctrl, alt, shift }, { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false }, consumed };
 }
 
-fn ParseResult make_mouse(MouseButton button, MouseAction action, int row, int col, bool shift, bool alt, bool ctrl, usz consumed) {
+fn ParseResult make_mouse(MouseButton button, MouseAction action, int row, int col, bool shift, bool alt, bool ctrl, sz consumed) {
     return { MsgKind.MOUSE, { NONE, 0, false, false, false }, { button, action, row, col, shift, alt, ctrl }, consumed };
 }
 
@@ -226,7 +226,7 @@ fn ParseResult parse_key(char[] buf) {
                 return make_key(NONE, 0, false, false, false, 0);
             }
 
-            usz total = 2 + csi.consumed; // ESC [ + CSI data
+            sz total = 2 + csi.consumed; // ESC [ + CSI data
             char fb = csi.final_byte;
 
             // SGR mouse: ESC [ < button ; col ; row M (press) or m (release)

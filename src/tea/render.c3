@@ -33,7 +33,7 @@ fn void render_view_to(View v, DString* out) {
 
     // Write content, converting \n to \r\n for proper terminal line endings
     String frame = v.content;
-    for (usz i = 0; i < frame.len; i++) {
+    for (sz i = 0; i < frame.len; i++) {
         if (frame[i] == '\n' && (i == 0 || frame[i - 1] != '\r')) {
             out.append_char('\r');
         }

@@ -8,8 +8,8 @@ import std::core::dstring;
 
 struct TextInput {
     char[256] buf;
-    usz len;
-    usz cursor;
+    sz len;
+    sz cursor;
     String placeholder;
     bool focused;
     bool is_password;
@@ -22,7 +22,7 @@ fn void TextInput.clear(TextInput* self) {
 
 fn void TextInput.insert(TextInput* self, char c) {
     if (self.len >= self.buf.len - 1) return;
-    for (usz i = self.len; i > self.cursor; i--) {
+    for (sz i = self.len; i > self.cursor; i--) {
         self.buf[i] = self.buf[i - 1];
     }
     self.buf[self.cursor] = c;
@@ -32,7 +32,7 @@ fn void TextInput.insert(TextInput* self, char c) {
 
 fn void TextInput.backspace(TextInput* self) {
     if (self.cursor == 0) return;
-    for (usz i = self.cursor; i < self.len; i++) {
+    for (sz i = self.cursor; i < self.len; i++) {
         self.buf[i - 1] = self.buf[i];
     }
     self.len--;
@@ -41,7 +41,7 @@ fn void TextInput.backspace(TextInput* self) {
 
 fn void TextInput.delete_char(TextInput* self) {
     if (self.cursor >= self.len) return;
-    for (usz i = self.cursor; i < self.len - 1; i++) {
+    for (sz i = self.cursor; i < self.len - 1; i++) {
         self.buf[i] = self.buf[i + 1];
     }
     self.len--;
@@ -55,7 +55,7 @@ fn String TextInput.display_text(TextInput* self) {
     if (self.len == 0) return self.placeholder;
     if (self.is_password) {
         DString hidden = dstring::temp();
-        for (usz i = 0; i < self.len; i++) hidden.append_char('*');
+        for (sz i = 0; i < self.len; i++) hidden.append_string("•");
         return hidden.str_view();
     }
     return self.text();

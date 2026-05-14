@@ -15,10 +15,10 @@ extern fn int tcgetattr(int fd, char* termios_buf);
 extern fn int tcsetattr(int fd, int flags, char* termios_buf);
 extern fn int cfmakeraw(char* termios_buf);
 extern fn int poll(void* fds, ulong nfds, int timeout);
-extern fn isz read(int fd, void* buf, usz nbytes);
-extern fn isz write(int fd, void* buf, usz nbytes);
+extern fn sz read(int fd, void* buf, sz nbytes);
+extern fn sz write(int fd, void* buf, sz nbytes);
 extern fn int c3_get_winsize(int fd, ushort* row, ushort* col);
-extern fn isz c3_time_ms();
+extern fn sz c3_time_ms();
 extern fn double c3_sin(double x);
 extern fn double c3_cos(double x);
 extern fn int rand();
@@ -84,11 +84,11 @@ fn void raw_mode_restore(TtyState saved) {
     tcsetattr(STDIN_FILENO, TCSANOW, &saved.termios_buf[0]);
 }
 
-fn usz time_ms() {
-    return (usz)c3_time_ms();
+fn sz time_ms() {
+    return (sz)c3_time_ms();
 }
 
-fn isz read_stdin_timeout(char[] buf, int timeout_ms) {
+fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
     if (buf.len == 0) return 0;
 
     PollFd pfd;
@@ -99,20 +99,20 @@ fn isz read_stdin_timeout(char[] buf, int timeout_ms) {
     int poll_result = poll(&pfd, 1, timeout_ms);
     if (poll_result <= 0) return 0;
 
-    isz n = read(STDIN_FILENO, &buf[0], buf.len);
+    sz n = read(STDIN_FILENO, &buf[0], buf.len);
     if (n < 0) return 0;
     return n;
 }
 
-fn isz read_stdin(char[] buf) {
+fn sz read_stdin(char[] buf) {
     return read_stdin_timeout(buf, 50);
 }
 
 fn void write_stdout(char[] bytes) {
-    usz written = 0;
+    sz written = 0;
     while (written < bytes.len) {
-        isz n = write(STDOUT_FILENO, &bytes[written], bytes.len - written);
+        sz n = write(STDOUT_FILENO, &bytes[written], bytes.len - written);
         if (n <= 0) break;
-        written += (usz)n;
+        written += (sz)n;
     }
 }

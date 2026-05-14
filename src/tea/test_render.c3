@@ -11,9 +11,9 @@ import std::core::dstring;
 fn bool contains(String haystack, String needle) {
     if (needle.len == 0) return true;
     if (needle.len > haystack.len) return false;
-    for (usz i = 0; i <= haystack.len - needle.len; i++) {
+    for (sz i = 0; i <= haystack.len - needle.len; i++) {
         bool match = true;
-        for (usz j = 0; j < needle.len; j++) {
+        for (sz j = 0; j < needle.len; j++) {
             if (haystack[i + j] != needle[j]) { match = false; break; }
         }
         if (match) return true;
@@ -217,7 +217,7 @@ fn void test_textinputs_line_counting() @test {
 
     // Count the lines by splitting on \n
     int line_count = 0;
-    for (usz i = 0; i < content.len; i++) {
+    for (sz i = 0; i < content.len; i++) {
         if (content[i] == '\n') line_count++;
     }
     // 7 \n characters → 8 lines (0-indexed: 0..7)
@@ -226,7 +226,7 @@ fn void test_textinputs_line_counting() @test {
     // So base_row should be 3 (0-indexed)
     int nickname_line = 0;
     int nl_count = 0;
-    for (usz i = 0; i < content.len; i++) {
+    for (sz i = 0; i < content.len; i++) {
         if (content[i] == '\n') {
             nl_count++;
             if (nl_count == 3) {
