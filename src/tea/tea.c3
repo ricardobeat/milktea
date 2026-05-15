@@ -2,6 +2,7 @@ module tea;
 
 import std::core::dstring;
 import std::thread;
+import xray;
 
 // Cursor shapes (matches Go tea.CursorShape constants)
 enum CursorShape : int {
@@ -152,6 +153,9 @@ struct Program {
 
     // Threaded input reader
     thread::Thread reader_thread;
+
+    // Xray renderer (differential rendering + sync output)
+    xray::Renderer* renderer;
 }
 
 // File-scope input queue — not inside Program to avoid copies.
@@ -427,6 +431,10 @@ fn void? Program.run(Program* self) {
     // not when the if-block above closes (C3 defer is block-scoped).
     defer {
         if (!self.test_mode) {
+            if (self.renderer != null) {
+                self.renderer.destroy();
+                mem::free(self.renderer);
+            }
             input_queue_destroy(&g_input_queue);
             disable_mouse();
             disable_focus();
@@ -462,6 +470,11 @@ fn void? Program.run(Program* self) {
     }
     Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
     if (dispatch(self, self.model, init_wmsg)) return;
+
+    // Create xray renderer for differential rendering (non-test mode only)
+    if (!self.test_mode) {
+        self.renderer = xray::new_renderer((sz)initial_ws.ws_col, (sz)initial_ws.ws_row, &write_stdout);
+    }
 
     Cmd c0 = self.model.init();
     if (c0 != null) {
@@ -509,6 +522,9 @@ fn void? Program.run(Program* self) {
         if (!self.test_mode && g_win_resized) {
             g_win_resized = false;
             WinSize ws = get_window_size();
+            if (self.renderer != null) {
+                self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
+            }
             Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)ws.ws_col, (int)ws.ws_row } };
             if (dispatch(self, self.model, wm)) return;
             dirty = true;
@@ -557,6 +573,7 @@ fn void? Program.run(Program* self) {
 
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
+// In non-test mode, uses xray's differential renderer with synchronized output.
 fn void Program.render_current_view(Program* self) {
     @pool() {
         View v = self.model.view();
@@ -572,7 +589,65 @@ fn void Program.render_current_view(Program* self) {
                 render_view_to(v, self.output_buf);
             }
         } else {
-            render_view(v);
+            // Use xray renderer for differential output
+            xray::Renderer* r = self.renderer;
+            if (r != null) {
+                r.begin_frame();
+
+                // Clear the screen buffer and write new content
+                r.screen.clear();
+
+                // Write view content line by line, converting \n to row advances
+                String content = v.content;
+                sz row = 0;
+                sz col = 0;
+                sz line_start = 0;
+                for (sz i = 0; i <= content.len; i++) {
+                    if (i == content.len || content[i] == '\n') {
+                        sz line_len = i - line_start;
+                        if (line_len > 0) {
+                            String line = content[line_start : line_len];
+                            // Strip leading \r if present
+                            if (line.len > 0 && line[0] == '\r') {
+                                line = line[1..];
+                            }
+                            // Use ANSI parser to handle lipgloss SGR sequences
+                            r.screen.render_ansi_string(col, row, line, xray::default_style());
+                        }
+                        row++;
+                        col = 0;
+                        line_start = i + 1;
+                    }
+                }
+
+                // Handle cursor
+                if (v.has_cursor) {
+                    // Cursor position is set via CUP after render,
+                    // so we mark the cursor cell in the screen buffer
+                    // (the renderer will emit CUP at end_frame)
+                }
+
+                r.end_frame();
+
+                // Emit cursor positioning and shape after the diff frame
+                if (v.has_cursor) {
+                    DString cursor_seq = dstring::temp();
+                    int term_row = v.cursor.y + 1;
+                    int term_col = v.cursor.x + 1;
+                    cursor_seq.append_string(cursor_to(term_row, term_col));
+                    cursor_seq.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
+                    if (v.cursor.blink) {
+                        cursor_seq.append_string(SGR_CURSOR_BLINK_ON);
+                    } else {
+                        cursor_seq.append_string(SGR_CURSOR_BLINK_OFF);
+                    }
+                    cursor_seq.append_string(SGR_SHOW_CURSOR);
+                    write_stdout((char[])cursor_seq.str_view());
+                }
+            } else {
+                // Fallback: no renderer (shouldn't happen in non-test mode)
+                render_view(v);
+            }
         }
     };
 }

@@ -18,7 +18,7 @@ struct SplashModel {
 }
 
 fn tea::Cmd SplashModel.init(SplashModel* self) @dynamic {
-    return tea::tick(33, &on_tick);
+    return tea::tick(16, &on_tick);
 }
 
 fn tea::Msg on_tick() {
@@ -33,7 +33,7 @@ fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
     }
     if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
         self.frame++;
-        return tea::tick(33, &on_tick);
+        return tea::tick(16, &on_tick);
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
     return tea::quit();
