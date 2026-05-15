@@ -91,6 +91,9 @@ struct Style {
     int pad_bottom;
     int pad_left;
     int width;        // 0 = auto (don't pad)
+    int height;       // 0 = auto
+    Position h_align; // horizontal alignment within width
+    Position v_align; // vertical alignment within height
     Border border;    // zero value = no border
 }
 
@@ -152,6 +155,31 @@ fn Style Style.set_border(self, Border b) {
 fn Style Style.set_border_fg(self, Color c) {
     Style s = self;
     s.border_fg = c;
+    return s;
+}
+
+fn Style Style.set_height(self, int h) {
+    Style s = self;
+    s.height = h;
+    return s;
+}
+
+fn Style Style.align(self, Position h, Position v) {
+    Style s = self;
+    s.h_align = h;
+    s.v_align = v;
+    return s;
+}
+
+fn Style Style.align_horizontal(self, Position h) {
+    Style s = self;
+    s.h_align = h;
+    return s;
+}
+
+fn Style Style.align_vertical(self, Position v) {
+    Style s = self;
+    s.v_align = v;
     return s;
 }
 
@@ -235,13 +263,16 @@ fn String Style.render(self, String input) {
     // Total line width = content + padding (border is applied after)
     int line_width = target_width + self.pad_left + self.pad_right;
 
+    // Build content into a temp buffer first, then add height alignment.
+    DString body = dstring::temp();
+
     // Top padding lines.
     for (int i = 0; i < self.pad_top; i++) {
-        for (int j = 0; j < line_width; j++) out.append_char(' ');
+        for (int j = 0; j < line_width; j++) body.append_char(' ');
         if (has_attrs) {
-            out.append_string("\x1b[0m");
+            body.append_string("\x1b[0m");
         }
-        out.append_char('\n');
+        body.append_char('\n');
     }
 
     // Content lines.
@@ -260,48 +291,77 @@ fn String Style.render(self, String input) {
 
         // Wrap with SGR if needed.
         if (has_attrs) {
-            out.append_string("\x1b[");
+            body.append_string("\x1b[");
             bool first = true;
             if (self.bold) {
-                out.append_string("1");
+                body.append_string("1");
                 first = false;
             }
             if (self.italic) {
-                if (!first) out.append_char(';');
-                out.append_string("3");
+                if (!first) body.append_char(';');
+                body.append_string("3");
                 first = false;
             }
             if (self.underline) {
-                if (!first) out.append_char(';');
-                out.append_string("4");
+                if (!first) body.append_char(';');
+                body.append_string("4");
                 first = false;
             }
             if (self.fg.kind != ColorKind.NONE) {
-                if (!first) out.append_char(';');
-                self.fg.write_sgr_params(&out, true);
+                if (!first) body.append_char(';');
+                self.fg.write_sgr_params(&body, true);
                 first = false;
             }
             if (self.bg.kind != ColorKind.NONE) {
-                if (!first) out.append_char(';');
-                self.bg.write_sgr_params(&out, false);
+                if (!first) body.append_char(';');
+                self.bg.write_sgr_params(&body, false);
             }
-            out.append_string("m");
-            out.append_string(styled_str);
-            out.append_string("\x1b[0m");
+            body.append_string("m");
+            body.append_string(styled_str);
+            body.append_string("\x1b[0m");
         } else {
-            out.append_string(styled_str);
+            body.append_string(styled_str);
         }
 
-        out.append_char('\n');
+        body.append_char('\n');
     }
 
     // Bottom padding lines.
     for (int i = 0; i < self.pad_bottom; i++) {
-        for (int j = 0; j < line_width; j++) out.append_char(' ');
+        for (int j = 0; j < line_width; j++) body.append_char(' ');
         if (has_attrs) {
-            out.append_string("\x1b[0m");
+            body.append_string("\x1b[0m");
         }
-        out.append_char('\n');
+        body.append_char('\n');
+    }
+
+    // Height: add empty lines to reach target height, with vertical alignment.
+    int total_lines = (int)line_count + self.pad_top + self.pad_bottom;
+    if (self.height > 0 && total_lines < self.height) {
+        int extra = self.height - total_lines;
+        int top_extra = 0;
+        int bottom_extra = 0;
+        if (self.v_align == Position.CENTER) {
+            top_extra = extra / 2;
+            bottom_extra = extra - top_extra;
+        } else if (self.v_align == Position.BOTTOM) {
+            top_extra = extra;
+        } else {
+            bottom_extra = extra;
+        }
+
+        // Write top extra, then body, then bottom extra
+        for (int i = 0; i < top_extra; i++) {
+            for (int j = 0; j < line_width; j++) out.append_char(' ');
+            out.append_char('\n');
+        }
+        out.append_string(body.str_view());
+        for (int i = 0; i < bottom_extra; i++) {
+            for (int j = 0; j < line_width; j++) out.append_char(' ');
+            out.append_char('\n');
+        }
+    } else {
+        out.append_string(body.str_view());
     }
 
     // Remove trailing newline if needed, then apply border or copy.

@@ -41,32 +41,36 @@ fn String Editor.text(Editor* self) {
     return (String)self.buf[:self.len];
 }
 
-fn String Editor.view(Editor* self, int height, bool show_cursor) {
+fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor) {
     lipgloss::Style focused = lipgloss::new_style()
         .set_border(lipgloss::rounded_border())
+        .set_border_fg(lipgloss::color_hex("#3b82f6"))
+        .set_width(pane_width)
         .padding(0, 1, 0, 1);
     lipgloss::Style unfocused = lipgloss::new_style()
-        .set_border({ .top="-", .bottom="-", .left="|", .right="|",
-                       .top_left="-", .top_right="-", .bottom_left="-", .bottom_right="-" })
+        .set_border(lipgloss::hidden_border())
+        .set_width(pane_width)
         .padding(0, 1, 0, 1);
 
     lipgloss::Style s = self.focused ? focused : unfocused;
+
+    // Content width available for text (inside padding and borders)
+    int content_width = pane_width - 4; // 2 padding + 2 border chars
+    if (content_width < 1) content_width = 1;
 
     DString content = dstring::temp();
     content.append_string(self.label);
     content.append_char('\n');
 
-    // Show lines up to height
+    // Show lines up to height, with word wrapping
     String txt = self.text();
     sz line_num = 1;
-    sz line_start = 0;
     int lines_shown = 0;
     int max_lines = height - 4;
     if (max_lines < 1) max_lines = 1;
 
     // Find which line cursor is on for scrolling
     int cursor_line = 0;
-    sz pos = 0;
     for (sz i = 0; i < self.len; i++) {
         if (i == (sz)self.cursor) break;
         if (self.buf[i] == '\n') cursor_line++;
@@ -78,20 +82,79 @@ fn String Editor.view(Editor* self, int height, bool show_cursor) {
         skip = cursor_line - max_lines + 2;
     }
 
+    // Cursor line highlight: blue bg (57) + near-white fg (230)
+    String cline_open = "\x1b[48;5;57m\x1b[38;5;230m";
+    String cline_close = "\x1b[0m";
+    String cursor_block = "\xe2\x96\x88"; // █
+
+    sz line_start = 0;
+    int logical_line = 0;
     for (sz i = 0; i <= txt.len; i++) {
-        if (i == txt.len || txt[i] == '\n') {
-            if (line_num - 1 >= skip && lines_shown < max_lines) {
-                content.append_string(string::tformat("%2d ", line_num));
-                content.append_string(txt[line_start:i - line_start]);
-                if (self.focused && show_cursor && line_num - 1 == cursor_line && (sz)self.cursor == i) {
-                    content.append_string("▎");
+        bool at_end = i == txt.len;
+        bool at_newline = !at_end && txt[i] == '\n';
+
+        if (at_end || at_newline) {
+            // Word-wrap this logical line into display lines
+            sz seg_start = line_start;
+            while (seg_start < i) {
+                sz seg_end = seg_start;
+                sz last_break = seg_start;
+                int col = 0;
+                while (seg_end < i && col < content_width) {
+                    if (txt[seg_end] == ' ') last_break = seg_end + 1;
+                    col++;
+                    seg_end++;
+                }
+                // If we didn't reach the end, break at last word boundary
+                if (seg_end < i && last_break > seg_start) {
+                    seg_end = last_break;
+                }
+                if (seg_end == seg_start) seg_end = seg_start + 1; // safety
+
+                if (logical_line >= skip && lines_shown < max_lines) {
+                    bool is_cursor_line = self.focused && logical_line == cursor_line;
+                    if (is_cursor_line) content.append_string(cline_open);
+                    content.append_string(string::tformat("%2d ", line_num));
+                    content.append_string(txt[seg_start : seg_end - seg_start]);
+                    if (is_cursor_line && show_cursor && (sz)self.cursor >= seg_start && (sz)self.cursor <= seg_end) {
+                        content.append_string(cursor_block);
+                    }
+                    // Pad cursor line to full content width so highlight extends across
+                    if (is_cursor_line) {
+                        int used = 3 + (int)(seg_end - seg_start); // "NN " + text
+                        if (show_cursor && (sz)self.cursor >= seg_start && (sz)self.cursor <= seg_end) used++;
+                        for (int p = used; p < content_width; p++) content.append_char(' ');
+                        content.append_string(cline_close);
+                    }
+                    content.append_char('\n');
+                    lines_shown++;
+                }
+                logical_line++;
+                seg_start = seg_end;
+            }
+
+            // If cursor is at the end of this logical line (e.g. right after
+            // pressing Enter), render an empty line with the cursor visible.
+            if (at_newline && (sz)self.cursor == i + 1 && logical_line >= skip && lines_shown < max_lines) {
+                bool is_cursor_line = self.focused && logical_line == cursor_line;
+                if (is_cursor_line) content.append_string(cline_open);
+                content.append_string(string::tformat("%2d ", (int)(line_num + 1)));
+                if (is_cursor_line && show_cursor) {
+                    content.append_string(cursor_block);
+                }
+                // Pad cursor line to full content width
+                if (is_cursor_line) {
+                    int used = 4; // "NN " + cursor block
+                    for (int p = used; p < content_width; p++) content.append_char(' ');
+                    content.append_string(cline_close);
                 }
                 content.append_char('\n');
                 lines_shown++;
+                logical_line++;
             }
             line_num++;
             line_start = i + 1;
-            if (i == txt.len) break;
+            if (at_end) break;
         }
     }
 
@@ -139,9 +202,18 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
         case tea::KeyCode.CTRL_C:
             return tea::quit();
         case tea::KeyCode.TAB:
-            self.editors[self.focus].focused = false;
-            self.focus = (self.focus + 1) % self.count;
-            self.editors[self.focus].focused = true;
+            if (k.shift) {
+                // Shift-Tab: previous pane
+                self.editors[self.focus].focused = false;
+                self.focus--;
+                if (self.focus < 0) self.focus = self.count - 1;
+                self.editors[self.focus].focused = true;
+            } else {
+                // Tab: next pane
+                self.editors[self.focus].focused = false;
+                self.focus = (self.focus + 1) % self.count;
+                self.editors[self.focus].focused = true;
+            }
         case tea::KeyCode.BACKSPACE:
             self.editors[self.focus].backspace();
         case tea::KeyCode.ENTER:
@@ -150,11 +222,11 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
             return tea::quit();
         case tea::KeyCode.RUNE:
             if (k.ctrl) {
-                if (k.rune == 'n' - 'a' + 1) {
+                if (k.rune == 'n') {
                     // Ctrl+N - add editor
                     if (self.count < MAX_EDITORS) self.count++;
                 }
-                if (k.rune == 'w' - 'a' + 1) {
+                if (k.rune == 'w') {
                     // Ctrl+W - remove editor
                     if (self.count > 1) {
                         self.editors[self.focus].focused = false;
@@ -178,10 +250,13 @@ fn tea::View SplitModel.view(SplitModel* self) @dynamic {
     int edit_h = self.height - 3;
     if (edit_h < 5) edit_h = 5;
 
+    int pane_w = self.width / self.count;
+    if (pane_w < 10) pane_w = 10;
+
     DString out = dstring::temp();
     String[4] views;
     for (int i = 0; i < self.count; i++) {
-        views[i] = self.editors[i].view(edit_h, show_cursor);
+        views[i] = self.editors[i].view(edit_h, pane_w, show_cursor);
     }
 
     if (self.count == 1) {
@@ -189,13 +264,13 @@ fn tea::View SplitModel.view(SplitModel* self) @dynamic {
     } else {
         String joined = views[0];
         for (int i = 1; i < self.count; i++) {
-            joined = lipgloss::join_horizontal(joined, views[i], 1);
+            joined = lipgloss::join_horizontal(joined, views[i], 0);
         }
         out.append_string(joined);
     }
 
     out.append_char('\n');
-    out.append_string(hint.render(string::tformat("TAB: switch | Ctrl+N: add | Ctrl+W: close | ESC: quit | Panes: %d", self.count)));
+    out.append_string(hint.render(string::tformat("TAB: next | Shift+TAB: prev | Ctrl+N: add | Ctrl+W: close | ESC: quit | Panes: %d", self.count)));
     return tea::new_alt_screen_view(out.str_view());
 }
 

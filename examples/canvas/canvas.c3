@@ -6,21 +6,14 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
-
 struct CanvasModel {
     bool flip;
     int width;
     int height;
-    int ticks;
 }
 
 fn tea::Cmd CanvasModel.init(CanvasModel* self) @dynamic {
-    return tea::tick(1000, &on_tick);
-}
-
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
+    return null;
 }
 
 fn tea::Cmd CanvasModel.update(CanvasModel* self, tea::Msg msg) @dynamic {
@@ -28,10 +21,6 @@ fn tea::Cmd CanvasModel.update(CanvasModel* self, tea::Msg msg) @dynamic {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
         return null;
-    }
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
-        self.ticks++;
-        return tea::tick(1000, &on_tick);
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;
@@ -48,42 +37,47 @@ fn tea::Cmd CanvasModel.update(CanvasModel* self, tea::Msg msg) @dynamic {
 }
 
 fn tea::View CanvasModel.view(CanvasModel* self) @dynamic {
-    lipgloss::Color front_color = self.flip ? lipgloss::color_hex("#ff00ff") : lipgloss::color_hex("#00d7ff");
-    lipgloss::Color back_color = self.flip ? lipgloss::color_hex("#00d7ff") : lipgloss::color_hex("#ff00ff");
-
-    lipgloss::Style front_style = lipgloss::new_style()
-        .foreground(lipgloss::color_hex("#ffffff"))
-        .set_bold(true)
-        .padding(1, 2, 1, 2)
-        .set_border(lipgloss::rounded_border());
-    front_style = front_style.foreground(front_color);
-
-    lipgloss::Style back_style = lipgloss::new_style()
-        .foreground(lipgloss::color_hex("#888888"))
-        .padding(1, 2, 1, 2)
-        .set_border({
-            .top="-", .bottom="-", .left="|", .right="|",
-            .top_left="+", .top_right="+", .bottom_left="+", .bottom_right="+"
-        });
-
-    String front_view = front_style.render("Hello");
-    String back_view = back_style.render("Goodbye");
-
-    // The "flip" swaps which card is drawn first (and thus appears underneath)
-    String joined;
+    // Z-order: normally cardA on top, flip swaps
+    int z_a = 0;
+    int z_b = 1;
     if (self.flip) {
-        joined = lipgloss::join_horizontal(back_view, front_view, 4);
-    } else {
-        joined = lipgloss::join_horizontal(front_view, back_view, 4);
+        z_a = 1;
+        z_b = 0;
     }
 
-    lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+    // Cards: Width(20) Height(10) with rounded border, centered content
+    lipgloss::Style card_style = lipgloss::new_style()
+        .set_width(20)
+        .set_height(10)
+        .set_border(lipgloss::rounded_border())
+        .set_border_fg(lipgloss::color_hex("#7c3aed"))
+        .foreground(lipgloss::color_hex("#ffffff"))
+        .set_bold(true);
 
-    DString out = dstring::temp();
-    out.append_string(joined);
-    out.append_char('\n');
-    out.append_string(hint.render("Press any key to swap layers | q quit"));
-    return tea::new_alt_screen_view(out.str_view());
+    String card_a_content = lipgloss::place_pos(16, 6, lipgloss::Position.CENTER, lipgloss::Position.CENTER, "Hello");
+    String card_b_content = lipgloss::place_pos(16, 6, lipgloss::Position.CENTER, lipgloss::Position.CENTER, "Goodbye");
+
+    lipgloss::Layer* card_a = lipgloss::new_layer(card_style.render(card_a_content))
+        .set_z(z_a);
+    lipgloss::Layer* card_b = lipgloss::new_layer(card_style.render(card_b_content))
+        .set_x(10)
+        .set_y(2)
+        .set_z(z_b);
+
+    // Footer
+    lipgloss::Style footer_style = lipgloss::new_style()
+        .set_height(3)
+        .foreground(lipgloss::color_hex("#a0a0a0"));
+    String footer_text = "Press any key to swap the cards, or q to quit.";
+    lipgloss::Layer* footer = lipgloss::new_layer(footer_style.render(footer_text));
+
+    // Compose
+    lipgloss::Compositor* comp = lipgloss::new_compositor();
+    comp.add_layer(footer);
+    comp.add_layer(card_a);
+    comp.add_layer(card_b);
+
+    return tea::new_alt_screen_view(comp.render());
 }
 
 fn int main() {
