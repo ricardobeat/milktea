@@ -82,6 +82,7 @@ fn int string_width(String s) {
 struct Style {
     Color fg;
     Color bg;
+    Color border_fg;
     bool bold;
     bool italic;
     bool underline;
@@ -148,6 +149,12 @@ fn Style Style.set_border(self, Border b) {
     return s;
 }
 
+fn Style Style.set_border_fg(self, Color c) {
+    Style s = self;
+    s.border_fg = c;
+    return s;
+}
+
 // Shorthand methods — shorter names for common operations.
 // These coexist with the longer names for backwards compatibility.
 
@@ -196,11 +203,28 @@ fn String Style.render(self, String input) {
     }
 
     // Determine target width.
+    // In Go lipgloss, Width(N) means total output = N (border + padding included).
+    // So we subtract border and padding from the requested width to get the
+    // content area width.
+    int border_h = 0;
+    bool border_is_empty = self.border.top.len == 0 && self.border.bottom.len == 0 &&
+                           self.border.left.len == 0 && self.border.right.len == 0 &&
+                           self.border.top_left.len == 0 && self.border.top_right.len == 0 &&
+                           self.border.bottom_left.len == 0 && self.border.bottom_right.len == 0;
+    if (!border_is_empty) {
+        border_h = 2; // left + right border chars
+    }
+
     int target_width = self.width;
-    if (target_width <= 0) {
+    if (target_width > 0) {
+        // Subtract border and padding to get content area
+        target_width = target_width - border_h - self.pad_left - self.pad_right;
+        if (target_width < 1) target_width = 1;
+    } else {
+        // Auto-size to widest line
         target_width = 0;
         for (sz i = 0; i < line_count; i++) {
-            int line_width = string_width(lines[i]) + self.pad_left + self.pad_right;
+            int line_width = string_width(lines[i]);
             if (line_width > target_width) target_width = line_width;
         }
     }
@@ -208,9 +232,12 @@ fn String Style.render(self, String input) {
     bool has_attrs = self.fg.kind != ColorKind.NONE || self.bg.kind != ColorKind.NONE ||
                      self.bold || self.italic || self.underline;
 
+    // Total line width = content + padding (border is applied after)
+    int line_width = target_width + self.pad_left + self.pad_right;
+
     // Top padding lines.
     for (int i = 0; i < self.pad_top; i++) {
-        for (int j = 0; j < target_width; j++) out.append_char(' ');
+        for (int j = 0; j < line_width; j++) out.append_char(' ');
         if (has_attrs) {
             out.append_string("\x1b[0m");
         }
@@ -221,14 +248,12 @@ fn String Style.render(self, String input) {
     for (sz i = 0; i < line_count; i++) {
         String line = lines[i];
 
-        // Build styled line: pad_left + line + pad to width + pad_right.
+        // Build styled line: pad_left + content + pad_right.
         DString styled = dstring::temp();
         for (int j = 0; j < self.pad_left; j++) styled.append_char(' ');
         styled.append_string(line);
         int current_len = string_width(line) + self.pad_left;
-        int pad_end = target_width - self.pad_right;
-        if (pad_end < current_len) pad_end = current_len;
-        for (int j = current_len; j < pad_end; j++) styled.append_char(' ');
+        for (int j = current_len; j < target_width + self.pad_left; j++) styled.append_char(' ');
         for (int j = 0; j < self.pad_right; j++) styled.append_char(' ');
 
         String styled_str = styled.str_view();
@@ -272,7 +297,7 @@ fn String Style.render(self, String input) {
 
     // Bottom padding lines.
     for (int i = 0; i < self.pad_bottom; i++) {
-        for (int j = 0; j < target_width; j++) out.append_char(' ');
+        for (int j = 0; j < line_width; j++) out.append_char(' ');
         if (has_attrs) {
             out.append_string("\x1b[0m");
         }
@@ -285,14 +310,8 @@ fn String Style.render(self, String input) {
         rendered = rendered[:rendered.len - 1];
     }
 
-    // Check if border is empty.
-    bool border_is_empty = self.border.top.len == 0 && self.border.bottom.len == 0 &&
-                           self.border.left.len == 0 && self.border.right.len == 0 &&
-                           self.border.top_left.len == 0 && self.border.top_right.len == 0 &&
-                           self.border.bottom_left.len == 0 && self.border.bottom_right.len == 0;
-
     if (!border_is_empty) {
-        return self.border.wrap(rendered);
+        return self.border.wrap_with_color(rendered, self.border_fg);
     }
     return rendered.tcopy();
 }
