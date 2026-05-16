@@ -643,6 +643,9 @@ fn void Program.render_current_view(Program* self) {
                     }
                     cursor_seq.append_string(SGR_SHOW_CURSOR);
                     write_stdout((char[])cursor_seq.str_view());
+                } else if (v.alt_screen) {
+                    // Park the hidden cursor at top-left to prevent artifacts in some terminals
+                    write_stdout("\x1b[1;1H");
                 }
             } else {
                 // Fallback: no renderer (shouldn't happen in non-test mode)

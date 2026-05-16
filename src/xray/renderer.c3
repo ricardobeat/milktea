@@ -97,7 +97,6 @@ fn void Renderer.end_frame(&self) {
 
 	final.append_string(HIDE_CURSOR_SEQ);
 	final.append_string(diff_str);
-	final.append_string(SHOW_CURSOR_SEQ);
 
 	if (self.sync_supported) {
 		final.append_string(SYNC_END);
