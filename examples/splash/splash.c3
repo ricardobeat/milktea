@@ -30,8 +30,7 @@ fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         // Reallocate cell grid
         mem::free(self.view_cells.ptr);
-        int rows = (self.height - 1) / 2;
-        if (rows < 1) rows = 1;
+        int rows = self.height;
         self.view_cells_len = (sz)self.width * (sz)rows;
         self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
         return null;
@@ -101,9 +100,9 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
     if (h < 2) h = 24;
 
     double t = (double)self.frame * 0.03;
+    double angle = 0.7854 + t * 0.1;
 
-    int rows = (h - 1) / 2;
-    if (rows < 1) rows = 1;
+    int rows = h;
 
     // Reallocate if size changed
     sz needed = (sz)w * (sz)rows;
@@ -115,6 +114,7 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
 
     xray::Style base_style = xray::default_style();
 
+    int pixel_rows = h * 2;
     for (int y = 0; y < rows; y++) {
         int fy_top = y * 2;
         int fy_bot = y * 2 + 1;
@@ -123,17 +123,22 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
         for (int x = 0; x < w; x++) {
             double fx = (double)x / (double)w;
 
+            double ca = c3_cos(angle);
+            double sa = c3_sin(angle);
+
             // Top pixel color
-            double yt = (double)fy_top / (double)h;
-            double vt = 0.5 + 0.5 * c3_sin(fx * 3.0 + t * 0.7 + yt * 2.0);
-            double ht = (fx + t * 0.1 + yt * 0.3) % 1.0;
+            double yt = (double)fy_top / (double)pixel_rows;
+            double proj_t = (fx - 0.5) * ca + (yt - 0.5) * sa + 0.5;
+            double vt = 0.6 + 0.4 * c3_sin(fx * 3.0 + t * 0.7 + yt * 2.0);
+            double ht = (proj_t * 0.4 + t * 0.1) % 1.0;
             if (ht < 0) ht += 1.0;
             RgbColor top = hsv_to_rgb(ht, 0.8, vt);
 
             // Bottom pixel color
-            double yb = (double)fy_bot / (double)h;
-            double vb = 0.5 + 0.5 * c3_sin(fx * 3.0 + t * 0.7 + yb * 2.0);
-            double hb = (fx + t * 0.1 + yb * 0.3) % 1.0;
+            double yb = (double)fy_bot / (double)pixel_rows;
+            double proj_b = (fx - 0.5) * ca + (yb - 0.5) * sa + 0.5;
+            double vb = 0.6 + 0.4 * c3_sin(fx * 3.0 + t * 0.7 + yb * 2.0);
+            double hb = (proj_b * 0.4 + t * 0.1) % 1.0;
             if (hb < 0) hb += 1.0;
             RgbColor bot = hsv_to_rgb(hb, 0.8, vb);
 
