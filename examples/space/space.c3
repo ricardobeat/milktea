@@ -26,23 +26,24 @@ struct SpaceModel {
 fn tea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
     ulong seed = (ulong)c3_time_ms_long();
     srand((uint)seed);
-    return tea::tick(50);
+    return tea::tick(16);
 }
 
 
 // Pre-compute color matrix: grayscale gradient, brighter near top.
 // Matches Go version: baseValue = ((height-y)/height)^2 with random offset.
 fn void SpaceModel.compute_colors(SpaceModel* self) {
-    sz total = (sz)self.width * (sz)self.height;
+    sz total = (sz)self.width * (sz)self.height * 2;
     if (self.color_r == null) {
         self.color_r = mem::new_array(char, total);
         self.color_g = mem::new_array(char, total);
         self.color_b = mem::new_array(char, total);
     }
-    for (int y = 0; y < self.height; y++) {
+    int pixel_rows = self.height * 2;
+    for (int y = 0; y < pixel_rows; y++) {
         for (int x = 0; x < self.width; x++) {
             // Squared gradient: top is brightest (1.0), bottom is darkest (0.0)
-            double randomness_factor = (double)(self.height - y) / (double)self.height;
+            double randomness_factor = (double)(pixel_rows - y) / (double)pixel_rows;
             double base_value = randomness_factor * randomness_factor;
 
             // Random per-pixel offset (-0.1 to +0.1)
@@ -61,7 +62,7 @@ fn void SpaceModel.compute_colors(SpaceModel* self) {
 
     // Allocate cell grid
     mem::free(self.view_cells.ptr);
-    sz cells_total = (sz)self.width * (sz)(self.height / 2);
+    sz cells_total = (sz)self.width * (sz)self.height;
     self.view_cells = mem::new_array(xray::Cell, cells_total);
 }
 
@@ -75,7 +76,7 @@ fn tea::Cmd SpaceModel.update(SpaceModel* self, tea::Msg msg) @dynamic {
 
     if (msg.kind == tea::MsgKind.TICK) {
         self.frame++;
-        return tea::tick(50);
+        return tea::tick(16);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -98,12 +99,14 @@ fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
     int w = self.width;
     int h = self.height;
     int frame = self.frame;
-    int view_h = h / 2;
+    int view_h = h;
 
     xray::Style base_style = xray::default_style();
 
     for (int vy = 0; vy < view_h; vy++) {
         int fire_y = vy * 2;
+        int next_y = fire_y + 1;
+        int pixel_rows = h * 2;
         int row_offset = vy * w;
         for (int vx = 0; vx < w; vx++) {
             int xi = ((vx + frame) % w + w) % w;
@@ -113,9 +116,8 @@ fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
             char tg = self.color_g[idx];
             char tb = self.color_b[idx];
 
-            int next_y = fire_y + 1;
             char br, bg, bb;
-            if (next_y < h) {
+            if (next_y < pixel_rows) {
                 sz bidx = (sz)next_y * (sz)w + (sz)xi;
                 br = self.color_r[bidx];
                 bg = self.color_g[bidx];
