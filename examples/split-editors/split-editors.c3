@@ -15,6 +15,7 @@ struct Editor {
     int cursor;
     bool focused;
     String label;
+    String placeholder;
 }
 
 fn void Editor.insert(Editor* self, char c) {
@@ -57,9 +58,29 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
     int content_width = pane_width - 4; // 2 padding + 2 border chars
     if (content_width < 1) content_width = 1;
 
+    // Cursor line highlight styles
+    lipgloss::Style cline_style = lipgloss::new_style()
+        .background(lipgloss::color_256(57))
+        .foreground(lipgloss::color_256(230));
+    lipgloss::Style placeholder_style = lipgloss::new_style()
+        .foreground(lipgloss::color_256(242));
+    String cursor_block = tea::CURSOR_BLOCK;
+
     DString content = dstring::temp();
     content.append_string(self.label);
     content.append_char('\n');
+
+    // Show placeholder if empty
+    if (self.len == 0 && self.placeholder.len > 0) {
+        String line_text = string::tformat("%2d %s", 1, self.placeholder);
+        if (self.focused) {
+            content.append_string(cline_style.render(line_text));
+        } else {
+            content.append_string(placeholder_style.render(line_text));
+        }
+        content.append_char('\n');
+        return s.render(content.str_view());
+    }
 
     // Show lines up to height, with word wrapping
     String txt = self.text();
@@ -80,11 +101,6 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
     if (cursor_line > max_lines - 2) {
         skip = cursor_line - max_lines + 2;
     }
-
-    // Cursor line highlight: blue bg (57) + near-white fg (230)
-    String cline_open = "\x1b[48;5;57m\x1b[38;5;230m";
-    String cline_close = "\x1b[0m";
-    String cursor_block = "\xe2\x96\x88"; // █
 
     sz line_start = 0;
     int logical_line = 0;
@@ -112,18 +128,20 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 
                 if (logical_line >= skip && lines_shown < max_lines) {
                     bool is_cursor_line = self.focused && logical_line == cursor_line;
-                    if (is_cursor_line) content.append_string(cline_open);
-                    content.append_string(string::tformat("%2d ", line_num));
-                    content.append_string(txt[seg_start : seg_end - seg_start]);
+                    DString line_buf = dstring::temp();
+                    line_buf.append_string(string::tformat("%2d ", line_num));
+                    line_buf.append_string(txt[seg_start : seg_end - seg_start]);
                     if (is_cursor_line && show_cursor && (sz)self.cursor >= seg_start && (sz)self.cursor <= seg_end) {
-                        content.append_string(cursor_block);
+                        line_buf.append_string(cursor_block);
                     }
-                    // Pad cursor line to full content width so highlight extends across
                     if (is_cursor_line) {
-                        int used = 3 + (int)(seg_end - seg_start); // "NN " + text
+                        // Pad cursor line to full content width so highlight extends across
+                        int used = 3 + (int)(seg_end - seg_start);
                         if (show_cursor && (sz)self.cursor >= seg_start && (sz)self.cursor <= seg_end) used++;
-                        for (int p = used; p < content_width; p++) content.append_char(' ');
-                        content.append_string(cline_close);
+                        for (int p = used; p < content_width; p++) line_buf.append_char(' ');
+                        content.append_string(cline_style.render(line_buf.str_view()));
+                    } else {
+                        content.append_string(line_buf.str_view());
                     }
                     content.append_char('\n');
                     lines_shown++;
@@ -134,18 +152,20 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 
             // If cursor is at the end of this logical line (e.g. right after
             // pressing Enter), render an empty line with the cursor visible.
-            if (at_newline && (sz)self.cursor == i + 1 && logical_line >= skip && lines_shown < max_lines) {
-                bool is_cursor_line = self.focused && logical_line == cursor_line;
-                if (is_cursor_line) content.append_string(cline_open);
-                content.append_string(string::tformat("%2d ", (int)(line_num + 1)));
+            if (at_newline && (sz)self.cursor == i + 1 && logical_line + 1 >= skip && lines_shown < max_lines) {
+                bool is_cursor_line = self.focused && logical_line + 1 == cursor_line;
+                DString line_buf = dstring::temp();
+                line_buf.append_string(string::tformat("%2d ", (int)(line_num + 1)));
                 if (is_cursor_line && show_cursor) {
-                    content.append_string(cursor_block);
+                    line_buf.append_string(cursor_block);
                 }
-                // Pad cursor line to full content width
                 if (is_cursor_line) {
+                    // Pad cursor line to full content width
                     int used = 4; // "NN " + cursor block
-                    for (int p = used; p < content_width; p++) content.append_char(' ');
-                    content.append_string(cline_close);
+                    for (int p = used; p < content_width; p++) line_buf.append_char(' ');
+                    content.append_string(cline_style.render(line_buf.str_view()));
+                } else {
+                    content.append_string(line_buf.str_view());
                 }
                 content.append_char('\n');
                 lines_shown++;
@@ -174,7 +194,9 @@ fn tea::Cmd SplitModel.init(SplitModel* self) @dynamic {
     self.focus = 0;
     self.editors[0].label = "Editor 1";
     self.editors[0].focused = true;
+    self.editors[0].placeholder = "type something";
     self.editors[1].label = "Editor 2";
+    self.editors[1].placeholder = "type something";
     self.editors[2].label = "Editor 3";
     self.editors[3].label = "Editor 4";
     return tea::tick(500);

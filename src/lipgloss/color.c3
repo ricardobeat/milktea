@@ -7,6 +7,7 @@ faultdef BAD_HEX;
 enum ColorKind : char {
     NONE,
     ANSI,
+    ANSI256,
     TRUECOLOR,
 }
 
@@ -25,6 +26,11 @@ fn Color color_none() {
 fn Color color_ansi(int idx) {
     char clamped = (char)(idx < 0 ? 0 : (idx > 15 ? 15 : idx));
     return { .kind = ColorKind.ANSI, .ansi = clamped };
+}
+
+fn Color color_256(int idx) {
+    char clamped = (char)(idx < 0 ? 0 : (idx > 255 ? 255 : idx));
+    return { .kind = ColorKind.ANSI256, .ansi = clamped };
 }
 
 fn char? hex_digit(char c) {
@@ -72,6 +78,8 @@ fn void Color.write_sgr_params(self, DString* out, bool foreground) {
             } else {
                 out.appendf(foreground ? "9%d" : "10%d", self.ansi - 8);
             }
+        case ANSI256:
+            out.appendf(foreground ? "38;5;%d" : "48;5;%d", (int)self.ansi);
         case TRUECOLOR:
             out.appendf(foreground ? "38;2;%d;%d;%d" : "48;2;%d;%d;%d",
                         self.r, self.g, self.b);

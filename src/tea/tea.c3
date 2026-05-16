@@ -318,6 +318,11 @@ fn Msg tick_msg() {
     return { .kind = MsgKind.TICK };
 }
 
+// Common cursor characters.
+const String CURSOR_BLOCK = "\xe2\x96\x88";     // █
+const String CURSOR_UNDERLINE = "\xe2\x96\x84"; // ▄
+const String CURSOR_BAR = "\xe2\x96\x82";       // ▂
+
 // batch collects non-null Cmds and returns a Cmd that dispatches them concurrently.
 // Uses the global program pointer to store the batch, which is safe because
 // batch() is always called from within the event loop (during model.Update).
