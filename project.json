@@ -35,6 +35,10 @@
     "chat":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/chat/**" ],                "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
     "batch":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/batch/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
     "mouse":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/mouse/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "colors":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/colors/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true }
+    "colors":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/colors/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
+    "diff-viewer":      { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/diff-viewer/**" ],        "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
+    "voxel-renderer":   { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/voxel-renderer/**" ],     "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
+    "super-splash":     { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/super-splash/**" ],       "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
+    "glb-viewer":       { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/glb-viewer/**" ],         "c-sources": [ "src/tea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c" ], "opt": "Os", "strip-unused": true }
   }
 }
