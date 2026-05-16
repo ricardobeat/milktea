@@ -77,10 +77,8 @@ struct GlbModel {
     int width;
     int height;
     int frame;
-    int[MAX_VOXELS] last_visible; // hysteresis: frame number each face was last rendered
     xray::Cell[] cells;
     Pixel[]       pixels;
-    Pixel[]       prev_pixels;   // previous frame for temporal accumulation
     float[]       depth;
     // camera — set by App before each view() call
     float cam_px;
@@ -387,7 +385,6 @@ fn GlbModel*? load_glb(String path) {
     model.height      = 24;
     model.cells       = mem::new_array(xray::Cell, (sz)(model.width * model.height));
     model.pixels      = mem::new_array(Pixel, (sz)(model.width * model.height * 2));
-    model.prev_pixels = mem::new_array(Pixel, (sz)(model.width * model.height * 2));
     model.depth       = mem::new_array(float, (sz)(model.width * model.height * 2));
 
     return model;
@@ -408,16 +405,89 @@ fn tea::Cmd GlbModel.update(GlbModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         mem::free(self.cells.ptr);
         mem::free(self.pixels.ptr);
-        mem::free(self.prev_pixels.ptr);
         mem::free(self.depth.ptr);
         self.cells       = mem::new_array(xray::Cell, (sz)(self.width * self.height));
         self.pixels      = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
-        self.prev_pixels = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
         self.depth       = mem::new_array(float, (sz)(self.width * self.height * 2));
         return null;
     }
 
     return null;
+}
+
+// Edge function: positive on one side of the line A→B, negative on the other.
+fn float edge_fn(float ax, float ay, float bx, float by, float px, float py) {
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+// Rasterize a triangle using top-left fill convention so coplanar adjacent
+// triangles tile exactly without double-shading shared edges. Uses constant
+// per-face depth (flat z) — sufficient for voxel faces since corner z's of a
+// single small quad are nearly equal.
+fn void rasterize_tri(GlbModel* self, int w, int ph,
+                      float ax, float ay,
+                      float bx, float by,
+                      float cx, float cy,
+                      float depth_z, Pixel col) {
+    // Determine winding via the triangle's signed area.
+    float area = edge_fn(ax, ay, bx, by, cx, cy);
+    if (area == 0.0f) return;
+
+    // Make winding positive so the inside is where all edge functions are >= 0.
+    if (area < 0.0f) {
+        float tx = bx; float ty = by;
+        bx = cx; by = cy;
+        cx = tx; cy = ty;
+        area = -area;
+    }
+
+    // Bounding box in pixel space, clipped to viewport.
+    float min_x = ax; if (bx < min_x) min_x = bx; if (cx < min_x) min_x = cx;
+    float max_x = ax; if (bx > max_x) max_x = bx; if (cx > max_x) max_x = cx;
+    float min_y = ay; if (by < min_y) min_y = by; if (cy < min_y) min_y = cy;
+    float max_y = ay; if (by > max_y) max_y = by; if (cy > max_y) max_y = cy;
+
+    int x0 = (int)math::floor(min_x); if (x0 < 0) x0 = 0;
+    int x1 = (int)math::ceil(max_x);  if (x1 >= w) x1 = w - 1;
+    int y0 = (int)math::floor(min_y); if (y0 < 0) y0 = 0;
+    int y1 = (int)math::ceil(max_y);  if (y1 >= ph) y1 = ph - 1;
+    if (x0 > x1 || y0 > y1) return;
+
+    // Top-left fill rule: for each edge, decide whether points exactly on it count.
+    // An edge counts if it's a "top" edge (horizontal, going right) or a "left"
+    // edge (going down). This guarantees each pixel-center is owned by exactly
+    // one triangle when triangles share an edge.
+    bool tl_ab = (ay == by && bx > ax) || (by < ay);
+    bool tl_bc = (by == cy && cx > bx) || (cy < by);
+    bool tl_ca = (cy == ay && ax > cx) || (ay < cy);
+    float bias_ab = tl_ab ? 0.0f : -0.0001f;
+    float bias_bc = tl_bc ? 0.0f : -0.0001f;
+    float bias_ca = tl_ca ? 0.0f : -0.0001f;
+
+    for (int py = y0; py <= y1; py++) {
+        float pcy = (float)py + 0.5f;
+        for (int px = x0; px <= x1; px++) {
+            float pcx = (float)px + 0.5f;
+            float e0 = edge_fn(ax, ay, bx, by, pcx, pcy) + bias_ab;
+            float e1 = edge_fn(bx, by, cx, cy, pcx, pcy) + bias_bc;
+            float e2 = edge_fn(cx, cy, ax, ay, pcx, pcy) + bias_ca;
+            if (e0 < 0.0f || e1 < 0.0f || e2 < 0.0f) continue;
+            sz idx = (sz)(py * w + px);
+            if (depth_z < self.depth[idx]) {
+                self.depth[idx] = depth_z;
+                self.pixels[idx] = col;
+            }
+        }
+    }
+}
+
+fn void rasterize_quad(GlbModel* self, int w, int ph,
+                       float[4] csx, float[4] csy, float[4] cz, Pixel col) {
+    // Quad corners in (u, v) order: 0=(-,-), 1=(-,+), 2=(+,-), 3=(+,+).
+    // Split along the 1↔2 diagonal into triangles (0,1,3) and (0,3,2).
+    float face_z = (cz[0] + cz[1] + cz[2] + cz[3]) * 0.25f;
+    rasterize_tri(self, w, ph, csx[0], csy[0], csx[1], csy[1], csx[3], csy[3], face_z, col);
+    rasterize_tri(self, w, ph, csx[0], csy[0], csx[3], csy[3], csx[2], csy[2], face_z, col);
 }
 
 fn tea::View GlbModel.view(GlbModel* self) @dynamic {
@@ -446,11 +516,9 @@ fn tea::View GlbModel.view(GlbModel* self) @dynamic {
     float light_len = (float)math::sqrt(light_x*light_x + light_y*light_y + light_z*light_z);
     light_x /= light_len; light_y /= light_len; light_z /= light_len;
 
-    int cur_frame = self.frame;
-
     for (int v = 0; v < self.voxel_count; v++) {
         Vec3 p = self.voxels[v].pos;
-        Vec3 n = self.voxels[v].normal;
+        Vec3 n_world = self.voxels[v].normal;
 
         // translate into camera space, then rotate by inverse camera orientation
         float rx = p.x - self.cam_px;
@@ -467,20 +535,18 @@ fn tea::View GlbModel.view(GlbModel* self) @dynamic {
         p.y =  cos_pitch * ay + sin_pitch * az;
         p.z = -sin_pitch * ay + cos_pitch * az;
 
-        // same for normal
-        float nax =  cos_yaw * n.x - sin_yaw * n.z;
-        float nay =  n.y;
-        float naz =  sin_yaw * n.x + cos_yaw * n.z;
-        n.x = nax;
-        n.y =  cos_pitch * nay + sin_pitch * naz;
-        n.z = -sin_pitch * nay + cos_pitch * naz;
+        // rotate normal for back-face cull (yaw then pitch, same as point)
+        float nax =  cos_yaw * n_world.x - sin_yaw * n_world.z;
+        float nay =  n_world.y;
+        float naz =  sin_yaw * n_world.x + cos_yaw * n_world.z;
+        float ncx = nax;
+        float ncy =  cos_pitch * nay + sin_pitch * naz;
+        float ncz = -sin_pitch * nay + cos_pitch * naz;
 
-        // technique 4: softened back-face cull — allow slightly grazing faces through
-        // faces with n.z in (-0.08, 0] are nearly edge-on and would shimmer; let hysteresis handle them
-        if (n.z > 0.08f) continue;
+        // strict back-face cull: skip faces pointing away from the camera
+        if (ncz > 0.0f) continue;
 
-        float dz = p.z;
-        if (dz < 0.5f) continue;
+        if (p.z < 0.5f) continue;
 
         Vec3 tu = self.voxels[v].tan_u;
         Vec3 tv = self.voxels[v].tan_v;
@@ -501,120 +567,41 @@ fn tea::View GlbModel.view(GlbModel* self) @dynamic {
         float tvuz2 = -sin_pitch * tv.y + cos_pitch * tv.z;
         tv.y = tvuy2; tv.z = tvuz2;
 
-        float min_sx =  1e9f; float max_sx = -1e9f;
-        float min_sy =  1e9f; float max_sy = -1e9f;
-
+        // Project all 4 face-quad corners. Order: (-,-), (-,+), (+,-), (+,+).
+        float[4] csx_arr;
+        float[4] csy_arr;
+        float[4] cz_arr;
+        bool near_clipped = false;
         float[4] cu = { -1, -1,  1,  1 };
         float[4] cv = { -1,  1, -1,  1 };
         for (int ci = 0; ci < 4; ci++) {
             float cx3 = p.x + cu[ci] * tu.x + cv[ci] * tv.x;
             float cy3 = p.y + cu[ci] * tu.y + cv[ci] * tv.y;
             float cz3 = p.z + cu[ci] * tu.z + cv[ci] * tv.z;
-            if (cz3 < 0.1f) continue;
+            if (cz3 < 0.1f) { near_clipped = true; break; }
             float sc  = fov / cz3;
-            float csx = cx3 * sc * 2.0f + cx;
-            float csy = -cy3 * sc * 2.0f + cy;
-            if (csx < min_sx) min_sx = csx; if (csx > max_sx) max_sx = csx;
-            if (csy < min_sy) min_sy = csy; if (csy > max_sy) max_sy = csy;
+            csx_arr[ci] = cx3 * sc * 2.0f + cx;
+            csy_arr[ci] = -cy3 * sc * 2.0f + cy;
+            cz_arr[ci]  = cz3;
         }
+        if (near_clipped) continue;
 
-        // projected face size in pixels
-        float face_w = max_sx - min_sx;
-        float face_h = max_sy - min_sy;
-        float face_area = face_w * face_h;
+        // world-space lighting — consistent shading regardless of camera orientation
+        float diff = n_world.x * light_x + n_world.y * light_y + n_world.z * light_z;
+        if (diff < 0.0f) diff = 0.0f;
+        float brightness = 0.30f + 0.70f * diff;
 
-        // technique 2: hysteresis — keep rendering faces that were recently visible
-        // even if they've gone sub-pixel, for up to 3 frames
-        bool recently_visible = (cur_frame - self.last_visible[v]) <= 3;
-        if (face_area < 0.5f && !recently_visible) continue;
-
-        self.last_visible[v] = cur_frame;
-
-        // wrap lighting: extend diffuse into the shadow side to soften the terminator
-        // (dot + wrap) / (1 + wrap), clamped to [0,1]
-        float wrap = 0.5f;
-        float diff = n.x * light_x + n.y * light_y + n.z * light_z;
-        float wrapped = (diff + wrap) / (1.0f + wrap);
-        if (wrapped < 0.0f) wrapped = 0.0f;
-        if (wrapped > 1.0f) wrapped = 1.0f;
-        float brightness = 0.25f + 0.75f * wrapped;
-
-        char pr = (char)((float)self.voxels[v].r * brightness);
-        char pg = (char)((float)self.voxels[v].g * brightness);
-        char pb = (char)((float)self.voxels[v].b * brightness);
-
-        // technique 3: dithered sub-pixel coverage
-        // coverage = fraction of pixel the face actually covers (0..1 per axis)
-        // use Bayer threshold to decide whether to draw each pixel
-        float coverage = face_area < 1.0f ? face_area : 1.0f;
-
-        int x0 = (int)min_sx; int x1 = (int)max_sx;
-        int y0 = (int)min_sy; int y1 = (int)max_sy;
-        // expand by 1 to catch sub-pixel faces that round to zero range
-        if (x0 == x1) { x0--; x1++; }
-        if (y0 == y1) { y0--; y1++; }
-
-        for (int py = y0; py <= y1; py++) {
-            if (py < 0 || py >= ph) continue;
-            for (int px = x0; px <= x1; px++) {
-                if (px < 0 || px >= w) continue;
-
-
-                sz idx = (sz)(py * w + px);
-                if (p.z < self.depth[idx]) {
-                    self.depth[idx] = p.z;
-                    self.pixels[idx] = (Pixel){ pr, pg, pb };
-                }
-            }
-        }
-    }
-
-    // AA pass — fringe pixels only
-    int[4] adx = { 1, -1, 0,  0 };
-    int[4] ady = { 0,  0, 1, -1 };
-    for (int py = 0; py < ph; py++) {
-        for (int px = 0; px < w; px++) {
-            sz idx = (sz)(py * w + px);
-            if (self.depth[idx] < 999.0f) continue;
-
-            float sum_r = 0.0f; float sum_g = 0.0f; float sum_b = 0.0f;
-            int count = 0;
-            for (int d = 0; d < 4; d++) {
-                int nx = px + adx[d]; int ny = py + ady[d];
-                if (nx < 0 || nx >= w || ny < 0 || ny >= ph) continue;
-                sz nidx = (sz)(ny * w + nx);
-                if (self.depth[nidx] >= 999.0f) continue;
-                sum_r += (float)self.pixels[nidx].r;
-                sum_g += (float)self.pixels[nidx].g;
-                sum_b += (float)self.pixels[nidx].b;
-                count++;
-            }
-            if (count == 0) continue;
-            float fade = (float)count * 0.20f;
-            float inv = 1.0f / (float)count;
-            self.pixels[idx] = (Pixel){
-                (char)(sum_r * inv * fade),
-                (char)(sum_g * inv * fade),
-                (char)(sum_b * inv * fade),
-            };
-            self.depth[idx] = 998.0f;
-        }
-    }
-
-    // Temporal accumulation: blend current frame with previous (80% current, 20% prev)
-    // Only blend filled pixels; empty pixels inherit nothing from history
-    for (sz i = 0; i < ptotal; i++) {
-        if (self.depth[i] >= 999.0f) continue;
-        Pixel cur  = self.pixels[i];
-        Pixel prev = self.prev_pixels[i];
-        self.pixels[i] = (Pixel){
-            (char)((int)cur.r * 4 / 5 + (int)prev.r / 5),
-            (char)((int)cur.g * 4 / 5 + (int)prev.g / 5),
-            (char)((int)cur.b * 4 / 5 + (int)prev.b / 5),
+        Pixel col = {
+            (char)((float)self.voxels[v].r * brightness),
+            (char)((float)self.voxels[v].g * brightness),
+            (char)((float)self.voxels[v].b * brightness),
         };
+
+        // Rasterize the quad as two triangles using edge-function coverage.
+        // Splitting into (0,1,3) and (0,3,2) so adjacent face-quads tile exactly
+        // along their shared edge with no slivers (no bbox bleed).
+        rasterize_quad(self, w, ph, csx_arr, csy_arr, cz_arr, col);
     }
-    // save current frame for next tick
-    mem::copy(self.prev_pixels.ptr, self.pixels.ptr, ptotal * Pixel::size);
 
     // Combine into half-block cells
     for (sz i = 0; i < (sz)(w * h); i++) self.cells[i] = xray::empty_cell();
@@ -686,7 +673,6 @@ fn void App.free_model(App* self) {
     if (self.model == null) return;
     mem::free(self.model.cells.ptr);
     mem::free(self.model.pixels.ptr);
-    mem::free(self.model.prev_pixels.ptr);
     mem::free(self.model.depth.ptr);
     mem::free(self.model);
     self.model = null;
@@ -705,11 +691,9 @@ fn void App.load_file(App* self, String path) {
     self.model.height = self.height;
     mem::free(self.model.cells.ptr);
     mem::free(self.model.pixels.ptr);
-    mem::free(self.model.prev_pixels.ptr);
     mem::free(self.model.depth.ptr);
     self.model.cells       = mem::new_array(xray::Cell, (sz)(self.width * self.height));
     self.model.pixels      = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
-    self.model.prev_pixels = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
     self.model.depth       = mem::new_array(float, (sz)(self.width * self.height * 2));
     self.model.frame = 0;
     self.cam_px = 0.0f; self.cam_py = 0.0f; self.cam_pz = -20.0f;
