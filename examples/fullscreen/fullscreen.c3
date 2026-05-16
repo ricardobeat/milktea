@@ -6,7 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
 
 struct FullscreenModel {
     int countdown;
@@ -15,12 +14,9 @@ struct FullscreenModel {
 }
 
 fn tea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
-    return tea::tick(1000, &on_tick);
+    return tea::tick(1000);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd FullscreenModel.update(FullscreenModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -29,12 +25,12 @@ fn tea::Cmd FullscreenModel.update(FullscreenModel* self, tea::Msg msg) @dynamic
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         self.countdown--;
         if (self.countdown <= 0) {
             return tea::quit();
         }
-        return tea::tick(1000, &on_tick);
+        return tea::tick(1000);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;

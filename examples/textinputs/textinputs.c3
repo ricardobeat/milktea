@@ -74,25 +74,17 @@ fn int TextInput.cursor_x(TextInput* self) {
 fn String TextInput.view(TextInput* self, bool focused) {
     String display = self.display_text();
 
-    DString out = dstring::temp();
-
     // Color based on state
-    int r, g, b;
+    lipgloss::Style s = lipgloss::new_style();
     if (self.len > 0 && focused) {
-        r = 255; g = 255; b = 255;  // white for focused with text
+        s = s.foreground(lipgloss::color_hex("#ffffff"));  // white for focused with text
     } else if (self.len > 0) {
-        r = 136; g = 136; b = 136; // gray for blurred with text
+        s = s.foreground(lipgloss::color_hex("#888888")); // gray for blurred with text
     } else {
-        r = 68; g = 68; b = 68;    // dim for placeholder
+        s = s.foreground(lipgloss::color_hex("#444444")); // dim for placeholder
     }
-    out.append_string(string::tformat("\x1b[38;2;%d;%d;%dm", r, g, b));
 
-    // Text content (cursor is positioned via terminal ANSI, not inline)
-    out.append_string(display);
-
-    // Reset ANSI codes.
-    out.append_string("\x1b[0m");
-    return out.str_view();
+    return s.render(display);
 }
 
 struct InputsModel {
@@ -101,6 +93,7 @@ struct InputsModel {
     bool submitted;
     int width;
     int height;
+    int cursor_blink;
 }
 
 fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
@@ -109,7 +102,11 @@ fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
     self.inputs[1].placeholder = "Email";
     self.inputs[2].placeholder = "Password";
     self.inputs[2].is_password = true;
-    return null;
+    return tea::tick(500, &on_blink);
+}
+
+fn tea::Msg on_blink() {
+    return { .kind = tea::MsgKind.USER, .tag = 10 };
 }
 
 fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
@@ -117,6 +114,10 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
         return null;
+    }
+    if (msg.kind == tea::MsgKind.USER && msg.tag == 10) {
+        self.cursor_blink = 1 - self.cursor_blink;
+        return tea::tick(500, &on_blink);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -127,7 +128,12 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
             return tea::quit();
         case tea::KeyCode.TAB:
             self.inputs[self.focus].focused = false;
-            self.focus = (self.focus + 1) % 3;
+            if (k.shift) {
+                self.focus--;
+                if (self.focus < 0) self.focus = 2;
+            } else {
+                self.focus = (self.focus + 1) % 3;
+            }
             self.inputs[self.focus].focused = true;
         case tea::KeyCode.UP:
             self.inputs[self.focus].focused = false;
@@ -197,7 +203,18 @@ fn tea::View InputsModel.view(InputsModel* self) @dynamic {
     }
 
     out.append_char('\n');
-    out.append_string(hint.render("TAB/↑↓ switch fields | ENTER submit | ESC quit"));
+
+    // Submit button
+    if (self.focus == 2) {
+        lipgloss::Style btn = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff")).background(lipgloss::color_hex("#00d7ff")).padding(0, 2, 0, 2).set_bold(true);
+        out.append_string(btn.render(" Submit "));
+    } else {
+        lipgloss::Style btn = lipgloss::new_style().foreground(lipgloss::color_hex("#888888")).padding(0, 2, 0, 2);
+        out.append_string(btn.render(" Submit "));
+    }
+    out.append_char('\n');
+    out.append_char('\n');
+    out.append_string(hint.render("TAB/Shift+TAB switch | ENTER submit | ESC quit"));
 
     tea::View v = tea::new_alt_screen_view(out.str_view());
     v.has_cursor = true;

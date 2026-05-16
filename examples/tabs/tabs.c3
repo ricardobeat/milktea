@@ -84,13 +84,15 @@ fn tea::View TabsModel.view(TabsModel* self) @dynamic {
     DString out = dstring::temp();
 
     // Tab bar
+    String[4] tab_views;
     for (int i = 0; i < 4; i++) {
         if (i == self.active_tab) {
-            out.append_string(active_tab.render(tab_names[i]));
+            tab_views[i] = active_tab.render(tab_names[i]);
         } else {
-            out.append_string(inactive_tab.render(tab_names[i]));
+            tab_views[i] = inactive_tab.render(tab_names[i]);
         }
     }
+    out.append_string(lipgloss::join_horizontal_arr(lipgloss::Position.BOTTOM, tab_views[..], 0));
 
     out.append_char('\n');
 

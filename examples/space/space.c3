@@ -1,76 +1,81 @@
 module space_example;
 
 import tea;
+import xray;
 import lipgloss;
 import std::io;
 import std::core::string;
-import std::core::dstring;
 
 extern fn int rand();
 extern fn void srand(uint seed);
 extern fn long c3_time_ms_long();
 
-const int MSG_TICK = 1;
-const int STAR_COUNT = 200;
-
-struct Star {
-    int x;
-    int y;
-    int brightness;
-    char ch;
-}
 
 struct SpaceModel {
-    Star[STAR_COUNT] stars;
+    int frame;
     int width;
     int height;
-    int offset;
+    char* color_r;
+    char* color_g;
+    char* color_b;
+    bool matrix_init;
+    // Cell grid for direct rendering
+    xray::Cell[] view_cells;
 }
 
 fn tea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
     ulong seed = (ulong)c3_time_ms_long();
     srand((uint)seed);
-    self.width = 80;
-    self.height = 24;
-    self.offset = 0;
-
-    for (int i = 0; i < STAR_COUNT; i++) {
-        self.stars[i].x = rand() % 300;
-        self.stars[i].y = rand() % 100;
-        self.stars[i].brightness = rand() % 24; // 0-23 grayscale level
-        // Pick character based on brightness
-        int b = self.stars[i].brightness;
-        if (b < 4) {
-            self.stars[i].ch = '.';
-        } else if (b < 8) {
-            self.stars[i].ch = ':';
-        } else if (b < 12) {
-            self.stars[i].ch = '+';
-        } else if (b < 16) {
-            self.stars[i].ch = '*';
-        } else if (b < 20) {
-            self.stars[i].ch = '#';
-        } else {
-            self.stars[i].ch = '@';
-        }
-    }
-    return tea::tick(80, &on_tick);
+    return tea::tick(50);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
+
+// Pre-compute color matrix: grayscale gradient, brighter near top.
+// Matches Go version: baseValue = ((height-y)/height)^2 with random offset.
+fn void SpaceModel.compute_colors(SpaceModel* self) {
+    sz total = (sz)self.width * (sz)self.height;
+    if (self.color_r == null) {
+        self.color_r = mem::new_array(char, total);
+        self.color_g = mem::new_array(char, total);
+        self.color_b = mem::new_array(char, total);
+    }
+    for (int y = 0; y < self.height; y++) {
+        for (int x = 0; x < self.width; x++) {
+            // Squared gradient: top is brightest (1.0), bottom is darkest (0.0)
+            double randomness_factor = (double)(self.height - y) / (double)self.height;
+            double base_value = randomness_factor * randomness_factor;
+
+            // Random per-pixel offset (-0.1 to +0.1)
+            double random_offset = ((double)rand() / 2147483647.0) * 0.2 - 0.1;
+            double val = base_value + random_offset;
+            if (val < 0.0) val = 0.0;
+            if (val > 1.0) val = 1.0;
+            char v = (char)(val * 255.0);
+            sz idx = (sz)y * (sz)self.width + (sz)x;
+            self.color_r[idx] = v;
+            self.color_g[idx] = v;
+            self.color_b[idx] = v;
+        }
+    }
+    self.matrix_init = true;
+
+    // Allocate cell grid
+    mem::free(self.view_cells.ptr);
+    sz cells_total = (sz)self.width * (sz)(self.height / 2);
+    self.view_cells = mem::new_array(xray::Cell, cells_total);
 }
 
 fn tea::Cmd SpaceModel.update(SpaceModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
+        self.compute_colors();
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
-        self.offset++;
-        return tea::tick(80, &on_tick);
+    if (msg.kind == tea::MsgKind.TICK) {
+        self.frame++;
+        return tea::tick(50);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -86,84 +91,63 @@ fn tea::Cmd SpaceModel.update(SpaceModel* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-// Grayscale ANSI 256-color: 232=very dark, 255=white
-fn String gray_fg(int level) {
-    int idx = 232 + level;
-    if (idx < 232) idx = 232;
-    if (idx > 255) idx = 255;
-    return string::tformat("\x1b[38;5;%dm", idx);
-}
-
 fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
+    if (self.width == 0 || self.height == 0) return tea::new_view("");
+    if (!self.matrix_init) self.compute_colors();
+
     int w = self.width;
-    int h = self.height - 1;
-    if (w < 10) w = 80;
-    if (h < 5) h = 24;
+    int h = self.height;
+    int frame = self.frame;
+    int view_h = h / 2;
 
-    // Build a 2D grid. For each cell, check if a star is there.
-    // Use a simple hash or direct lookup. Since stars are sparse,
-    // we'll iterate stars and mark them.
+    xray::Style base_style = xray::default_style();
 
-    // Mark star positions using temp allocator for large grids
-    @pool() {
-        int cols = w;
-        if (cols > 200) cols = 200;
-        int rows = h;
-        if (rows > 60) rows = 60;
+    for (int vy = 0; vy < view_h; vy++) {
+        int fire_y = vy * 2;
+        int row_offset = vy * w;
+        for (int vx = 0; vx < w; vx++) {
+            int xi = ((vx + frame) % w + w) % w;
+            sz idx = (sz)fire_y * (sz)w + (sz)xi;
 
-        char[60][200] grid_chars;
-        int[60][200] grid_bright;
-        for (int y = 0; y < rows; y++) {
-            for (int x = 0; x < cols; x++) {
-                grid_chars[y][x] = ' ';
-                grid_bright[y][x] = -1;
+            char tr = self.color_r[idx];
+            char tg = self.color_g[idx];
+            char tb = self.color_b[idx];
+
+            int next_y = fire_y + 1;
+            char br, bg, bb;
+            if (next_y < h) {
+                sz bidx = (sz)next_y * (sz)w + (sz)xi;
+                br = self.color_r[bidx];
+                bg = self.color_g[bidx];
+                bb = self.color_b[bidx];
+            } else {
+                br = tr;
+                bg = tg;
+                bb = tb;
             }
+
+            xray::Cell c;
+            c.content[0] = 0xe2;
+            c.content[1] = 0x96;
+            c.content[2] = 0x80;
+            c.content_len = 3;
+            c.width = 1;
+            c.style = base_style
+                .set_fg(xray::color_rgb(tr, tg, tb))
+                .set_bg(xray::color_rgb(br, bg, bb));
+            self.view_cells[row_offset + vx] = c;
         }
+    }
 
-        for (int i = 0; i < STAR_COUNT; i++) {
-            Star s = self.stars[i];
-            int sx = (s.x + self.offset) % cols;
-            int sy = s.y % rows;
-            if (sy < 0) sy = 0;
-            if (sy >= rows) sy = rows - 1;
-            if (sx < 0) sx = 0;
-            if (sx >= cols) sx = cols - 1;
-            grid_chars[sy][sx] = s.ch;
-            grid_bright[sy][sx] = s.brightness;
-        }
-
-        lipgloss::Style title = lipgloss::new_style()
-            .foreground(lipgloss::color_hex("#00d7ff"))
-            .set_bold(true);
-
-        DString out = dstring::temp();
-
-        for (int y = 0; y < rows; y++) {
-            for (int x = 0; x < cols; x++) {
-                if (grid_bright[y][x] >= 0) {
-                    out.append_string(gray_fg(grid_bright[y][x]));
-                    out.append_char(grid_chars[y][x]);
-                } else {
-                    out.append_string("\x1b[38;5;233m ");
-                }
-            }
-            out.append_string("\x1b[0m");
-            if (y < rows - 1) out.append_char('\n');
-        }
-
-        out.append_char('\n');
-        out.append_string(title.render("SPACE   q/ESC quit"));
-        return tea::new_alt_screen_view(out.str_view());
-    };
+    return tea::new_alt_cell_view(self.view_cells, (sz)w, (sz)view_h);
 }
 
 fn int main() {
-    SpaceModel m = {};
-    if (catch err = tea::@run_program(&m)) {
+    SpaceModel* m = mem::new(SpaceModel);
+    if (catch err = tea::@run_program(m)) {
         io::printfn("Error: %s", err);
         return 1;
     }
-
     io::printn("Bye!");
     return 0;
 }

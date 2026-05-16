@@ -6,8 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
-
 struct BounceModel {
     int ball_x;
     int ball_y;
@@ -23,12 +21,9 @@ fn tea::Cmd BounceModel.init(BounceModel* self) @dynamic {
     self.ball_y = 3;
     self.dx = 1;
     self.dy = 1;
-    return tea::tick(60, &on_tick);
+    return tea::tick(33);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd BounceModel.update(BounceModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -37,7 +32,7 @@ fn tea::Cmd BounceModel.update(BounceModel* self, tea::Msg msg) @dynamic {
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         self.ticks++;
 
         // Bounce area is smaller than the terminal
@@ -60,7 +55,7 @@ fn tea::Cmd BounceModel.update(BounceModel* self, tea::Msg msg) @dynamic {
             if (self.ball_y > arena_h) self.ball_y = arena_h;
         }
 
-        return tea::tick(60, &on_tick);
+        return tea::tick(33);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -87,35 +82,34 @@ fn tea::View BounceModel.view(BounceModel* self) @dynamic {
     String[4] ball_frames = { "🔴", "🟠", "🟡", "🟢" };
     String ball = ball_frames[self.ticks % 4];
 
-    DString out = dstring::temp();
-
-    // Top border
-    out.append_string("╔");
-    for (int x = 0; x < arena_w; x++) out.append_string("═");
-    out.append_string("╗\n");
-
+    // Build arena content (ball row + empty rows)
+    DString content = dstring::temp();
     for (int y = 0; y < arena_h; y++) {
-        out.append_string("║");
         if (y == self.ball_y) {
             for (int x = 0; x < arena_w; x++) {
                 if (x == self.ball_x) {
-                    out.append_string(ball);
+                    content.append_string(ball);
                 } else {
-                    out.append_char(' ');
+                    content.append_char(' ');
                 }
             }
         } else {
             for (int x = 0; x < arena_w; x++) {
-                out.append_char(' ');
+                content.append_char(' ');
             }
         }
-        out.append_string("║\n");
+        if (y < arena_h - 1) content.append_char('\n');
     }
 
-    // Bottom border
-    out.append_string("╚");
-    for (int x = 0; x < arena_w; x++) out.append_string("═");
-    out.append_string("╝\n");
+    lipgloss::Style border = lipgloss::new_style()
+        .set_border({
+            .top = "═", .bottom = "═", .left = "║", .right = "║",
+            .top_left = "╔", .top_right = "╗", .bottom_left = "╚", .bottom_right = "╝"
+        });
+
+    DString out = dstring::temp();
+    out.append_string(border.render(content.str_view()));
+    out.append_char('\n');
 
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
     out.append_string(hint.render("Bouncing ball  |  q/ESC quit"));

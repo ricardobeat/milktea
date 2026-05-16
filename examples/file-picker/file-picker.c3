@@ -9,6 +9,7 @@ import std::core::dstring;
 extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
 
 const int MAX_ENTRIES = 64;
+const int MSG_CLEAR_ERROR = 1;
 
 struct PickerModel {
     char[64][MAX_ENTRIES] names;
@@ -22,11 +23,32 @@ struct PickerModel {
     int width;
     int height;
     bool has_error;
+    String error_msg;
+}
+
+fn tea::Msg on_clear_error() {
+    return { .kind = tea::MsgKind.USER, .tag = MSG_CLEAR_ERROR };
+}
+
+fn tea::Cmd show_error(PickerModel* self, String msg) {
+    self.has_error = true;
+    self.error_msg = msg;
+    return tea::tick(2000, &on_clear_error);
+}
+
+fn bool is_allowed_ext(String name) {
+    if (name.len < 4) return false;
+    if (name.len >= 3 && name[name.len - 3] == '.' && name[name.len - 2] == 'c' && name[name.len - 1] == '3') return true;
+    if (name.len >= 3 && name[name.len - 3] == '.' && name[name.len - 2] == 'm' && name[name.len - 1] == 'd') return true;
+    if (name.len >= 4 && name[name.len - 4] == '.' && name[name.len - 3] == 't' && name[name.len - 2] == 'x' && name[name.len - 1] == 't') return true;
+    if (name.len >= 5 && name[name.len - 5] == '.' && name[name.len - 4] == 'j' && name[name.len - 3] == 's' && name[name.len - 2] == 'o' && name[name.len - 1] == 'n') return true;
+    return false;
 }
 
 fn void load_dir(PickerModel* self, String path) {
     self.selected = "";
     self.has_error = false;
+    self.error_msg = "";
     self.count = 0;
     self.cursor = 0;
     self.scroll = 0;
@@ -78,6 +100,11 @@ fn tea::Cmd PickerModel.update(PickerModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         return null;
     }
+    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_CLEAR_ERROR) {
+        self.has_error = false;
+        self.error_msg = "";
+        return null;
+    }
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;
 
@@ -100,9 +127,13 @@ fn tea::Cmd PickerModel.update(PickerModel* self, tea::Msg msg) @dynamic {
                     new_path.append_string((String)self.names[self.cursor][:self.name_lens[self.cursor]]);
                     load_dir(self, new_path.str_view());
                 }
-            } else {
-                self.selected = (String)self.names[self.cursor][:self.name_lens[self.cursor]];
-                return tea::quit();
+            } else if (self.cursor < self.count) {
+                String fname = (String)self.names[self.cursor][:self.name_lens[self.cursor]];
+                if (is_allowed_ext(fname)) {
+                    self.selected = fname;
+                    return tea::quit();
+                }
+                return show_error(self, string::tformat("Invalid: %s (allowed: .c3 .json .md .txt)", fname));
             }
         case tea::KeyCode.RUNE:
             if (k.rune == 'q') return tea::quit();
@@ -140,8 +171,8 @@ fn tea::View PickerModel.view(PickerModel* self) @dynamic {
     out.append_char('\n');
 
     if (self.has_error) {
-        out.append_string("Error reading directory");
-        return tea::new_alt_screen_view(out.str_view());
+        out.append_string(self.error_msg);
+        out.append_char('\n');
     }
 
     int visible = self.height - 5;

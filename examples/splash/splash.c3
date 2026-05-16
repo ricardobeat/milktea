@@ -1,45 +1,49 @@
 module splash;
 
 import tea;
+import xray;
 import lipgloss;
 import std::io;
 import std::core::string;
-import std::core::dstring;
 
 extern fn double c3_sin(double x);
 extern fn double c3_cos(double x);
 
-const int MSG_TICK = 1;
 
 struct SplashModel {
     int frame;
     int width;
     int height;
+    // Cell grid for direct rendering
+    xray::Cell[] view_cells;
+    sz view_cells_len;
 }
 
 fn tea::Cmd SplashModel.init(SplashModel* self) @dynamic {
-    return tea::tick(16, &on_tick);
+    return tea::tick();
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
+        // Reallocate cell grid
+        mem::free(self.view_cells.ptr);
+        int rows = (self.height - 1) / 2;
+        if (rows < 1) rows = 1;
+        self.view_cells_len = (sz)self.width * (sz)rows;
+        self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
         return null;
     }
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         self.frame++;
-        return tea::tick(16, &on_tick);
+        return tea::tick();
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
     return tea::quit();
 }
 
-// HSV to RGB. h in [0,1], s in [0,1], v in [0,1]
 fn int clamp_color(int v) {
     if (v < 0) return 0;
     if (v > 255) return 255;
@@ -98,15 +102,23 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
 
     double t = (double)self.frame * 0.03;
 
-    // We render at half-height using ▀ blocks (top pixel = fg, bottom pixel = bg)
     int rows = (h - 1) / 2;
     if (rows < 1) rows = 1;
 
-    DString out = dstring::temp();
+    // Reallocate if size changed
+    sz needed = (sz)w * (sz)rows;
+    if (needed != self.view_cells_len) {
+        mem::free(self.view_cells.ptr);
+        self.view_cells_len = needed;
+        self.view_cells = mem::new_array(xray::Cell, needed);
+    }
+
+    xray::Style base_style = xray::default_style();
 
     for (int y = 0; y < rows; y++) {
         int fy_top = y * 2;
         int fy_bot = y * 2 + 1;
+        int row_offset = y * w;
 
         for (int x = 0; x < w; x++) {
             double fx = (double)x / (double)w;
@@ -125,15 +137,20 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
             if (hb < 0) hb += 1.0;
             RgbColor bot = hsv_to_rgb(hb, 0.8, vb);
 
-            out.append_string(string::tformat("\x1b[38;2;%d;%d;%d;48;2;%d;%d;%dm▀",
-                top.r, top.g, top.b, bot.r, bot.g, bot.b));
+            xray::Cell c;
+            c.content[0] = 0xe2;
+            c.content[1] = 0x96;
+            c.content[2] = 0x80;
+            c.content_len = 3;
+            c.width = 1;
+            c.style = base_style
+                .set_fg(xray::color_rgb((char)top.r, (char)top.g, (char)top.b))
+                .set_bg(xray::color_rgb((char)bot.r, (char)bot.g, (char)bot.b));
+            self.view_cells[row_offset + x] = c;
         }
-        out.append_string("\x1b[0m\n");
     }
 
-    lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff")).set_bold(true);
-    out.append_string(hint.render("Press any key to quit"));
-    return tea::new_alt_screen_view(out.str_view());
+    return tea::new_alt_cell_view(self.view_cells, (sz)w, (sz)rows);
 }
 
 fn int main() {

@@ -84,14 +84,16 @@ fn tea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
     content.append_string(title.render("Spinner Gallery"));
     content.append_char('\n');
 
+    String[6] spin_views;
     for (int i = 0; i < 6; i++) {
         int idx = self.frame % spinners[i].count;
         String spin = spinners[i].frames[idx];
         String name = spinners[i].name;
-        content.append_string(active.render(string::tformat("  %s", spin)));
-        content.append_string(label.render(string::tformat("  %s", name)));
-        content.append_string("   ");
+        spin_views[i] = string::tformat("%s%s",
+            active.render(string::tformat("  %s", spin)),
+            label.render(string::tformat("  %s", name)));
     }
+    content.append_string(lipgloss::join_horizontal_arr(lipgloss::Position.TOP, spin_views[..], 3));
 
     content.append_char('\n');
     content.append_string(label.render("Press q or ESC to quit"));

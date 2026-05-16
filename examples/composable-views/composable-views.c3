@@ -89,10 +89,12 @@ fn tea::View Model.view(Model* self) @dynamic {
 
     lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
 
-    String timer_view = timer_style.render(string::tformat("Timer\n%02d:%02d", mins, secs));
-    String spin_view = spin_style.render(string::tformat("Spinner\n%s Loading...", spin));
+    String timer_raw = timer_style.render(string::tformat("Timer\n%02d:%02d", mins, secs));
+    String spin_raw = spin_style.render(string::tformat("Spinner\n%s Loading...", spin));
 
-    String joined = lipgloss::join_horizontal(timer_view, spin_view, 2);
+    String timer_view = lipgloss::place_pos(15, 5, lipgloss::Position.CENTER, lipgloss::Position.CENTER, timer_raw);
+    String spin_view = lipgloss::place_pos(15, 5, lipgloss::Position.CENTER, lipgloss::Position.CENTER, spin_raw);
+    String joined = lipgloss::join_horizontal_pos(lipgloss::Position.TOP, timer_view, spin_view, 2);
 
     DString out = dstring::temp();
     out.append_string(joined);

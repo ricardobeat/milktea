@@ -6,7 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
 const int TOTAL = 100;
 
 struct ProgressModel {
@@ -19,12 +18,9 @@ struct ProgressModel {
 
 fn tea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
     self.speed = 1;
-    return tea::tick(50, &on_tick);
+    return tea::tick(50);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -33,7 +29,7 @@ fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         if (!self.done) {
             self.progress += self.speed;
             if (self.progress >= TOTAL) {
@@ -41,7 +37,7 @@ fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
                 self.done = true;
             }
         }
-        return tea::tick(50, &on_tick);
+        return tea::tick(50);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -58,7 +54,7 @@ fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
                 self.progress = 0;
                 self.done = false;
                 self.speed = 1;
-                return tea::tick(50, &on_tick);
+                return tea::tick(50);
             }
         case tea::KeyCode.ESC:
             return tea::quit();

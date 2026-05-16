@@ -138,6 +138,7 @@ enum MsgKind : char {
     MOUSE,
     BATCH,
     QUIT,
+    TICK,
     USER,
 }
 
@@ -312,6 +313,11 @@ fn Msg make_batch_msg() @local {
     return { .kind = MsgKind.BATCH };
 }
 
+// tick_msg creates a TICK message for animation/timers.
+fn Msg tick_msg() {
+    return { .kind = MsgKind.TICK };
+}
+
 // batch collects non-null Cmds and returns a Cmd that dispatches them concurrently.
 // Uses the global program pointer to store the batch, which is safe because
 // batch() is always called from within the event loop (during model.Update).
@@ -437,12 +443,9 @@ fn void Program.emit_sgr(Program* self, String seq) {
     }
 }
 
-// tick registers a timer that fires after delay_ms, then calls callback.
-<*
-  @require delay_ms > 0
-  @require callback != null
-*>
-fn Cmd tick(sz delay_ms, Cmd callback) {
+// tick registers a timer that fires after delay_ms.
+// Default: 16ms (~60fps) sending a TICK message.
+fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
     if (g_program == null) return null;
     sz deadline = time_ms() + delay_ms;
     for (sz i = 0; i < MAX_TIMERS; i++) {

@@ -105,11 +105,10 @@ fn tea::View Model.view(Model* self) @dynamic {
     String timer_view = timer_style.render(string::tformat("Timer\n%02d seconds", self.seconds));
     String step_view = step_style.render(string::tformat("Steps\n%d half-seconds", self.step));
 
-    String joined = lipgloss::join_horizontal(spin_view, timer_view, 2);
+    String top_row = lipgloss::join_horizontal(spin_view, timer_view, 2);
+    String main_view = lipgloss::join_vertical(lipgloss::Position.LEFT, top_row, step_view);
     DString out = dstring::temp();
-    out.append_string(joined);
-    out.append_char('\n');
-    out.append_string(step_view);
+    out.append_string(main_view);
     out.append_char('\n');
     out.append_string(hint.render("q to quit"));
     return tea::new_alt_screen_view(out.str_view());

@@ -33,6 +33,7 @@
     "file-picker":     { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/file-picker/**" ],        "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
     "chat":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/chat/**" ],                "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
     "batch":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/batch/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "mouse":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/mouse/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true }
+    "mouse":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/mouse/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
+    "colors":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/colors/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true }
   }
 }

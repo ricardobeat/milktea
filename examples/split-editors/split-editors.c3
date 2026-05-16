@@ -6,7 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
 const int MAX_EDITORS = 4;
 const int BUF_SIZE = 4096;
 
@@ -178,12 +177,9 @@ fn tea::Cmd SplitModel.init(SplitModel* self) @dynamic {
     self.editors[1].label = "Editor 2";
     self.editors[2].label = "Editor 3";
     self.editors[3].label = "Editor 4";
-    return tea::tick(500, &on_tick);
+    return tea::tick(500);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -191,9 +187,9 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         return null;
     }
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         self.cursor_blink = 1 - self.cursor_blink;
-        return tea::tick(500, &on_tick);
+        return tea::tick(500);
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;

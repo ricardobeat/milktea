@@ -6,7 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
 const int BUF_SIZE = 512;
 
 struct ChatModel {
@@ -29,12 +28,9 @@ fn tea::Cmd ChatModel.init(ChatModel* self) @dynamic {
     self.messages[1] = "Type a message and press Enter to send.";
     self.senders[1] = "system";
     self.msg_count = 2;
-    return tea::tick(500, &on_tick);
+    return tea::tick(500);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -42,9 +38,9 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         return null;
     }
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         self.cursor_blink = 1 - self.cursor_blink;
-        return tea::tick(500, &on_tick);
+        return tea::tick(500);
     }
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;
@@ -104,7 +100,9 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
     out.append_string(title_style.render("💬 Chat Room"));
     out.append_char('\n');
 
-    // Show messages (bottom-aligned)
+    // Show messages (bottom-aligned) with word wrapping
+    int wrap_width = self.width - 6; // "You: " or "system: " prefix
+    if (wrap_width < 10) wrap_width = 10;
     int start = self.msg_count - msg_area_h;
     if (start < 0) start = 0;
 
@@ -112,8 +110,33 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
         String sender = self.senders[i];
         String msg = self.messages[i];
         lipgloss::Style s = (sender == "You") ? you_style : sys_style;
-        out.append_string(s.render(string::tformat("%s: %s", sender, msg)));
-        out.append_char('\n');
+        String prefix = string::tformat("%s: ", sender);
+
+        // Word-wrap the message content
+        sz pos = 0;
+        bool first_line = true;
+        while (pos < msg.len) {
+            sz end = pos;
+            sz last_break = pos;
+            int col = 0;
+            while (end < msg.len && col < wrap_width) {
+                if (msg[end] == ' ') last_break = end + 1;
+                col++;
+                end++;
+            }
+            if (end < msg.len && last_break > pos) end = last_break;
+            if (end == pos) end = pos + 1;
+
+            if (first_line) {
+                out.append_string(s.render(string::tformat("%s%s", prefix, msg[pos : end - pos])));
+                first_line = false;
+            } else {
+                // Continuation line: pad with spaces matching prefix width
+                out.append_string(s.render(string::tformat("%s%s", "                         ", msg[pos : end - pos])));
+            }
+            out.append_char('\n');
+            pos = end;
+        }
     }
 
     // Fill remaining lines

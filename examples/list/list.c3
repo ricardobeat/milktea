@@ -7,7 +7,8 @@ import std::core::string;
 import std::core::dstring;
 
 struct ListModel {
-    String[] items;
+    String[16] items;
+    int item_count;
     int cursor;
     int selected;
     int width;
@@ -16,6 +17,22 @@ struct ListModel {
 }
 
 fn tea::Cmd ListModel.init(ListModel* self) @dynamic {
+    self.items[0] = "Buy milk";
+    self.items[1] = "Clean the house";
+    self.items[2] = "Write C3 code";
+    self.items[3] = "Read a book";
+    self.items[4] = "Play video games";
+    self.items[5] = "Go for a walk";
+    self.items[6] = "Call mom";
+    self.items[7] = "Cook dinner";
+    self.items[8] = "Fix the bug";
+    self.items[9] = "Deploy to prod";
+    self.items[10] = "Review PRs";
+    self.items[11] = "Update docs";
+    self.items[12] = "Refactor module";
+    self.items[13] = "Write tests";
+    self.items[14] = "Celebration dinner";
+    self.item_count = 15;
     return null;
 }
 
@@ -25,27 +42,27 @@ fn tea::Cmd ListModel.update(ListModel* self, tea::Msg msg) @dynamic {
         self.height = msg.window_size.height;
         return null;
     }
-    
+
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;
-    
+
     switch (k.code) {
         case tea::KeyCode.CTRL_C:
             return tea::quit();
         case tea::KeyCode.UP:
             if (self.cursor > 0) self.cursor--;
         case tea::KeyCode.DOWN:
-            if (self.cursor < (int)self.items.len - 1) self.cursor++;
+            if (self.cursor < self.item_count - 1) self.cursor++;
         case tea::KeyCode.HOME:
             self.cursor = 0;
         case tea::KeyCode.END:
-            self.cursor = (int)self.items.len - 1;
+            self.cursor = self.item_count - 1;
         case tea::KeyCode.PAGE_UP:
-            self.cursor = self.cursor - 5;
+            self.cursor -= 5;
             if (self.cursor < 0) self.cursor = 0;
         case tea::KeyCode.PAGE_DOWN:
-            self.cursor = self.cursor + 5;
-            if (self.cursor > (int)self.items.len - 1) self.cursor = (int)self.items.len - 1;
+            self.cursor += 5;
+            if (self.cursor >= self.item_count) self.cursor = self.item_count - 1;
         case tea::KeyCode.ENTER:
             self.selected = self.cursor;
         case tea::KeyCode.RUNE:
@@ -63,87 +80,62 @@ fn tea::View ListModel.view(ListModel* self) @dynamic {
     lipgloss::Style dim_style = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
     lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
     lipgloss::Style hint_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+    lipgloss::Style dot_on = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
+    lipgloss::Style dot_off = lipgloss::new_style().foreground(lipgloss::color_hex("#555555"));
 
-    // Reserve space: title (2 lines), hint (2 lines)
     int available = self.height - 4;
     if (available < 3) available = 3;
 
-    // Compute scroll offset to keep cursor visible
-    if (self.cursor < self.scroll_offset) {
-        self.scroll_offset = self.cursor;
-    }
-    if (self.cursor >= self.scroll_offset + available) {
-        self.scroll_offset = self.cursor - available + 1;
-    }
+    if (self.cursor < self.scroll_offset) self.scroll_offset = self.cursor;
+    if (self.cursor >= self.scroll_offset + available) self.scroll_offset = self.cursor - available + 1;
 
     DString out = dstring::temp();
     out.append_string(title_style.render("Select an item:"));
     out.append_char('\n');
 
     int end = self.scroll_offset + available;
-    if (end > (int)self.items.len) end = (int)self.items.len;
+    if (end > self.item_count) end = self.item_count;
 
     for (int i = self.scroll_offset; i < end; i++) {
-        String cursor_str = "  ";
-        if (self.cursor == i) {
-            cursor_str = "> ";
-        }
-        
         String item = self.items[i];
-        String rendered_item;
-        
         if (self.cursor == i) {
-            rendered_item = cursor_style.render(string::tformat("%s%s", cursor_str, item));
+            out.append_string(cursor_style.render(string::tformat("> %s", item)));
         } else if (self.selected == i) {
-            rendered_item = selected_style.render(string::tformat("%s%s ✓", cursor_str, item));
+            out.append_string(selected_style.render(string::tformat("  %s \xe2\x9c\x93", item)));
         } else {
-            rendered_item = dim_style.render(string::tformat("%s%s", cursor_str, item));
+            out.append_string(dim_style.render(string::tformat("  %s", item)));
         }
-        
-        out.append_string(rendered_item);
         out.append_char('\n');
     }
 
+    // Pagination dots
+    int total_pages = (self.item_count + available - 1) / available;
+    int current_page = self.scroll_offset / available;
     out.append_char('\n');
-    out.append_string(hint_style.render("↑↓ navigate  |  ENTER select  |  q/ESC quit"));
-    
+    for (int p = 0; p < total_pages; p++) {
+        if (p > 0) out.append_char(' ');
+        if (p == current_page) {
+            out.append_string(dot_on.render("\xe2\x80\xa2"));
+        } else {
+            out.append_string(dot_off.render("\xe2\x97\xa5"));
+        }
+    }
+
+    out.append_char('\n');
+    out.append_string(hint_style.render("Up/Down navigate | Enter select | q quit"));
+
     return tea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
-    String[] items = {
-        "Buy milk",
-        "Clean the house",
-        "Write C3 code",
-        "Read a book",
-        "Play video games",
-        "Go for a walk",
-        "Call mom",
-        "Cook dinner",
-        "Fix the bug",
-        "Deploy to prod",
-        "Review PRs",
-        "Update docs",
-        "Refactor module",
-        "Write tests",
-        "Celebration dinner"
-    };
-    
-    ListModel m = { .items = items, .cursor = 0, .selected = -1 };
-    
-    tea::enter_alt_screen();
-    
+    ListModel m = {};
     if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
     }
-    
-    
     if (m.selected >= 0) {
-        io::printfn("\nYou selected: %s\n", m.items[m.selected]);
-    } else {
-        io::printn("\nYou didn't select anything.\n");
+        io::printfn("You selected: %s", m.items[m.selected]);
     }
-    
+    io::printn("Bye!");
     return 0;
 }

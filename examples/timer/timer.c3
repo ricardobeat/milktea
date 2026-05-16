@@ -6,7 +6,6 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_TICK = 1;
 
 struct TimerModel {
     int seconds;
@@ -17,12 +16,9 @@ struct TimerModel {
 }
 
 fn tea::Cmd TimerModel.init(TimerModel* self) @dynamic {
-    return tea::tick(1000, &on_tick);
+    return tea::tick(1000);
 }
 
-fn tea::Msg on_tick() {
-    return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
-}
 
 fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -31,7 +27,7 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+    if (msg.kind == tea::MsgKind.TICK) {
         if (self.running) {
             self.seconds--;
             if (self.seconds <= 0) {
@@ -41,7 +37,7 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
                 return null;
             }
         }
-        return tea::tick(1000, &on_tick);
+        return tea::tick(1000);
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -57,7 +53,7 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
                 self.seconds = 60;
                 self.running = true;
                 self.done = false;
-                return tea::tick(1000, &on_tick);
+                return tea::tick(1000);
             }
         default:
     }
