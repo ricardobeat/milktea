@@ -26,6 +26,7 @@ extern fn void srand(uint seed);
 extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
 extern fn long c3_time_ms_long();
 extern fn void* signal(int signum, void* handler);
+extern fn char* getenv(char* name);
 
 struct TtyState {
     char[256] termios_buf;

@@ -2,6 +2,7 @@ module tea;
 
 import std::core::dstring;
 import std::thread;
+import std::io;
 import xray;
 
 // Cursor shapes (matches Go tea.CursorShape constants)
@@ -27,6 +28,12 @@ struct View {
     Cursor cursor;
     bool has_cursor;
     bool alt_screen;
+    // Optional direct cell grid — bypasses string parsing.
+    // When cells is non-null, the renderer writes cells directly into
+    // the screen buffer, skipping ANSI string → CSI parse → cells.
+    xray::Cell[] cells;
+    sz cells_width;
+    sz cells_height;
 }
 
 // new_view creates a View with the given content and default settings (no cursor, no alt screen).
@@ -37,6 +44,17 @@ fn View new_view(String content) {
 // new_alt_screen_view creates a View with alt screen enabled.
 fn View new_alt_screen_view(String content) {
     return { .content = content, .alt_screen = true };
+}
+
+// new_cell_view creates a View backed by a direct cell grid.
+// Bypasses string parsing — cells are written straight into the screen buffer.
+fn View new_cell_view(xray::Cell[] cells, sz width, sz height) {
+    return { .cells = cells, .cells_width = width, .cells_height = height };
+}
+
+// new_alt_cell_view creates an alt-screen View backed by a direct cell grid.
+fn View new_alt_cell_view(xray::Cell[] cells, sz width, sz height) {
+    return { .cells = cells, .cells_width = width, .cells_height = height, .alt_screen = true };
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
@@ -65,6 +83,40 @@ fn View View.set_alt_screen(self, bool on) {
     View v = self;
     v.alt_screen = on;
     return v;
+}
+
+// should_support_sync_output checks env vars to estimate whether the
+// terminal supports synchronized output (mode 2026). This is a heuristic
+// matching the Go version's shouldQuerySynchronizedOutput().
+fn bool should_support_sync_output() {
+    // SSH sessions — most modern SSH terminals support it
+    char* ssh_tty = getenv("SSH_TTY");
+    if (ssh_tty != null) return true;
+
+    // Windows Terminal
+    char* wt_session = getenv("WT_SESSION");
+    if (wt_session != null) return true;
+
+    // Check TERM_PROGRAM for known terminals
+    char* term_prog = getenv("TERM_PROGRAM");
+    if (term_prog != null) {
+        String tp = ((ZString)term_prog).str_view();
+        if (tp.starts_with("ghostty")) return true;
+        if (tp.starts_with("WezTerm")) return true;
+        if (tp.starts_with("Alacritty")) return true;
+        if (tp.starts_with("kitty")) return true;
+        if (tp.starts_with("rio")) return true;
+        if (tp.starts_with("iTerm.app")) return true;
+        if (tp.starts_with("vscode")) return true;
+    }
+
+    // tmux/screen — likely supports it when inside a capable outer terminal
+    char* tmux = getenv("TMUX");
+    if (tmux != null) return true;
+    char* screen = getenv("STY");
+    if (screen != null) return true;
+
+    return false;
 }
 
 // viewf creates a formatted View (shorthand for new_view + string::tformat).
@@ -457,25 +509,6 @@ fn void? Program.run(Program* self) {
         }
     };
 
-    // Determine initial window size
-    WinSize initial_ws;
-    if (self.inject_width > 0 && self.inject_height > 0) {
-        initial_ws.ws_col = (ushort)self.inject_width;
-        initial_ws.ws_row = (ushort)self.inject_height;
-    } else if (!self.test_mode) {
-        initial_ws = get_window_size();
-    } else {
-        initial_ws.ws_col = 80;
-        initial_ws.ws_row = 24;
-    }
-    Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
-    if (dispatch(self, self.model, init_wmsg)) return;
-
-    // Create xray renderer for differential rendering (non-test mode only)
-    if (!self.test_mode) {
-        self.renderer = xray::new_renderer((sz)initial_ws.ws_col, (sz)initial_ws.ws_row, &write_stdout);
-    }
-
     Cmd c0 = self.model.init();
     if (c0 != null) {
         Msg m0 = c0();
@@ -483,6 +516,31 @@ fn void? Program.run(Program* self) {
     }
 
     if (&self.model.on_mount) self.model.on_mount();
+
+    // Determine initial window size
+    WinSize initial_ws;
+    if (self.inject_width > 0 && self.inject_height > 0) {
+        initial_ws.ws_col = (ushort)self.inject_width;
+        initial_ws.ws_row = (ushort)self.inject_height;
+    } else if (!self.test_mode) {
+        initial_ws = get_window_size();
+        if (initial_ws.ws_col == 0) initial_ws.ws_col = 80;
+        if (initial_ws.ws_row == 0) initial_ws.ws_row = 24;
+    } else {
+        initial_ws.ws_col = 80;
+        initial_ws.ws_row = 24;
+    }
+
+    // Create xray renderer for differential rendering (non-test mode only)
+    if (!self.test_mode) {
+        self.renderer = xray::new_renderer((sz)initial_ws.ws_col, (sz)initial_ws.ws_row, &write_stdout);
+        if (should_support_sync_output()) {
+            self.renderer.set_sync_supported(true);
+        }
+    }
+
+    Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
+    if (dispatch(self, self.model, init_wmsg)) return;
 
     // Render initial view
     self.render_current_view();
@@ -595,28 +653,42 @@ fn void Program.render_current_view(Program* self) {
                 r.begin_frame();
 
                 // Clear the screen buffer and write new content
-                r.screen.clear();
-
-                // Write view content line by line, converting \n to row advances
-                String content = v.content;
-                sz row = 0;
-                sz col = 0;
-                sz line_start = 0;
-                for (sz i = 0; i <= content.len; i++) {
-                    if (i == content.len || content[i] == '\n') {
-                        sz line_len = i - line_start;
-                        if (line_len > 0) {
-                            String line = content[line_start : line_len];
-                            // Strip leading \r if present
-                            if (line.len > 0 && line[0] == '\r') {
-                                line = line[1..];
-                            }
-                            // Use ANSI parser to handle lipgloss SGR sequences
-                            r.screen.render_ansi_string(col, row, line, xray::default_style());
+                if (v.cells.ptr != null) {
+                    // Direct cell path — write cells straight into the screen buffer.
+                    // No string building, no CSI parsing. The diff engine handles the rest.
+                    // Skip clear() — set_cell() tracks dirty lines against previous frame.
+                    sz cols = v.cells_width;
+                    if (cols > r.screen.width) cols = r.screen.width;
+                    sz rows = v.cells_height;
+                    if (rows > r.screen.height) rows = r.screen.height;
+                    for (sz row = 0; row < rows; row++) {
+                        for (sz col = 0; col < cols; col++) {
+                            r.screen.set_cell(col, row, v.cells[row * v.cells_width + col]);
                         }
-                        row++;
-                        col = 0;
-                        line_start = i + 1;
+                    }
+                } else {
+                    // String path — clear buffer then parse ANSI content line by line
+                    r.screen.clear();
+                    String content = v.content;
+                    sz row = 0;
+                    sz col = 0;
+                    sz line_start = 0;
+                    for (sz i = 0; i <= content.len; i++) {
+                        if (i == content.len || content[i] == '\n') {
+                            sz line_len = i - line_start;
+                            if (line_len > 0) {
+                                String line = content[line_start : line_len];
+                                // Strip leading \r if present
+                                if (line.len > 0 && line[0] == '\r') {
+                                    line = line[1..];
+                                }
+                                // Use ANSI parser to handle lipgloss SGR sequences
+                                r.screen.render_ansi_string(col, row, line, xray::default_style());
+                            }
+                            row++;
+                            col = 0;
+                            line_start = i + 1;
+                        }
                     }
                 }
 
