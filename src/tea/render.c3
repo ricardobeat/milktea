@@ -14,6 +14,13 @@ const String SGR_MOUSE_SGR_OFF = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 const String SGR_CURSOR_BLINK_OFF = "\x1b[?12l";
 const String SGR_CURSOR_BLINK_ON = "\x1b[?12h";
 
+// OSC 22 — set/reset the mouse pointer shape (xterm, kitty, most modern terminals).
+// name: any CSS cursor keyword, e.g. "crosshair", "text", "pointer", "default".
+fn String mouse_cursor_seq(String name) {
+    return string::tformat("\x1b]22;%s\x1b\\", name);
+}
+const String OSC_MOUSE_CURSOR_RESET = "\x1b]22;\x1b\\";
+
 // cursor_style_seq returns the ANSI escape to set cursor shape.
 // Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
 fn String cursor_style_seq(CursorShape shape, bool blink) {

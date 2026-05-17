@@ -34,6 +34,9 @@ struct View {
     xray::Cell[] cells;
     sz cells_width;
     sz cells_height;
+    // OSC 22 mouse pointer shape. Empty = use terminal default.
+    // Examples: "crosshair", "text", "pointer", "default".
+    String mouse_cursor;
 }
 
 // new_view creates a View with the given content and default settings (no cursor, no alt screen).
@@ -82,6 +85,12 @@ fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink)
 fn View View.set_alt_screen(self, bool on) {
     View v = self;
     v.alt_screen = on;
+    return v;
+}
+
+fn View View.set_mouse_cursor(self, String name) {
+    View v = self;
+    v.mouse_cursor = name;
     return v;
 }
 
@@ -209,6 +218,9 @@ struct Program {
 
     // Xray renderer (differential rendering + sync output)
     xray::Renderer* renderer;
+
+    // Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
+    String last_mouse_cursor;
 }
 
 // File-scope input queue — not inside Program to avoid copies.
@@ -499,6 +511,7 @@ fn void? Program.run(Program* self) {
             disable_mouse();
             disable_focus();
             show_cursor();
+            write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
             raw_mode_restore(saved);
         }
     };
@@ -708,6 +721,16 @@ fn void Program.render_current_view(Program* self) {
                 }
 
                 r.end_frame();
+
+                // Emit OSC 22 mouse cursor shape when it changes.
+                if (v.mouse_cursor != self.last_mouse_cursor) {
+                    if (v.mouse_cursor.len > 0) {
+                        write_stdout((char[])mouse_cursor_seq(v.mouse_cursor));
+                    } else {
+                        write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
+                    }
+                    self.last_mouse_cursor = v.mouse_cursor;
+                }
 
                 // Emit cursor positioning and shape after the diff frame
                 if (v.has_cursor) {

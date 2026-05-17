@@ -1,50 +1,271 @@
 {
   "langrev": "1",
-  "warnings": [ "no-unused-parameter", "no-unused-import" ],
-  "macos-min-version": "15.0",
-  "cflags": "-mmacosx-version-min=15.0",
-  "sources": [ "src/**" ],
+  "warnings": ["no-unused-parameter", "no-unused-import"],
+  "macos-min-version": "26.0",
+  "sources": ["src/**"],
   "targets": {
     "tea": {
       "type": "static-lib",
-      "sources": [ "src/tea/**", "src/lipgloss/**" ],
-      "c-sources": [ "src/tea/tty_winsize.c" ]
+      "sources": ["src/tea/**", "src/lipgloss/**"],
+      "c-sources": ["src/tea/tty_winsize.c"]
     },
-    "counter":       { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/counter/**" ],          "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "list":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/list/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "spinner":        { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/spinner/**" ],           "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "timer":          { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/timer/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "fullscreen":      { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/fullscreen/**" ],         "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "tabs":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/tabs/**" ],                "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "pagination":      { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/pagination/**" ],          "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "viewport":        { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/viewport/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "spinners":        { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/spinners/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "progress":        { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/progress/**" ],           "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "bounce":          { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/bounce/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "composable-views":{ "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/composable-views/**" ],  "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "focus-blur":       { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/focus-blur/**" ],          "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "doom-fire":       { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/doom-fire/doom-fire.c3" ],           "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "doom-fire-tea":   { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/doom-fire/doom-fire-tea.c3" ],     "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "doom-fire-3d":    { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/doom-fire-3d/**" ],                "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "textinputs":      { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/textinputs/**" ],         "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "canvas":          { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/canvas/**" ],               "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "vanish":          { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/vanish/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "space":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/space/**" ],               "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "splash":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/splash/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "split-editors":   { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/split-editors/**" ],      "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "file-picker":     { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/file-picker/**" ],        "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "chat":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/chat/**" ],                "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "batch":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/batch/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "mouse":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/mouse/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "paint":            { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/paint/**" ],              "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "colors":           { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/colors/**" ],            "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "diff-viewer":      { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/diff-viewer/**" ],        "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "voxel-renderer":   { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/voxel-renderer/**" ],     "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "super-splash":     { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/super-splash/**" ],       "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "glb-viewer":       { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/glb-viewer/**" ],         "c-sources": [ "src/tea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c" ], "opt": "Os", "strip-unused": true },
-    "minecraft":        { "type": "executable", "sources": [ "src/**", "examples/minecraft/**" ],          "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "wolf3d":           { "type": "executable", "sources": [ "src/**", "examples/wolf3d/**" ],          "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true },
-    "wolf3d-server":    { "type": "executable", "sources": [ "src/**", "examples/wolf3d-server/**" ],   "c-sources": [ "src/tea/tty_winsize.c" ], "opt": "Os", "strip-unused": true, "linked-libraries": ["sqlite3"], "linker-search-paths": ["/opt/homebrew/lib"] },
-    "oiia":             { "type": "executable", "sources": [ "src/tea/**", "src/lipgloss/**", "examples/oiia-player/**", "examples/glb-viewer/stb_json.c3" ],  "c-sources": [ "src/tea/tty_winsize.c", "examples/oiia-player/stb_image_impl.c", "examples/glb-viewer/stb_json_impl.c" ], "opt": "Os", "strip-unused": true }
+    "counter": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/counter/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "list": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/list/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "spinner": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/spinner/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "timer": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/timer/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "fullscreen": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/fullscreen/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "tabs": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/tabs/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "pagination": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/pagination/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "viewport": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/viewport/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "spinners": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/spinners/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "progress": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/progress/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "bounce": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/bounce/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "composable-views": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/composable-views/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "focus-blur": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/focus-blur/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "doom-fire": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/doom-fire/doom-fire.c3"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "doom-fire-tea": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/doom-fire/doom-fire-tea.c3"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "doom-fire-3d": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/doom-fire-3d/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "textinputs": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/textinputs/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "canvas": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/canvas/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "vanish": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/vanish/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "space": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/space/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "splash": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/splash/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "split-editors": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/split-editors/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "file-picker": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/file-picker/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "chat": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/chat/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "batch": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/batch/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "mouse": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/mouse/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "paint": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/paint/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "colors": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/colors/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "diff-viewer": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/diff-viewer/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "voxel-renderer": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/voxel-renderer/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "super-splash": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/super-splash/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "glb-viewer": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/glb-viewer/**"],
+      "c-sources": ["src/tea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "minecraft": {
+      "type": "executable",
+      "sources": ["src/**", "examples/minecraft/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "wolf3d": {
+      "type": "executable",
+      "sources": ["src/**", "examples/wolf3d/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "wolf3d-server": {
+      "type": "executable",
+      "sources": ["src/**", "examples/wolf3d-server/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true,
+      "linked-libraries": ["sqlite3"],
+      "linker-search-paths": ["/opt/homebrew/lib"]
+    },
+    "oiia": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "examples/oiia-player/**", "examples/glb-viewer/stb_json.c3"],
+      "c-sources": [
+        "src/tea/tty_winsize.c",
+        "examples/oiia-player/stb_image_impl.c",
+        "examples/glb-viewer/stb_json_impl.c"
+      ],
+      "opt": "Os",
+      "strip-unused": true
+    }
   }
 }
