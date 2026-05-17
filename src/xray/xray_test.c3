@@ -404,3 +404,342 @@ fn void test_ansi_parser_newline() @test {
 	Cell* c2 = sb.cell_at(0, 1);
 	assert(c2.content[0] == 'B');
 }
+
+// ============================================================
+// Rect tests
+// ============================================================
+
+fn void test_rect_basic() @test {
+	Rect r = new_rect(5, 10, 20, 15);
+	assert(r.x == 5);
+	assert(r.y == 10);
+	assert(r.w == 20);
+	assert(r.h == 15);
+	assert(r.right() == 25);
+	assert(r.bottom() == 25);
+}
+
+fn void test_rect_contains() @test {
+	Rect r = new_rect(5, 10, 20, 15);
+	// Top-left corner
+	assert(r.contains(5, 10));
+	// Last cell before right edge
+	assert(r.contains(24, 10));
+	// Last cell before bottom edge
+	assert(r.contains(5, 24));
+	// Last cell in rect
+	assert(r.contains(24, 24));
+	// Right edge (out of bounds)
+	assert(!r.contains(25, 10));
+	// Bottom edge (out of bounds)
+	assert(!r.contains(5, 25));
+	// Left of rect
+	assert(!r.contains(4, 10));
+	// Above rect
+	assert(!r.contains(5, 9));
+}
+
+fn void test_rect_inset() @test {
+	Rect r = new_rect(0, 0, 20, 10);
+	Rect inset = r.inset(2, 1, 2, 1);
+	assert(inset.x == 2);
+	assert(inset.y == 1);
+	assert(inset.w == 16);
+	assert(inset.h == 8);
+}
+
+fn void test_rect_inset_clamp() @test {
+	Rect r = new_rect(0, 0, 4, 4);
+	Rect inset = r.inset(3, 3, 3, 3);
+	// Should be clamped to 0, not negative
+	assert(inset.w == 0);
+	assert(inset.h == 0);
+}
+
+// ============================================================
+// Layout tests
+// ============================================================
+
+fn void test_layout_h_len() @test {
+	Rect[8] out;
+	Constraint[3] constraints = {
+		constraint_len(5),
+		constraint_len(10),
+		constraint_len(5)
+	};
+	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
+
+	assert(out[0].x == 0 && out[0].w == 5);
+	assert(out[1].x == 5 && out[1].w == 10);
+	assert(out[2].x == 15 && out[2].w == 5);
+	assert(out[0].y == 0 && out[0].h == 5);
+	assert(out[1].y == 0 && out[1].h == 5);
+	assert(out[2].y == 0 && out[2].h == 5);
+}
+
+fn void test_layout_h_fill() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_fill(1),
+		constraint_fill(1)
+	};
+	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
+
+	assert(out[0].w == 10);
+	assert(out[1].w == 10);
+}
+
+fn void test_layout_h_fill_weighted() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_fill(1),
+		constraint_fill(2)
+	};
+	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
+
+	// Total weight is 3; 20 width split 1:2
+	// out[0] should get ~6-7, out[1] should get ~13-14
+	assert(out[0].w + out[1].w == 20);
+	assert(out[0].w >= 5 && out[0].w <= 8);
+	assert(out[1].w >= 12 && out[1].w <= 15);
+}
+
+fn void test_layout_h_mixed() @test {
+	Rect[8] out;
+	Constraint[3] constraints = {
+		constraint_len(5),
+		constraint_fill(1),
+		constraint_fill(2)
+	};
+	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
+
+	assert(out[0].w == 5);
+	// Remaining 15 split 1:2 between out[1] and out[2]
+	assert(out[1].w + out[2].w == 15);
+	assert(out[1].w >= 4 && out[1].w <= 6);
+	assert(out[2].w >= 9 && out[2].w <= 11);
+}
+
+fn void test_layout_v_basic() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_len(5),
+		constraint_fill(1)
+	};
+	layout_v(new_rect(0, 0, 10, 20), constraints[..], out[..]);
+
+	assert(out[0].y == 0 && out[0].h == 5);
+	assert(out[0].x == 0 && out[0].w == 10);
+	assert(out[1].y == 5 && out[1].h == 15);
+	assert(out[1].x == 0 && out[1].w == 10);
+}
+
+fn void test_layout_h_percent() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_percent(25),
+		constraint_percent(75)
+	};
+	layout_h(new_rect(0, 0, 100, 1), constraints[..], out[..]);
+
+	assert(out[0].w == 25);
+	assert(out[1].w == 75);
+}
+
+fn void test_layout_h_gap() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_fill(1),
+		constraint_fill(1)
+	};
+	layout_h_gap(new_rect(0, 0, 20, 1), constraints[..], 2, out[..]);
+
+	// Available = 20 - 2 (gap) = 18; each fill gets 9
+	assert(out[0].w == 9);
+	assert(out[0].x == 0);
+	assert(out[1].w == 9);
+	assert(out[1].x == 11);  // 9 + 2 (gap)
+}
+
+fn void test_layout_h_max() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_max(5),
+		constraint_fill(1)
+	};
+	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
+
+	assert(out[0].w <= 5);
+	assert(out[0].w + out[1].w == 20);
+	assert(out[1].w >= 15);
+}
+
+fn void test_layout_h_min() @test {
+	Rect[8] out;
+	Constraint[2] constraints = {
+		constraint_min(8),
+		constraint_fill(1)
+	};
+	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
+
+	assert(out[0].w >= 8);
+	assert(out[0].w + out[1].w == 20);
+	assert(out[1].w <= 12);
+}
+
+// ============================================================
+// ScreenBuffer draw helper tests
+// ============================================================
+
+fn void test_fill_rect() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.fill_rect(new_rect(2, 1, 4, 3), default_style().set_bold(true));
+
+	// Check top-left of filled rect
+	Cell* c = sb.cell_at(2, 1);
+	assert(c.style.attrs.bold);
+	assert(c.content[0] == ' ');
+
+	// Check last cell in filled rect
+	c = sb.cell_at(5, 3);
+	assert(c.style.attrs.bold);
+
+	// Check outside rect (to the left)
+	c = sb.cell_at(1, 1);
+	assert(!c.style.attrs.bold);
+
+	// Check outside rect (to the right)
+	c = sb.cell_at(6, 1);
+	assert(!c.style.attrs.bold);
+}
+
+fn void test_fill_rect_clamp() @test {
+	ScreenBuffer* sb = new_screen_buffer(5, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	// Should not panic/crash when rect extends beyond buffer
+	sb.fill_rect(new_rect(3, 3, 10, 10), default_style());
+
+	// Cell at (4, 4) should be written (last cell in buffer)
+	Cell* c = sb.cell_at(4, 4);
+	assert(c.content[0] == ' ');
+}
+
+fn void test_draw_string_in_rect_basic() @test {
+	ScreenBuffer* sb = new_screen_buffer(20, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.draw_string_in_rect(new_rect(2, 1, 10, 3), "Hello", default_style());
+
+	Cell* c;
+	c = sb.cell_at(2, 1);
+	assert(c.content[0] == 'H');
+	c = sb.cell_at(3, 1);
+	assert(c.content[0] == 'e');
+	c = sb.cell_at(4, 1);
+	assert(c.content[0] == 'l');
+	c = sb.cell_at(5, 1);
+	assert(c.content[0] == 'l');
+	c = sb.cell_at(6, 1);
+	assert(c.content[0] == 'o');
+}
+
+fn void test_draw_string_in_rect_wrap() @test {
+	ScreenBuffer* sb = new_screen_buffer(20, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.draw_string_in_rect(new_rect(0, 0, 5, 3), "HelloWorld", default_style());
+
+	// "Hello" on row 0
+	Cell* c = sb.cell_at(0, 0);
+	assert(c.content[0] == 'H');
+	c = sb.cell_at(4, 0);
+	assert(c.content[0] == 'o');
+
+	// "World" on row 1
+	c = sb.cell_at(0, 1);
+	assert(c.content[0] == 'W');
+	c = sb.cell_at(4, 1);
+	assert(c.content[0] == 'd');
+}
+
+fn void test_draw_string_in_rect_newline() @test {
+	ScreenBuffer* sb = new_screen_buffer(20, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.draw_string_in_rect(new_rect(0, 0, 10, 3), "AB\nCD", default_style());
+
+	Cell* c;
+	c = sb.cell_at(0, 0);
+	assert(c.content[0] == 'A');
+	c = sb.cell_at(1, 0);
+	assert(c.content[0] == 'B');
+	c = sb.cell_at(0, 1);
+	assert(c.content[0] == 'C');
+	c = sb.cell_at(1, 1);
+	assert(c.content[0] == 'D');
+}
+
+fn void test_blit_opaque() @test {
+	ScreenBuffer* src = new_screen_buffer(5, 3);
+	defer { src.destroy(); mem::free(src); }
+	ScreenBuffer* dst = new_screen_buffer(5, 3);
+	defer { dst.destroy(); mem::free(dst); }
+
+	// Set 'X' at (0, 0) in src
+	Cell x_cell = new_cell("X", 1, default_style());
+	src.set_cell(0, 0, x_cell);
+
+	// Blit src to dst at (2, 1), opaque
+	dst.blit(2, 1, src, false);
+
+	// Check that 'X' appears at (2, 1) in dst
+	Cell* c = dst.cell_at(2, 1);
+	assert(c.content[0] == 'X');
+}
+
+fn void test_blit_transparent() @test {
+	ScreenBuffer* src = new_screen_buffer(5, 3);
+	defer { src.destroy(); mem::free(src); }
+	ScreenBuffer* dst = new_screen_buffer(5, 3);
+	defer { dst.destroy(); mem::free(dst); }
+
+	// Fill dst with blue background
+	dst.fill_rect(new_rect(0, 0, 5, 3), default_style().set_bg(color_ansi(4)));
+
+	// Set 'X' with red background at (1, 1) in src
+	Cell red_x = new_cell("X", 1, default_style().set_bg(color_ansi(1)));
+	src.set_cell(1, 1, red_x);
+
+	// Blit transparent: non-empty cells overwrite, empty cells skip
+	dst.blit(0, 0, src, true);
+
+	// Cell (1, 1) should have 'X' with red bg (overwritten)
+	Cell* c = dst.cell_at(1, 1);
+	assert(c.content[0] == 'X');
+	assert(c.style.bg.index == 1);  // red
+
+	// Cell (0, 0) should still have blue background (transparent skip)
+	c = dst.cell_at(0, 0);
+	assert(c.style.bg.index == 4);  // blue
+}
+
+fn void test_blit_ansi() @test {
+	ScreenBuffer* sb = new_screen_buffer(20, 5);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.blit_ansi(2, 1, 5, 2, "\x1b[31mHi\x1b[0m", false);
+
+	// Cell at (2, 1) should be 'H' with red color
+	Cell* c = sb.cell_at(2, 1);
+	assert(c.content[0] == 'H');
+	assert(c.style.fg.kind == ColorKind.ANSI);
+	assert(c.style.fg.index == 1);  // red
+
+	// Cell at (3, 1) should be 'i' with red color
+	c = sb.cell_at(3, 1);
+	assert(c.content[0] == 'i');
+	assert(c.style.fg.kind == ColorKind.ANSI);
+}

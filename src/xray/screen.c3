@@ -521,3 +521,90 @@ fn void apply_sgr_code(Style* s, int code) @local {
 			// handled by a sub-parser below — TODO for future enhancement)
 	}
 }
+
+// ============================================================
+// Rect-based drawing operations
+// ============================================================
+
+// fill_rect fills a rectangle in the screen buffer with a space cell using the given style.
+fn void ScreenBuffer.fill_rect(&self, Rect r, Style style) {
+	if (r.w <= 0 || r.h <= 0) return;
+	int x0 = r.x < 0 ? 0 : r.x;
+	int y0 = r.y < 0 ? 0 : r.y;
+	int x1 = r.x + r.w;
+	int y1 = r.y + r.h;
+	if (x1 > (int)self.width)  x1 = (int)self.width;
+	if (y1 > (int)self.height) y1 = (int)self.height;
+	if (x0 >= x1 || y0 >= y1) return;
+
+	for (int row = y0; row < y1; row++) {
+		for (int col = x0; col < x1; col++) {
+			self.set_cell((sz)col, (sz)row, new_cell(" ", 1, style));
+		}
+	}
+}
+
+// draw_string_in_rect draws a plain (no ANSI) string into a rectangle, wrapping at r.w, clipping at r.h.
+// Each \n in text or when a line exceeds r.w advances to the next row.
+fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style) {
+	if (r.w <= 0 || r.h <= 0) return;
+	sz col = 0;
+	sz row = 0;
+	sz i = 0;
+
+	while (i < text.len && row < (sz)r.h) {
+		if (text[i] == '\n') {
+			row++;
+			col = 0;
+			i++;
+			continue;
+		}
+
+		uint cp;
+		sz char_len = utf8_decode(text[i..], &cp);
+		if (char_len == 0) break;
+
+		char w = 1;
+		if (cp >= 0x2E80) w = 2;
+
+		if (col + (sz)w > (sz)r.w) {
+			row++;
+			col = 0;
+			if (row >= (sz)r.h) break;
+		}
+
+		Cell cell = new_cell(text[i : char_len], w, style);
+		self.set_cell((sz)r.x + col, (sz)r.y + row, cell);
+		col += (sz)w;
+		i += char_len;
+	}
+}
+
+// blit composites src ScreenBuffer onto self at (dst_x, dst_y).
+// If transparent is true, skip src cells where content is ' ' (space, 0x20) AND bg is ColorKind.NONE.
+fn void ScreenBuffer.blit(&self, sz dst_x, sz dst_y, ScreenBuffer* src, bool transparent) {
+	for (sz row = 0; row < src.height; row++) {
+		for (sz col = 0; col < src.width; col++) {
+			Cell c = src.cells[row * src.width + col];
+			if (transparent) {
+				// Skip if content is space AND bg is NONE
+				if (c.content_len == 1 && c.content[0] == ' ' && c.style.bg.kind == ColorKind.NONE) continue;
+			}
+			sz dx = dst_x + col;
+			sz dy = dst_y + row;
+			self.set_cell(dx, dy, c);
+		}
+	}
+}
+
+// blit_ansi parses an ANSI string into a temporary ScreenBuffer of size (w, h), then blits it onto self at (dst_x, dst_y).
+// This is a convenience wrapper for the "render lipgloss → overlay on xray canvas" pattern.
+fn void ScreenBuffer.blit_ansi(&self, sz dst_x, sz dst_y, sz w, sz h, String ansi_text, bool transparent) {
+	// Allocate a temporary ScreenBuffer on the heap
+	ScreenBuffer* tmp = new_screen_buffer(w, h);
+	defer { tmp.destroy(); mem::free(tmp); }
+	// Parse the ANSI string into the tmp buffer
+	tmp.render_ansi_string(0, 0, ansi_text, default_style());
+	// Blit tmp onto self
+	self.blit(dst_x, dst_y, tmp, transparent);
+}
