@@ -283,6 +283,16 @@ void jsrt_set_prop_str(void* ctx, void* obj, const char* name, const char* val) 
     JS_SetPropertyStr(c, obj_val, name, str_val);
 }
 
+void jsrt_set_prop_str_n(void* ctx, void* obj, const char* name, const char* val, size_t len) {
+    if (!ctx || !obj || !name || !val) return;
+
+    JSContext* c = (JSContext*)ctx;
+    JSValue obj_val = *(JSValue*)obj;
+    JSValue str_val = JS_NewStringLen(c, val, len);
+
+    JS_SetPropertyStr(c, obj_val, name, str_val);
+}
+
 void jsrt_set_prop_int(void* ctx, void* obj, const char* name, int val) {
     if (!ctx || !obj || !name) return;
 
@@ -617,6 +627,25 @@ void jsrt_run_timers(void* rt, void* ctx) {
     jsrt_execute_pending_jobs(rt);
 }
 
+int jsrt_is_job_pending(void* rt) {
+    return rt ? JS_IsJobPending((JSRuntime*)rt) : 0;
+}
+
+/* Returns ms until the soonest active timer, or -1 if no timers are active. */
+long long jsrt_next_timer_ms(void) {
+    _timers_ensure_init();
+    long long now = jsrt_now_ms();
+    long long soonest = -1;
+    for (int i = 0; i < JSRT_MAX_TIMERS; i++) {
+        if (_timers[i].active) {
+            long long remaining = _timers[i].expiry_ms - now;
+            if (remaining < 0) remaining = 0;
+            if (soonest < 0 || remaining < soonest) soonest = remaining;
+        }
+    }
+    return soonest;
+}
+
 /* ============================================================
  * fetch() — libcurl-based, pthreads, Promise-based
  * ============================================================ */
@@ -742,6 +771,13 @@ typedef struct jsrt_fetch_resp {
 static pthread_mutex_t _fetch_mutex = PTHREAD_MUTEX_INITIALIZER;
 static jsrt_fetch_resp_t* _fetch_resp_head = NULL;
 static jsrt_fetch_resp_t* _fetch_resp_tail = NULL;
+
+int jsrt_has_pending_fetch(void) {
+    pthread_mutex_lock(&_fetch_mutex);
+    int pending = (_fetch_resp_head != NULL);
+    pthread_mutex_unlock(&_fetch_mutex);
+    return pending;
+}
 
 static void _fetch_push_resp(jsrt_fetch_resp_t* resp) {
     pthread_mutex_lock(&_fetch_mutex);

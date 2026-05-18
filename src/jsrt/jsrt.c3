@@ -9,6 +9,7 @@ extern fn void* jsrt_get_prop(void* ctx, void* obj, ZString name);
 extern fn int jsrt_call(void* ctx, void* fn_val, void* this_val, int argc, void** argv, void** out);
 extern fn void* jsrt_new_object(void* ctx);
 extern fn void jsrt_set_prop_str(void* ctx, void* obj, ZString name, ZString val);
+extern fn void jsrt_set_prop_str_n(void* ctx, void* obj, ZString name, char* val, sz len);
 extern fn void jsrt_set_prop_int(void* ctx, void* obj, ZString name, int val);
 extern fn void jsrt_set_prop_bool(void* ctx, void* obj, ZString name, int val);
 extern fn void jsrt_set_prop_obj(void* ctx, void* obj, ZString name, void* child);
@@ -32,6 +33,9 @@ extern fn void jsrt_run_timers(void* rt, void* ctx);
 extern fn void jsrt_fetch_init();
 extern fn void jsrt_drain_fetch_responses(void* rt, void* ctx);
 extern fn void jsrt_register_async_globals(void* ctx);
+extern fn long jsrt_next_timer_ms();
+extern fn int jsrt_has_pending_fetch();
+extern fn int jsrt_is_job_pending(void* rt);
 
 faultdef JS_ERROR;
 
@@ -110,7 +114,7 @@ fn void* Runtime.new_object(&self) {
 }
 
 fn void Runtime.set_prop_str(&self, void* obj, String name, String val) {
-    jsrt_set_prop_str(self.ctx, obj, (ZString)name.ptr, (ZString)val.ptr);
+    jsrt_set_prop_str_n(self.ctx, obj, (ZString)name.ptr, val.ptr, val.len);
 }
 
 fn void Runtime.set_prop_int(&self, void* obj, String name, int val) {
@@ -177,4 +181,19 @@ fn void Runtime.drain_fetch(&self) {
 
 fn void Runtime.register_globals(&self) {
     jsrt_register_async_globals(self.ctx);
+}
+
+// next_timer_ms returns ms until the soonest JS setTimeout fires, or -1 if none.
+fn long Runtime.next_timer_ms(&self) {
+    return jsrt_next_timer_ms();
+}
+
+// has_pending_fetch returns true if any fetch() responses are waiting to be drained.
+fn bool Runtime.has_pending_fetch(&self) {
+    return jsrt_has_pending_fetch() != 0;
+}
+
+// is_job_pending returns true if QuickJS has unprocessed microtasks (Promise continuations).
+fn bool Runtime.is_job_pending(&self) {
+    return jsrt_is_job_pending(self.rt) != 0;
 }

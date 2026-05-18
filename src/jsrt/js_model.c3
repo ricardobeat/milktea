@@ -20,8 +20,7 @@ fn tea::Cmd JsModel.init(&self) @dynamic {
         }
         self.rt.free_value(fn_val);
     }
-    // Start the 60fps tick loop
-    return tea::tick();
+    return self.js_tick_cmd();
 }
 
 fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
@@ -44,8 +43,7 @@ fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
     void* fn_val = self.rt.get_prop(self.js_model_obj, "update");
     if (fn_val == null || !self.rt.is_function(fn_val)) {
         if (fn_val != null) self.rt.free_value(fn_val);
-        if (msg.kind == tea::MsgKind.TICK) return tea::tick();
-        return null;
+        return self.js_tick_cmd();
     }
 
     void* js_msg = msg_to_js(&self.rt, msg);
@@ -55,9 +53,19 @@ fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
     self.rt.execute_jobs();
 
     tea::Cmd cmd = js_value_to_cmd(&self.rt, result);
-    // Keep the tick loop alive unless quitting
-    if (msg.kind == tea::MsgKind.TICK && cmd == null) return tea::tick();
-    return cmd;
+    if (cmd != null) return cmd;
+    return self.js_tick_cmd();
+}
+
+// js_tick_cmd schedules the next tick only when JS has pending work.
+// Returns null (idle) when there are no active timers or fetch requests.
+fn tea::Cmd JsModel.js_tick_cmd(&self) @inline {
+    if (self.rt.is_job_pending()) return tea::tick(1);
+    if (self.rt.has_pending_fetch()) return tea::tick(1);
+    long next_ms = self.rt.next_timer_ms();
+    if (next_ms < 0) return null;
+    sz delay = next_ms < 1 ? 1 : (sz)next_ms;
+    return tea::tick(delay);
 }
 
 fn tea::View JsModel.view(&self) @dynamic {
