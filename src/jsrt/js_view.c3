@@ -5,33 +5,6 @@ import pearls;
 import std::io;
 import std::core::mem;
 
-// One spinner instance per SpinnerKind, lazily advanced by time.
-struct SpinnerSlot {
-    pearls::Spinner spinner;
-    long            last_ms;   // last time frame was advanced
-    bool            init;
-}
-SpinnerSlot[5] _spinner_slots;
-
-fn pearls::Spinner* get_spinner(pearls::SpinnerKind kind, lipgloss::Color fg) @local {
-    int idx = (int)kind;
-    SpinnerSlot* slot = &_spinner_slots[idx];
-    if (!slot.init) {
-        slot.spinner = pearls::new_spinner(kind).with_color(fg);
-        slot.last_ms = 0;
-        slot.init    = true;
-    } else {
-        slot.spinner.fg = fg;
-    }
-    // Advance frame based on elapsed time
-    pearls::SpinnerFrames fs = pearls::spinner_frames(kind);
-    long now = (long)jsrt_now_ms();
-    if (now - slot.last_ms >= (long)fs.interval_ms) {
-        slot.spinner.advance();
-        slot.last_ms = now;
-    }
-    return &slot.spinner;
-}
 
 // is_vnode checks that val is a JS object with a string "type" property
 fn bool is_vnode(Runtime* rt, void* val) {
@@ -238,7 +211,8 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
     return xray::constraint_fill(1);
 }
 
-// render_vnode walks a vnode tree, filling screen with content in area
+// render_vnode walks a vnode tree, filling screen with content in area.
+// key is the position hash for this node — used to look up component state.
 fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray::Rect area) {
     if (!vnode || rt.is_null(vnode)) return;
 
@@ -401,11 +375,15 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
         } else {
             // All-text path: collect and render via lipgloss
             if (get_prop_int(rt, props, "width", 0) == 0) {
-                int inner_w = area.w - border_pad;
+                int pad   = get_prop_int(rt, props, "pad", 0);
+                int pad_x = get_prop_int(rt, props, "pad_x", pad);
+                int inner_w = area.w - border_pad - pad_x * 2;
                 style = style.set_width(inner_w > 0 ? inner_w : 1);
             }
             if (get_prop_int(rt, props, "height", 0) == 0) {
-                int inner_h = area.h - border_pad;
+                int pad   = get_prop_int(rt, props, "pad", 0);
+                int pad_y = get_prop_int(rt, props, "pad_y", pad);
+                int inner_h = area.h - border_pad - pad_y * 2;
                 style = style.set_height(inner_h > 0 ? inner_h : 1);
             }
             String content = collect_text(rt, vnode);
@@ -427,9 +405,14 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             if (fg_str.len > 0) fg = lipgloss::color_hex(fg_str);
         }
 
-        pearls::Spinner* sp = get_spinner(kind, fg);
-        String frame = sp.view();
-        screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style());
+        pearls::SpinnerFrames fs = pearls::spinner_frames(kind);
+        int frame = (int)((jsrt_now_ms() / (long)fs.interval_ms) % (long)fs.count);
+        String frame_str = fs.frames[frame];
+        if (fg.kind != lipgloss::ColorKind.NONE) {
+            frame_str = lipgloss::new_style().foreground(fg).render(frame_str);
+        }
+        screen.render_ansi_string((sz)area.x, (sz)area.y, frame_str, xray::default_style());
+        request_render_tick((long)fs.interval_ms);
 
     } else if (type == "text") {
         lipgloss::Style style = props_to_style(rt, props);

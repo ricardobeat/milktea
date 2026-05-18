@@ -776,6 +776,18 @@ int jsrt_has_pending_fetch(void) {
     pthread_mutex_lock(&_fetch_mutex);
     int pending = (_fetch_resp_head != NULL);
     pthread_mutex_unlock(&_fetch_mutex);
+    if (pending) return 1;
+    pthread_mutex_lock(&_chunk_mutex);
+    pending = (_chunk_head != NULL);
+    pthread_mutex_unlock(&_chunk_mutex);
+    if (pending) return 1;
+    /* Active stream slots: curl thread is still working */
+    pthread_mutex_lock(&_streams_mutex);
+    _streams_ensure_init();
+    for (int i = 0; i < JSRT_MAX_STREAMS; i++) {
+        if (_streams[i].active) { pending = 1; break; }
+    }
+    pthread_mutex_unlock(&_streams_mutex);
     return pending;
 }
 

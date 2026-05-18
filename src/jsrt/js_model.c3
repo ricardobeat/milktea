@@ -10,6 +10,16 @@ struct JsModel {
     int term_h;
 }
 
+// Requested tick delay from the last render pass. -1 means no tick requested.
+// Components call request_render_tick() during render_vnode to register a wakeup.
+long g_render_tick_ms = -1;
+
+fn void request_render_tick(long delay_ms) {
+    if (g_render_tick_ms < 0 || delay_ms < g_render_tick_ms) {
+        g_render_tick_ms = delay_ms;
+    }
+}
+
 fn tea::Cmd JsModel.init(&self) @dynamic {
     void* fn_val = self.rt.get_prop(self.js_model_obj, "init");
     if (fn_val != null) {
@@ -57,12 +67,16 @@ fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
     return self.js_tick_cmd();
 }
 
-// js_tick_cmd schedules the next tick only when JS has pending work.
-// Returns null (idle) when there are no active timers or fetch requests.
+// js_tick_cmd schedules the next tick based on JS runtime state and render requests.
+// Returns null (idle) when nothing needs a wakeup.
 fn tea::Cmd JsModel.js_tick_cmd(&self) @inline {
     if (self.rt.is_job_pending()) return tea::tick(1);
     if (self.rt.has_pending_fetch()) return tea::tick(1);
     long next_ms = self.rt.next_timer_ms();
+    // Take the minimum of JS timer deadline and render-requested tick
+    if (g_render_tick_ms >= 0) {
+        if (next_ms < 0 || g_render_tick_ms < next_ms) next_ms = g_render_tick_ms;
+    }
     if (next_ms < 0) return null;
     sz delay = next_ms < 1 ? 1 : (sz)next_ms;
     return tea::tick(delay);
@@ -85,6 +99,7 @@ fn tea::View JsModel.view(&self) @dynamic {
         int h = self.term_h > 0 ? self.term_h : 24;
         xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
         xray::Rect area = xray::new_rect(0, 0, w, h);
+        g_render_tick_ms = -1;
         render_vnode(&self.rt, result, screen, area);
         self.rt.free_value(result);
         tea::View view = tea::new_alt_cell_view(screen.cells[0:screen.width * screen.height], screen.width, screen.height);
