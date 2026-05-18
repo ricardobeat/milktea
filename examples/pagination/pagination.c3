@@ -2,26 +2,23 @@ module pagination;
 
 import tea;
 import lipgloss;
+import pearls;
 import std::io;
 import std::core::string;
 import std::core::dstring;
 
+const int TOTAL_ITEMS = 50;
+
 struct PaginationModel {
+    pearls::Pagination pg;
     int cursor;
-    int page;
-    int per_page;
     int width;
     int height;
     bool[1000] selected;
 }
 
-const int TOTAL_ITEMS = 50;
-const int MSG_TICK = 1;
-
 fn tea::Cmd PaginationModel.init(PaginationModel* self) @dynamic {
-    self.per_page = 8;
-    self.page = 0;
-    self.cursor = 0;
+    self.pg = pearls::new_pagination(8, TOTAL_ITEMS);
     return null;
 }
 
@@ -35,9 +32,10 @@ fn tea::Cmd PaginationModel.update(PaginationModel* self, tea::Msg msg) @dynamic
     if (msg.kind != tea::MsgKind.KEY) return null;
     tea::KeyMsg k = msg.key;
 
-    int page_start = self.page * self.per_page;
-    int page_end = page_start + self.per_page;
-    if (page_end > TOTAL_ITEMS) page_end = TOTAL_ITEMS;
+    if (self.pg.handle_key(k)) return null;
+
+    int page_start = self.pg.page_start();
+    int page_end = self.pg.page_end();
 
     switch (k.code) {
         case tea::KeyCode.CTRL_C:
@@ -46,16 +44,6 @@ fn tea::Cmd PaginationModel.update(PaginationModel* self, tea::Msg msg) @dynamic
             if (self.cursor > page_start) self.cursor--;
         case tea::KeyCode.DOWN:
             if (self.cursor < page_end - 1) self.cursor++;
-        case tea::KeyCode.PAGE_UP:
-            if (self.page > 0) {
-                self.page--;
-                self.cursor = self.page * self.per_page;
-            }
-        case tea::KeyCode.PAGE_DOWN:
-            if ((self.page + 1) * self.per_page < TOTAL_ITEMS) {
-                self.page++;
-                self.cursor = self.page * self.per_page;
-            }
         case tea::KeyCode.HOME:
             self.cursor = page_start;
         case tea::KeyCode.END:
@@ -82,18 +70,17 @@ fn tea::View PaginationModel.view(PaginationModel* self) @dynamic {
     lipgloss::Style cursor_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
     lipgloss::Style check_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00"));
     lipgloss::Style dim_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
-    lipgloss::Style num_style = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
 
     DString out = dstring::temp();
-    out.append_string(title_style.render(string::tformat("Items (page %d of %d)", self.page + 1, (TOTAL_ITEMS + self.per_page - 1) / self.per_page)));
+    int tp = self.pg.total_pages();
+    out.append_string(title_style.render(string::tformat("Items (page %d of %d)", self.pg.page + 1, tp)));
     out.append_char('\n');
 
-    int page_start = self.page * self.per_page;
-    int page_end = page_start + self.per_page;
-    if (page_end > TOTAL_ITEMS) page_end = TOTAL_ITEMS;
+    int page_start = self.pg.page_start();
+    int page_end = self.pg.page_end();
 
     for (int i = page_start; i < page_end; i++) {
-        String check = self.selected[i] ? "✓" : " ";
+        String check = self.selected[i] ? "\xe2\x9c\x93" : " ";
         String marker = (i == self.cursor) ? "> " : "  ";
         String item_text = string::tformat("Item %03d", i + 1);
 
@@ -108,8 +95,10 @@ fn tea::View PaginationModel.view(PaginationModel* self) @dynamic {
     }
 
     out.append_char('\n');
-    out.append_string(num_style.render(string::tformat("%d-%d of %d", page_start + 1, page_end, TOTAL_ITEMS)));
-    out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  PgUp/PgDn pages  |  q quit"));
+    out.append_string(dim_style.render(string::tformat("%d-%d of %d", page_start + 1, page_end, TOTAL_ITEMS)));
+    out.append_string(dim_style.render("  |  "));
+    out.append_string(self.pg.view());
+    out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  ←→ pages  |  q quit"));
 
     return tea::new_alt_screen_view(out.str_view());
 }
@@ -120,7 +109,6 @@ fn int main() {
         io::printfn("Error: %s", err);
         return 1;
     }
-
 
     int count = 0;
     for (int i = 0; i < TOTAL_ITEMS; i++) {

@@ -15,11 +15,14 @@ struct Textarea {
     int        cursor_col;
     int        scroll_offset;
     String     placeholder;
+    String     prompt;           // prefix shown before each line (e.g. "> ")
+    bool       show_line_numbers;
     bool       focused;
     lipgloss::Style focused_style;
     lipgloss::Style blurred_style;
     lipgloss::Style cursor_style;
     lipgloss::Style line_number_style;
+    lipgloss::Style prompt_style;
 }
 
 // new_textarea creates a textarea with the given dimensions.
@@ -27,10 +30,12 @@ fn Textarea new_textarea(int width, int height) {
     Textarea t = {};
     t.width = width;
     t.height = height;
+    t.show_line_numbers = true;
     t.focused_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff"));
     t.blurred_style = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
     t.cursor_style = lipgloss::new_style().background(lipgloss::color_hex("#ffffff")).foreground(lipgloss::color_hex("#000000"));
     t.line_number_style = lipgloss::new_style().foreground(lipgloss::color_hex("#555555"));
+    t.prompt_style = lipgloss::new_style().foreground(lipgloss::color_hex("#555555"));
     return t;
 }
 
@@ -244,13 +249,17 @@ fn int Textarea.line_count(&self) {
     return count;
 }
 
-// view returns the rendered textarea string with line numbers.
+// view returns the rendered textarea string.
 fn String Textarea.view(&self) {
     DString out = dstring::temp();
     int lc = self.line_count();
-    int gutter_width = 2;
-    if (lc >= 10) gutter_width = 3;
-    if (lc >= 100) gutter_width = 4;
+
+    int gutter_width = 0;
+    if (self.show_line_numbers) {
+        gutter_width = 2;
+        if (lc >= 10) gutter_width = 3;
+        if (lc >= 100) gutter_width = 4;
+    }
 
     lipgloss::Style content_style = self.focused ? self.focused_style : self.blurred_style;
 
@@ -275,28 +284,43 @@ fn String Textarea.view(&self) {
 
     // Render visible lines
     for (int r = start_row; r < end_row; r++) {
-        // Line number
-        String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
-        out.append_string(self.line_number_style.render(num));
+        // Optional line number gutter
+        if (self.show_line_numbers) {
+            String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
+            out.append_string(self.line_number_style.render(num));
+        }
 
-        // Line content
+        // Optional prompt prefix
+        if (self.prompt.len > 0) {
+            out.append_string(self.prompt_style.render(self.prompt));
+        }
+
+        // Line content — width constrained so the outer style doesn't expand
         sz line_end = line_start;
         while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
 
+        int content_w = self.width - (int)self.prompt.len;
+        if (content_w < 1) content_w = 1;
+        lipgloss::Style line_style = content_style.set_width(content_w);
+
         if (line_start == self.len && self.len > 0 && self.buf[self.len - 1] == '\n') {
             // Empty line after trailing newline
+            out.append_string(line_style.render(""));
             out.append_char('\n');
         } else if (line_start < self.len) {
             String line_text = (String)self.buf[line_start:line_end];
-            out.append_string(content_style.render(line_text));
+            out.append_string(line_style.render(line_text));
             out.append_char('\n');
         } else if (r == 0 && self.len == 0) {
-            out.append_string(self.placeholder);
+            out.append_string(line_style.render(self.placeholder));
             out.append_char('\n');
         }
 
         line_start = line_end + 1;
     }
 
-    return out.str_view();
+    String s = out.str_view();
+    // Strip trailing newline — the outer lipgloss render() adds its own line breaks
+    if (s.len > 0 && s[s.len - 1] == '\n') s = s[:s.len - 1];
+    return s;
 }

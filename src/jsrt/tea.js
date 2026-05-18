@@ -1,5 +1,5 @@
 function h(type, props, ...children) {
-  return { type, props: props || {}, children: children.flat() };
+  return { type, props: props || {}, children: children.flat().filter(c => c != null) };
 }
 globalThis.h = h;
 
@@ -162,5 +162,34 @@ globalThis.tea = {
 
   batch(...cmds) {
     return { __cmd: "batch", cmds };
-  }
+  },
+
+  // Textarea API — backed by pearls::Textarea on the C3 side
+  // textareaUpdate(id, msg) forwards a key event to the textarea
+  textareaUpdate(id, msg) {
+    if (typeof textareaUpdate === "function") textareaUpdate(id, msg);
+  },
+
+  // textareaGetText(id) returns the current text content
+  textareaGetText(id) {
+    return typeof textareaGetText === "function" ? textareaGetText(id) : "";
+  },
+
+  // textareaClear(id) clears the textarea
+  textareaClear(id) {
+    if (typeof textareaClear === "function") textareaClear(id);
+  },
+
+  // textareaGetCursor(id) returns { row, col }
+  textareaGetCursor(id) {
+    return typeof textareaGetCursor === "function" ? textareaGetCursor(id) : { row: 0, col: 0 };
+  },
+
+  // Viewport API — backed by pearls::Viewport on the C3 side
+  viewportUpdate(id, msg) {
+    if (typeof viewportUpdate === "function") viewportUpdate(id, msg);
+  },
+  viewportScrollToBottom(id) {
+    if (typeof viewportScrollToBottom === "function") viewportScrollToBottom(id);
+  },
 };

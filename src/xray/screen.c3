@@ -270,8 +270,9 @@ fn sz utf8_decode(String s, uint* out_cp) {
 // basic cursor movement. All other CSI sequences are skipped.
 // ============================================================
 
-fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Style start_style, sz max_row = 0) {
+fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Style start_style, sz max_row = 0, sz max_col = 0) {
 	if (max_row == 0) max_row = self.height;
+	if (max_col == 0) max_col = self.width;
 	sz c = col;
 	sz r = row;
 	Style style = start_style;
@@ -358,8 +359,10 @@ fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Styl
 		char w = 1;
 		if (cp >= 0x2E80) w = 2; // CJK / wide range heuristic
 
-		Cell cell = new_cell(text[i : char_len], w, style);
-		self.set_cell(c, r, cell);
+		if (c < max_col) {
+			Cell cell = new_cell(text[i : char_len], w, style);
+			self.set_cell(c, r, cell);
+		}
 		c += w;
 		i += char_len;
 	}

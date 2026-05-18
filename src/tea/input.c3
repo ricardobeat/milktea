@@ -196,7 +196,7 @@ fn ParseResult parse_key(char[] buf) {
         if (second == '[') {
             // X10 mouse: ESC [ M followed by 3 bytes (button+32, col+32, row+32)
             // Check for ESC [ M before CSI parsing
-            if (buf.len >= 2 && buf[2] == 'M') {
+            if (buf.len >= 3 && buf[2] == 'M') {
                 if (buf.len < 6) {
                     // Need more data for X10 mouse
                     return make_key(NONE, 0, false, false, false, 0);

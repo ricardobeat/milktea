@@ -2,93 +2,13 @@ module textinputs;
 
 import tea;
 import lipgloss;
+import pearls;
 import std::io;
 import std::core::string;
 import std::core::dstring;
 
-struct TextInput {
-    char[256] buf;
-    sz len;
-    sz cursor;
-    String placeholder;
-    bool focused;
-    bool is_password;
-}
-
-fn void TextInput.clear(TextInput* self) {
-    self.len = 0;
-    self.cursor = 0;
-}
-
-fn void TextInput.insert(TextInput* self, char c) {
-    if (self.len >= self.buf.len - 1) return;
-    for (sz i = self.len; i > self.cursor; i--) {
-        self.buf[i] = self.buf[i - 1];
-    }
-    self.buf[self.cursor] = c;
-    self.len++;
-    self.cursor++;
-}
-
-fn void TextInput.backspace(TextInput* self) {
-    if (self.cursor == 0) return;
-    for (sz i = self.cursor; i < self.len; i++) {
-        self.buf[i - 1] = self.buf[i];
-    }
-    self.len--;
-    self.cursor--;
-}
-
-fn void TextInput.delete_char(TextInput* self) {
-    if (self.cursor >= self.len) return;
-    for (sz i = self.cursor; i < self.len - 1; i++) {
-        self.buf[i] = self.buf[i + 1];
-    }
-    self.len--;
-}
-
-fn String TextInput.text(TextInput* self) {
-    return (String)self.buf[:self.len];
-}
-
-fn String TextInput.display_text(TextInput* self) {
-    if (self.len == 0) return self.placeholder;
-    if (self.is_password) {
-        DString hidden = dstring::temp();
-        for (sz i = 0; i < self.len; i++) hidden.append_string("•");
-        return hidden.str_view();
-    }
-    return self.text();
-}
-
-// cursor_x returns the 0-indexed column offset of the cursor within the
-// input's rendered text. This is relative to where the input text starts,
-// NOT relative to the line start.
-fn int TextInput.cursor_x(TextInput* self) {
-    if (self.len > 0 && self.cursor < self.len) {
-        return (int)self.cursor;
-    }
-    return (int)self.len;
-}
-
-fn String TextInput.view(TextInput* self, bool focused) {
-    String display = self.display_text();
-
-    // Color based on state
-    lipgloss::Style s = lipgloss::new_style();
-    if (self.len > 0 && focused) {
-        s = s.foreground(lipgloss::color_hex("#ffffff"));  // white for focused with text
-    } else if (self.len > 0) {
-        s = s.foreground(lipgloss::color_hex("#888888")); // gray for blurred with text
-    } else {
-        s = s.foreground(lipgloss::color_hex("#444444")); // dim for placeholder
-    }
-
-    return s.render(display);
-}
-
 struct InputsModel {
-    TextInput[3] inputs;
+    pearls::TextInput[3] inputs;
     int focus;
     bool submitted;
     int width;
@@ -97,11 +17,10 @@ struct InputsModel {
 }
 
 fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
-    self.inputs[0].placeholder = "Nickname";
+    self.inputs[0] = pearls::new_text_input().with_placeholder("Nickname");
     self.inputs[0].focused = true;
-    self.inputs[1].placeholder = "Email";
-    self.inputs[2].placeholder = "Password";
-    self.inputs[2].is_password = true;
+    self.inputs[1] = pearls::new_text_input().with_placeholder("Email");
+    self.inputs[2] = pearls::new_text_input().with_placeholder("Password").with_password();
     return tea::tick(500, &on_blink);
 }
 
@@ -152,19 +71,11 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
                 self.submitted = true;
                 return tea::quit();
             }
-        case tea::KeyCode.BACKSPACE:
-            self.inputs[self.focus].backspace();
-        case tea::KeyCode.LEFT:
-            if (self.inputs[self.focus].cursor > 0) self.inputs[self.focus].cursor--;
-        case tea::KeyCode.RIGHT:
-            if (self.inputs[self.focus].cursor < self.inputs[self.focus].len) self.inputs[self.focus].cursor++;
-        case tea::KeyCode.RUNE:
-            if (k.rune == 'q' && self.focus == 0) return tea::quit();
-            self.inputs[self.focus].insert(k.rune);
         case tea::KeyCode.ESC:
             return tea::quit();
         default:
     }
+    if (self.inputs[self.focus].handle_key(k)) return null;
     return null;
 }
 
@@ -178,12 +89,8 @@ fn tea::View InputsModel.view(InputsModel* self) @dynamic {
     out.append_char('\n');
 
     String[3] labels = { "Nickname:", "Email:", "Password:" };
-    // 0-indexed column where each input's text begins (label chars + trailing space)
     int[3] label_cols = { 10, 7, 10 };
 
-    // Title.render with bottom padding (pad_bottom=1) produces 2 lines,
-    // plus 2 explicit newlines → lines 0,1,2 are occupied,
-    // so inputs start at content row 3 (0-indexed).
     int base_row = 3;
 
     int cursor_x = 0;
@@ -195,16 +102,15 @@ fn tea::View InputsModel.view(InputsModel* self) @dynamic {
 
         if (i == self.focus) {
             cursor_y = base_row + i;
-            cursor_x = label_cols[i] + self.inputs[i].cursor_x();
+            cursor_x = label_cols[i] + self.inputs[i].cursor_col();
         }
 
-        out.append_string(self.inputs[i].view(self.inputs[i].focused));
+        out.append_string(self.inputs[i].view());
         out.append_char('\n');
     }
 
     out.append_char('\n');
 
-    // Submit button
     if (self.focus == 2) {
         lipgloss::Style btn = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff")).background(lipgloss::color_hex("#00d7ff")).padding(0, 2, 0, 2).set_bold(true);
         out.append_string(btn.render(" Submit "));

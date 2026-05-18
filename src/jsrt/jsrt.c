@@ -16,6 +16,17 @@
  * JSValue or JSRuntime directly.
  */
 
+/* Last JS error message + stack, cleared on successful call */
+static char _jsrt_last_error[4096] = {0};
+
+const char* jsrt_last_error(void) {
+    return _jsrt_last_error[0] ? _jsrt_last_error : NULL;
+}
+
+void jsrt_clear_error(void) {
+    _jsrt_last_error[0] = 0;
+}
+
 /* Heap-allocate a JSValue and return it as void* */
 static void* _jsrt_alloc_value(JSValue val) {
     JSValue* ptr = (JSValue*)malloc(sizeof(JSValue));
@@ -247,10 +258,29 @@ int jsrt_call(void* ctx, void* fn_val, void* this_val, int argc, void** argv, vo
         /* Print and clear the exception so it doesn't poison subsequent calls */
         JSValue exc = JS_GetException(c);
         const char* exc_str = JS_ToCString(c, exc);
-        if (exc_str) {
-            fprintf(stderr, "[jsrt] JS call error: %s\n", exc_str);
-            JS_FreeCString(c, exc_str);
+        JSValue stack = JS_GetPropertyStr(c, exc, "stack");
+        const char* stack_str = !JS_IsUndefined(stack) ? JS_ToCString(c, stack) : NULL;
+
+        /* Store for overlay rendering */
+        if (stack_str)
+            snprintf(_jsrt_last_error, sizeof(_jsrt_last_error), "%s", stack_str);
+        else if (exc_str)
+            snprintf(_jsrt_last_error, sizeof(_jsrt_last_error), "%s", exc_str);
+
+        /* Also print to stderr */
+        if (exc_str) fprintf(stderr, "\r[jsrt] JS error: %s\r\n", exc_str);
+        if (stack_str) {
+            const char* p = stack_str;
+            while (*p) {
+                const char* nl = strchr(p, '\n');
+                if (nl) { fprintf(stderr, "\r%.*s\r\n", (int)(nl - p), p); p = nl + 1; }
+                else     { fprintf(stderr, "\r%s\r\n", p); break; }
+            }
         }
+
+        if (exc_str)   JS_FreeCString(c, exc_str);
+        if (stack_str) JS_FreeCString(c, stack_str);
+        JS_FreeValue(c, stack);
         JS_FreeValue(c, exc);
         JS_FreeValue(c, result);
         if (out) *out = NULL;
@@ -271,6 +301,11 @@ void* jsrt_new_object(void* ctx) {
 
     JSValue obj = JS_NewObject((JSContext*)ctx);
     return _jsrt_alloc_value(obj);
+}
+
+void* jsrt_new_int32(void* ctx, int val) {
+    if (!ctx) return NULL;
+    return _jsrt_alloc_value(JS_NewInt32((JSContext*)ctx, val));
 }
 
 void jsrt_set_prop_str(void* ctx, void* obj, const char* name, const char* val) {
@@ -1331,6 +1366,20 @@ typedef struct { unsigned char kind; unsigned char ansi; unsigned char r; unsign
 /* Declared in C3 gradient.c3 with @export — C3 mangles to lipgloss__blend_luv */
 extern LipglossColor lipgloss__blend_luv(LipglossColor a, LipglossColor b, double t);
 
+/* Declared in C3 js_view.c3 — C3 mangles as jsrt__function with @export */
+extern void*         jsrt__textarea_get_ptr(const char* id);
+extern void          jsrt__textarea_handle_key_ptr(void* ta_ptr, int code, int rune, int ctrl, int alt, int shift);
+extern void          jsrt__textarea_clear_ptr(void* ta_ptr);
+extern int           jsrt__textarea_cursor_row_ptr(void* ta_ptr);
+extern int           jsrt__textarea_cursor_col_ptr(void* ta_ptr);
+extern const char*   jsrt__textarea_text_ptr(void* ta_ptr);
+extern int           jsrt__textarea_text_len(void* ta_ptr);
+
+extern void*         jsrt__viewport_get_ptr(const char* id);
+extern void          jsrt__viewport_handle_key_ptr(void* vp_ptr, int code, int ctrl, int alt, int shift);
+extern void          jsrt__viewport_scroll_to_bottom_ptr(void* vp_ptr);
+extern int           jsrt__viewport_offset_ptr(void* vp_ptr);
+
 static int _parse_hex_byte(const char* s) {
     int hi, lo;
     char c = s[0];
@@ -1374,6 +1423,154 @@ static JSValue _js_blend_luv(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_NewString(ctx, buf);
 }
 
+/* ── textarea JS bridge functions ─────────────────────────────────────────── */
+
+/* Map the string key code produced by keycode_to_string() back to (KeyCode, rune).
+   KeyCode enum values: NONE=0,RUNE=1,ENTER=2,BACKSPACE=3,ESC=4,TAB=5,
+   UP=6,DOWN=7,LEFT=8,RIGHT=9,HOME=10,END=11,DELETE=12,PAGE_UP=13,PAGE_DOWN=14,
+   INSERT=15,F1=16,...F12=27,CTRL_C=28 */
+static void _str_to_keycode(const char* s, int32_t* out_code, int32_t* out_rune) {
+    *out_rune = 0;
+    if (!s || !s[0]) { *out_code = 0; return; }
+    if (strcmp(s, "enter")     == 0) { *out_code = 2;  return; }
+    if (strcmp(s, "backspace") == 0) { *out_code = 3;  return; }
+    if (strcmp(s, "esc")       == 0) { *out_code = 4;  return; }
+    if (strcmp(s, "tab")       == 0) { *out_code = 5;  return; }
+    if (strcmp(s, "up")        == 0) { *out_code = 6;  return; }
+    if (strcmp(s, "down")      == 0) { *out_code = 7;  return; }
+    if (strcmp(s, "left")      == 0) { *out_code = 8;  return; }
+    if (strcmp(s, "right")     == 0) { *out_code = 9;  return; }
+    if (strcmp(s, "home")      == 0) { *out_code = 10; return; }
+    if (strcmp(s, "end")       == 0) { *out_code = 11; return; }
+    if (strcmp(s, "delete")    == 0) { *out_code = 12; return; }
+    if (strcmp(s, "page_up")   == 0) { *out_code = 13; return; }
+    if (strcmp(s, "page_down") == 0) { *out_code = 14; return; }
+    if (strcmp(s, "insert")    == 0) { *out_code = 15; return; }
+    if (strcmp(s, "f1")  == 0) { *out_code = 16; return; }
+    if (strcmp(s, "f2")  == 0) { *out_code = 17; return; }
+    if (strcmp(s, "f3")  == 0) { *out_code = 18; return; }
+    if (strcmp(s, "f4")  == 0) { *out_code = 19; return; }
+    if (strcmp(s, "f5")  == 0) { *out_code = 20; return; }
+    if (strcmp(s, "f6")  == 0) { *out_code = 21; return; }
+    if (strcmp(s, "f7")  == 0) { *out_code = 22; return; }
+    if (strcmp(s, "f8")  == 0) { *out_code = 23; return; }
+    if (strcmp(s, "f9")  == 0) { *out_code = 24; return; }
+    if (strcmp(s, "f10") == 0) { *out_code = 25; return; }
+    if (strcmp(s, "f11") == 0) { *out_code = 26; return; }
+    if (strcmp(s, "f12") == 0) { *out_code = 27; return; }
+    /* single printable character → RUNE */
+    if (s[1] == '\0') { *out_code = 1; *out_rune = (int32_t)(unsigned char)s[0]; return; }
+    *out_code = 0;
+}
+
+static JSValue _js_textarea_update(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* ta_ptr = jsrt__textarea_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (!ta_ptr) return JS_UNDEFINED;
+
+    JSValue msg = argv[1];
+    int32_t code = 0, rune = 0, ctrl = 0, alt = 0, shift = 0;
+    JSValue v;
+    /* code is a string like "backspace", "enter", "a" — parse it */
+    v = JS_GetPropertyStr(ctx, msg, "code");
+    const char* code_str = JS_ToCString(ctx, v);
+    JS_FreeValue(ctx, v);
+    if (code_str) {
+        _str_to_keycode(code_str, &code, &rune);
+        JS_FreeCString(ctx, code_str);
+    }
+    v = JS_GetPropertyStr(ctx, msg, "ctrl");   ctrl  = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+    v = JS_GetPropertyStr(ctx, msg, "alt");    alt   = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+    v = JS_GetPropertyStr(ctx, msg, "shift");  shift = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+
+    jsrt__textarea_handle_key_ptr(ta_ptr, code, rune, ctrl, alt, shift);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_textarea_get_text(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NewString(ctx, "");
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* ta_ptr = jsrt__textarea_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (!ta_ptr) return JS_NewString(ctx, "");
+    int len = jsrt__textarea_text_len(ta_ptr);
+    if (len <= 0) return JS_NewString(ctx, "");
+    const char* text = jsrt__textarea_text_ptr(ta_ptr);
+    return JS_NewStringLen(ctx, text, (size_t)len);
+}
+
+static JSValue _js_textarea_clear(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* ta_ptr = jsrt__textarea_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (ta_ptr) jsrt__textarea_clear_ptr(ta_ptr);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_viewport_update(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp_ptr = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (!vp_ptr) return JS_UNDEFINED;
+
+    JSValue msg = argv[1];
+    const char* code_str = NULL;
+    JSValue v = JS_GetPropertyStr(ctx, msg, "code");
+    code_str = JS_ToCString(ctx, v);
+    JS_FreeValue(ctx, v);
+
+    int32_t code = 0, rune = 0;
+    if (code_str) { _str_to_keycode(code_str, &code, &rune); JS_FreeCString(ctx, code_str); }
+
+    int ctrl = 0, alt = 0, shift = 0;
+    v = JS_GetPropertyStr(ctx, msg, "ctrl");  ctrl  = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+    v = JS_GetPropertyStr(ctx, msg, "alt");   alt   = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+    v = JS_GetPropertyStr(ctx, msg, "shift"); shift = JS_ToBool(ctx, v); JS_FreeValue(ctx, v);
+
+    jsrt__viewport_handle_key_ptr(vp_ptr, code, ctrl, alt, shift);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_viewport_scroll_to_bottom(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp_ptr = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (vp_ptr) jsrt__viewport_scroll_to_bottom_ptr(vp_ptr);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_textarea_get_cursor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    const char* id = NULL;
+    if (argc >= 1) {
+        id = JS_ToCString(ctx, argv[0]);
+        if (!id) return JS_EXCEPTION;
+    }
+    void* ta_ptr = id ? jsrt__textarea_get_ptr(id) : NULL;
+    if (id) JS_FreeCString(ctx, id);
+    int row = ta_ptr ? jsrt__textarea_cursor_row_ptr(ta_ptr) : 0;
+    int col = ta_ptr ? jsrt__textarea_cursor_col_ptr(ta_ptr) : 0;
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "row", JS_NewInt32(ctx, row));
+    JS_SetPropertyStr(ctx, obj, "col", JS_NewInt32(ctx, col));
+    return obj;
+}
+
 void jsrt_register_async_globals(void* ctx) {
     if (!ctx) return;
     JSContext* c = (JSContext*)ctx;
@@ -1384,6 +1581,12 @@ void jsrt_register_async_globals(void* ctx) {
     JS_SetPropertyStr(c, global, "clearInterval", JS_NewCFunction(c, _js_clear_timeout,  "clearInterval", 1));
     JS_SetPropertyStr(c, global, "fetch",         JS_NewCFunction(c, _js_fetch,          "fetch",         1));
     JS_SetPropertyStr(c, global, "__jsrt_log",    JS_NewCFunction(c, _js_log_stderr,     "__jsrt_log",    1));
-    JS_SetPropertyStr(c, global, "blendLuv",      JS_NewCFunction(c, _js_blend_luv,      "blendLuv",      3));
+    JS_SetPropertyStr(c, global, "blendLuv",          JS_NewCFunction(c, _js_blend_luv,          "blendLuv",          3));
+    JS_SetPropertyStr(c, global, "textareaUpdate",     JS_NewCFunction(c, _js_textarea_update,     "textareaUpdate",     2));
+    JS_SetPropertyStr(c, global, "textareaGetText",    JS_NewCFunction(c, _js_textarea_get_text,   "textareaGetText",    1));
+    JS_SetPropertyStr(c, global, "textareaClear",      JS_NewCFunction(c, _js_textarea_clear,      "textareaClear",      1));
+    JS_SetPropertyStr(c, global, "textareaGetCursor",  JS_NewCFunction(c, _js_textarea_get_cursor, "textareaGetCursor",  1));
+    JS_SetPropertyStr(c, global, "viewportUpdate",         JS_NewCFunction(c, _js_viewport_update,         "viewportUpdate",         2));
+    JS_SetPropertyStr(c, global, "viewportScrollToBottom", JS_NewCFunction(c, _js_viewport_scroll_to_bottom, "viewportScrollToBottom", 1));
     JS_FreeValue(c, global);
 }

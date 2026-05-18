@@ -8,6 +8,7 @@ extern fn void* jsrt_get_global(void* ctx);
 extern fn void* jsrt_get_prop(void* ctx, void* obj, ZString name);
 extern fn int jsrt_call(void* ctx, void* fn_val, void* this_val, int argc, void** argv, void** out);
 extern fn void* jsrt_new_object(void* ctx);
+extern fn void* jsrt_new_int32(void* ctx, int val);
 extern fn void jsrt_set_prop_str(void* ctx, void* obj, ZString name, ZString val);
 extern fn void jsrt_set_prop_str_n(void* ctx, void* obj, ZString name, char* val, sz len);
 extern fn void jsrt_set_prop_int(void* ctx, void* obj, ZString name, int val);
@@ -26,6 +27,8 @@ extern fn void* jsrt_array_item(void* ctx, void* val, int idx);
 
 extern fn int jsrt_eval_module(void* rt, void* ctx, ZString src, sz len, ZString filename);
 extern fn long jsrt_now_ms();
+extern fn ZString jsrt_last_error();
+extern fn void jsrt_clear_error();
 extern fn void jsrt_execute_pending_jobs(void* rt);
 extern fn int jsrt_set_timeout(void* ctx, void* callback_val, long delay_ms);
 extern fn void jsrt_clear_timeout(void* ctx, int timer_id);
@@ -111,6 +114,18 @@ fn void* Runtime.call1(&self, void* fn_val, void* this_val, void* arg) {
 
 fn void* Runtime.new_object(&self) {
     return jsrt_new_object(self.ctx);
+}
+
+fn void* Runtime.new_int32(&self, int val) {
+    return jsrt_new_int32(self.ctx, val);
+}
+
+fn void* Runtime.call2(&self, void* fn_val, void* this_val, void* a0, void* a1) {
+    void* result = null;
+    void*[] argv = { a0, a1 };
+    int status = jsrt_call(self.ctx, fn_val, this_val, 2, &argv[0], &result);
+    if (status != 0) return null;
+    return result;
 }
 
 fn void Runtime.set_prop_str(&self, void* obj, String name, String val) {

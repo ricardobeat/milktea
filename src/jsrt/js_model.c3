@@ -1,6 +1,7 @@
 module jsrt;
 import tea;
 import xray;
+import lipgloss;
 import std::io;
 
 struct JsModel {
@@ -34,6 +35,8 @@ fn tea::Cmd JsModel.init(&self) @dynamic {
 }
 
 fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
+    if (msg.kind == tea::MsgKind.MOUSE) return self.js_tick_cmd();
+
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
         self.term_w = msg.window_size.width;
         self.term_h = msg.window_size.height;
@@ -48,6 +51,21 @@ fn tea::Cmd JsModel.update(&self, tea::Msg msg) @dynamic {
         bool should_quit = quit_flag != null && !self.rt.is_null(quit_flag) && self.rt.to_string(quit_flag) == "true";
         if (quit_flag != null) self.rt.free_value(quit_flag);
         if (should_quit) return tea::quit();
+    }
+
+    // If there's a pending JS error, only allow esc/q to quit (clears error and quits)
+    ZString pending_err = jsrt_last_error();
+    if (pending_err) {
+        if (msg.kind == tea::MsgKind.KEY) {
+            tea::KeyMsg k = msg.key;
+            bool is_quit = k.code == tea::KeyCode.ESC
+                || (k.code == tea::KeyCode.RUNE && k.rune == 'q');
+            if (is_quit) {
+                jsrt_clear_error();
+                return tea::quit();
+            }
+        }
+        return self.js_tick_cmd();
     }
 
     void* fn_val = self.rt.get_prop(self.js_model_obj, "update");
@@ -83,38 +101,61 @@ fn tea::Cmd JsModel.js_tick_cmd(&self) @inline {
 }
 
 fn tea::View JsModel.view(&self) @dynamic {
+    int w = self.term_w > 0 ? self.term_w : 80;
+    int h = self.term_h > 0 ? self.term_h : 24;
+
     void* fn_val = self.rt.get_prop(self.js_model_obj, "view");
-    if (fn_val == null || !self.rt.is_function(fn_val)) {
+    void* result = null;
+    if (fn_val != null && self.rt.is_function(fn_val)) {
+        result = self.rt.call0(fn_val, self.js_model_obj);
+        self.rt.free_value(fn_val);
+    } else {
         if (fn_val != null) self.rt.free_value(fn_val);
-        return tea::new_view("");
     }
 
-    void* result = self.rt.call0(fn_val, self.js_model_obj);
-    self.rt.free_value(fn_val);
-    if (!result) return tea::new_view("");
-
     // vnode path: walk the tree, fill a ScreenBuffer, return cell view
-    if (is_vnode(&self.rt, result)) {
-        int w = self.term_w > 0 ? self.term_w : 80;
-        int h = self.term_h > 0 ? self.term_h : 24;
-        xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
-        xray::Rect area = xray::new_rect(0, 0, w, h);
+    // Always use screen buffer so we can overlay errors on top
+    xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
+    xray::Rect area = xray::new_rect(0, 0, w, h);
+
+    if (result != null && is_vnode(&self.rt, result)) {
         g_render_tick_ms = -1;
         render_vnode(&self.rt, result, screen, area);
         self.rt.free_value(result);
-        tea::View view = tea::new_alt_cell_view(screen.cells[0:screen.width * screen.height], screen.width, screen.height);
-        screen.destroy();
-        mem::free(screen);
-        return view;
+    } else if (result != null) {
+        // string path (legacy): render as text into screen buffer
+        ZString cstr = jsrt_to_cstring(self.rt.ctx, result);
+        self.rt.free_value(result);
+        if (cstr) {
+            String content = string::tformat("%s", cstr.str_view());
+            jsrt_free_cstring(self.rt.ctx, cstr);
+            screen.render_ansi_string(0, 0, content, xray::default_style());
+        }
     }
 
-    // string path (legacy): return raw string view
-    ZString cstr = jsrt_to_cstring(self.rt.ctx, result);
-    self.rt.free_value(result);
-    if (!cstr) return tea::new_view("");
-    String temp_content = string::tformat("%s", cstr.str_view());
-    jsrt_free_cstring(self.rt.ctx, cstr);
-    return tea::new_view(temp_content);
+    // Error overlay: always render last JS error as a red bordered box at the bottom
+    ZString err = jsrt_last_error();
+    if (err) {
+        String err_str = err.str_view();
+        lipgloss::Style err_style = lipgloss::new_style()
+            .set_border(lipgloss::rounded_border())
+            .set_border_fg(lipgloss::color_hex("#ff0000"))
+            .foreground(lipgloss::color_hex("#ff6666"))
+            .set_width(w - 2);
+        String rendered = err_style.render(err_str);
+        int line_count = 1;
+        for (sz i = 0; i < rendered.len; i++) {
+            if (rendered[i] == '\n') line_count++;
+        }
+        int overlay_y = h - line_count;
+        if (overlay_y < 0) overlay_y = 0;
+        screen.render_ansi_string(1, (sz)overlay_y, rendered, xray::default_style());
+    }
+
+    tea::View view = tea::new_alt_cell_view(screen.cells[0:screen.width * screen.height], screen.width, screen.height);
+    screen.destroy();
+    mem::free(screen);
+    return view;
 }
 
 fn void JsModel.on_destroy(&self) @dynamic {

@@ -9,6 +9,13 @@
       "sources": ["src/tea/**", "src/lipgloss/**"],
       "c-sources": ["src/tea/tty_winsize.c"]
     },
+    "jsrt": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "src/pearls/**", "src/jsrt/**", "examples/jsrt/**"],
+      "c-sources": ["src/tea/tty_winsize.c", "src/jsrt/jsrt.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
+      "opt": "O0",
+      "linked-libraries": ["curl"]
+    },
     "counter": {
       "type": "executable",
       "sources": ["src/tea/**", "src/lipgloss/**", "examples/counter/**"],
@@ -158,7 +165,7 @@
     },
     "split-editors": {
       "type": "executable",
-      "sources": ["src/tea/**", "src/lipgloss/**", "examples/split-editors/**"],
+      "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "examples/split-editors/**"],
       "c-sources": ["src/tea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
@@ -193,7 +200,7 @@
     },
     "paint": {
       "type": "executable",
-      "sources": ["src/tea/**", "src/lipgloss/**", "examples/paint/**"],
+      "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "examples/paint/**"],
       "c-sources": ["src/tea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
@@ -255,6 +262,12 @@
       "strip-unused": true,
       "linked-libraries": ["sqlite3"],
       "linker-search-paths": ["/opt/homebrew/lib"]
+    },
+    "inputbox": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "examples/inputbox/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "O0"
     },
     "oiia": {
       "type": "executable",

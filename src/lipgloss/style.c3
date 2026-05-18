@@ -296,12 +296,17 @@ fn String Style.render(self, String input) {
     for (sz i = 0; i < line_count; i++) {
         String line = lines[i];
 
-        // Build styled line: pad_left + content + pad_right.
+        // Build styled line: pad_left + content + reset + fill spaces + pad_right.
         DString styled = dstring::temp();
         for (int j = 0; j < self.pad_left; j++) styled.append_char(' ');
         styled.append_string(line);
         int current_len = string_width(line) + self.pad_left;
-        for (int j = current_len; j < target_width + self.pad_left; j++) styled.append_char(' ');
+        int fill = (target_width + self.pad_left) - current_len;
+        if (fill > 0) {
+            // Reset any styles opened inside `line` before writing fill spaces.
+            styled.append_string("\x1b[0m");
+            for (int j = 0; j < fill; j++) styled.append_char(' ');
+        }
         for (int j = 0; j < self.pad_right; j++) styled.append_char(' ');
 
         String styled_str = styled.str_view();

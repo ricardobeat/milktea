@@ -2,23 +2,21 @@ module timer;
 
 import tea;
 import lipgloss;
+import pearls;
 import std::io;
 import std::core::string;
 import std::core::dstring;
 
-
 struct TimerModel {
-    int seconds;
+    pearls::Timer timer;
     int width;
     int height;
-    bool running;
-    bool done;
 }
 
 fn tea::Cmd TimerModel.init(TimerModel* self) @dynamic {
-    return tea::tick(1000);
+    self.timer = pearls::new_timer(60);
+    return self.timer.init_cmd();
 }
-
 
 fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
@@ -28,16 +26,7 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
     }
 
     if (msg.kind == tea::MsgKind.TICK) {
-        if (self.running) {
-            self.seconds--;
-            if (self.seconds <= 0) {
-                self.seconds = 0;
-                self.running = false;
-                self.done = true;
-                return null;
-            }
-        }
-        return tea::tick(1000);
+        return self.timer.tick();
     }
 
     if (msg.kind != tea::MsgKind.KEY) return null;
@@ -48,12 +37,10 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
             return tea::quit();
         case tea::KeyCode.RUNE:
             if (k.rune == 'q') return tea::quit();
-            if (k.rune == ' ') self.running = !self.running;
+            if (k.rune == ' ') self.timer.toggle();
             if (k.rune == 'r') {
-                self.seconds = 60;
-                self.running = true;
-                self.done = false;
-                return tea::tick(1000);
+                self.timer.reset();
+                return self.timer.init_cmd();
             }
         default:
     }
@@ -61,9 +48,6 @@ fn tea::Cmd TimerModel.update(TimerModel* self, tea::Msg msg) @dynamic {
 }
 
 fn tea::View TimerModel.view(TimerModel* self) @dynamic {
-    int minutes = self.seconds / 60;
-    int secs = self.seconds % 60;
-
     lipgloss::Style box_style = lipgloss::new_style()
         .foreground(lipgloss::color_hex("#ff00ff"))
         .set_bold(true)
@@ -74,16 +58,18 @@ fn tea::View TimerModel.view(TimerModel* self) @dynamic {
         .foreground(lipgloss::color_hex("#666666"));
 
     DString out = dstring::temp();
+    int minutes = self.timer.remaining_seconds / 60;
+    int secs = self.timer.remaining_seconds % 60;
     String time_str = string::tformat("%02d:%02d", minutes, secs);
     out.append_string(box_style.render(time_str));
     out.append_char('\n');
 
-    if (self.done) {
+    if (self.timer.done) {
         lipgloss::Style done_style = lipgloss::new_style()
             .foreground(lipgloss::color_hex("#00ff00"))
             .set_bold(true);
         out.append_string(done_style.render("Time's up!"));
-    } else if (self.running) {
+    } else if (self.timer.running) {
         out.append_string(subtle.render("SPACE to pause"));
     } else {
         lipgloss::Style pause_style = lipgloss::new_style()
@@ -98,7 +84,7 @@ fn tea::View TimerModel.view(TimerModel* self) @dynamic {
 }
 
 fn int main() {
-    TimerModel m = { .seconds = 60, .running = true };
+    TimerModel m = {};
     if (catch err = tea::@run_program(&m)) {
         io::printfn("Error: %s", err);
         return 1;
