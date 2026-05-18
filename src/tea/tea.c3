@@ -2,6 +2,7 @@ module tea;
 
 import std::core::dstring;
 import std::thread;
+import std::time;
 import std::io;
 import xray;
 
@@ -197,7 +198,7 @@ struct Program {
     int batch_count;
     TimerEntry[MAX_TIMERS] timers;
     bool in_alt_screen;
-    char[256] pending;
+    char[32] pending;
     sz pending_len;
 
     // Test / injection support
@@ -205,8 +206,7 @@ struct Program {
     int inject_width;
     int inject_height;
     DString* output_buf;
-    char[4096] inject_input;
-    sz inject_input_len;
+    char[] inject_input;
     sz inject_input_pos;
     // Ring buffer for Send()-injected messages.
     Msg[MAX_BATCH] send_queue;
@@ -241,6 +241,7 @@ struct InputQueue {
     sz head;
     sz tail;
     thread::Mutex mu;
+    thread::ConditionVariable cond;
     bool closed;
 }
 
@@ -249,24 +250,28 @@ fn void? input_queue_init(InputQueue* q) {
     q.tail = 0;
     q.closed = false;
     q.mu.init()!;
+    q.cond.init()!;
 }
 
 fn void input_queue_destroy(InputQueue* q) {
     q.mu.lock();
     q.closed = true;
+    q.cond.broadcast();
     q.mu.unlock();
+    q.cond.destroy();
     q.mu.destroy();
 }
 
 fn void input_queue_push(InputQueue* q, char[] data) {
     q.mu.lock();
-    defer q.mu.unlock();
     for (sz i = 0; i < data.len; i++) {
         sz next = (q.head + 1) % INPUT_BUF_SIZE;
         if (next == q.tail) break; // full, drop remaining
         q.buf[q.head] = data[i];
         q.head = next;
     }
+    q.cond.signal();
+    q.mu.unlock();
 }
 
 fn sz input_queue_drain(InputQueue* q, char[] out) {
@@ -279,6 +284,16 @@ fn sz input_queue_drain(InputQueue* q, char[] out) {
         count++;
     }
     return count;
+}
+
+// input_queue_wait blocks until data is available or timeout_ms elapses.
+// Called with the queue unlocked; returns with queue unlocked.
+fn void input_queue_wait(InputQueue* q, sz timeout_ms) {
+    q.mu.lock();
+    if (q.tail == q.head && !q.closed) {
+        (void)q.cond.wait_timeout(&q.mu, (time::Duration)((long)timeout_ms * time::MS));
+    }
+    q.mu.unlock();
 }
 
 fn bool input_queue_is_closed(InputQueue* q) {
@@ -388,12 +403,7 @@ fn void with_test_mode(Program* self, DString* output) {
 // with_input injects raw input bytes that the event loop will consume
 // instead of reading from stdin.
 fn void with_input(Program* self, char[] data) {
-    sz len = data.len;
-    if (len > self.inject_input.len) len = self.inject_input.len;
-    for (sz i = 0; i < len; i++) {
-        self.inject_input[i] = data[i];
-    }
-    self.inject_input_len = len;
+    self.inject_input = data;
     self.inject_input_pos = 0;
 }
 
@@ -655,6 +665,20 @@ fn void? Program.run(Program* self) {
         if (dirty) {
             self.render_current_view();
         }
+
+        // Block until input arrives or the next timer fires — avoids busy-waiting.
+        if (!self.test_mode && self.pending_len == 0) {
+            sz wait_ms = 1000;
+            now = time_ms();
+            for (sz i = 0; i < MAX_TIMERS; i++) {
+                if (self.timers[i].active) {
+                    sz remaining = self.timers[i].deadline_ms > now
+                        ? self.timers[i].deadline_ms - now : 0;
+                    if (remaining < wait_ms) wait_ms = remaining;
+                }
+            }
+            if (wait_ms > 0) input_queue_wait(&g_input_queue, wait_ms);
+        }
     }
 }
 
@@ -771,13 +795,10 @@ fn void Program.render_current_view(Program* self) {
 // drain_inject_input copies bytes from the injected input buffer into buf.
 // Returns the number of bytes copied (0 when exhausted).
 fn sz Program.drain_inject_input(Program* self, char[] buf) {
-    sz remaining = self.inject_input_len - self.inject_input_pos;
+    sz remaining = self.inject_input.len - self.inject_input_pos;
     if (remaining == 0) return 0;
-    sz n = remaining;
-    if (n > buf.len) n = buf.len;
-    for (sz i = 0; i < n; i++) {
-        buf[i] = self.inject_input[self.inject_input_pos + i];
-    }
+    sz n = remaining < buf.len ? remaining : buf.len;
+    buf[:n] = self.inject_input[self.inject_input_pos:n];
     self.inject_input_pos += n;
     return n;
 }
