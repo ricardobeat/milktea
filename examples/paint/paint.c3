@@ -2,6 +2,7 @@ module paint;
 
 import tea;
 import lipgloss;
+import xray;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -26,15 +27,71 @@ const String[8] PALETTE_HEX = {
     "#ffffff", // 7: white
 };
 
+// ── Canvas ────────────────────────────────────────────────────────────────────
+
+// Pixel bitmap. width × height pixels, each cell is a color index (0-7) or -1 for empty.
+struct Canvas {
+    int[] pixels;
+    int width;
+    int height;
+}
+
+fn void Canvas.resize(Canvas* self, int width, int height) {
+    self.width  = width  < 1 ? 1 : width;
+    self.height = height < 1 ? 1 : height;
+    sz total = (sz)self.width * (sz)self.height;
+    if (self.pixels.ptr != null) mem::free(self.pixels.ptr);
+    self.pixels = mem::new_array(int, total);
+    for (sz i = 0; i < total; i++) self.pixels[i] = -1;
+}
+
+fn void Canvas.clear(Canvas* self) {
+    for (sz i = 0; i < self.pixels.len; i++) self.pixels[i] = -1;
+}
+
+fn void Canvas.set_pixel(Canvas* self, int x, int y, int color) {
+    if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
+    self.pixels[(sz)y * (sz)self.width + (sz)x] = color;
+}
+
+fn int Canvas.get_pixel(Canvas* self, int x, int y) {
+    if (x < 0 || x >= self.width || y < 0 || y >= self.height) return -1;
+    return self.pixels[(sz)y * (sz)self.width + (sz)x];
+}
+
+fn void Canvas.draw_circle(Canvas* self, int cx, int cy, int radius, int color) {
+    for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            int dist_sq  = dx*dx + dy*dy;
+            int radius_sq = radius*radius;
+            if (dist_sq < radius_sq || (dist_sq <= radius_sq + 2*radius && dist_sq <= radius_sq + radius)) {
+                self.set_pixel(cx + dx, cy + dy, color);
+            }
+        }
+    }
+}
+
+fn void Canvas.draw_line(Canvas* self, int x0, int y0, int x1, int y1, int radius, int color) {
+    int dx = x1 - x0;
+    int dy = y1 - y0;
+    int steps = dx < 0 ? -dx : dx;
+    int dy_abs = dy < 0 ? -dy : dy;
+    if (steps < dy_abs) steps = dy_abs;
+    if (steps < 1) steps = 1;
+    for (int i = 0; i <= steps; i++) {
+        self.draw_circle(x0 + (dx * i) / steps, y0 + (dy * i) / steps, radius, color);
+    }
+}
+
+// ── Model ─────────────────────────────────────────────────────────────────────
+
 struct Model {
     int term_width;
     int term_height;
 
-    int[] canvas;
-    int canvas_width;
-    int canvas_height;
-    int canvas_x;  // left offset of canvas within terminal
-    int canvas_y;  // top offset of canvas within terminal
+    Canvas canvas;
+    xray::Rect palette_rect;  // left sidebar
+    xray::Rect canvas_rect;   // canvas area (in terminal cells; each row = 2 pixel rows)
 
     char selected_color; // 0-7
     PaintTool tool;
@@ -42,77 +99,20 @@ struct Model {
     int eraser_width;    // 1-3
 
     bool was_pressing;
-    int last_draw_row;
+    int last_draw_row;   // in canvas pixel coords
     int last_draw_col;
 
     int hover_row;
     int hover_col;
 }
 
-// ── Canvas helpers ────────────────────────────────────────────────────────────
-
-fn void resize_canvas(Model* m, int width, int height) {
-    m.term_width = width;
-    m.term_height = height;
-
-    // Col 0 = palette (1 cell wide), Row 0 = toolbar
-    m.canvas_x = 1;
-    m.canvas_y = 1;
-    m.canvas_width  = width  - m.canvas_x;
-    m.canvas_height = height - m.canvas_y;
-
-    if (m.canvas_width  < 1) m.canvas_width  = 1;
-    if (m.canvas_height < 1) m.canvas_height = 1;
-
-    sz total = (sz)m.canvas_width * (sz)m.canvas_height;
-    if (m.canvas.ptr != null) mem::free(m.canvas.ptr);
-    m.canvas = mem::new_array(int, total);
-    for (sz i = 0; i < total; i++) m.canvas[i] = -1;
-}
-
-fn void clear_canvas(Model* m) {
-    for (sz i = 0; i < m.canvas.len; i++) m.canvas[i] = -1;
-}
-
-// draw_circle fills a circle centered at (cx, cy) with the given color index.
-fn void draw_circle(Model* m, int cx, int cy, int radius, int color) {
-    for (int dy = -radius; dy <= radius; dy++) {
-        for (int dx = -radius; dx <= radius; dx++) {
-            if (dx*dx + dy*dy <= radius*radius) {
-                int col = cx + dx;
-                int row = cy + dy;
-                if (col >= 0 && col < m.canvas_width && row >= 0 && row < m.canvas_height) {
-                    sz idx = (sz)row * (sz)m.canvas_width + (sz)col;
-                    m.canvas[idx] = color;
-                }
-            }
-        }
-    }
-}
-
-// draw_line bridges two points by sampling N steps between them.
-fn void draw_line(Model* m, int x0, int y0, int x1, int y1, int radius, int color) {
-    int dx = x1 - x0;
-    int dy = y1 - y0;
-    int steps = dx < 0 ? -dx : dx;
-    int dy_abs = dy < 0 ? -dy : dy;
-    if (steps < dy_abs) steps = dy_abs;
-    if (steps < 1) steps = 1;
-
-    for (int i = 0; i <= steps; i++) {
-        int x = x0 + (dx * i) / steps;
-        int y = y0 + (dy * i) / steps;
-        draw_circle(m, x, y, radius, color);
-    }
-}
-
-// ── Tea Model ───────────────────────────────────────────────────────────────
+// ── Tea Model ─────────────────────────────────────────────────────────────────
 
 fn tea::Cmd Model.init(Model* self) @dynamic {
-    self.selected_color = 1; // red
+    self.selected_color = 1;
     self.tool = PaintTool.PAINT;
     self.stroke_width = 1;
-    self.eraser_width = 3;
+    self.eraser_width = 2;
     self.was_pressing = false;
     self.last_draw_row = -1;
     self.last_draw_col = -1;
@@ -123,7 +123,15 @@ fn tea::Cmd Model.init(Model* self) @dynamic {
 
 fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
     if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
-        resize_canvas(self, msg.window_size.width, msg.window_size.height);
+        self.term_width  = msg.window_size.width;
+        self.term_height = msg.window_size.height;
+        // Row 0 = toolbar; remaining rows split into palette (5 wide) + canvas
+        xray::Rect body = xray::new_rect(0, 1, self.term_width, self.term_height - 1);
+        xray::Rect[2] cols;
+        xray::layout_h(body, { xray::constraint_len(5), xray::constraint_fill(1) }, cols[..]);
+        self.palette_rect = cols[0];
+        self.canvas_rect  = cols[1];
+        self.canvas.resize(self.canvas_rect.w, self.canvas_rect.h * 2);
         return null;
     }
 
@@ -134,46 +142,38 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
         self.hover_col = col;
         self.hover_row = row;
 
-        // ── Click on color palette (row 0, col 0) ───────────────────────
-        if (col == 0 && row >= 1 && row <= 8) {
-            self.selected_color = (char)(row - 1);
-            return null;
+        // ── Color palette ────────────────────────────────────────────────────
+        if (self.palette_rect.contains(col, row)) {
+            int color_idx = (row - self.palette_rect.y) / 3;
+            if (color_idx < 8) {
+                self.selected_color = (char)color_idx;
+                return null;
+            }
         }
 
-        // ── Toolbar clicks (row 0, cols >= 1) ───────────────────────────
+        // ── Toolbar (row 0) ──────────────────────────────────────────────────
         if (row == 0) {
-            // Paint button: cols 0-8
-            if (col >= 0 && col <= 8) {
-                self.tool = PaintTool.PAINT;
-                return null;
-            }
-            // Stroke width buttons (cols 9, 10, 11)
-            if (col == 10) { self.stroke_width = 1; return null; }
-            if (col == 11) { self.stroke_width = 2; return null; }
-            if (col == 12) { self.stroke_width = 3; return null; }
-            // Eraser button (cols 13-19)
-            if (col == 14) { self.tool = PaintTool.ERASER; return null; }
-            // Clear button (cols 20-23)
-            if (col == 21) { clear_canvas(self); return null; }
-            // Color selector: click cols 25-32 maps to colors 0-7
-            if (col >= 25 && col <= 32) {
-                self.selected_color = (char)(col - 25);
-                return null;
-            }
+            if (col >= 5 && col <= 13)  { self.tool = PaintTool.PAINT;  return null; }
+            if (col == 15)              { self.stroke_width = 1;         return null; }
+            if (col == 16)              { self.stroke_width = 2;         return null; }
+            if (col == 17)              { self.stroke_width = 3;         return null; }
+            if (col >= 19 && col <= 28) { self.tool = PaintTool.ERASER; return null; }
+            if (col >= 30 && col <= 34) { self.canvas.clear();          return null; }
             return null;
         }
 
-        // ── Canvas click ───────────────────────────────────────────────
-        int ccol = col - self.canvas_x;
-        int crow = row - self.canvas_y;
-        bool in_canvas = ccol >= 0 && ccol < self.canvas_width
-                      && crow >= 0 && crow < self.canvas_height;
+        // ── Canvas ───────────────────────────────────────────────────────────
+        int ccol = col - self.canvas_rect.x;
+        // Each terminal row = 2 canvas pixel rows; map here, once.
+        int crow = (row - self.canvas_rect.y) * 2;
+        bool in_canvas = ccol >= 0 && ccol < self.canvas.width
+                      && crow >= 0 && crow < self.canvas.height;
 
         if (msg.mouse.action == tea::MouseAction.MOUSE_PRESS && in_canvas) {
             self.was_pressing = true;
             int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-            int color  = (self.tool == PaintTool.PAINT) ? self.selected_color : -1;
-            draw_circle(self, ccol, crow, radius, color);
+            int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
+            self.canvas.draw_circle(ccol, crow, radius, color);
             self.last_draw_col = ccol;
             self.last_draw_row = crow;
             return null;
@@ -181,11 +181,11 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 
         if (msg.mouse.action == tea::MouseAction.MOUSE_MOTION && self.was_pressing && in_canvas) {
             int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-            int color  = (self.tool == PaintTool.PAINT) ? self.selected_color : -1;
+            int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
             if (self.last_draw_col >= 0 && self.last_draw_row >= 0) {
-                draw_line(self, self.last_draw_col, self.last_draw_row, ccol, crow, radius, color);
+                self.canvas.draw_line(self.last_draw_col, self.last_draw_row, ccol, crow, radius, color);
             } else {
-                draw_circle(self, ccol, crow, radius, color);
+                self.canvas.draw_circle(ccol, crow, radius, color);
             }
             self.last_draw_col = ccol;
             self.last_draw_row = crow;
@@ -215,9 +215,15 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
             } else if (k.rune == 'e' || k.rune == 'E') {
                 self.tool = PaintTool.ERASER;
             } else if (k.rune == 'c' || k.rune == 'C') {
-                clear_canvas(self);
+                self.canvas.clear();
             } else if (k.rune >= '1' && k.rune <= '8') {
                 self.selected_color = (char)(k.rune - '1');
+            } else if (k.rune == '+' || k.rune == '=') {
+                if (self.stroke_width < 3) self.stroke_width++;
+                if (self.eraser_width < 3) self.eraser_width++;
+            } else if (k.rune == '-' || k.rune == '_') {
+                if (self.stroke_width > 1) self.stroke_width--;
+                if (self.eraser_width > 1) self.eraser_width--;
             } else if (k.rune >= 'a' && k.rune <= 'c') {
                 self.stroke_width = (int)(k.rune - 'a') + 1;
             }
@@ -226,191 +232,125 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
     return null;
 }
 
-// ── View ────────────────────────────────────────────────────────────────────
+// ── View helpers ──────────────────────────────────────────────────────────────
 
-fn tea::View Model.view(Model* self) @dynamic {
+fn String build_palette_column(Model* self) {
     DString out = dstring::temp();
-
-    int tw = self.term_width;
-    int th = self.term_height;
-
-    if (tw == 0 || th == 0) {
-        return tea::new_alt_screen_view("");
-    }
-
     String bg_empty = PALETTE_HEX[0];
 
-    for (int row = 0; row < th; row++) {
+    for (int color_idx = 0; color_idx < 8; color_idx++) {
+        bool selected = (color_idx == self.selected_color);
+        String cell_bg = PALETTE_HEX[color_idx];
+        String fg = (color_idx == 7) ? "#000000" : "#ffffff";
 
-        // ── Palette column (col 0) ────────────────────────────────────────
-        {
-            String cell_bg  = bg_empty;
-            char   cell_ch = ' ';
-            String fg       = "#333333";
+        lipgloss::Style s = lipgloss::new_style()
+            .foreground(lipgloss::color_hex(fg))
+            .background(lipgloss::color_hex(cell_bg));
 
-            if (row >= 1 && row <= 8) {
-                char swatch = (char)(row - 1);
-                cell_bg = PALETTE_HEX[swatch];
-                if (swatch == self.selected_color) {
-                    cell_ch = '>';
-                    fg = "#ffffff";
-                }
-            } else if (row == 9) {
-                cell_bg = bg_empty;
-                cell_ch = (char)('0' + self.stroke_width);
-                fg = "#888888";
-            } else if (row == 0) {
-                cell_ch = '|';
-                fg = "#444444";
+        for (int row = 0; row < 3; row++) {
+            String content = (selected && row == 1) ? "  ✓  " : "     ";
+            out.append_string(s.render(content));
+            out.append_char('\n');
+        }
+    }
+
+    lipgloss::Style s = lipgloss::new_style()
+        .foreground(lipgloss::color_hex("#888888"))
+        .background(lipgloss::color_hex(bg_empty));
+    out.append_string(s.render(string::tformat("W:%d", self.stroke_width)));
+
+    return out.str_view();
+}
+
+fn String build_tools_toolbar(Model* self) {
+    DString out = dstring::temp();
+
+    out.append_string(self.tool == PaintTool.PAINT ? "[*Paint*]" : "[ Paint ]");
+    out.append_string(" | ");
+    for (int w = 1; w <= 3; w++) {
+        bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
+        lipgloss::Style s = lipgloss::new_style()
+            .foreground(lipgloss::color_hex(active ? "#000000" : "#888888"))
+            .background(lipgloss::color_hex(active ? "#55ffff" : "#222222"));
+        out.append_string(s.render(string::tformat("%d", w)));
+    }
+    out.append_string(" | ");
+    out.append_string(self.tool == PaintTool.ERASER ? "[*Eraser*]" : "[ Eraser ]");
+    out.append_string(" | ");
+    out.append_string("[Clr]");
+
+    return out.str_view();
+}
+
+fn String build_top_bar(Model* self, int width) {
+    String tools = build_tools_toolbar(self);
+    int remaining = width - 1 - lipgloss::string_width(tools);
+    if (remaining > 0) {
+        DString pad = dstring::temp();
+        for (int i = 0; i < remaining; i++) pad.append_char(' ');
+        return lipgloss::join_horizontal(tools, pad.str_view(), 0);
+    }
+    return tools;
+}
+
+fn String build_canvas_view(Canvas* c) {
+    DString out = dstring::temp();
+    String bg_empty = PALETTE_HEX[0];
+
+    // Two canvas pixel rows per terminal row via half-block characters.
+    for (int py = 0; py < c.height; py += 2) {
+        lipgloss::Style sep = lipgloss::new_style()
+            .foreground(lipgloss::color_hex("#444444"))
+            .background(lipgloss::color_hex(bg_empty));
+        out.append_string(sep.render("|"));
+
+        for (int px = 0; px < c.width; px++) {
+            int top    = c.get_pixel(px, py);
+            int bottom = c.get_pixel(px, py + 1);
+
+            String top_hex    = (top    >= 0) ? PALETTE_HEX[top]    : bg_empty;
+            String bottom_hex = (bottom >= 0) ? PALETTE_HEX[bottom] : bg_empty;
+
+            String glyph, fg, bg;
+            if (top >= 0 && bottom >= 0 && top == bottom) {
+                glyph = "█"; fg = top_hex;    bg = top_hex;
+            } else if (top >= 0 && bottom >= 0) {
+                glyph = "▀"; fg = top_hex;    bg = bottom_hex;
+            } else if (top >= 0) {
+                glyph = "▀"; fg = top_hex;    bg = bg_empty;
+            } else if (bottom >= 0) {
+                glyph = "▄"; fg = bottom_hex; bg = bg_empty;
+            } else {
+                glyph = " "; fg = "#222222";  bg = bg_empty;
             }
 
             lipgloss::Style s = lipgloss::new_style()
                 .foreground(lipgloss::color_hex(fg))
-                .background(lipgloss::color_hex(cell_bg));
-            out.append_string(s.render(string::tformat("%c", cell_ch)));
+                .background(lipgloss::color_hex(bg));
+            out.append_string(s.render(glyph));
         }
-
-        // ── Toolbar row (row 0, cols 1+) ────────────────────────────────
-        if (row == 0) {
-            // Paint button
-            {
-                String lbl = self.tool == PaintTool.PAINT ? "[*Paint*]" : "[ Paint ]";
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex(self.tool == PaintTool.PAINT ? "#000000" : "#aaaaaa"))
-                    .background(lipgloss::color_hex(self.tool == PaintTool.PAINT ? "#55ff55" : "#333333"));
-                out.append_string(s.render(lbl));
-            }
-            // Separator
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#555555"))
-                    .background(lipgloss::color_hex("#222222"));
-                out.append_string(s.render("|"));
-            }
-            // Stroke width 1-3
-            for (int w = 1; w <= 3; w++) {
-                bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex(active ? "#000000" : "#888888"))
-                    .background(lipgloss::color_hex(active ? "#55ffff" : "#222222"));
-                out.append_string(s.render(string::tformat("%d", w)));
-            }
-            // Separator
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#555555"))
-                    .background(lipgloss::color_hex("#222222"));
-                out.append_string(s.render("|"));
-            }
-            // Eraser button
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex(self.tool == PaintTool.ERASER ? "#000000" : "#aaaaaa"))
-                    .background(lipgloss::color_hex(self.tool == PaintTool.ERASER ? "#ff55ff" : "#333333"));
-                out.append_string(s.render("[Eraser]"));
-            }
-            // Separator
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#555555"))
-                    .background(lipgloss::color_hex("#222222"));
-                out.append_string(s.render("|"));
-            }
-            // Clear All
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#ff5555"))
-                    .background(lipgloss::color_hex("#222222"));
-                out.append_string(s.render("[Clr]"));
-            }
-            // Separator
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#555555"))
-                    .background(lipgloss::color_hex("#222222"));
-                out.append_string(s.render("|"));
-            }
-            // Color palette row: clickable colors 0-7
-            for (int c = 0; c < 8; c++) {
-                bool selected = (c == self.selected_color);
-                String cell_bg = PALETTE_HEX[c];
-                String fg = (c == 7) ? "#000000" : "#ffffff"; // white for dark, black for white
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex(fg))
-                    .background(lipgloss::color_hex(cell_bg))
-                    .set_bold(selected);
-                char label = (char)(c + '1');
-                out.append_string(s.render(string::tformat("%c", label)));
-            }
-            // Fill rest of toolbar row
-            {
-                int written = 11 + 1 + 3 + 1 + 8 + 1 + 5 + 1 + 8;
-                int remaining = tw - written;
-                if (remaining > 0) {
-                    lipgloss::Style s = lipgloss::new_style()
-                        .foreground(lipgloss::color_hex("#333333"))
-                        .background(lipgloss::color_hex("#222222"));
-                    for (int i = 0; i < remaining; i++) {
-                        out.append_char(' ');
-                    }
-                }
-            }
-            out.append_char('\n');
-            continue;
-        }
-
-        // ── Canvas rows ─────────────────────────────────────────────────
-        {
-            int canvas_row = row - self.canvas_y;
-
-            if (canvas_row < 0 || canvas_row >= self.canvas_height) {
-                // Fill gap rows with dark background
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#222222"))
-                    .background(lipgloss::color_hex("#111111"));
-                for (int i = 1; i < tw; i++) {
-                    out.append_string(s.render(" "));
-                }
-                out.append_char('\n');
-                continue;
-            }
-
-            // Vertical separator after palette column.
-            {
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex("#444444"))
-                    .background(lipgloss::color_hex(bg_empty));
-                out.append_string(s.render("|"));
-            }
-
-            // Canvas cells.
-            for (int canvas_col = 0; canvas_col < self.canvas_width; canvas_col++) {
-                sz idx = (sz)canvas_row * (sz)self.canvas_width + (sz)canvas_col;
-                int color_idx = self.canvas[idx];
-                String cell_bg = bg_empty;
-                char   cell_ch = ' ';
-                String cell_fg = "#222222";
-
-                if (color_idx >= 0) {
-                    cell_bg = PALETTE_HEX[color_idx];
-                    cell_ch = '#';
-                    cell_fg = PALETTE_HEX[color_idx];
-                }
-
-                lipgloss::Style s = lipgloss::new_style()
-                    .foreground(lipgloss::color_hex(cell_fg))
-                    .background(lipgloss::color_hex(cell_bg));
-                out.append_string(s.render(string::tformat("%c", cell_ch)));
-            }
-
-            out.append_char('\n');
-        }
+        out.append_char('\n');
     }
-
-    return tea::new_alt_screen_view(out.str_view());
+    return out.str_view();
 }
 
-// ── Entry point ────────────────────────────────────────────────────────────
+// ── View ──────────────────────────────────────────────────────────────────────
+
+fn tea::View Model.view(Model* self) @dynamic {
+    if (self.term_width == 0 || self.term_height == 0) {
+        return tea::new_alt_screen_view("");
+    }
+
+    String top_bar      = build_top_bar(self, self.term_width);
+    String palette      = build_palette_column(self);
+    String canvas_view  = build_canvas_view(&self.canvas);
+    String content_area = lipgloss::join_horizontal(palette, canvas_view, 0);
+    String content      = lipgloss::join_vertical(lipgloss::Position.LEFT, top_bar, content_area);
+
+    return tea::new_alt_screen_view(content).set_mouse_cursor("crosshair");
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 fn int main() {
     Model m = {};

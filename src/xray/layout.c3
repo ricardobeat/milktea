@@ -32,11 +32,20 @@ enum ConstraintKind : char {
 	CMAX,
 	CPERCENT,
 	CFILL,
+	CFIT,    // measure content; requires a MeasureFn + context pointer
 }
+
+// MeasureFn is called during layout to size a CFIT child.
+// cross is the available size on the cross axis (width when laying out vertically).
+// ctx is an arbitrary pointer supplied alongside the constraint.
+// Returns the desired size along the main axis.
+alias MeasureFn = fn int(void* ctx, int cross);
 
 struct Constraint {
 	ConstraintKind kind;
 	int value;
+	MeasureFn measure;  // only used when kind == CFIT
+	void* ctx;          // passed to measure
 }
 
 fn Constraint constraint_len(int n) {
@@ -59,7 +68,11 @@ fn Constraint constraint_fill(int weight) {
 	return { .kind = ConstraintKind.CFILL, .value = weight };
 }
 
-fn int layout_axis(int total, int gap, Constraint[] cs, int[] out_sizes) @local {
+fn Constraint constraint_fit(MeasureFn measure, void* ctx) {
+	return { .kind = ConstraintKind.CFIT, .measure = measure, .ctx = ctx };
+}
+
+fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] out_sizes) @local {
 	int n = cs.len;
 	if (n == 0) return 0;
 	if (n > 64) n = 64;
@@ -101,6 +114,13 @@ fn int layout_axis(int total, int gap, Constraint[] cs, int[] out_sizes) @local 
 				int pct_sz = available * cs[i].value / 100;
 				sizes[i] = pct_sz;
 				fixed += pct_sz;
+
+			case ConstraintKind.CFIT:
+				int fit_sz = cs[i].measure ? cs[i].measure(cs[i].ctx, cross) : 0;
+				if (fit_sz < 0) fit_sz = 0;
+				if (fit_sz > available) fit_sz = available;
+				sizes[i] = fit_sz;
+				fixed += fit_sz;
 
 			case ConstraintKind.CMAX:
 				sizes[i] = 0;
@@ -151,6 +171,7 @@ fn int layout_axis(int total, int gap, Constraint[] cs, int[] out_sizes) @local 
 				case ConstraintKind.CLEN:
 				case ConstraintKind.CMIN:
 				case ConstraintKind.CPERCENT:
+				case ConstraintKind.CFIT:
 					fixed += sizes[i];
 
 				case ConstraintKind.CMAX:
@@ -208,7 +229,7 @@ fn int layout_h_gap(Rect area, Constraint[] cs, int gap, Rect[] out_rects) {
 	if (n > 64) n = 64;
 
 	int[64] sizes;
-	int n_computed = layout_axis(area.w, gap, cs[0:n], sizes[0:n]);
+	int n_computed = layout_axis_cross(area.w, gap, area.h, cs[0:n], sizes[0:n]);
 
 	int offset = 0;
 	for (int i = 0; i < n_computed; i++) {
@@ -225,7 +246,7 @@ fn int layout_v_gap(Rect area, Constraint[] cs, int gap, Rect[] out_rects) {
 	if (n > 64) n = 64;
 
 	int[64] sizes;
-	int n_computed = layout_axis(area.h, gap, cs[0:n], sizes[0:n]);
+	int n_computed = layout_axis_cross(area.h, gap, area.w, cs[0:n], sizes[0:n]);
 
 	int offset = 0;
 	for (int i = 0; i < n_computed; i++) {

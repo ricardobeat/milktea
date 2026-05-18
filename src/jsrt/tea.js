@@ -1,0 +1,166 @@
+function h(type, props, ...children) {
+  return { type, props: props || {}, children: children.flat() };
+}
+globalThis.h = h;
+
+globalThis.__jsrt_quit = false;
+
+// ── Streaming body support ────────────────────────────────────────────────────
+// Each streaming fetch gets a slot keyed by req_id.  The C drain loop calls
+// __jsrt_push_chunk(req_id, text) for each SSE data line and
+// __jsrt_stream_done(req_id, error_or_null) when the stream closes.
+// response.body is an async iterable that yields each raw chunk string.
+(function() {
+  const _streams = {};  // req_id → { queue, resolve, done, error }
+
+  globalThis.__jsrt_stream_alloc = function(req_id) {
+    _streams[req_id] = { queue: [], resolve: null, done: false, error: null };
+  };
+
+  globalThis.__jsrt_push_chunk = function(req_id, text) {
+    const s = _streams[req_id];
+    if (!s) return;
+    if (s.resolve) {
+      const res = s.resolve;
+      s.resolve = null;
+      res({ value: text, done: false });
+    } else {
+      s.queue.push(text);
+    }
+  };
+
+  globalThis.__jsrt_stream_done = function(req_id, error) {
+    const s = _streams[req_id];
+    if (!s) return;
+    s.done = true;
+    s.error = error || null;
+    if (s.resolve) {
+      const res = s.resolve;
+      s.resolve = null;
+      if (error) res(Promise.reject(new Error(error)));
+      else       res({ value: undefined, done: true });
+    }
+  };
+
+  // Build an async-iterable body object for a given req_id
+  globalThis.__jsrt_make_stream_body = function(req_id) {
+    return {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            const s = _streams[req_id];
+            if (!s) return Promise.resolve({ value: undefined, done: true });
+            if (s.queue.length > 0) {
+              return Promise.resolve({ value: s.queue.shift(), done: false });
+            }
+            if (s.done) {
+              delete _streams[req_id];
+              if (s.error) return Promise.reject(new Error(s.error));
+              return Promise.resolve({ value: undefined, done: true });
+            }
+            // No chunk yet — park a resolve callback
+            return new Promise(resolve => { s.resolve = resolve; });
+          },
+          return() {
+            delete _streams[req_id];
+            return Promise.resolve({ value: undefined, done: true });
+          }
+        };
+      }
+    };
+  };
+})();
+
+// Pre-compiled response factory used by the C fetch drain (batch path)
+globalThis.__jsrt_make_response = function(r) {
+  r.text = function() { return Promise.resolve(r._body); };
+  r.json = function() { return Promise.resolve(JSON.parse(r._body)); };
+  return r;
+};
+
+// Streaming response factory: body is the async iterable, text()/json() collect it
+globalThis.__jsrt_make_stream_response = function(req_id, status) {
+  const body = __jsrt_make_stream_body(req_id);
+  const r = {
+    ok:     status >= 200 && status < 300,
+    status: status,
+    body:   body,
+    text() {
+      return (async () => {
+        let out = "";
+        for await (const chunk of body) out += chunk;
+        return out;
+      })();
+    },
+    json() {
+      return this.text().then(t => JSON.parse(t));
+    },
+  };
+  return r;
+};
+
+// setInterval via recursive setTimeout
+(function() {
+  let _interval_id = 1000000; // start above setTimeout id range
+  const _intervals = {};
+  globalThis.setInterval = function(fn, delay) {
+    const id = _interval_id++;
+    function fire() {
+      if (!_intervals[id]) return;
+      fn();
+      if (_intervals[id]) _intervals[id] = setTimeout(fire, delay);
+    }
+    _intervals[id] = setTimeout(fire, delay);
+    return id;
+  };
+  globalThis.clearInterval = function(id) {
+    if (_intervals[id]) { clearTimeout(_intervals[id]); delete _intervals[id]; }
+  };
+})();
+
+globalThis.console = {
+  log(...args) {
+    const line = args.map(a => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ");
+    // Write to stderr so it appears even when stdout is captured
+    // QuickJS doesn't have process.stderr, but print() goes to stdout
+    // Use a C-backed __jsrt_log if available, otherwise best-effort
+    if (typeof __jsrt_log === "function") {
+      __jsrt_log(line);
+    } else {
+      print(line);
+    }
+  },
+  error(...args) { this.log(...args); },
+  warn(...args)  { this.log(...args); },
+  info(...args)  { this.log(...args); },
+};
+
+globalThis.tea = {
+  run(model) {
+    globalThis.__jsrt_model = model;
+  },
+
+  quit() {
+    globalThis.__jsrt_quit = true;
+    return "quit";
+  },
+
+  tick(tag) {
+    return { __cmd: "tick", tag };
+  },
+
+  keyName(msg) {
+    if (msg.kind === "key" && msg.key && msg.key.code) {
+      return msg.key.code;
+    }
+    return "";
+  },
+
+  isKey(msg, code) {
+    return msg.kind === "key" && msg.key && msg.key.code === code;
+  },
+
+  batch(...cmds) {
+    return { __cmd: "batch", cmds };
+  }
+};

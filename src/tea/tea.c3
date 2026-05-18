@@ -221,6 +221,9 @@ struct Program {
 
     // Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
     String last_mouse_cursor;
+
+    // Last rendered content height (rows), for clean exit in inline (non-alt-screen) mode.
+    sz last_content_rows;
 }
 
 // File-scope input queue — not inside Program to avoid copies.
@@ -492,7 +495,7 @@ fn void? Program.run(Program* self) {
         saved = raw_mode_enter()!;
         hide_cursor();
         enable_focus();
-        setup_sigwinch();
+        setup_signals(saved, &self.in_alt_screen);
 
         // Start the reader thread so stdin reads never block the event loop.
         input_queue_init(&g_input_queue)!;
@@ -512,6 +515,11 @@ fn void? Program.run(Program* self) {
             disable_focus();
             show_cursor();
             write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
+            // For inline (non-alt-screen) mode: move cursor below the last rendered
+            // content so the shell prompt appears on a clean line after the app exits.
+            if (!self.in_alt_screen && self.last_content_rows > 0) {
+                write_stdout((char[])string::tformat("\x1b[%d;1H\x1b[m\r\n", self.last_content_rows));
+            }
             raw_mode_restore(saved);
         }
     };
@@ -687,6 +695,7 @@ fn void Program.render_current_view(Program* self) {
                             r.screen.set_cell(col, row, v.cells[row * v.cells_width + col]);
                         }
                     }
+                    self.last_content_rows = rows;
                 } else {
                     // String path — clear buffer then parse ANSI content line by line
                     r.screen.clear();
@@ -711,6 +720,7 @@ fn void Program.render_current_view(Program* self) {
                             line_start = i + 1;
                         }
                     }
+                    self.last_content_rows = row;
                 }
 
                 // Handle cursor

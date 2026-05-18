@@ -214,6 +214,23 @@ fn Style Style.with_width(self, int width) {
     return self.set_width(width);
 }
 
+// measure_height renders content at the given outer width and counts the output lines.
+// Useful for auto-sizing a box before committing it to a layout rect.
+fn int Style.measure_height(self, String input, int outer_width) {
+    bool has_border = self.border.top.len > 0 || self.border.left.len > 0;
+    int border_pad = has_border ? 2 : 0;
+    int inner_w = outer_width - border_pad - self.pad_left - self.pad_right;
+    if (inner_w < 1) inner_w = 1;
+    Style sized = self.set_width(inner_w);
+    String rendered = sized.render(input);
+    // Count newlines in the fully-rendered output (border lines already included).
+    int lines = 1;
+    for (sz i = 0; i < rendered.len; i++) {
+        if (rendered[i] == '\n') lines++;
+    }
+    return lines;
+}
+
 fn String Style.render(self, String input) {
     DString out = dstring::temp();
 

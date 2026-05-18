@@ -36,7 +36,7 @@ struct Pixel {
     char r, g, b;
 }
 
-const ZString VERSION = "0.2.3";
+const ZString VERSION = "0.2.6";
 
 const int MAP_WIDTH = 16;
 const int MAP_HEIGHT = 16;
@@ -217,6 +217,7 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
                     }
                 }
                 self.server_state.mutex.unlock();
+                io::printfn("Player joined: %s", &self.name_buf[0]);
             }
             if (k.code == tea::KeyCode.RUNE) {
                 if (self.name_len < 31) {
@@ -255,6 +256,7 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
                     }
                 }
                 self.server_state.mutex.unlock();
+                io::printfn("Player joined: %s", &self.name_buf[0]);
             }
             return null;
         } else if (self.mode == TAG_INPUT) {
@@ -498,7 +500,7 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
                     int cx = start_x + (int)j;
                     if (cx >= 0 && cx < w) {
                         xray::Style st = self.cells[draw_y * w + cx].style;
-                        st = st.set_fg(xray::color_rgb(0, 255, 255));
+                        st = st.set_fg(xray::color_rgb(0, 255, 255)).set_bg(xray::color_rgb(20, 20, 20));
                         char[2] ch = { t.text[j], '\0' };
                         self.cells[draw_y * w + cx] = xray::new_cell((String)ch[..], 1, st);
                     }
@@ -521,7 +523,7 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
                         int cx = author_start_x + (int)j;
                         if (cx >= 0 && cx < w) {
                             xray::Style st = self.cells[(draw_y + 1) * w + cx].style;
-                            st = st.set_fg(xray::color_rgb(150, 150, 150));
+                            st = st.set_fg(xray::color_rgb(150, 150, 150)).set_bg(xray::color_rgb(20, 20, 20));
                             char[2] ch = { author_line[j], '\0' };
                             self.cells[(draw_y + 1) * w + cx] = xray::new_cell((String)ch[..], 1, st);
                         }
@@ -612,17 +614,21 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
                 xray::Style st = xray::default_style()
                     .set_bg(xray::color_rgb(3, 3, 12));
                 if (star_rand < 1) {
-                    // Bright twinkling star
+                    // Bright twinkling star — cycle characters for blink effect
                     int phase = hash % 40;
                     float t = (float)((self.tick_count + phase) % 40) * 0.15f;
                     char b = (char)(150 + (int)(math::sin(t) * 80));
                     st = st.set_fg(xray::color_rgb(b, b, (char)(b + 20)));
-                    self.cells[y * w + x] = xray::new_cell("✦", 1, st);
+                    int blink = (self.tick_count / 8 + phase) % 4;
+                    String[] star_chars = { "✦", "✧", "∗", "·" };
+                    self.cells[y * w + x] = xray::new_cell(star_chars[blink], 1, st);
                 } else if (star_rand < 4) {
-                    // Dim steady star
+                    // Dim steady star — slower character cycle
                     char b = (char)(40 + hash % 50);
                     st = st.set_fg(xray::color_rgb(b, b, b));
-                    self.cells[y * w + x] = xray::new_cell("·", 1, st);
+                    int blink = (self.tick_count / 12 + hash) % 3;
+                    String[] dim_chars = { "·", "∙", "︙" };
+                    self.cells[y * w + x] = xray::new_cell(dim_chars[blink], 1, st);
                 } else {
                     self.cells[y * w + x] = xray::new_cell(" "[..], 1, st);
                 }
@@ -649,27 +655,24 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 
         String rendered = box_st.render(content.str_view());
 
-        // Render into dialog ScreenBuffer
+        // Center the dialog in the screen via lipgloss::place, then render
+        // into the dialog buffer.  Padding spaces from place() have no bg
+        // style so they are transparent during compositing over the starfield.
+        String placed = lipgloss::place(w, h, rendered);
         self.dialog.clear();
-        self.dialog.render_ansi_string(0, 0, rendered, xray::default_style());
+        self.dialog.render_ansi_string(0, 0, placed, xray::default_style());
 
-        // Composite dialog over starfield, centered
-        int dlg_x = (w - (int)self.dialog.width) / 2;
-        int dlg_y = (h - (int)self.dialog.height) / 2;
+        // Composite dialog over starfield — skip transparent (space + no bg) cells
         for (int dy = 0; dy < (int)self.dialog.height; dy++) {
             for (int dx = 0; dx < (int)self.dialog.width; dx++) {
-                int cx = dlg_x + dx;
-                int cy = dlg_y + dy;
-                if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
-                    xray::Cell c = self.dialog.cells[dy * (int)self.dialog.width + dx];
-                    if (c.content[0] != ' ' || c.style.bg.kind != xray::ColorKind.NONE) {
-                        self.cells[cy * w + cx] = c;
-                    }
+                xray::Cell c = *self.dialog.cell_at((sz)dx, (sz)dy);
+                if (c.content[0] != ' ' || c.style.bg.kind != xray::ColorKind.NONE) {
+                    self.cells[dy * w + dx] = c;
                 }
             }
         }
     }
-    
+
     if (self.mode == ENTERING_NAME || self.mode == TAG_INPUT) {
         char[128] prompt;
         sz p_len = 0;
@@ -682,22 +685,33 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
         }
         prompt[p_len++] = '_';
         prompt[p_len] = '\0';
-        
-        int box_w = (int)p_len + 4;
+
+        // Render the prompt box with lipgloss, center it with FlexNode
+        lipgloss::Style box_st = lipgloss::new_style()
+            .set_border(lipgloss::rounded_border())
+            .set_border_fg(lipgloss::color_hex("#6450c8"))
+            .background(lipgloss::color_hex("#140a28"))
+            .foreground(lipgloss::color_hex("#c8b4ff"));
+        String rendered = box_st.render((String)prompt[:p_len]);
+        int box_w = (int)lipgloss::string_width(rendered);
         int box_h = 3;
-        int box_x = w / 2 - box_w / 2;
-        int box_y = h / 2 - box_h / 2;
-        
-        xray::Style box_st = xray::default_style().set_bg(xray::color_rgb(0, 0, 100)).set_fg(xray::color_rgb(255, 255, 255));
-        for (int y = box_y; y < box_y + box_h; y++) {
-            for (int x = box_x; x < box_x + box_w; x++) {
-                if (x >= 0 && x < w && y >= 0 && y < h) {
-                    if (y == box_y + 1 && x >= box_x + 2 && x < box_x + 2 + (int)p_len) {
-                        char[2] ch = { prompt[x - (box_x + 2)], '\0' };
-                        self.cells[y * w + x] = xray::new_cell((String)ch[..], 1, box_st);
-                    } else {
-                        self.cells[y * w + x] = xray::new_cell(" ", 1, box_st);
-                    }
+
+        xray::FlexNode* root = xray::flex_col()
+            .with_justify(xray::JustifyContent.JUSTIFY_CENTER)
+            .with_align(xray::AlignItems.ALIGN_CENTER)
+            .add(xray::flex_node()
+                .with_main_size(xray::constraint_len(box_h))
+                .with_cross_size(xray::constraint_len(box_w)));
+        root.solve(xray::new_rect(0, 0, w, h));
+        xray::Rect box = root.child_rect(0);
+
+        self.dialog.clear();
+        self.dialog.render_ansi_string(0, 0, lipgloss::place(w, h, rendered), xray::default_style());
+        for (int dy = 0; dy < box_h && box.y + dy < h; dy++) {
+            for (int dx = 0; dx < box_w && box.x + dx < w; dx++) {
+                xray::Cell c = *self.dialog.cell_at((sz)(box.x + dx), (sz)(box.y + dy));
+                if (c.content[0] != ' ' || c.style.bg.kind != xray::ColorKind.NONE) {
+                    self.cells[(box.y + dy) * w + (box.x + dx)] = c;
                 }
             }
         }
@@ -962,40 +976,53 @@ fn int handle_client(void* arg) {
             render_cells_to(v.cells, v.cells_width, v.cells_height, &s);
         };
 
-        sz? read_result = s.read(buf[..]);
-        if (catch err = read_result) {
-            running = false;
-        } else {
-            sz n = read_result;
-            if (n == 0) {
+        // Poll socket with 0ms timeout — only read if data is available,
+        // so the loop keeps ticking and animating without input.
+        tea::PollFd pfd;
+        pfd.fd = s.sock;
+        pfd.events = tea::POLLIN;
+        pfd.revents = 0;
+
+        if (tea::poll(&pfd, 1, 0) > 0 && (pfd.revents & tea::POLLIN) != 0) {
+            sz? read_result = s.read(buf[..]);
+            if (catch err = read_result) {
                 running = false;
-            } else if (n > 0) {
-                // Filter out incoming Telnet command sequences starting with IAC (255)
-                sz out_n = 0;
-                sz i = 0;
-                while (i < n) {
-                    if (buf[i] == (char)255) {
-                        if (i + 2 < n) { i += 3; }
-                        else { i = n; }
-                    } else {
-                        buf[out_n++] = buf[i++];
-                    }
-                }
-                n = out_n;
-                
-                if (n > 0) {
-                    tea::ParseResult pr = tea::parse_key(buf[:n]);
-                    if (pr.consumed > 0) {
-                        if (pr.key.code == tea::KeyCode.ESC || (pr.key.code == tea::KeyCode.RUNE && pr.key.rune == 'q')) {
-                            running = false;
+            } else {
+                sz n = read_result;
+                if (n == 0) {
+                    running = false;
+                } else if (n > 0) {
+                    // Filter out incoming Telnet command sequences starting with IAC (255)
+                    sz out_n = 0;
+                    sz i = 0;
+                    while (i < n) {
+                        if (buf[i] == (char)255) {
+                            if (i + 2 < n) { i += 3; }
+                            else { i = n; }
                         } else {
-                            app.update({ .kind = tea::MsgKind.KEY, .key = pr.key });
+                            buf[out_n++] = buf[i++];
+                        }
+                    }
+                    n = out_n;
+
+                    if (n > 0) {
+                        tea::ParseResult pr = tea::parse_key(buf[:n]);
+                        if (pr.consumed > 0) {
+                            // Only quit on ESC/'q' when in PLAYING mode
+                            // (input modes handle their own keys via update)
+                            bool is_quit = (pr.key.code == tea::KeyCode.ESC || (pr.key.code == tea::KeyCode.RUNE && pr.key.rune == 'q'));
+                            if (is_quit && app.mode == PLAYING) {
+                                running = false;
+                            } else {
+                                app.update({ .kind = tea::MsgKind.KEY, .key = pr.key });
+                            }
                         }
                     }
                 }
             }
-            if (running) app.update(tea::tick_msg());
         }
+
+        if (running) app.update(tea::tick_msg());
         thread::sleep_ms(16);
     }
     write_socket(&s, (char[])"\x1b[?1049l\x1b[?25h");

@@ -270,7 +270,8 @@ fn sz utf8_decode(String s, uint* out_cp) {
 // basic cursor movement. All other CSI sequences are skipped.
 // ============================================================
 
-fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Style start_style) {
+fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Style start_style, sz max_row = 0) {
+	if (max_row == 0) max_row = self.height;
 	sz c = col;
 	sz r = row;
 	Style style = start_style;
@@ -348,6 +349,8 @@ fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Styl
 		}
 
 		// Decode UTF-8
+		if (r >= max_row) { i++; continue; }
+
 		uint cp;
 		sz char_len = utf8_decode(text[i..], &cp);
 		if (char_len == 0) break;

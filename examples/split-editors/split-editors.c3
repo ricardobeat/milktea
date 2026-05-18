@@ -2,6 +2,7 @@ module split_editors;
 
 import tea;
 import lipgloss;
+import xray;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -268,12 +269,15 @@ fn tea::View SplitModel.view(SplitModel* self) @dynamic {
     int edit_h = self.height - 3;
     if (edit_h < 5) edit_h = 5;
 
-    int pane_w = self.width / self.count;
-    if (pane_w < 10) pane_w = 10;
+    xray::Constraint[4] pane_cs;
+    for (int i = 0; i < self.count; i++) pane_cs[i] = xray::constraint_fill(1);
+    xray::Rect[4] pane_rects;
+    xray::layout_h(xray::new_rect(0, 0, self.width, edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
 
     DString out = dstring::temp();
     String[4] views;
     for (int i = 0; i < self.count; i++) {
+        int pane_w = pane_rects[i].w < 10 ? 10 : pane_rects[i].w;
         views[i] = self.editors[i].view(edit_h, pane_w, show_cursor);
     }
 

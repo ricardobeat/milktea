@@ -27,6 +27,9 @@ extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries
 extern fn long c3_time_ms_long();
 extern fn void* signal(int signum, void* handler);
 extern fn char* getenv(char* name);
+extern fn int raise(int signum);
+extern fn int kill(int pid, int signum);
+extern fn int getpid();
 
 struct TtyState {
     char[256] termios_buf;
@@ -56,12 +59,52 @@ fn WinSize get_window_size() {
 
 bool g_win_resized = false;
 
+// g_saved_tty stores the pre-raw-mode terminal state so signal handlers can restore it.
+TtyState g_saved_tty;
+bool g_tty_saved = false;
+// g_in_alt_screen lets the signal handler exit alt screen if needed.
+bool* g_in_alt_screen_ptr = null;
+
+const int SIGINT  = 2;
+const int SIGTERM = 15;
+
 fn void sigwinch_handler(int sig) {
     g_win_resized = true;
 }
 
-fn void setup_sigwinch() {
+// fatal_signal_handler restores the terminal and re-raises the signal with default action.
+fn void fatal_signal_handler(int sig) {
+    // Restore TTY raw mode
+    if (g_tty_saved) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_tty.termios_buf[0]);
+    }
+    // Exit alt screen if active
+    if (g_in_alt_screen_ptr != null && *g_in_alt_screen_ptr) {
+        // write alt-screen-off and show-cursor directly (avoid calling render fns)
+        char[] alt_off = (char[])"\x1b[?1049l\x1b[?25h";
+        sz written = 0;
+        while (written < alt_off.len) {
+            sz n = write(STDOUT_FILENO, &alt_off[written], alt_off.len - written);
+            if (n <= 0) break;
+            written += n;
+        }
+    } else {
+        // Inline mode: show cursor
+        char[] show = (char[])"\x1b[?25h";
+        write(STDOUT_FILENO, &show[0], show.len);
+    }
+    // Reset signal to default and re-raise so the process exits with correct status
+    signal(sig, null);
+    raise(sig);
+}
+
+fn void setup_signals(TtyState saved, bool* in_alt_screen) {
+    g_saved_tty = saved;
+    g_tty_saved = true;
+    g_in_alt_screen_ptr = in_alt_screen;
     signal(SIGWINCH, &sigwinch_handler);
+    signal(SIGINT,   &fatal_signal_handler);
+    signal(SIGTERM,  &fatal_signal_handler);
 }
 
 fn TtyState? raw_mode_enter() {
