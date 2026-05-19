@@ -354,6 +354,9 @@ fn ParseResult parse_key(char[] buf) {
                 }
             }
 
+            // Shift+Tab: ESC [ Z
+            if (fb == 'Z') return make_key(TAB, 0, false, false, true, total);
+
             // Unknown CSI — consume ESC only, let next call re-parse
             return make_key(ESC, 0, false, false, false, 1);
         }

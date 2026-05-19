@@ -808,7 +808,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                     if (draw_result && !rt.is_null(draw_result) && rt.is_string(draw_result)) {
                         ZString cstr = jsrt_to_cstring(rt.ctx, draw_result);
                         if (cstr) {
-                            screen.render_ansi_string(
+                            screen.overlay_char(
                                 (sz)g_focused_cursor.x,
                                 (sz)g_focused_cursor.y,
                                 cstr.str_view(),

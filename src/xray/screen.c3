@@ -105,6 +105,22 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 	}
 }
 
+// overlay_char renders text into exactly one cell slot at (col, row).
+// Supports ANSI escape sequences (SGR color/style). Neighbors are never
+// touched — wide chars occupy one slot visually without shifting anything.
+fn void ScreenBuffer.overlay_char(&self, sz col, sz row, String text, Style base_style) {
+	if (col >= self.width || row >= self.height || text.len == 0) return;
+	// Parse through a 1-wide scratch buffer so ANSI sequences are handled.
+	// We only care about the cell at (0,0) of the scratch.
+	ScreenBuffer* tmp = new_screen_buffer(2, 1);
+	defer { tmp.destroy(); mem::free(tmp); }
+	tmp.render_ansi_string(0, 0, text, base_style, 1, 2);
+	Cell c = tmp.cells[0];
+	// If nothing was written (e.g. empty/null string), bail out.
+	if (c.content_len == 0 || (c.content_len == 1 && c.content[0] == ' ' && c.style.is_empty())) return;
+	self.set_cell(col, row, c);
+}
+
 // set_string writes a string starting at (col, row) with the given style.
 // Advances col by each character's display width.
 fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style) {
@@ -195,6 +211,9 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 
 				// Emit cell content
 				out.append_string(cell.content_str());
+
+				// Wide cell: skip placeholder in next slot
+				if (cell.width == 2) col++;
 			}
 		}
 		self.full_redraw = false;
@@ -239,6 +258,10 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 
 			// Content
 			out.append_string(cell.content_str());
+
+			// Wide cell: the next slot is a blank placeholder that the terminal
+			// already advanced past. Skip it so we don't emit a spurious space.
+			if (cell.width == 2) col++;
 		}
 	}
 }
@@ -385,8 +408,9 @@ fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Styl
 		if (c < max_col) {
 			Cell cell = new_cell(text[i : char_len], w, style);
 			self.set_cell(c, r, cell);
-			// Wide cell: blank the second terminal column so stale content
-			// in the next cell slot isn't emitted by the diff renderer.
+			// Wide cell: slot c+1 is consumed by the second terminal column.
+			// Write a blank placeholder so the diff renderer doesn't output
+			// the stale content that was there before.
 			if (w == 2 && c + 1 < max_col) {
 				self.set_cell(c + 1, r, empty_cell());
 			}
@@ -612,6 +636,64 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 		col += (sz)w;
 		i += char_len;
 	}
+}
+
+// ============================================================
+// Debug helpers
+// ============================================================
+
+// render_frame returns a plain-text snapshot of the screen buffer,
+// one row per line, cell content concatenated with no ANSI escapes.
+// Wide cells (width=2) emit their content once; their neighbour slot
+// (which holds an empty placeholder) emits nothing, preserving column
+// alignment so the output matches what the terminal would display.
+// Useful for writing render tests without a real terminal.
+fn String ScreenBuffer.render_frame(&self) {
+	DString out = dstring::temp();
+	for (sz row = 0; row < self.height; row++) {
+		sz col = 0;
+		while (col < self.width) {
+			Cell* cell = &self.cells[row * self.width + col];
+			if (cell.width == 2 && col + 1 < self.width) {
+				// Wide cell: emit content, skip the placeholder slot
+				out.append_string(cell.content_str());
+				col += 2;
+			} else {
+				out.append_string(cell.content_str());
+				col++;
+			}
+		}
+		out.append_char('\n');
+	}
+	return out.str_view();
+}
+
+// render_frame_row returns a plain-text snapshot of a single row.
+fn String ScreenBuffer.render_frame_row(&self, sz row) {
+	DString out = dstring::temp();
+	if (row >= self.height) return out.str_view();
+	sz col = 0;
+	while (col < self.width) {
+		Cell* cell = &self.cells[row * self.width + col];
+		if (cell.width == 2 && col + 1 < self.width) {
+			out.append_string(cell.content_str());
+			col += 2;
+		} else {
+			out.append_string(cell.content_str());
+			col++;
+		}
+	}
+	return out.str_view();
+}
+
+// render_diff_str is a convenience wrapper: runs render_diff into a temp
+// DString and returns the raw escape sequence output as a string.
+// Useful for asserting that specific ANSI sequences are (or aren't) emitted.
+fn String ScreenBuffer.render_diff_str(&self) {
+	DString out = dstring::temp();
+	Style pen = default_style();
+	self.render_diff(&out, &pen);
+	return out.str_view();
 }
 
 // blit composites src ScreenBuffer onto self at (dst_x, dst_y).

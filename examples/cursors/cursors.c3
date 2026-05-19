@@ -14,11 +14,11 @@ import std::io;
 // ── section A: draw-cursor callbacks ─────────────────────────────────────────
 
 fn String cursor_fire(int x, int y, bool blink) {
-    return blink ? "🔥" : " ";
+    return blink ? "🔥" : "";
 }
 
 fn String cursor_skull(int x, int y, bool blink) {
-    return blink ? "💀" : " ";
+    return blink ? "💀" : "";
 }
 
 fn String cursor_crosshair(int x, int y, bool blink) {
@@ -208,13 +208,14 @@ fn tea::View Model.view(&self) @dynamic {
             focused_cx = cx;
             focused_cy = cy;
 
-            // Section A: paint draw-cursor
+            // Section A: paint draw-cursor — overlay_char writes exactly one
+            // cell slot so wide chars (emoji, katakana) never displace neighbors.
             if (e.draw != null) {
                 long now = tea::time_ms();
                 bool blink = ((now / (long)e.interval_ms) % 2) == 0;
                 String drawn = e.draw(cx, cy, blink);
                 if (drawn.len > 0) {
-                    screen.render_ansi_string((sz)cx, (sz)cy, drawn, xray::default_style());
+                    screen.overlay_char((sz)cx, (sz)cy, drawn, xray::default_style());
                 }
             }
         }
