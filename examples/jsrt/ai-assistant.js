@@ -162,8 +162,33 @@ tea.run({
         this.thinking   = true;
         this.thinkStart = Date.now();
       }
-      for (const part of thinking_delta.split("\n"))
-        if (part.trim()) this._push("  " + part, "thinking");
+      const THINK_CLR = "\x1b[38;5;240m";
+      const BORDER = `\x1b[38;2;60;60;70m▎\x1b[0m${THINK_CLR}`;
+      const think_w = this.width - 4;
+      for (const part of thinking_delta.split("\n")) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        if (trimmed.length + 2 <= think_w) {
+          this._push(BORDER + " " + trimmed, "thinking");
+        } else {
+          const inner_w = think_w - 2;
+          const words = trimmed.split(" ");
+          const lines = [];
+          let line = "";
+          for (const word of words) {
+            if (line.length + word.length + 1 > inner_w && line) {
+              lines.push(line);
+              line = word;
+            } else {
+              line = line ? line + " " + word : word;
+            }
+          }
+          if (line) lines.push(line);
+          for (let i = 0; i < lines.length; i++) {
+            this._push(i === 0 ? BORDER + " " + lines[i] : "  " + lines[i], "thinking");
+          }
+        }
+      }
       this.scroll = 0;
     }
 

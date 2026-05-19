@@ -1,4 +1,5 @@
-// hardwired.js — AI coding assistant TUI
+// @jsx h
+// hardwired.jsx — AI coding assistant TUI
 //
 // Layout:
 //   ┌─────────────────────────────┐
@@ -54,10 +55,65 @@ function md_line(line, base_style) {
   return base_style + md_inline(line) + (base_style ? MD_RESET : "");
 }
 
-// Half-block pixel art for "HARDWIRED".
-// Each letter is 5px wide × 6px tall. 1px gap between letters.
-// 2 pixel rows → 1 terminal row → 3 terminal rows total.
-// 9 letters × 5 + 8 gaps = 53 pixels wide.
+// ── Fire animation ────────────────────────────────────────────────────────────
+
+// Fire palette: dark bg → deep red → orange → yellow → white tip
+const FIRE_COLORS = [
+  [10, 5, 2],
+  [80, 10, 0],
+  [160, 30, 0],
+  [220, 80, 0],
+  [255, 140, 0],
+  [255, 200, 20],
+  [255, 240, 120],
+  [255, 255, 220],
+];
+
+function fire_color(t) {
+  // t in [0,1]: 0=base (dark), 1=tip (white)
+  const scaled = t * (FIRE_COLORS.length - 1);
+  const i = Math.min(Math.floor(scaled), FIRE_COLORS.length - 2);
+  const f = scaled - i;
+  const a = FIRE_COLORS[i],
+    b = FIRE_COLORS[i + 1];
+  const r = Math.round(a[0] + (b[0] - a[0]) * f);
+  const g = Math.round(a[1] + (b[1] - a[1]) * f);
+  const bl = Math.round(a[2] + (b[2] - a[2]) * f);
+  return `\x1b[38;2;${r};${g};${bl}m`;
+}
+
+// Fast hash for per-column flicker — no Math.random() so it's deterministic per frame
+function fire_hash(col, t) {
+  let x = (col * 374761393 + t * 668265263) | 0;
+  x = ((x ^ (x >>> 13)) * 1274126177) | 0;
+  return ((x ^ (x >>> 16)) >>> 0) / 0xffffffff;
+}
+
+// Eighth-block chars: smooth vertical fill from empty to full
+const FIRE_CHARS = ["▖", "▗", "▘", "▙", "▛", "▜", "▝", "▞", "▟"];
+
+function render_fire(w) {
+  const t = Math.floor(Date.now() / 80);
+  const RESET = "\x1b[0m";
+  let out = "";
+  const offset = t % FIRE_CHARS.length;
+  for (let col = 0; col < w; col++) {
+    const progress = col / Math.max(w - 1, 1);
+    // Fade at both edges with a smooth bell curve
+    const edge = Math.sin(progress * Math.PI);
+    // Slow rightward drift: fire front advances over time
+    const drift = (t * 0.15) % 1;
+    const shifted = (progress + drift) % 1;
+    // Core flame shape: two overlapping humps for irregular look
+    const shape = Math.max(Math.exp(-((shifted - 0.4) ** 2) / 0.08), Math.exp(-((shifted - 0.75) ** 2) / 0.05) * 0.7);
+    const noise = fire_hash(col, t) * 0.4 - 0.15;
+    const heat = Math.max(0, Math.min(1, shape * edge + noise * edge));
+    // const char_idx = Math.round(heat * (FIRE_CHARS.length - 1));
+    const char_idx = (offset + col) % FIRE_CHARS.length;
+    out += fire_color(heat) + FIRE_CHARS[char_idx];
+  }
+  return out + RESET;
+}
 
 const LOGO_ROWS = [
   "█   █ ▄▀▀▀▄ █▀▀▀▄ █▀▀▀▄ █   █ ▀▀█▀▀ █▀▀▀▄ █▀▀▀▀ █▀▀▀▄",
@@ -85,26 +141,6 @@ function make_gradient(n_cols, from_hex, to_hex) {
   return colors;
 }
 
-// Render one logo row with per-character gradient coloring.
-// Spaces get background color as both fg and bg (invisible).
-function render_logo_row(row, gradient, bg_hex) {
-  const RESET = "\x1b[0m";
-  // Use [...row] to split by Unicode codepoint (block chars are single codepoints)
-  const chars = [...row];
-  let out = `\x1b[48;2;${hex_to_rgb(bg_hex)}m`;
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i];
-    const fg = gradient[Math.min(i, gradient.length - 1)];
-    if (ch === " ") {
-      out += " ";
-    } else {
-      out += `\x1b[38;2;${hex_to_rgb(fg)}m${ch}`;
-    }
-  }
-  out += RESET;
-  return out;
-}
-
 // Render the background pattern for a row, width w
 // Pattern cycles through: ╲╲  ╱╱  ╲╲  …  (dim)
 const BG_PATTERNS = ["╲", "╲", " ", "╱", "╱", " "];
@@ -127,16 +163,13 @@ tea.run({
     this.width = 80;
     this.height = 24;
     this.focused = "input"; // "input" | "output" | "none"
-    // gradient is cached; regenerated when logo width changes
-    this._gradient = make_gradient([...LOGO_ROWS[0]].length, "#ff5500", "#ffcc00");
 
     this.llm = new LLM((text, style) => {
       if (style === "thought_end") {
         const secs = this.llm.thinkSecs;
-        if (secs > 0) {
+        if (secs > 0)
           this.output.push({ text: "Thought for " + secs + " second" + (secs === 1 ? "" : "s"), style: "dim" });
-          this.output.push({ text: "", style: "normal" });
-        }
+        this.output.push({ text: "", style: "normal" });
         return;
       }
       this.output.push({ text, style: style || "normal" });
@@ -152,9 +185,6 @@ tea.run({
 
   _compact() {
     return this.llm.messages.length > 0;
-  },
-  _header_rows() {
-    return this._compact() ? 1 : LOGO_ROWS.length;
   },
 
   update(msg) {
@@ -214,42 +244,10 @@ tea.run({
   },
 
   view() {
-    const grad = this._gradient;
-    const bg = "#0a0a0f";
-    const dim = "#1a1a2a";
-
     const GRAY = "\x1b[38;5;240m";
     const DIM = "\x1b[38;5;246m";
     const WHITE = "\x1b[38;5;255m";
     const RESET = "\x1b[0m";
-
-    // Each header row: logo text (draw vnode) + bg fill (draw vnode)
-    const header_rows = this._compact()
-      ? [
-          h(
-            "row",
-            { height: 1 },
-            h("draw", { width: 2, fn: (cw, ri) => render_bg_row(cw, ri, dim, bg) }),
-            h("draw", { width: COMPACT_LOGO_TEXT.length, fn: () => render_logo_row(COMPACT_LOGO_TEXT, grad, bg) }),
-            h("draw", { fn: (cw, ri) => render_bg_row(cw, ri, dim, bg) }),
-          ),
-        ]
-      : LOGO_ROWS.map((row, i) =>
-          h(
-            "row",
-            { height: 1 },
-            h("draw", { width: 4, fn: (cw, ri) => render_bg_row(cw, ri, dim, bg) }),
-            // h(
-            //   "stack",
-            //   { vertical: true, width: LOGO_ROWS[0].length },
-            //   h("text", {}, "v0.1"),
-            h("draw", { width: LOGO_ROWS[0].length, fn: () => render_logo_row(row, grad, bg) }),
-            // ),
-            h("draw", { fn: (cw, ri) => render_bg_row(cw, ri, dim, bg) }),
-          ),
-        );
-
-    const header_box = h("col", { height: this._header_rows() }, ...header_rows);
 
     const input_focused = this.focused === "input";
     const output_focused = this.focused === "output";
@@ -258,79 +256,79 @@ tea.run({
     const output_fg = output_focused ? "#ff6600" : "#555555";
     const input_fg = this.llm.loading ? "#888888" : input_focused ? "#ff6600" : "#555555";
 
-    const max_w = this.width - 8;
-
-    const content_lines = this.output.flatMap((l) => {
-      if (l.style === "thinking") {
-        const text = l.text.replace(/^>\s?/, "");
-        const bq_w = max_w - 2;
-        const wrapped =
-          text.length <= bq_w
-            ? [text]
-            : (() => {
-                const parts = [];
-                let line = "";
-                for (const word of text.split(" ")) {
-                  if (line.length + word.length + 1 > bq_w && line) {
-                    parts.push(line);
-                    line = word;
-                  } else line = line ? line + " " + word : word;
-                }
-                if (line) parts.push(line);
-                return parts;
-              })();
-        return wrapped.map((w) => md_line("> " + w, ""));
-      }
-      if (l.style === "dim") return [DIM + l.text + RESET];
-      if (l.style === "user") return [`\x1b[48;2;40;40;48m\x1b[38;2;200;200;210m ${l.text} ${RESET}`];
-      if (l.text.length <= max_w) return [md_line(l.text, "")];
-      const parts = [];
-      let line = "";
-      for (const word of l.text.split(" ")) {
-        if (line.length + word.length + 1 > max_w && line) {
-          parts.push(md_line(line, ""));
-          line = word;
-        } else line = line ? line + " " + word : word;
-      }
-      if (line) parts.push(md_line(line, ""));
-      return parts;
+    const content_lines = this.output.map((l) => {
+      if (l.style === "thinking") return md_line(l.text, `\x1b[38;2;80;80;90m`);
+      if (l.style === "dim") return DIM + l.text + RESET;
+      if (l.style === "user") return `\x1b[48;2;40;40;48m\x1b[38;2;200;200;210m ${l.text} ${RESET}`;
+      return md_line(l.text, "");
     });
 
-    return h(
-      "stack",
-      {},
-      header_box,
-      h(
-        "box",
-        { border: "rounded", borderColor: output_fg, pad: 2 },
-        h(
-          "viewport",
-          { id: "output" },
-          content_lines.join("\n") + "\n",
-          this.llm.loading
-            ? this.llm.thinking
-              ? h(
-                  "row",
-                  {},
-                  h("spinner", { kind: "pulse", fg: "#ff6600", width: 1 }),
-                  h("text", { fg: "#785030" }, " Thinking..."),
-                )
-              : h("spinner", { kind: "pulse", fg: "#ff6600" })
-            : null,
-        ),
-      ),
-      h("textarea", {
-        id: "input",
-        border: "rounded",
-        borderColor: input_focused ? "#cc8822" : "#666666",
-        fg: input_fg,
-        height: 1,
-        prompt: "> ",
-        focused: input_focused,
-      }),
-      unfocused
-        ? h("text", { fg: "#444444", fit: true }, `${GRAY}[esc]${RESET} quit  ${GRAY}[tab]${RESET} focus`)
-        : h("text", { fg: "#444444", fit: true }, `${GRAY}[tab]${RESET} focus`),
+    return (
+      <stack>
+        <col height={this._compact() ? 1 : LOGO_ROWS.length}>{Header({ compact: this._compact() })}</col>
+        <box border="rounded" borderColor={output_fg} pad={2}>
+          <viewport id="output">
+            {content_lines.join("\n") + "\n"}
+            {this.llm.loading ? <draw width={24} fn={(w) => render_fire(w)} /> : null}
+          </viewport>
+        </box>
+        <textarea
+          id="input"
+          border="rounded"
+          borderColor={input_focused ? "#cc8822" : "#666666"}
+          fg={input_fg}
+          height={1}
+          prompt="> "
+          focused={input_focused}
+        />
+        {unfocused ? (
+          <text fg="#444444" fit={true}>{`${GRAY}[esc]${RESET} quit  ${GRAY}[tab]${RESET} focus`}</text>
+        ) : (
+          <text fg="#444444" fit={true}>{`${GRAY}[tab]${RESET} focus`}</text>
+        )}
+      </stack>
     );
   },
 });
+
+const gradient = make_gradient([...LOGO_ROWS[0]].length, "#ff5500", "#ffcc00");
+const bg = "#0a0a0f";
+const dim = "#1a1a2a";
+
+// Render one logo row with per-character gradient coloring.
+// Spaces get background color as both fg and bg (invisible).
+function render_logo_row(row, gradient, bg_hex) {
+  const RESET = "\x1b[0m";
+  // Use [...row] to split by Unicode codepoint (block chars are single codepoints)
+  const chars = [...row];
+  let out = `\x1b[48;2;${hex_to_rgb(bg_hex)}m`;
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    const fg = gradient[Math.min(i, gradient.length - 1)];
+    if (ch === " ") {
+      out += " ";
+    } else {
+      out += `\x1b[38;2;${hex_to_rgb(fg)}m${ch}`;
+    }
+  }
+  out += RESET;
+  return out;
+}
+
+function Header({ compact }) {
+  return compact
+    ? [
+        <row height={1}>
+          <draw width={4} fn={(width, index) => render_bg_row(width, index, dim, bg)} />
+          <draw width={COMPACT_LOGO_TEXT.length} fn={() => render_logo_row(COMPACT_LOGO_TEXT, gradient, bg)} />
+          <draw fn={(cw, ri) => render_bg_row(cw, ri, dim, bg)} />
+        </row>,
+      ]
+    : LOGO_ROWS.map((row, i) => (
+        <row height={1}>
+          <draw width={4} fn={(cw, ri) => render_bg_row(cw, ri, dim, bg)} />
+          <draw width={LOGO_ROWS[0].length} fn={() => render_logo_row(row, gradient, bg)} />
+          <draw fn={(cw, ri) => render_bg_row(cw, ri, dim, bg)} />
+        </row>
+      ));
+}

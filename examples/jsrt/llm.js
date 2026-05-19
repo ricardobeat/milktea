@@ -27,7 +27,6 @@ export class LLM {
 
   send(prompt) {
     this.messages.push({ role: "user", content: prompt });
-    this._push("", "normal");
     this._push(prompt, "user");
     this._push("", "normal");
     this.loading = true;
