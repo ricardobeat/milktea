@@ -128,6 +128,14 @@ fn void* Runtime.call2(&self, void* fn_val, void* this_val, void* a0, void* a1) 
     return result;
 }
 
+fn void* Runtime.call3(&self, void* fn_val, void* this_val, void* a0, void* a1, void* a2) {
+    void* result = null;
+    void*[] argv = { a0, a1, a2 };
+    int status = jsrt_call(self.ctx, fn_val, this_val, 3, &argv[0], &result);
+    if (status != 0) return null;
+    return result;
+}
+
 fn void Runtime.set_prop_str(&self, void* obj, String name, String val) {
     jsrt_set_prop_str_n(self.ctx, obj, (ZString)name.ptr, val.ptr, val.len);
 }

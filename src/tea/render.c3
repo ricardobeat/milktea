@@ -21,6 +21,14 @@ fn String mouse_cursor_seq(String name) {
 }
 const String OSC_MOUSE_CURSOR_RESET = "\x1b]22;\x1b\\";
 
+// OSC 12 — set the terminal cursor color.
+// color: CSS/X11 color name or hex, e.g. "#ff6600" or "red".
+fn String cursor_color_seq(String color) {
+    return string::tformat("\x1b]12;%s\x1b\\", color);
+}
+// Reset cursor color to terminal default.
+const String OSC_CURSOR_COLOR_RESET = "\x1b]112\x1b\\";
+
 // cursor_style_seq returns the ANSI escape to set cursor shape.
 // Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
 fn String cursor_style_seq(CursorShape shape, bool blink) {
@@ -55,6 +63,13 @@ fn void render_view_to(View v, DString* out) {
         int term_row = v.cursor.y + 1;
         int term_col = v.cursor.x + 1;
         out.append_string(cursor_to(term_row, term_col));
+
+        // Set cursor color via OSC 12
+        if (v.cursor.color.len > 0) {
+            out.append_string(cursor_color_seq(v.cursor.color));
+        } else {
+            out.append_string(OSC_CURSOR_COLOR_RESET);
+        }
 
         // Set cursor shape and blink
         out.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));

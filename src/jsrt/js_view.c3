@@ -6,6 +6,34 @@ import tea;
 import std::io;
 import std::core::mem;
 
+// ── Focused cursor tracking ───────────────────────────────────────────────────
+// Set by the textarea renderer when a focused textarea is rendered.
+// Read by js_model.c3 to position the native terminal cursor.
+
+struct FocusedCursor {
+    int x;
+    int y;
+    char[32] color_buf;    // hex color, e.g. "#ff6600", or empty for terminal default
+    bool suppress_native;  // true when drawCursor vnode rendered in its place
+}
+
+FocusedCursor g_focused_cursor = {};
+bool g_has_focused_cursor = false;
+
+fn void reset_focused_cursor() {
+    g_has_focused_cursor = false;
+    g_focused_cursor.suppress_native = false;
+}
+
+fn bool get_focused_cursor(int* out_x, int* out_y, String* out_color, bool* out_suppress) {
+    if (!g_has_focused_cursor) return false;
+    *out_x = g_focused_cursor.x;
+    *out_y = g_focused_cursor.y;
+    *out_color = ((ZString)&g_focused_cursor.color_buf).str_view();
+    *out_suppress = g_focused_cursor.suppress_native;
+    return true;
+}
+
 // ── Textarea registry ────────────────────────────────────────────────────────
 // Global map from string ID → pearls::Textarea, used by the "textarea" vnode type.
 // JS calls tea.textareaUpdate(id, msg) which routes through C → this registry.
@@ -281,6 +309,18 @@ fn lipgloss::Style props_to_style(Runtime* rt, void* props) @local {
 
     String border_color = get_prop_string(rt, props, "borderColor");
     if (border_color.len > 0) s = s.set_border_fg(lipgloss::color_hex(border_color));
+
+    String border_anim = get_prop_string(rt, props, "borderAnimation");
+    if (border_anim == "pulse") {
+        s = s.set_border_anim(lipgloss::BorderAnimation.PULSE);
+    } else if (border_anim == "rainbow") {
+        s = s.set_border_anim(lipgloss::BorderAnimation.RAINBOW);
+    } else if (border_anim == "race") {
+        s = s.set_border_anim(lipgloss::BorderAnimation.RACE);
+    }
+
+    int anim_speed = get_prop_int(rt, props, "borderAnimSpeed", 0);
+    if (anim_speed > 0) s = s.set_border_anim_speed(anim_speed);
 
     int pad = get_prop_int(rt, props, "pad", 0);
     int pad_x = get_prop_int(rt, props, "pad_x", pad);
@@ -563,7 +603,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
         if (has_vnode_children) {
             // Draw border frame via lipgloss on empty content, then recurse into inner rect.
-            // lipgloss height/width = content size; border adds 2, padding handled by frame.
+            // set_width/set_height = total outer size; render() subtracts border+pad internally.
             int pad   = props ? get_prop_int(rt, props, "pad",   0) : 0;
             int pad_x = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
             int pad_y = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
@@ -573,9 +613,17 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             int inner_h = area.h - border_pad - pad_y * 2;
             if (inner_w < 1) inner_w = 1;
             if (inner_h < 1) inner_h = 1;
-            style = style.set_width(area.w - border_pad).set_height(area.h - border_pad);
+            style = style.set_width(area.w).set_height(area.h);
             String frame = style.render("");
             screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
+            // Animated border overlay (if borderAnimation is set)
+            if (has_border && style.border_anim != lipgloss::BorderAnimation.NONE) {
+                String anim_frame = style.border.wrap_animated(
+                    area.w - border_pad, area.h - border_pad,
+                    style.border_anim, style, jsrt_now_ms());
+                screen.render_ansi_string((sz)area.x, (sz)area.y, anim_frame, xray::default_style(), (sz)(area.y + area.h));
+                request_render_tick((long)lipgloss::border_anim_tick_ms(style.border_anim));
+            }
             // Inner rect sits inside border + padding
             xray::Rect inner = xray::new_rect(area.x + offset_x, area.y + offset_y, inner_w, inner_h);
             // Treat children as a col container (stack vertically)
@@ -596,20 +644,37 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             }
         } else {
             // All-text path: collect and render via lipgloss.
-            // lipgloss height/width = content size; border adds 2 on each axis.
+            // set_width/set_height mean total outer size; render() subtracts border internally.
             int content_w = area.w - border_pad;
             int content_h = area.h - border_pad;
             if (content_w < 1) content_w = 1;
             if (content_h < 1) content_h = 1;
-            if (get_prop_int(rt, props, "width", 0) == 0) {
-                style = style.set_width(content_w);
-            }
-            if (get_prop_int(rt, props, "height", 0) == 0) {
-                style = style.set_height(content_h);
-            }
             String content = collect_text(rt, vnode);
-            String rendered = style.render(content);
-            screen.render_ansi_string((sz)area.x, (sz)area.y, rendered, xray::default_style(), (sz)(area.y + area.h));
+            if (has_border && style.border_anim != lipgloss::BorderAnimation.NONE) {
+                // Animated: render content without border, then wrap with animated border.
+                if (get_prop_int(rt, props, "width", 0) == 0) {
+                    style = style.set_width(area.w);
+                }
+                if (get_prop_int(rt, props, "height", 0) == 0) {
+                    style = style.set_height(area.h);
+                }
+                String content_rendered = style.render_content_only(content);
+                String anim_border = style.border.wrap_animated(
+                    content_w, content_h, style.border_anim, style, jsrt_now_ms());
+                // Render content, then overlay animated border on top.
+                screen.render_ansi_string((sz)area.x, (sz)area.y, content_rendered, xray::default_style(), (sz)(area.y + area.h));
+                screen.render_ansi_string((sz)area.x, (sz)area.y, anim_border, xray::default_style(), (sz)(area.y + area.h));
+                request_render_tick((long)lipgloss::border_anim_tick_ms(style.border_anim));
+            } else {
+                if (get_prop_int(rt, props, "width", 0) == 0) {
+                    style = style.set_width(area.w);
+                }
+                if (get_prop_int(rt, props, "height", 0) == 0) {
+                    style = style.set_height(area.h);
+                }
+                String rendered = style.render(content);
+                screen.render_ansi_string((sz)area.x, (sz)area.y, rendered, xray::default_style(), (sz)(area.y + area.h));
+            }
         }
 
     } else if (type == "spinner") {
@@ -666,6 +731,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                 String prompt = get_prop_string(rt, props, "prompt");
                 ta.prompt = prompt;
                 ta.show_line_numbers = get_prop_bool(rt, props, "show_line_numbers");
+                ta.show_cursor = get_prop_bool(rt, props, "showCursor");
                 ta.focused = get_prop_bool(rt, props, "focused");
 
                 String fg_str = get_prop_string(rt, props, "fg");
@@ -674,6 +740,16 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                     ta.focused_style = lipgloss::new_style().foreground(fg_col);
                     ta.prompt_style  = lipgloss::new_style().foreground(fg_col);
                 }
+
+                // Fake cursor style: cursorBg / cursorFg props override defaults
+                String cursor_bg = get_prop_string(rt, props, "cursorBg");
+                String cursor_fg = get_prop_string(rt, props, "cursorFg");
+                if (cursor_bg.len > 0 || cursor_fg.len > 0) {
+                    lipgloss::Style cs = lipgloss::new_style();
+                    if (cursor_bg.len > 0) cs = cs.background(lipgloss::color_hex(cursor_bg));
+                    if (cursor_fg.len > 0) cs = cs.foreground(lipgloss::color_hex(cursor_fg));
+                    ta.cursor_style = cs;
+                }
             }
 
             // Draw border frame (if any) by rendering an empty box of the full area size.
@@ -681,9 +757,16 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             // so the content height is exactly what ta.view() produces (no padding/clipping issues).
             if (has_border || pad_x > 0 || pad_y > 0) {
                 lipgloss::Style frame_style = props_to_style(rt, props);
-                frame_style = frame_style.set_width(area.w - border_pad).set_height(area.h - border_pad);
+                frame_style = frame_style.set_width(area.w).set_height(area.h);
                 String frame = frame_style.render("");
                 screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
+                if (has_border && frame_style.border_anim != lipgloss::BorderAnimation.NONE) {
+                    String anim_frame = frame_style.border.wrap_animated(
+                        area.w - border_pad, area.h - border_pad,
+                        frame_style.border_anim, frame_style, jsrt_now_ms());
+                    screen.render_ansi_string((sz)area.x, (sz)area.y, anim_frame, xray::default_style(), (sz)(area.y + area.h));
+                    request_render_tick((long)lipgloss::border_anim_tick_ms(frame_style.border_anim));
+                }
             }
             // Write content lines directly into the inner rect
             xray::Rect inner = xray::new_rect(
@@ -692,6 +775,52 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                 inner_w, inner_h);
             String content = ta.view();
             screen.render_ansi_string((sz)inner.x, (sz)inner.y, content, xray::default_style(), (sz)(inner.y + inner_h), (sz)(inner.x + inner_w));
+
+            // Record screen-space cursor position for the native terminal cursor.
+            if (ta.focused) {
+                int prompt_w = (int)ta.prompt.len;
+                g_focused_cursor.x = inner.x + prompt_w + ta.cursor_col;
+                g_focused_cursor.y = inner.y + (ta.cursor_row - ta.scroll_offset);
+                // Store cursor color from the cursorColor prop (or clear it)
+                String cc = props ? get_prop_string(rt, props, "cursorColor") : "";
+                sz copy_len = cc.len < 31 ? cc.len : 31;
+                g_focused_cursor.color_buf[:copy_len] = cc[:copy_len];
+                g_focused_cursor.color_buf[copy_len] = 0;
+                g_has_focused_cursor = true;
+
+                // drawCursor prop: fn(x, y, blink) -> string | null
+                // Renders a custom string at the cursor position and suppresses the native cursor.
+                void* draw_fn = props ? rt.get_prop(props, "drawCursor") : null;
+                if (draw_fn && !rt.is_null(draw_fn) && rt.is_function(draw_fn)) {
+                    int interval_ms = props ? get_prop_int(rt, props, "cursorInterval", 500) : 500;
+                    if (interval_ms < 16) interval_ms = 16;
+                    long now = jsrt_now_ms();
+                    bool blink = ((now / (long)interval_ms) % 2) == 0;
+                    request_render_tick((long)interval_ms);
+
+                    void* x_arg = rt.new_int32(g_focused_cursor.x);
+                    void* y_arg = rt.new_int32(g_focused_cursor.y);
+                    void* b_arg = rt.new_int32((int)blink);
+                    void* draw_result = rt.call3(draw_fn, null, x_arg, y_arg, b_arg);
+                    if (x_arg) rt.free_value(x_arg);
+                    if (y_arg) rt.free_value(y_arg);
+                    if (b_arg) rt.free_value(b_arg);
+                    if (draw_result && !rt.is_null(draw_result) && rt.is_string(draw_result)) {
+                        ZString cstr = jsrt_to_cstring(rt.ctx, draw_result);
+                        if (cstr) {
+                            screen.render_ansi_string(
+                                (sz)g_focused_cursor.x,
+                                (sz)g_focused_cursor.y,
+                                cstr.str_view(),
+                                xray::default_style());
+                            jsrt_free_cstring(rt.ctx, cstr);
+                        }
+                    }
+                    if (draw_result) rt.free_value(draw_result);
+                    g_focused_cursor.suppress_native = true;
+                }
+                if (draw_fn) rt.free_value(draw_fn);
+            }
         }
 
     } else if (type == "viewport") {
@@ -802,9 +931,16 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             // Draw border frame
             if (has_border || pad_x > 0 || pad_y > 0) {
                 lipgloss::Style frame_style = props_to_style(rt, props);
-                frame_style = frame_style.set_width(area.w - border_pad).set_height(area.h - border_pad);
+                frame_style = frame_style.set_width(area.w).set_height(area.h);
                 String frame = frame_style.render("");
                 screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
+                if (has_border && frame_style.border_anim != lipgloss::BorderAnimation.NONE) {
+                    String anim_frame = frame_style.border.wrap_animated(
+                        area.w - border_pad, area.h - border_pad,
+                        frame_style.border_anim, frame_style, jsrt_now_ms());
+                    screen.render_ansi_string((sz)area.x, (sz)area.y, anim_frame, xray::default_style(), (sz)(area.y + area.h));
+                    request_render_tick((long)lipgloss::border_anim_tick_ms(frame_style.border_anim));
+                }
             }
 
             // Render visible lines into inner rect
@@ -891,6 +1027,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
             }
             if (fn_val) rt.free_value(fn_val);
         }
+
     }
 
     if (props) rt.free_value(props);

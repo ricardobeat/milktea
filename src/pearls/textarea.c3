@@ -17,6 +17,7 @@ struct Textarea {
     String     placeholder;
     String     prompt;           // prefix shown before each line (e.g. "> ")
     bool       show_line_numbers;
+    bool       show_cursor;      // draw a fake block cursor in the content (option 2)
     bool       focused;
     lipgloss::Style focused_style;
     lipgloss::Style blurred_style;
@@ -303,17 +304,56 @@ fn String Textarea.view(&self) {
         if (content_w < 1) content_w = 1;
         lipgloss::Style line_style = content_style.set_width(content_w);
 
+        bool is_cursor_row = self.focused && self.show_cursor && (r == self.cursor_row);
+
         if (line_start == self.len && self.len > 0 && self.buf[self.len - 1] == '\n') {
             // Empty line after trailing newline
-            out.append_string(line_style.render(""));
-            out.append_char('\n');
+            if (is_cursor_row) {
+                // Cursor on empty trailing line — render a single highlighted space
+                out.append_string(self.cursor_style.render(" "));
+                out.append_char('\n');
+            } else {
+                out.append_string(line_style.render(""));
+                out.append_char('\n');
+            }
         } else if (line_start < self.len) {
             String line_text = (String)self.buf[line_start:line_end];
-            out.append_string(line_style.render(line_text));
-            out.append_char('\n');
+            if (is_cursor_row) {
+                sz cur = (sz)self.cursor_col;
+                sz line_len = line_end - line_start;
+                // before-cursor segment
+                if (cur > 0) {
+                    sz blen = cur < line_len ? cur : line_len;
+                    out.append_string(content_style.render(line_text[:blen]));
+                }
+                // cursor character (or space if at end)
+                if (cur < line_len) {
+                    char[2] ch_buf = { line_text[cur], 0 };
+                    out.append_string(self.cursor_style.render(((ZString)&ch_buf).str_view()));
+                    // after-cursor segment
+                    if (cur + 1 < line_len) {
+                        int remaining_w = content_w - (int)cur - 1;
+                        if (remaining_w < 1) remaining_w = 1;
+                        out.append_string(content_style.set_width(remaining_w).render(line_text[cur+1:line_len - cur - 1]));
+                    }
+                } else {
+                    // Cursor past end of line — append highlighted space
+                    out.append_string(self.cursor_style.render(" "));
+                }
+                out.append_char('\n');
+            } else {
+                out.append_string(line_style.render(line_text));
+                out.append_char('\n');
+            }
         } else if (r == 0 && self.len == 0) {
-            out.append_string(line_style.render(self.placeholder));
-            out.append_char('\n');
+            if (is_cursor_row) {
+                // Empty buffer with cursor — highlighted space then placeholder styling
+                out.append_string(self.cursor_style.render(" "));
+                out.append_char('\n');
+            } else {
+                out.append_string(line_style.render(self.placeholder));
+                out.append_char('\n');
+            }
         }
 
         line_start = line_end + 1;

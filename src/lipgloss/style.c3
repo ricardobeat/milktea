@@ -2,6 +2,14 @@ module lipgloss;
 
 import std::core::dstring;
 
+// BorderAnimation selects an animated border rendering mode.
+enum BorderAnimation : char {
+    NONE,     // static border (default)
+    PULSE,    // pulses the base color in brightness
+    RAINBOW,  // rainbow colors spin around the perimeter
+    RACE,     // a dash of bright color races around, leaving a dim trail
+}
+
 fn int string_width(String s) {
     int w = 0;
     bool in_ansi = false;
@@ -95,6 +103,8 @@ struct Style {
     Position h_align; // horizontal alignment within width
     Position v_align; // vertical alignment within height
     Border border;    // zero value = no border
+    BorderAnimation border_anim; // NONE = static
+    int border_anim_speed;       // ms per full cycle (default 1000)
 }
 
 fn Style new_style() {
@@ -158,6 +168,19 @@ fn Style Style.set_border_fg(self, Color c) {
     return s;
 }
 
+fn Style Style.set_border_anim(self, BorderAnimation anim) {
+    Style s = self;
+    s.border_anim = anim;
+    if (s.border_anim_speed == 0) s.border_anim_speed = 1000;
+    return s;
+}
+
+fn Style Style.set_border_anim_speed(self, int ms) {
+    Style s = self;
+    s.border_anim_speed = ms;
+    return s;
+}
+
 fn Style Style.set_height(self, int h) {
     Style s = self;
     s.height = h;
@@ -210,6 +233,14 @@ fn Style Style.with_border(self, Border b) {
     return self.set_border(b);
 }
 
+fn Style Style.with_border_anim(self, BorderAnimation anim) {
+    return self.set_border_anim(anim);
+}
+
+fn Style Style.with_border_anim_speed(self, int ms) {
+    return self.set_border_anim_speed(ms);
+}
+
 fn Style Style.with_width(self, int width) {
     return self.set_width(width);
 }
@@ -217,13 +248,9 @@ fn Style Style.with_width(self, int width) {
 // measure_height renders content at the given outer width and counts the output lines.
 // Useful for auto-sizing a box before committing it to a layout rect.
 fn int Style.measure_height(self, String input, int outer_width) {
-    bool has_border = self.border.top.len > 0 || self.border.left.len > 0;
-    int border_pad = has_border ? 2 : 0;
-    int inner_w = outer_width - border_pad - self.pad_left - self.pad_right;
-    if (inner_w < 1) inner_w = 1;
-    Style sized = self.set_width(inner_w);
+    // set_width means total outer width (border+pad+content); render() subtracts border internally.
+    Style sized = self.set_width(outer_width);
     String rendered = sized.render(input);
-    // Count newlines in the fully-rendered output (border lines already included).
     int lines = 1;
     for (sz i = 0; i < rendered.len; i++) {
         if (rendered[i] == '\n') lines++;
@@ -358,9 +385,13 @@ fn String Style.render(self, String input) {
     }
 
     // Height: add empty lines to reach target height, with vertical alignment.
+    // self.height means total outer height (like Go lipgloss v2), so subtract border.
+    int border_v = !border_is_empty ? 2 : 0;
+    int height_target = self.height - border_v;
+    if (height_target < 0) height_target = 0;
     int total_lines = (int)line_count + self.pad_top + self.pad_bottom;
-    if (self.height > 0 && total_lines < self.height) {
-        int extra = self.height - total_lines;
+    if (height_target > 0 && total_lines < height_target) {
+        int extra = height_target - total_lines;
         int top_extra = 0;
         int bottom_extra = 0;
         if (self.v_align == Position.CENTER) {
@@ -396,4 +427,18 @@ fn String Style.render(self, String input) {
         return self.border.wrap_with_color(rendered, self.border_fg);
     }
     return rendered.tcopy();
+}
+
+// render_content_only renders the styled content WITHOUT the border.
+// The caller's width/height should already account for border overhead.
+// Used by animated border rendering to separate content from border.
+fn String Style.render_content_only(self, String input) {
+    // Temporarily clear the border, render, then restore.
+    Style saved = self;
+    Style s = self;
+    s.border = {};
+    s.border_fg = {};
+    s.border_anim = BorderAnimation.NONE;
+    String result = s.render(input);
+    return result;
 }

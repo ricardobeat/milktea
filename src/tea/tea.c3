@@ -22,11 +22,13 @@ enum MouseMode : int {
 
 // Cursor represents a cursor on the terminal screen.
 // x, y are 0-indexed relative to the top-left corner of the View content.
+// color is an optional hex color string (e.g. "#ff6600"). Empty = terminal default.
 struct Cursor {
     int x;
     int y;
     CursorShape shape;
     bool blink;
+    String color;
 }
 
 // View represents a terminal view with content, optional cursor, and settings.
@@ -89,6 +91,12 @@ fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink)
     View v = self;
     v.has_cursor = true;
     v.cursor = { .x = x, .y = y, .shape = shape, .blink = blink };
+    return v;
+}
+
+fn View View.set_cursor_color(self, String color) {
+    View v = self;
+    v.cursor.color = color;
     return v;
 }
 
@@ -535,6 +543,7 @@ fn void? Program.run(Program* self) {
             disable_mouse();
             disable_focus();
             show_cursor();
+            write_stdout((char[])OSC_CURSOR_COLOR_RESET);
             write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
             // For inline (non-alt-screen) mode: move cursor below the last rendered
             // content so the shell prompt appears on a clean line after the app exits.
@@ -815,6 +824,12 @@ fn void Program.render_current_view(Program* self) {
                     int term_row = v.cursor.y + 1;
                     int term_col = v.cursor.x + 1;
                     cursor_seq.append_string(cursor_to(term_row, term_col));
+                    // Set cursor color via OSC 12
+                    if (v.cursor.color.len > 0) {
+                        cursor_seq.append_string(cursor_color_seq(v.cursor.color));
+                    } else {
+                        cursor_seq.append_string(OSC_CURSOR_COLOR_RESET);
+                    }
                     cursor_seq.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
                     if (v.cursor.blink) {
                         cursor_seq.append_string(SGR_CURSOR_BLINK_ON);

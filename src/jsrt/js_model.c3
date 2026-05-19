@@ -333,6 +333,7 @@ fn tea::View JsModel.view(&self) @dynamic {
 
     if (result != null && is_vnode(&self.rt, result)) {
         g_render_tick_ms = -1;
+        reset_focused_cursor();
         if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode start");
         render_vnode(&self.rt, result, screen, area);
         if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode done");
@@ -374,6 +375,17 @@ fn tea::View JsModel.view(&self) @dynamic {
 
     tea::View view = tea::new_alt_cell_view(screen.cells[0:screen.width * screen.height], screen.width, screen.height);
     view.mouse_mode = tea::MouseMode.MOUSE_MODE_CELL_MOTION;
+
+    int cx, cy;
+    String cursor_color;
+    bool suppress_native;
+    if (get_focused_cursor(&cx, &cy, &cursor_color, &suppress_native) && !suppress_native) {
+        view = view.set_cursor_shape(cx, cy, tea::CursorShape.CURSOR_BLOCK, true);
+        if (cursor_color.len > 0) {
+            view = view.set_cursor_color(cursor_color);
+        }
+    }
+
     screen.destroy();
     mem::free(screen);
     return view;

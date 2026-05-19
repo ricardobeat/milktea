@@ -121,9 +121,16 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 
 		char w = 1;
 		if (cp >= 0x2E80) w = 2; // CJK / wide range heuristic
+		// Emoji (4-byte codepoints, U+1F300+) are also wide
+		if (cp >= 0x1F300u) w = 2;
 
 		Cell cell = new_cell(text[i : char_len], w, style);
 		self.set_cell(c, row, cell);
+		// Wide cell: write a blank placeholder at c+1 so the renderer
+		// doesn't output stale content in the second terminal column.
+		if (w == 2 && c + 1 < self.width) {
+			self.set_cell(c + 1, row, empty_cell());
+		}
 
 		c += w;
 		i += char_len;
@@ -280,12 +287,27 @@ fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Styl
 
 	while (i < text.len) {
 		// Check for ESC
-		if (text[i] == '\x1b' && i + 1 < text.len && text[i + 1] == '[') {
-			// Parse CSI sequence
+		if (text[i] == '\x1b') {
+			if (i + 1 >= text.len) { i++; break; }
+
+			if (text[i + 1] == ']') {
+				// OSC sequence: ESC ] ... ST  (ST = ESC \ or BEL)
+				i += 2;
+				while (i < text.len) {
+					if (text[i] == '\x07') { i++; break; } // BEL terminator
+					if (text[i] == '\x1b' && i + 1 < text.len && text[i + 1] == '\\') { i += 2; break; }
+					i++;
+				}
+				continue;
+			}
+
+			if (text[i + 1] != '[') { i += 2; continue; } // unknown ESC sequence — skip 2 bytes
+
+			// Parse CSI sequence: ESC [
 			i += 2; // skip ESC [
 			sz param_start = i;
-			// Collect parameter bytes (digits and semicolons)
-			while (i < text.len && ((text[i] >= '0' && text[i] <= '9') || text[i] == ';')) {
+			// Collect parameter bytes (digits, semicolons, colon)
+			while (i < text.len && ((text[i] >= '0' && text[i] <= '9') || text[i] == ';' || text[i] == ':')) {
 				i++;
 			}
 			String params = text[param_start : i - param_start];
@@ -358,10 +380,16 @@ fn void ScreenBuffer.render_ansi_string(&self, sz col, sz row, String text, Styl
 
 		char w = 1;
 		if (cp >= 0x2E80) w = 2; // CJK / wide range heuristic
+		if (cp >= 0x1F300u) w = 2; // emoji (4-byte, U+1F300+)
 
 		if (c < max_col) {
 			Cell cell = new_cell(text[i : char_len], w, style);
 			self.set_cell(c, r, cell);
+			// Wide cell: blank the second terminal column so stale content
+			// in the next cell slot isn't emitted by the diff renderer.
+			if (w == 2 && c + 1 < max_col) {
+				self.set_cell(c + 1, r, empty_cell());
+			}
 		}
 		c += w;
 		i += char_len;

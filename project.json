@@ -271,6 +271,12 @@
       "linked-libraries": ["sqlite3"],
       "linker-search-paths": ["/opt/homebrew/lib"]
     },
+    "cursors": {
+      "type": "executable",
+      "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "examples/cursors/**"],
+      "c-sources": ["src/tea/tty_winsize.c"],
+      "opt": "O0"
+    },
     "inputbox": {
       "type": "executable",
       "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "examples/inputbox/**"],

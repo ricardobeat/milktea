@@ -296,13 +296,21 @@ tea.run({
       return parts;
     });
 
+    const loading = this.llm.loading;
+
     return h(
       "stack",
       {},
       header_box,
       h(
         "box",
-        { border: "rounded", borderColor: output_fg, pad: 2 },
+        {
+          border: "rounded",
+          borderColor: output_fg,
+          pad: 2,
+          borderAnimation: loading ? "rainbow" : undefined,
+          borderAnimationDuration: 3000,
+        },
         h(
           "viewport",
           { id: "output" },
@@ -327,6 +335,8 @@ tea.run({
         height: 1,
         prompt: "> ",
         focused: input_focused,
+        drawCursor: (x, y, blink) => blink ? "🔥" : null,
+        cursorInterval: 400,
       }),
       unfocused
         ? h("text", { fg: "#444444", fit: true }, `${GRAY}[esc]${RESET} quit  ${GRAY}[tab]${RESET} focus`)

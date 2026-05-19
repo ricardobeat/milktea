@@ -93,8 +93,8 @@ fn tea::View Model.view(&self) @dynamic {
         .foreground(lipgloss::color_hex("#ffff00"))
         .set_border(lipgloss::rounded_border())
         .padding(0, 1, 0, 1)
-        .set_width(rects[2].w - 2)   // subtract border (1 each side)
-        .set_height(rects[2].h - 2); // subtract border (1 each side)
+        .set_width(rects[2].w)
+        .set_height(rects[2].h);
     String inp_content = string::tformat("> %s█", self.input.str_view());
     String inp_str = inp_style.render(inp_content);
     screen.render_ansi_string((sz)rects[2].x, (sz)rects[2].y, inp_str, xray::default_style(), (sz)(rects[2].y + rects[2].h));
