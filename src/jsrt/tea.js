@@ -192,4 +192,16 @@ globalThis.tea = {
   viewportScrollToBottom(id) {
     if (typeof viewportScrollToBottom === "function") viewportScrollToBottom(id);
   },
+  viewportScrollUp(id) {
+    if (typeof viewportScrollUp === "function") viewportScrollUp(id);
+  },
+  viewportScrollDown(id) {
+    if (typeof viewportScrollDown === "function") viewportScrollDown(id);
+  },
+  viewportPageUp(id) {
+    if (typeof viewportPageUp === "function") viewportPageUp(id);
+  },
+  viewportPageDown(id) {
+    if (typeof viewportPageDown === "function") viewportPageDown(id);
+  },
 };

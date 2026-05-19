@@ -114,7 +114,42 @@ fn int Viewport.view_line_end(&self) {
     return end;
 }
 
-// scrollbar returns a vertical scrollbar indicator string.
+// handle_mouse processes mouse scroll wheel events.
+// Recognizes "wheel_up"/"wheel_down" buttons (new) and legacy "left"/"middle" on motion.
+// Returns true if the event was consumed.
+fn bool Viewport.handle_mouse(&self, String button, String action) {
+    if (!self.mouse_wheel_enabled) return false;
+    // New wheel button names — work on press
+    if (button == "wheel_up") {
+        self.scroll_up();
+        return true;
+    }
+    if (button == "wheel_down") {
+        self.scroll_down();
+        return true;
+    }
+    // Legacy fallback: "left" on motion = scroll up, "middle" on motion = scroll down
+    if (action == "motion") {
+        if (button == "left") {
+            self.scroll_up();
+            return true;
+        }
+        if (button == "middle") {
+            self.scroll_down();
+            return true;
+        }
+    }
+    return false;
+}
+
+// scroll_by scrolls by the given number of lines (negative = up, positive = down).
+fn void Viewport.scroll_by(&self, int lines) {
+    if (lines < 0) {
+        for (int i = 0; i < -lines; i++) self.scroll_up();
+    } else {
+        for (int i = 0; i < lines; i++) self.scroll_down();
+    }
+}
 fn String Viewport.scrollbar(&self) {
     if (self.total_lines <= self.height) return "";
 

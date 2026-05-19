@@ -1379,6 +1379,10 @@ extern void*         jsrt__viewport_get_ptr(const char* id);
 extern void          jsrt__viewport_handle_key_ptr(void* vp_ptr, int code, int ctrl, int alt, int shift);
 extern void          jsrt__viewport_scroll_to_bottom_ptr(void* vp_ptr);
 extern int           jsrt__viewport_offset_ptr(void* vp_ptr);
+extern void          jsrt__viewport_scroll_up_ptr(void* vp_ptr);
+extern void          jsrt__viewport_scroll_down_ptr(void* vp_ptr);
+extern void          jsrt__viewport_page_up_ptr(void* vp_ptr);
+extern void          jsrt__viewport_page_down_ptr(void* vp_ptr);
 
 static int _parse_hex_byte(const char* s) {
     int hi, lo;
@@ -1571,6 +1575,52 @@ static JSValue _js_textarea_get_cursor(JSContext* ctx, JSValueConst this_val, in
     return obj;
 }
 
+/* ── viewport scroll JS bridge functions ────────────────────────────────── */
+
+static JSValue _js_viewport_scroll_up(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (vp) jsrt__viewport_scroll_up_ptr(vp);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_viewport_scroll_down(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (vp) jsrt__viewport_scroll_down_ptr(vp);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_viewport_page_up(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (vp) jsrt__viewport_page_up_ptr(vp);
+    return JS_UNDEFINED;
+}
+
+static JSValue _js_viewport_page_down(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_UNDEFINED;
+    const char* id = JS_ToCString(ctx, argv[0]);
+    if (!id) return JS_EXCEPTION;
+    void* vp = jsrt__viewport_get_ptr(id);
+    JS_FreeCString(ctx, id);
+    if (vp) jsrt__viewport_page_down_ptr(vp);
+    return JS_UNDEFINED;
+}
+
 void jsrt_register_async_globals(void* ctx) {
     if (!ctx) return;
     JSContext* c = (JSContext*)ctx;
@@ -1588,5 +1638,9 @@ void jsrt_register_async_globals(void* ctx) {
     JS_SetPropertyStr(c, global, "textareaGetCursor",  JS_NewCFunction(c, _js_textarea_get_cursor, "textareaGetCursor",  1));
     JS_SetPropertyStr(c, global, "viewportUpdate",         JS_NewCFunction(c, _js_viewport_update,         "viewportUpdate",         2));
     JS_SetPropertyStr(c, global, "viewportScrollToBottom", JS_NewCFunction(c, _js_viewport_scroll_to_bottom, "viewportScrollToBottom", 1));
+    JS_SetPropertyStr(c, global, "viewportScrollUp",       JS_NewCFunction(c, _js_viewport_scroll_up,       "viewportScrollUp",       1));
+    JS_SetPropertyStr(c, global, "viewportScrollDown",     JS_NewCFunction(c, _js_viewport_scroll_down,     "viewportScrollDown",     1));
+    JS_SetPropertyStr(c, global, "viewportPageUp",         JS_NewCFunction(c, _js_viewport_page_up,         "viewportPageUp",         1));
+    JS_SetPropertyStr(c, global, "viewportPageDown",       JS_NewCFunction(c, _js_viewport_page_down,       "viewportPageDown",       1));
     JS_FreeValue(c, global);
 }

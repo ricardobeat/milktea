@@ -12,8 +12,16 @@
     "jsrt": {
       "type": "executable",
       "sources": ["src/tea/**", "src/lipgloss/**", "src/xray/**", "src/pearls/**", "src/jsrt/**", "examples/jsrt/**"],
-      "c-sources": ["src/tea/tty_winsize.c", "src/jsrt/jsrt.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
-      "opt": "O0",
+      "c-sources": [
+        "src/tea/tty_winsize.c",
+        "src/jsrt/jsrt.c",
+        "vendor/quickjs/quickjs.c",
+        "vendor/quickjs/cutils.c",
+        "vendor/quickjs/libregexp.c",
+        "vendor/quickjs/libunicode.c",
+        "vendor/quickjs/dtoa.c"
+      ],
+      "opt": "Os",
       "linked-libraries": ["curl"]
     },
     "counter": {

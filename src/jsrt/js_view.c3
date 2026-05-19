@@ -48,6 +48,11 @@ fn void textarea_reset() {
 struct ViewportEntry {
     char[64] id_buf;
     pearls::Viewport vp;
+    int area_x;
+    int area_y;
+    int area_w;
+    int area_h;
+    bool has_area;
 }
 
 ViewportEntry[16] g_viewports;
@@ -68,13 +73,27 @@ fn pearls::Viewport* viewport_get_or_create(String id) {
     sz copy_len = id.len < 63 ? id.len : 63;
     e.id_buf[:copy_len] = id[:copy_len];
     e.id_buf[copy_len] = 0;
-    e.vp = pearls::new_viewport(80, 24);
+    e.vp = pearls::new_viewport(80, 24).with_mouse_wheel();
     g_viewport_count++;
     return &e.vp;
 }
 
 fn void* viewport_get_ptr(ZString id) @export {
     return viewport_get(id.str_view());
+}
+
+// viewport_dispatch_mouse sends a mouse scroll event to the viewport at (row, col).
+// Returns true if a viewport consumed the event.
+fn bool viewport_dispatch_mouse(int row, int col, String button, String action) @export {
+    for (int i = 0; i < g_viewport_count; i++) {
+        ViewportEntry* e = &g_viewports[i];
+        if (!e.has_area) continue;
+        if (row >= e.area_y && row < e.area_y + e.area_h &&
+            col >= e.area_x && col < e.area_x + e.area_w) {
+            if (e.vp.handle_mouse(button, action)) return true;
+        }
+    }
+    return false;
 }
 
 fn void viewport_handle_key_ptr(void* vp_ptr, int code, int ctrl, int alt, int shift) @export {
@@ -96,6 +115,26 @@ fn void viewport_scroll_to_bottom_ptr(void* vp_ptr) @export {
 fn int viewport_offset_ptr(void* vp_ptr) @export {
     if (!vp_ptr) return 0;
     return ((pearls::Viewport*)vp_ptr).offset;
+}
+
+fn void viewport_scroll_up_ptr(void* vp_ptr) @export {
+    if (!vp_ptr) return;
+    ((pearls::Viewport*)vp_ptr).scroll_up();
+}
+
+fn void viewport_scroll_down_ptr(void* vp_ptr) @export {
+    if (!vp_ptr) return;
+    ((pearls::Viewport*)vp_ptr).scroll_down();
+}
+
+fn void viewport_page_up_ptr(void* vp_ptr) @export {
+    if (!vp_ptr) return;
+    ((pearls::Viewport*)vp_ptr).page_up();
+}
+
+fn void viewport_page_down_ptr(void* vp_ptr) @export {
+    if (!vp_ptr) return;
+    ((pearls::Viewport*)vp_ptr).page_down();
 }
 
 // ── C-callable wrappers for the textarea registry ──────────────────────────
@@ -664,6 +703,18 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
         pearls::Viewport* vp = viewport_get_or_create(id);
         if (vp) {
+            // Store the rendered area for mouse event dispatch
+            for (int vi = 0; vi < g_viewport_count; vi++) {
+                if (&g_viewports[vi].vp == vp) {
+                    g_viewports[vi].area_x = area.x;
+                    g_viewports[vi].area_y = area.y;
+                    g_viewports[vi].area_w = area.w;
+                    g_viewports[vi].area_h = area.h;
+                    g_viewports[vi].has_area = true;
+                    break;
+                }
+            }
+
             bool has_border = props && !rt.is_null(props) && get_prop_string(rt, props, "border").len > 0;
             int border_pad = has_border ? 2 : 0;
             int pad   = props ? get_prop_int(rt, props, "pad",   0) : 0;
@@ -768,6 +819,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                 pos++;
             }
             for (int r = start; r < end && r < text_line_count; r++) {
+                if (pos > content.len) break;
                 sz line_end = pos;
                 while (line_end < content.len && content[line_end] != '\n') line_end++;
                 String line = content[pos:line_end - pos];
@@ -779,7 +831,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
                 line_style = line_style.set_width(inner_w);
                 String rendered_line = line_style.render(line);
                 screen.render_ansi_string((sz)inner.x, (sz)(inner.y + r - start), rendered_line, xray::default_style(), 0, (sz)(inner.x + inner_w));
-                pos = line_end + 1;
+                pos = line_end < content.len ? line_end + 1 : content.len + 1;
             }
 
             // Render vnode children that fall within the visible range (appended after text lines)

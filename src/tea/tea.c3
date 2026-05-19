@@ -13,6 +13,13 @@ enum CursorShape : int {
     CURSOR_BAR,
 }
 
+// Mouse mode — controls whether the terminal sends mouse events.
+enum MouseMode : int {
+    MOUSE_MODE_NONE,
+    MOUSE_MODE_CELL_MOTION,
+    MOUSE_MODE_ALL_MOTION,
+}
+
 // Cursor represents a cursor on the terminal screen.
 // x, y are 0-indexed relative to the top-left corner of the View content.
 struct Cursor {
@@ -29,6 +36,8 @@ struct View {
     Cursor cursor;
     bool has_cursor;
     bool alt_screen;
+    // Mouse mode — controls whether the terminal sends mouse events.
+    MouseMode mouse_mode;
     // Optional direct cell grid — bypasses string parsing.
     // When cells is non-null, the renderer writes cells directly into
     // the screen buffer, skipping ANSI string → CSI parse → cells.
@@ -198,7 +207,9 @@ struct Program {
     int batch_count;
     TimerEntry[MAX_TIMERS] timers;
     bool in_alt_screen;
-    char[32] pending;
+    MouseMode mouse_mode;
+    bool debug;
+    char[512] pending;
     sz pending_len;
 
     // Test / injection support
@@ -584,7 +595,7 @@ fn void? Program.run(Program* self) {
     // Render initial view
     self.render_current_view();
 
-    char[64] tmp;
+    char[256] tmp;
 
     while (true) {
         // Fire expired timers
@@ -633,9 +644,26 @@ fn void? Program.run(Program* self) {
             }
         }
 
+        bool stuck = false;
         while (self.pending_len > 0) {
             ParseResult pr = parse_key(self.pending[:self.pending_len]);
-            if (pr.consumed == 0) break;
+            if (pr.consumed == 0) {
+                stuck = true;
+                break;
+            }
+
+            // Log raw input bytes and parsed result to stderr (TEA_DEBUG=1)
+            if (self.debug) {
+                io::eprintfn("INPUT consumed=%d kind=%d key=%d rune='%c' mouse_btn=%d mouse_act=%d",
+                    (int)pr.consumed, (int)pr.kind,
+                    (int)pr.key.code, pr.key.rune,
+                    (int)pr.mouse.button, (int)pr.mouse.action);
+                io::eprintf("  raw:");
+                for (sz bi = 0; bi < pr.consumed && bi < self.pending_len; bi++) {
+                    io::eprintf(" %02x", (int)self.pending[bi]);
+                }
+                io::eprintf("\n");
+            }
 
             for (sz i = pr.consumed; i < self.pending_len; i++) {
                 self.pending[i - pr.consumed] = self.pending[i];
@@ -666,8 +694,10 @@ fn void? Program.run(Program* self) {
             self.render_current_view();
         }
 
+
+
         // Block until input arrives or the next timer fires — avoids busy-waiting.
-        if (!self.test_mode && self.pending_len == 0) {
+        if (!self.test_mode && (self.pending_len == 0 || stuck)) {
             sz wait_ms = 1000;
             now = time_ms();
             for (sz i = 0; i < MAX_TIMERS; i++) {
@@ -677,7 +707,11 @@ fn void? Program.run(Program* self) {
                     if (remaining < wait_ms) wait_ms = remaining;
                 }
             }
-            if (wait_ms > 0) input_queue_wait(&g_input_queue, wait_ms);
+            // When stuck on incomplete data, cap wait to avoid long hangs
+            if (stuck && wait_ms > 100) wait_ms = 100;
+            if (wait_ms > 0) {
+                input_queue_wait(&g_input_queue, wait_ms);
+            }
         }
     }
 }
@@ -694,6 +728,15 @@ fn void Program.render_current_view(Program* self) {
         } else if (!v.alt_screen && self.in_alt_screen) {
             self.emit_sgr(SGR_ALT_OFF);
             self.in_alt_screen = false;
+        }
+        // Enable/disable mouse reporting when mouse_mode changes
+        if (v.mouse_mode != self.mouse_mode) {
+            if (v.mouse_mode == MOUSE_MODE_NONE) {
+                disable_mouse();
+            } else {
+                enable_mouse();
+            }
+            self.mouse_mode = v.mouse_mode;
         }
         if (self.test_mode) {
             if (self.output_buf != null) {

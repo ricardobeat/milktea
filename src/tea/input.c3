@@ -51,6 +51,8 @@ enum MouseButton : int {
     MOUSE_MIDDLE,
     MOUSE_RIGHT,
     MOUSE_NONE,
+    MOUSE_WHEEL_UP,
+    MOUSE_WHEEL_DOWN,
 }
 
 struct MouseMsg {
@@ -132,7 +134,13 @@ fn CSIParse parse_csi(char[] buf) {
             // Intermediate bytes — skip
             pos++;
         } else {
-            // Unexpected byte
+            // Unexpected byte — skip it to make progress.
+            // But don't consume ESC (0x1b): it starts the next escape sequence.
+            if (ch == 0x1b) {
+                csi.consumed = pos;
+                return csi;
+            }
+            csi.consumed = pos + 1;
             return csi;
         }
     }
@@ -207,13 +215,20 @@ fn ParseResult parse_key(char[] buf) {
                 int cy = (int)(buf[5]) - 32;
 
                 MouseButton button = MOUSE_NONE;
-                if ((cb & 3) == 0) { button = MOUSE_LEFT; }
-                else if ((cb & 3) == 1) { button = MOUSE_MIDDLE; }
-                else if ((cb & 3) == 2) { button = MOUSE_RIGHT; }
-                else { button = MOUSE_NONE; }
+                // Wheel buttons (4-5) must be checked before the low-2-bits mask
+                if (cb == 4) { button = MOUSE_WHEEL_UP; }
+                else if (cb == 5) { button = MOUSE_WHEEL_DOWN; }
+                else {
+                    if ((cb & 3) == 0) { button = MOUSE_LEFT; }
+                    else if ((cb & 3) == 1) { button = MOUSE_MIDDLE; }
+                    else if ((cb & 3) == 2) { button = MOUSE_RIGHT; }
+                    else { button = MOUSE_NONE; }
+                }
 
                 MouseAction action = MOUSE_PRESS;
                 if ((cb & 64) != 0) action = MOUSE_MOTION;  // motion event
+                // Wheel events are always press
+                if (cb == 4 || cb == 5) action = MOUSE_PRESS;
 
                 bool shift = (cb & 4) != 0;
                 bool alt = (cb & 8) != 0;
@@ -224,9 +239,12 @@ fn ParseResult parse_key(char[] buf) {
 
             CSIParse csi = parse_csi(buf[2..]);
             if (!csi.valid) {
-                // Incomplete sequence — need more data
-                if (csi.consumed == 0) return make_key(NONE, 0, false, false, false, 0);
-                return make_key(NONE, 0, false, false, false, 0);
+                if (csi.consumed == 0) {
+                    // Incomplete sequence — need more data
+                    return make_key(NONE, 0, false, false, false, 0);
+                }
+                // Invalid or truncated CSI — consume and discard
+                return make_key(NONE, 0, false, false, false, 2 + csi.consumed);
             }
 
             sz total = 2 + csi.consumed; // ESC [ + CSI data
@@ -240,18 +258,29 @@ fn ParseResult parse_key(char[] buf) {
                     int row = csi.params[2];
 
                     MouseButton button = MOUSE_NONE;
-                    if ((btn_code & 3) == 0) { button = MOUSE_LEFT; }
-                    else if ((btn_code & 3) == 1) { button = MOUSE_MIDDLE; }
-                    else if ((btn_code & 3) == 2) { button = MOUSE_RIGHT; }
-                    else { button = MOUSE_NONE; }
+                    // Wheel buttons (64-67) must be checked before the low-2-bits mask
+                    if (btn_code >= 64 && btn_code <= 67) {
+                        switch (btn_code - 64) {
+                            case 0: button = MOUSE_WHEEL_UP;
+                            case 1: button = MOUSE_WHEEL_DOWN;
+                            default: button = MOUSE_NONE;
+                        }
+                    } else {
+                        if ((btn_code & 3) == 0) { button = MOUSE_LEFT; }
+                        else if ((btn_code & 3) == 1) { button = MOUSE_MIDDLE; }
+                        else if ((btn_code & 3) == 2) { button = MOUSE_RIGHT; }
+                        else { button = MOUSE_NONE; }
+                    }
 
-                    // Button 3 with no motion/release = no button (scroll or other)
+                    // Button 3 with no motion/release = no button (drag or other)
                     if ((btn_code & 3) == 3 && (btn_code & 32) == 0 && fb == 'M') {
                         button = MOUSE_NONE;
                     }
 
                     MouseAction action = (fb == 'M') ? MOUSE_PRESS : MOUSE_RELEASE;
                     if ((btn_code & 32) != 0) action = MOUSE_MOTION;
+                    // Wheel events are always press (no release in SGR for wheel)
+                    if (btn_code >= 64 && btn_code <= 67) action = MOUSE_PRESS;
 
                     bool shift = (btn_code & 4) != 0;
                     bool alt = (btn_code & 8) != 0;
