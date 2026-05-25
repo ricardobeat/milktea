@@ -59,6 +59,7 @@ struct Pixel {
 // ── GLB geometry ─────────────────────────────────────────────────────────────
 
 const int MAX_TRIANGLES = 65536;
+const int MAX_MATERIALS = 128;
 
 
 struct GlbModel {
@@ -158,6 +159,42 @@ fn GlbModel*? load_glb(String path) {
 
 	stb_json::Cursor accessors = stb_json::stbj_move_cursor_name(&root, "accessors");
 	stb_json::Cursor bvs       = stb_json::stbj_move_cursor_name(&root, "bufferViews");
+
+	// ── Parse materials ──────────────────────────────────────────────────
+
+	char[MAX_MATERIALS * 3] mat_color; // r,g,b per material (0-255)
+	char[MAX_MATERIALS] mat_present;
+	for (int mi = 0; mi < MAX_MATERIALS; mi++) mat_present[mi] = (char)0;
+
+	stb_json::Cursor materials = stb_json::stbj_move_cursor_name(&root, "materials");
+	int mat_count = stb_json::stbj_count_values(&materials);
+	if (mat_count > MAX_MATERIALS) mat_count = MAX_MATERIALS;
+	for (int mi = 0; mi < mat_count; mi++) {
+		stb_json::Cursor mat  = stb_json::stbj_move_cursor_index(&materials, mi);
+		stb_json::Cursor pbr  = stb_json::stbj_move_cursor_name(&mat, "pbrMetallicRoughness");
+		if (stb_json::stbj_any_error(&pbr) != 0) {
+			mat_color[mi * 3]     = (char)255;
+			mat_color[mi * 3 + 1] = (char)255;
+			mat_color[mi * 3 + 2] = (char)255;
+			mat_present[mi] = (char)1;
+			continue;
+		}
+		stb_json::Cursor bcf  = stb_json::stbj_move_cursor_name(&pbr, "baseColorFactor");
+		if (stb_json::stbj_any_error(&bcf) != 0) {
+			mat_color[mi * 3]     = (char)255;
+			mat_color[mi * 3 + 1] = (char)255;
+			mat_color[mi * 3 + 2] = (char)255;
+			mat_present[mi] = (char)1;
+			continue;
+		}
+		double r = stb_json::stbj_read_double_index(&bcf, 0, 1.0);
+		double g = stb_json::stbj_read_double_index(&bcf, 1, 1.0);
+		double b = stb_json::stbj_read_double_index(&bcf, 2, 1.0);
+		mat_color[mi * 3]     = (char)(r * 255.0);
+		mat_color[mi * 3 + 1] = (char)(g * 255.0);
+		mat_color[mi * 3 + 2] = (char)(b * 255.0);
+		mat_present[mi] = (char)1;
+	}
 
 	// ── First pass: compute global bounding box from all primitives ─────────
 
@@ -260,6 +297,8 @@ fn GlbModel*? load_glb(String path) {
 				uv_stride = (sz)(uv_bv.byte_stride > 0 ? uv_bv.byte_stride : 8);
 			}
 
+			int mat_idx    = stb_json::stbj_read_int_name(&prim, "material", -1);
+
 			int tri_count = idx_acc.count / 3;
 			for (int ti = 0; ti < tri_count; ti++) {
 				if (model.triangle_count >= MAX_TRIANGLES) break;
@@ -307,7 +346,11 @@ fn GlbModel*? load_glb(String path) {
 				char cr = (char)180;
 				char cg = (char)180;
 				char cb = (char)200;
-				if (has_uv) {
+				if (mat_idx >= 0 && mat_idx < MAX_MATERIALS && mat_present[mat_idx] != 0) {
+					cr = mat_color[mat_idx * 3];
+					cg = mat_color[mat_idx * 3 + 1];
+					cb = mat_color[mat_idx * 3 + 2];
+				} else if (has_uv) {
 					float u     = read_f32(bin, uv_base + (sz)i0 * uv_stride);
 					int pal_idx = (int)(u * 255.0f + 0.5f);
 					if (pal_idx < 0) pal_idx = 0;
