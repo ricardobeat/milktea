@@ -136,6 +136,13 @@
       "opt": "Os",
       "strip-unused": true
     },
+    "doom-fire-donut": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "examples/glb/glb.c3", "examples/doom-fire-donut/**", "examples/glb-viewer/stb_json.c3"],
+      "c-sources": ["milktea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
     "textinputs": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "examples/textinputs/**"],
@@ -243,7 +250,7 @@
     },
     "glb-viewer": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/glb-viewer/**"],
+      "sources": ["milktea/**", "glaze/**", "examples/glb/glb.c3", "examples/glb-viewer/**"],
       "c-sources": ["milktea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c"],
       "opt": "Os",
       "strip-unused": true
