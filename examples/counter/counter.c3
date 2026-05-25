@@ -1,48 +1,48 @@
 module counter;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 
 struct Counter {
 	int value;
 }
 
-fn tea::Cmd Counter.init(Counter* self) @dynamic {
+fn milktea::Cmd Counter.init(Counter* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd Counter.update(Counter* self, tea::Msg msg) @dynamic {
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case tea::KeyCode.UP:
+		case milktea::KeyCode.UP:
 			self.value++;
-		case tea::KeyCode.DOWN:
+		case milktea::KeyCode.DOWN:
 			self.value--;
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View Counter.view(Counter* self) @dynamic {
-	lipgloss::Style box = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+fn milktea::View Counter.view(Counter* self) @dynamic {
+	glaze::Style box = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(1, 3, 1, 3)
-		.set_border(lipgloss::rounded_border());
+		.set_border(glaze::rounded_border());
 
 	String label   = string::tformat("Counter: %d", self.value);
 	String hint    = "\nUse ↑↓ to change, q to quit";
 	String content = string::tformat("%s%s", label, hint);
-	return tea::new_view(box.render(content));
+	return milktea::new_view(box.render(content));
 }
 
 fn int main() {
 	Counter c = { };
-	if (catch err = tea::@run_program(&c)) {
+	if (catch err = milktea::@run_program(&c)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

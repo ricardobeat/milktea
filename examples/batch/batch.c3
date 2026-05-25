@@ -1,7 +1,7 @@
 module batch;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -18,99 +18,99 @@ struct Model {
 	int height;
 }
 
-fn tea::Msg on_spin() {
-	return { .kind = tea::MsgKind.USER, .tag = MSG_SPIN };
+fn milktea::Msg on_spin() {
+	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
 }
 
-fn tea::Msg on_tick() {
-	return { .kind = tea::MsgKind.USER, .tag = MSG_TICK };
+fn milktea::Msg on_tick() {
+	return { .kind = milktea::MsgKind.USER, .tag = MSG_TICK };
 }
 
-fn tea::Msg on_step() {
-	return { .kind = tea::MsgKind.USER, .tag = MSG_STEP };
+fn milktea::Msg on_step() {
+	return { .kind = milktea::MsgKind.USER, .tag = MSG_STEP };
 }
 
-fn tea::Cmd Model.init(Model* self) @dynamic {
+fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.spin_frame = 0;
 	self.seconds = 0;
 	self.step = 0;
 	// Start three independent timers using batch
-	tea::Cmd spin_cmd = tea::tick(80, &on_spin);
-	tea::Cmd tick_cmd = tea::tick(1000, &on_tick);
-	tea::Cmd step_cmd = tea::tick(500, &on_step);
-	tea::Cmd[3] cmds  = { spin_cmd, tick_cmd, step_cmd };
-	return tea::batch(cmds[..]);
+	milktea::Cmd spin_cmd = milktea::tick(80, &on_spin);
+	milktea::Cmd tick_cmd = milktea::tick(1000, &on_tick);
+	milktea::Cmd step_cmd = milktea::tick(500, &on_step);
+	milktea::Cmd[3] cmds  = { spin_cmd, tick_cmd, step_cmd };
+	return milktea::batch(cmds[..]);
 }
 
-fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_SPIN) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
 		self.spin_frame++;
-		return tea::tick(80, &on_spin);
+		return milktea::tick(80, &on_spin);
 	}
 
-	if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_TICK) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TICK) {
 		self.seconds++;
-		return tea::tick(1000, &on_tick);
+		return milktea::tick(1000, &on_tick);
 	}
 
-	if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_STEP) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_STEP) {
 		self.step++;
-		return tea::tick(500, &on_step);
+		return milktea::tick(500, &on_step);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View Model.view(Model* self) @dynamic {
+fn milktea::View Model.view(Model* self) @dynamic {
 	String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
 	String spin      = frames[self.spin_frame % 8];
 
-	lipgloss::Style spin_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style spin_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(lipgloss::rounded_border());
+		.set_border(glaze::rounded_border());
 
-	lipgloss::Style timer_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true)
+	glaze::Style timer_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(lipgloss::rounded_border());
+		.set_border(glaze::rounded_border());
 
-	lipgloss::Style step_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff88")).set_bold(true)
+	glaze::Style step_style = glaze::new_style().foreground(glaze::color_hex("#00ff88")).set_bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(lipgloss::rounded_border());
+		.set_border(glaze::rounded_border());
 
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	String spin_view  = spin_style.render(string::tformat("%s Spinning...", spin));
 	String timer_view = timer_style.render(string::tformat("Timer\n%02d seconds", self.seconds));
 	String step_view  = step_style.render(string::tformat("Steps\n%d half-seconds", self.step));
 
-	String top_row   = lipgloss::join_horizontal(spin_view, timer_view, 2);
-	String main_view = lipgloss::join_vertical(lipgloss::Position.LEFT, top_row, step_view);
+	String top_row   = glaze::join_horizontal(spin_view, timer_view, 2);
+	String main_view = glaze::join_vertical(glaze::Position.LEFT, top_row, step_view);
 	DString out      = dstring::temp();
 	out.append_string(main_view);
 	out.append_char('\n');
 	out.append_string(hint.render("q to quit"));
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

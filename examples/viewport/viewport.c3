@@ -1,8 +1,8 @@
 module viewport;
 
-import tea;
-import lipgloss;
-import pearls;
+import milktea;
+import glaze;
+import boba;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -10,17 +10,17 @@ import std::core::dstring;
 const int TOTAL_LINES = 80;
 
 struct ViewportModel {
-	pearls::Viewport vp;
+	boba::Viewport vp;
 }
 
-fn tea::Cmd ViewportModel.init(ViewportModel* self) @dynamic {
-	self.vp = pearls::new_viewport(80, 10);
+fn milktea::Cmd ViewportModel.init(ViewportModel* self) @dynamic {
+	self.vp = boba::new_viewport(80, 10);
 	self.vp.set_content(TOTAL_LINES);
 	return null;
 }
 
-fn tea::Cmd ViewportModel.update(ViewportModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd ViewportModel.update(ViewportModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.vp.width = msg.window_size.width;
 		self.vp.height = msg.window_size.height - 6;
 		if (self.vp.height < 3) self.vp.height = 3;
@@ -28,20 +28,20 @@ fn tea::Cmd ViewportModel.update(ViewportModel* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	if (self.vp.handle_key(k)) return null;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') self.vp.scroll_down();
 			if (k.rune == 'k') self.vp.scroll_up();
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
@@ -63,14 +63,14 @@ fn String lorem_line(int i) {
 	return fragments[i % 10];
 }
 
-fn tea::View ViewportModel.view(ViewportModel* self) @dynamic {
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(0, 2, 0, 0);
-	lipgloss::Style line_style = lipgloss::new_style().foreground(lipgloss::color_hex("#cccccc"));
-	lipgloss::Style dim_style  = lipgloss::new_style().foreground(lipgloss::color_hex("#444444"));
-	lipgloss::Style highlight_style = lipgloss::new_style().background(lipgloss::color_hex("#333355"))
-		.foreground(lipgloss::color_hex("#ffffff"));
-	lipgloss::Style box_style = lipgloss::new_style().set_border(lipgloss::rounded_border()).padding(0, 1, 0, 1);
+	glaze::Style line_style = glaze::new_style().foreground(glaze::color_hex("#cccccc"));
+	glaze::Style dim_style  = glaze::new_style().foreground(glaze::color_hex("#444444"));
+	glaze::Style highlight_style = glaze::new_style().background(glaze::color_hex("#333355"))
+		.foreground(glaze::color_hex("#ffffff"));
+	glaze::Style box_style = glaze::new_style().set_border(glaze::rounded_border()).padding(0, 1, 0, 1);
 
 	DString out = dstring::temp();
 	out.append_string(title_style.render("Scrollable Viewport"));
@@ -99,13 +99,13 @@ fn tea::View ViewportModel.view(ViewportModel* self) @dynamic {
 	out.append_string(box_style.render(body.str_view()));
 
 	int pct = self.vp.scroll_percent();
-	String bar = lipgloss::progress_bar(
+	String bar = glaze::progress_bar(
 		20,
 		pct,
 		"█",
 		"░",
-		lipgloss::color_hex("#00d7ff"),
-		lipgloss::color_hex("#333333")
+		glaze::color_hex("#00d7ff"),
+		glaze::color_hex("#333333")
 	);
 	out.append_char('\n');
 	out.append_string(
@@ -114,12 +114,12 @@ fn tea::View ViewportModel.view(ViewportModel* self) @dynamic {
 		)
 	);
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	ViewportModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

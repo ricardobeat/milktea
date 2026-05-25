@@ -1,18 +1,18 @@
 module list_example;
 
-import tea;
-import lipgloss;
-import pearls;
+import milktea;
+import glaze;
+import boba;
 import std::io;
 import std::core::string;
 import std::core::dstring;
 
 struct ListModel {
-	pearls::List lst;
+	boba::List lst;
 }
 
-fn tea::Cmd ListModel.init(ListModel* self) @dynamic {
-	self.lst = pearls::new_list();
+fn milktea::Cmd ListModel.init(ListModel* self) @dynamic {
+	self.lst = boba::new_list();
 	self.lst.add_item("Buy milk", "");
 	self.lst.add_item("Clean the house", "");
 	self.lst.add_item("Write C3 code", "");
@@ -31,32 +31,32 @@ fn tea::Cmd ListModel.init(ListModel* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd ListModel.update(ListModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd ListModel.update(ListModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.lst.set_size(msg.window_size.width, msg.window_size.height);
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	if (self.lst.handle_key(k)) return null;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View ListModel.view(ListModel* self) @dynamic {
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
-	lipgloss::Style hint_style  = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+fn milktea::View ListModel.view(ListModel* self) @dynamic {
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
+	glaze::Style hint_style  = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	out.append_string(title_style.render("Select an item:"));
@@ -65,12 +65,12 @@ fn tea::View ListModel.view(ListModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(hint_style.render("Up/Down navigate | Enter select | q quit"));
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	ListModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -1,6 +1,6 @@
 module oiia_player;
 
-import tea;
+import milktea;
 import xray;
 import stb_json;
 import stb_image;
@@ -528,7 +528,7 @@ fn void App.free_model(App* self) {
 
 // ── Tea callbacks ─────────────────────────────────────────────────────────────
 
-fn tea::Cmd App.init(App* self) @dynamic {
+fn milktea::Cmd App.init(App* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.frame = 0;
@@ -543,11 +543,11 @@ fn tea::Cmd App.init(App* self) @dynamic {
 	self.cam_yaw = 0.0f;
 	self.cam_pitch = 0.0f;
 	self.load_png();
-	return tea::tick();
+	return milktea::tick();
 }
 
-fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		if (self.model != null) {
@@ -565,7 +565,7 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
 
 		if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -583,16 +583,16 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 			self.cam_pz = -fwd_z * orbit_dist;
 		}
 
-		return tea::tick();
+		return milktea::tick();
 	}
 
-	if (msg.kind == tea::MsgKind.KEY) {
-		tea::KeyMsg k = msg.key;
-		if (k.code == tea::KeyCode.CTRL_C || (k.code == tea::KeyCode.RUNE && k.rune == 'q')) {
+	if (msg.kind == milktea::MsgKind.KEY) {
+		milktea::KeyMsg k = msg.key;
+		if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
 			if (self.sound_pid > 0) kill(self.sound_pid, 15);
 			if (self.img_data != null) stb_image::stbi_image_free(self.img_data);
 			self.free_model();
-			return tea::quit();
+			return milktea::quit();
 		}
 
 		// Any key or click transitions from SHOWING_IMAGE → PLAYING
@@ -603,8 +603,8 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 		}
 	}
 
-	if (msg.kind == tea::MsgKind.MOUSE && msg.mouse.action == tea::MouseAction.MOUSE_PRESS
-		&& msg.mouse.button == tea::MouseButton.MOUSE_LEFT) {
+	if (msg.kind == milktea::MsgKind.MOUSE && msg.mouse.action == milktea::MouseAction.MOUSE_PRESS
+		&& msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
 		if (self.mode == SHOWING_IMAGE) {
 			self.play_sound();
 			self.load_glb_model();
@@ -621,7 +621,7 @@ fn int clamp_color(int v) {
 	return v;
 }
 
-fn tea::View App.view(App* self) @dynamic {
+fn milktea::View App.view(App* self) @dynamic {
 	int w = self.width;
 	int h = self.height;
 	if (w < 2) w = 80;
@@ -667,7 +667,7 @@ fn tea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return tea::new_alt_cell_view(cells, (sz)w, (sz)h);
+		return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
 	}
 
 	if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -907,7 +907,7 @@ fn tea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return tea::new_alt_cell_view(self.model.cells, (sz)w, (sz)h);
+		return milktea::new_alt_cell_view(self.model.cells, (sz)w, (sz)h);
 	}
 
 	// Fallback: loading screen
@@ -924,20 +924,20 @@ fn tea::View App.view(App* self) @dynamic {
 			cells[(sz)(h / 2) * w + (sz)(start_x) + i] = xray::new_cell(msg[i:1], 1, txt_style);
 		}
 	}
-	return tea::new_alt_cell_view(cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn int main() {
 	App* app = mem::new(App);
-	tea::enable_mouse();
-	if (catch err = tea::@run_program(app)) {
-		tea::disable_mouse();
+	milktea::enable_mouse();
+	if (catch err = milktea::@run_program(app)) {
+		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;
 	}
-	tea::disable_mouse();
+	milktea::disable_mouse();
 	mem::free(app);
 	return 0;
 }

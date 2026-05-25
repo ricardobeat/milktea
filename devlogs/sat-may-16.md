@@ -17,7 +17,7 @@ The C3 doom-fire example was janky as the fire grew — frame drops, tearing, an
 
 ### Fixes Applied
 
-**Framework (`src/tea/tea.c3`):**
+**Framework (`milktea/milktea.c3`):**
 - Added cell-based rendering path to `View` struct (`cells`, `cells_width`, `cells_height`)
 - Added `new_cell_view()` and `new_alt_cell_view()` constructors
 - `render_current_view` now checks `v.cells.ptr != null` — if true, writes cells directly via `set_cell()`, skipping string→CSI→cells parsing
@@ -25,9 +25,9 @@ The C3 doom-fire example was janky as the fire grew — frame drops, tearing, an
 - Added `should_support_sync_output()` — checks env vars (TERM_PROGRAM, SSH_TTY, WT_SESSION, TMUX, STY) and sets `sync_supported = true` on the renderer at init
 - Added `tick_msg()` helper function
 - Added `CURSOR_BLOCK`, `CURSOR_UNDERLINE`, `CURSOR_BAR` constants
-- Made `tick()` have default params: `tick(delay_ms = 16, callback = &tick_msg)` — `tea::tick()` now just works
+- Made `tick()` have default params: `tick(delay_ms = 16, callback = &tick_msg)` — `milktea::tick()` now just works
 
-**Framework (`src/xray/color.c3`):**
+**Framework (`xray/color.c3`):**
 - Added `ANSI256` color kind
 - Added `color_256(int idx)` function for 256-color palette support
 - Updated `write_sgr_params` to emit `38;5;N` / `48;5;N` for ANSI256
@@ -36,12 +36,12 @@ The C3 doom-fire example was janky as the fire grew — frame drops, tearing, an
 - `doom-fire` — rewrote to use cell-based rendering, pre-built `fire_cells[26]` table, `rand() % 4`, palette updated for more orange/red
 - `space` — rewrote to use cell-based rendering, fixed color computation to match Go version: `((height-y)/height)^2` with random per-pixel offset
 - `splash` — rewrote to use cell-based rendering
-- `textinputs` — replaced raw `\x1b[38;2;R;G;Bm` with `lipgloss::new_style().foreground(...)`
-- `bounce` — replaced manual `╔═╗║╚╝` with `lipgloss::new_style().set_border(...)`, tick rate fixed to 30fps
+- `textinputs` — replaced raw `\x1b[38;2;R;G;Bm` with `glaze::new_style().foreground(...)`
+- `bounce` — replaced manual `╔═╗║╚╝` with `glaze::new_style().set_border(...)`, tick rate fixed to 30fps
 - `split-editors` — added placeholder "type something" with dim gray, line number display, highlight on focused editor
 - `chat` — eliminated per-wrap-iteration `DString temp()` allocation
-- All simple examples — removed `on_tick` boilerplate, using `tea::tick()` or `tea::tick(N)` directly
-- All tick examples — replaced `MSG_TICK = 1` constants with `tea::MsgKind.TICK` (new enum value)
+- All simple examples — removed `on_tick` boilerplate, using `milktea::tick()` or `milktea::tick(N)` directly
+- All tick examples — replaced `MSG_TICK = 1` constants with `milktea::MsgKind.TICK` (new enum value)
 
 ### API Changes
 
@@ -71,7 +71,7 @@ struct View {
 }
 ```
 
-**`color_256()`** — new in lipgloss:
+**`color_256()`** — new in glaze:
 ```c3
 fn Color color_256(int idx)  // xterm-256 palette (0-255)
 ```

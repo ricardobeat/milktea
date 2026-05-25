@@ -1,6 +1,6 @@
 module voxel_renderer_backup @if(false);
 
-import tea;
+import donut;
 import xray;
 import std::io;
 import std::math;
@@ -79,7 +79,7 @@ fn bool grid_set(int x, int y) {
     return false;
 }
 
-fn tea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
+fn donut::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
     self.width = 80;
     self.height = 24;
     self.frame = 0;
@@ -87,8 +87,8 @@ fn tea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
     self.cells = mem::new_array(xray::Cell, (sz)(self.width * self.height));
     self.depth = mem::new_array(float, (sz)(self.width * self.height));
     create_voxels(self);
-    tea::Cmd[] cmds = { tea::tick() };
-    return tea::batch(cmds);
+    donut::Cmd[] cmds = { donut::tick() };
+    return donut::batch(cmds);
 }
 
 fn void create_voxels(VoxelModel* self) {
@@ -112,8 +112,8 @@ fn void create_voxels(VoxelModel* self) {
     }
 }
 
-fn tea::Cmd VoxelModel.update(VoxelModel* self, tea::Msg msg) @dynamic {
-    if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn donut::Cmd VoxelModel.update(VoxelModel* self, donut::Msg msg) @dynamic {
+    if (msg.kind == donut::MsgKind.WINDOW_SIZE) {
         self.width = msg.window_size.width;
         self.height = msg.window_size.height;
         mem::free(self.cells.ptr);
@@ -123,27 +123,27 @@ fn tea::Cmd VoxelModel.update(VoxelModel* self, tea::Msg msg) @dynamic {
         return null;
     }
 
-    if (msg.kind == tea::MsgKind.TICK) {
+    if (msg.kind == donut::MsgKind.TICK) {
         self.frame++;
         self.rotation_x = (float)math::sin((float)self.frame * 0.003) * 0.15f;
         self.rotation_y = (float)self.frame * 0.01f;
         self.rotation_z = 0.0f;
-        return tea::tick();
+        return donut::tick();
     }
 
-    if (msg.kind != tea::MsgKind.KEY) return null;
-    tea::KeyMsg k = msg.key;
+    if (msg.kind != donut::MsgKind.KEY) return null;
+    donut::KeyMsg k = msg.key;
     switch (k.code) {
-        case tea::KeyCode.CTRL_C:
-            return tea::quit();
-        case tea::KeyCode.RUNE:
-            if (k.rune == 'q') return tea::quit();
+        case donut::KeyCode.CTRL_C:
+            return donut::quit();
+        case donut::KeyCode.RUNE:
+            if (k.rune == 'q') return donut::quit();
         default:
     }
     return null;
 }
 
-fn tea::View VoxelModel.view(VoxelModel* self) @dynamic {
+fn donut::View VoxelModel.view(VoxelModel* self) @dynamic {
     int w = self.width;
     int h = self.height;
     sz total = (sz)(w * h);
@@ -252,12 +252,12 @@ fn tea::View VoxelModel.view(VoxelModel* self) @dynamic {
         }
     }
 
-    return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+    return donut::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main() {
     VoxelModel* model = mem::new(VoxelModel);
-    if (catch err = tea::@run_program(model)) {
+    if (catch err = donut::@run_program(model)) {
         io::printfn("Error: %s", err);
         return 1;
     }

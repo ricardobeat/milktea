@@ -1,7 +1,7 @@
 module diff_viewer;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -29,7 +29,7 @@ struct DiffModel {
 	int cursor;
 }
 
-fn tea::Cmd DiffModel.init(DiffModel* self) @dynamic {
+fn milktea::Cmd DiffModel.init(DiffModel* self) @dynamic {
 	self.scroll_offset = 0;
 	self.cursor = 0;
 	self.width = 80;
@@ -78,21 +78,21 @@ fn void parse_sample_diff(DiffModel* self) {
 	}
 }
 
-fn tea::Cmd DiffModel.update(DiffModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < self.line_count - 1) {
 					self.cursor++;
@@ -105,28 +105,28 @@ fn tea::Cmd DiffModel.update(DiffModel* self, tea::Msg msg) @dynamic {
 					adjust_scroll(self);
 				}
 			}
-		case tea::KeyCode.DOWN:
+		case milktea::KeyCode.DOWN:
 			if (self.cursor < self.line_count - 1) {
 				self.cursor++;
 				adjust_scroll(self);
 			}
-		case tea::KeyCode.UP:
+		case milktea::KeyCode.UP:
 			if (self.cursor > 0) {
 				self.cursor--;
 				adjust_scroll(self);
 			}
-		case tea::KeyCode.PAGE_DOWN:
+		case milktea::KeyCode.PAGE_DOWN:
 			self.cursor = self.cursor + self.height - 3;
 			if (self.cursor >= self.line_count) self.cursor = self.line_count - 1;
 			adjust_scroll(self);
-		case tea::KeyCode.PAGE_UP:
+		case milktea::KeyCode.PAGE_UP:
 			self.cursor = self.cursor - self.height + 3;
 			if (self.cursor < 0) self.cursor = 0;
 			adjust_scroll(self);
-		case tea::KeyCode.HOME:
+		case milktea::KeyCode.HOME:
 			self.cursor = 0;
 			self.scroll_offset = 0;
-		case tea::KeyCode.END:
+		case milktea::KeyCode.END:
 			self.cursor = self.line_count - 1;
 			adjust_scroll(self);
 		default:
@@ -145,10 +145,10 @@ fn void adjust_scroll(DiffModel* self) {
 	}
 }
 
-fn tea::View DiffModel.view(DiffModel* self) @dynamic {
+fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	DString out = dstring::temp();
 
-	lipgloss::Style header_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style header_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
 	String header                = header_style.render("diff-viewer | j/k or arrows to scroll | q to quit");
 
 	out.append_string(header);
@@ -166,39 +166,39 @@ fn tea::View DiffModel.view(DiffModel* self) @dynamic {
 	}
 
 	out.append_char('\n');
-	lipgloss::Style footer_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style footer_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
 	String footer                = footer_style.render(
 		string::tformat("Line %d / %d", self.cursor + 1, self.line_count)
 	);
 	out.append_string(footer);
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 	String prefix         = " ";
-	lipgloss::Style style = lipgloss::new_style();
+	glaze::Style style = glaze::new_style();
 
 	switch (line.kind) {
 		case FILE_HEADER:
-			style = style.foreground(lipgloss::color_hex("#00d7ff"));
+			style = style.foreground(glaze::color_hex("#00d7ff"));
 			prefix = " ";
 		case HUNK_HEADER:
-			style = style.foreground(lipgloss::color_hex("#af87ff"));
+			style = style.foreground(glaze::color_hex("#af87ff"));
 			prefix = " ";
 		case ADDITION:
-			style = style.foreground(lipgloss::color_hex("#00ff00"));
+			style = style.foreground(glaze::color_hex("#00ff00"));
 			prefix = "+";
 		case DELETION:
-			style = style.foreground(lipgloss::color_hex("#ff0000"));
+			style = style.foreground(glaze::color_hex("#ff0000"));
 			prefix = "-";
 		case CONTEXT:
-			style = style.foreground(lipgloss::color_hex("#cccccc"));
+			style = style.foreground(glaze::color_hex("#cccccc"));
 			prefix = " ";
 	}
 
 	if (is_cursor) {
-		style = style.background(lipgloss::color_hex("#444444")).set_bold(true);
+		style = style.background(glaze::color_hex("#444444")).set_bold(true);
 	}
 
 	String content = style.render(string::tformat("%s%s", prefix, line.content));
@@ -207,7 +207,7 @@ fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 
 fn int main() {
 	DiffModel model = { };
-	if (catch err = tea::@run_program(&model)) {
+	if (catch err = milktea::@run_program(&model)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

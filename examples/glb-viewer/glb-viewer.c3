@@ -1,8 +1,8 @@
 module glb_viewer;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import stb_json;
 import std::io;
 import std::math;
@@ -417,13 +417,13 @@ fn GlbModel*? load_glb(String path) {
 
 GlbModel* g_model = null;
 
-fn tea::Cmd GlbModel.init(GlbModel* self) @dynamic {
-	tea::Cmd[] cmds = { tea::tick() };
-	return tea::batch(cmds);
+fn milktea::Cmd GlbModel.init(GlbModel* self) @dynamic {
+	milktea::Cmd[] cmds = { milktea::tick() };
+	return milktea::batch(cmds);
 }
 
-fn tea::Cmd GlbModel.update(GlbModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd GlbModel.update(GlbModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
@@ -535,7 +535,7 @@ fn void rasterize_quad(GlbModel* self, int w, int ph, float[4] csx, float[4] csy
 	rasterize_tri(self, w, ph, csx[0], csy[0], csx[3], csy[3], csx[2], csy[2], face_z, col);
 }
 
-fn tea::View GlbModel.view(GlbModel* self) @dynamic {
+fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 	int w     = self.width;
 	int h     = self.height;
 	int ph    = h * 2;
@@ -676,7 +676,7 @@ fn tea::View GlbModel.view(GlbModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 // ── File picker ───────────────────────────────────────────────────────────────
@@ -781,7 +781,7 @@ fn void scan_glb_files(App* self, String dir) {
 	}
 }
 
-fn tea::Cmd App.init(App* self) @dynamic {
+fn milktea::Cmd App.init(App* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.mode = PICKING;
@@ -803,29 +803,29 @@ fn tea::Cmd App.init(App* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		if (self.model != null) {
 			// forward resize to model
-			tea::Msg resize = msg;
+			milktea::Msg resize = msg;
 			self.model.update(resize);
 		}
 		return null;
 	}
 
 	if (self.mode == VIEWING) {
-		if (msg.kind == tea::MsgKind.KEY) {
-			tea::KeyMsg k = msg.key;
-			if (k.code == tea::KeyCode.ESC || (k.code == tea::KeyCode.RUNE && k.rune == 'b')) {
+		if (msg.kind == milktea::MsgKind.KEY) {
+			milktea::KeyMsg k = msg.key;
+			if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'b')) {
 				self.mode = PICKING;
 				return null;
 			}
-			if (k.code == tea::KeyCode.CTRL_C || (k.code == tea::KeyCode.RUNE && k.rune == 'q')) {
-				return tea::quit();
+			if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
+				return milktea::quit();
 			}
-			if (k.code == tea::KeyCode.RUNE) {
+			if (k.code == milktea::KeyCode.RUNE) {
 				switch (k.rune) {
 					case 'w': self.key_w = self.tick_count; self.auto_rotate = false;
 					case 's': self.key_s = self.tick_count; self.auto_rotate = false;
@@ -834,24 +834,24 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 					default:
 				}
 			}
-			if (k.code == tea::KeyCode.UP) {
+			if (k.code == milktea::KeyCode.UP) {
 				self.key_up = self.tick_count;
 				self.auto_rotate = false;
 			}
-			if (k.code == tea::KeyCode.DOWN) {
+			if (k.code == milktea::KeyCode.DOWN) {
 				self.key_down = self.tick_count;
 				self.auto_rotate = false;
 			}
-			if (k.code == tea::KeyCode.LEFT) {
+			if (k.code == milktea::KeyCode.LEFT) {
 				self.key_left = self.tick_count;
 				self.auto_rotate = false;
 			}
-			if (k.code == tea::KeyCode.RIGHT) {
+			if (k.code == milktea::KeyCode.RIGHT) {
 				self.key_right = self.tick_count;
 				self.auto_rotate = false;
 			}
 		}
-		if (msg.kind == tea::MsgKind.TICK) {
+		if (msg.kind == milktea::MsgKind.TICK) {
 			self.tick_count++;
 			int held_thresh = self.tick_count - 2;
 			bool held_w     = self.key_w >= held_thresh;
@@ -960,21 +960,21 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 				if (self.cam_pitch > 1.4f) self.cam_pitch = 1.4f;
 				if (self.cam_pitch < -1.4f) self.cam_pitch = -1.4f;
 			}
-			return tea::tick();
+			return milktea::tick();
 		}
 		return null;
 	}
 
 	// PICKING mode
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	int visible   = self.height - 3;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < self.file_count - 1) {
 					self.cursor++;
@@ -987,27 +987,27 @@ fn tea::Cmd App.update(App* self, tea::Msg msg) @dynamic {
 					if (self.cursor < self.scroll) self.scroll--;
 				}
 			}
-		case tea::KeyCode.DOWN:
+		case milktea::KeyCode.DOWN:
 			if (self.cursor < self.file_count - 1) {
 				self.cursor++;
 				if (self.cursor >= self.scroll + visible) self.scroll++;
 			}
-		case tea::KeyCode.UP:
+		case milktea::KeyCode.UP:
 			if (self.cursor > 0) {
 				self.cursor--;
 				if (self.cursor < self.scroll) self.scroll--;
 			}
-		case tea::KeyCode.ENTER:
+		case milktea::KeyCode.ENTER:
 			if (self.file_count > 0) {
 				self.load_file(self.files[self.cursor]);
-				if (self.mode == VIEWING) return tea::tick();
+				if (self.mode == VIEWING) return milktea::tick();
 			}
 		default:
 	}
 	return null;
 }
 
-fn tea::View App.view(App* self) @dynamic {
+fn milktea::View App.view(App* self) @dynamic {
 	if (self.mode == VIEWING && self.model != null) {
 		self.model.cam_px = self.cam_px;
 		self.model.cam_py = self.cam_py;
@@ -1017,15 +1017,15 @@ fn tea::View App.view(App* self) @dynamic {
 		return self.model.view();
 	}
 
-	// Picker view using lipgloss
+	// Picker view using glaze
 	DString out = dstring::temp();
 
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
-	lipgloss::Style cursor_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff")).set_bold(true)
-		.background(lipgloss::color_hex("#444444"));
-	lipgloss::Style normal_style = lipgloss::new_style().foreground(lipgloss::color_hex("#aaaaaa"));
-	lipgloss::Style error_style  = lipgloss::new_style().foreground(lipgloss::color_hex("#ff5555"));
-	lipgloss::Style hint_style   = lipgloss::new_style().foreground(lipgloss::color_hex("#555555"));
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
+	glaze::Style cursor_style = glaze::new_style().foreground(glaze::color_hex("#ffffff")).set_bold(true)
+		.background(glaze::color_hex("#444444"));
+	glaze::Style normal_style = glaze::new_style().foreground(glaze::color_hex("#aaaaaa"));
+	glaze::Style error_style  = glaze::new_style().foreground(glaze::color_hex("#ff5555"));
+	glaze::Style hint_style   = glaze::new_style().foreground(glaze::color_hex("#555555"));
 
 	out.append_string(title_style.render("GLB Viewer — select a file"));
 	out.append_char('\n');
@@ -1055,7 +1055,7 @@ fn tea::View App.view(App* self) @dynamic {
 
 	out.append_string(hint_style.render("↑/↓ or j/k to navigate · enter to open · q to quit"));
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -1074,7 +1074,7 @@ fn int main(String[] args) {
 		}
 	}
 
-	if (catch err = tea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

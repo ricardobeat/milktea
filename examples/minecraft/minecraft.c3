@@ -1,8 +1,8 @@
 module minecraft;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import std::io;
 import std::math;
 import std::os;
@@ -112,7 +112,7 @@ fn void Minecraft.add_block(Minecraft* self, int x, int y, int z, char r, char g
 
 // ── Tea Methods ──────────────────────────────────────────────────────────────
 
-fn tea::Cmd Minecraft.init(Minecraft* self) @dynamic {
+fn milktea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.cam_x = 0;
@@ -123,7 +123,7 @@ fn tea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.mouse_init = false;
 	self.generate_island();
 	self.allocate_buffers();
-	return tea::tick();
+	return milktea::tick();
 }
 
 fn void Minecraft.allocate_buffers(Minecraft* self) {
@@ -134,8 +134,8 @@ fn void Minecraft.allocate_buffers(Minecraft* self) {
 	self.depth = mem::new_array(float, ptotal);
 }
 
-fn tea::Cmd Minecraft.update(Minecraft* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
@@ -147,11 +147,11 @@ fn tea::Cmd Minecraft.update(Minecraft* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.KEY) {
-		tea::KeyMsg k = msg.key;
-		if (k.code == tea::KeyCode.ESC || (k.code == tea::KeyCode.RUNE && k.rune == 'q')) return tea::quit();
+	if (msg.kind == milktea::MsgKind.KEY) {
+		milktea::KeyMsg k = msg.key;
+		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
 
-		if (k.code == tea::KeyCode.RUNE) {
+		if (k.code == milktea::KeyCode.RUNE) {
 			switch (k.rune) {
 				case 'w': self.key_w = self.tick_count;
 				case 's': self.key_s = self.tick_count;
@@ -162,17 +162,17 @@ fn tea::Cmd Minecraft.update(Minecraft* self, tea::Msg msg) @dynamic {
 					self.mine_block();
 			}
 		}
-		if (k.code == tea::KeyCode.LEFT) self.key_left = self.tick_count;
-		if (k.code == tea::KeyCode.RIGHT) self.key_right = self.tick_count;
+		if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
+		if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
 	}
 
-	if (msg.kind == tea::MsgKind.MOUSE) {
+	if (msg.kind == milktea::MsgKind.MOUSE) {
 		if (!self.mouse_init) {
 			self.mouse_x = msg.mouse.col;
 			self.mouse_y = msg.mouse.row;
 			self.mouse_init = true;
 		} else {
-			if (msg.mouse.action == tea::MouseAction.MOUSE_MOTION) {
+			if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
 				int dx = msg.mouse.col - self.mouse_x;
 				int dy = msg.mouse.row - self.mouse_y;
 				self.yaw += (float)dx * 0.05f;
@@ -183,13 +183,13 @@ fn tea::Cmd Minecraft.update(Minecraft* self, tea::Msg msg) @dynamic {
 				self.mouse_y = msg.mouse.row;
 			}
 		}
-		if (msg.mouse.action == tea::MouseAction.MOUSE_PRESS && msg.mouse.button == tea::MouseButton.MOUSE_LEFT) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
 			self.swing_frame = 10;
 			self.mine_block();
 		}
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.tick_count++;
 		self.frame++;
 		if (self.swing_frame > 0) self.swing_frame--;
@@ -217,7 +217,7 @@ fn tea::Cmd Minecraft.update(Minecraft* self, tea::Msg msg) @dynamic {
 		if (self.key_left >= thresh) self.yaw -= rot_speed;
 		if (self.key_right >= thresh) self.yaw += rot_speed;
 
-		return tea::tick();
+		return milktea::tick();
 	}
 	return null;
 }
@@ -303,7 +303,7 @@ fn void Minecraft.push_face(Minecraft* self, Block* b, Vec3 rel_pos, Vec3 normal
 	};
 }
 
-fn tea::View Minecraft.view(Minecraft* self) @dynamic {
+fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 	self.collect_faces();
 
 	int w     = self.width;
@@ -466,17 +466,17 @@ fn tea::View Minecraft.view(Minecraft* self) @dynamic {
 			.set_fg(xray::color_rgb(150, 150, 150)));
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main(String[] args) {
 	Minecraft* app = mem::new(Minecraft);
-	tea::enable_mouse();
-	if (catch err = tea::@run_program(app)) {
-		tea::disable_mouse();
+	milktea::enable_mouse();
+	if (catch err = milktea::@run_program(app)) {
+		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;
 	}
-	tea::disable_mouse();
+	milktea::disable_mouse();
 	return 0;
 }

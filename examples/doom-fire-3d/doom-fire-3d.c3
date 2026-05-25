@@ -1,6 +1,6 @@
 module doom_fire_3d;
 
-import tea;
+import milktea;
 import xray;
 import std::io;
 import std::math;
@@ -234,7 +234,7 @@ fn void build_render_voxels(Fire3DModel* self) {
 	}
 }
 
-fn tea::Cmd Fire3DModel.init(Fire3DModel* self) @dynamic {
+fn milktea::Cmd Fire3DModel.init(Fire3DModel* self) @dynamic {
 	ulong seed = (ulong)c3_time_ms_long();
 	srand((uint)seed);
 	self.width = 80;
@@ -249,11 +249,11 @@ fn tea::Cmd Fire3DModel.init(Fire3DModel* self) @dynamic {
 	self.pixels = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
 	self.depth = mem::new_array(float, (sz)(self.width * self.height * 2));
 
-	return tea::tick();
+	return milktea::tick();
 }
 
-fn tea::Cmd Fire3DModel.update(Fire3DModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
@@ -265,7 +265,7 @@ fn tea::Cmd Fire3DModel.update(Fire3DModel* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
 
 		// spawn new particles
@@ -280,22 +280,22 @@ fn tea::Cmd Fire3DModel.update(Fire3DModel* self, tea::Msg msg) @dynamic {
 		self.rotation_y = (float)self.frame * 0.008f;
 		self.rotation_z = 0.0f;
 
-		return tea::tick();
+		return milktea::tick();
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
+fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 	int w    = self.width;
 	int h    = self.height;
 	sz total = (sz)(w * h);
@@ -382,12 +382,12 @@ fn tea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main() {
 	Fire3DModel* model = mem::new(Fire3DModel);
-	if (catch err = tea::@run_program(model)) {
+	if (catch err = milktea::@run_program(model)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

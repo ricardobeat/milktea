@@ -1,7 +1,7 @@
 module split_editors;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import xray;
 import std::io;
 import std::core::string;
@@ -43,24 +43,24 @@ fn String Editor.text(Editor* self) {
 }
 
 fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor) {
-	lipgloss::Style focused = lipgloss::new_style().set_border(lipgloss::rounded_border())
-		.set_border_fg(lipgloss::color_hex("#3b82f6"))
+	glaze::Style focused = glaze::new_style().set_border(glaze::rounded_border())
+		.set_border_fg(glaze::color_hex("#3b82f6"))
 		.set_width(pane_width)
 		.padding(0, 1, 0, 1);
-	lipgloss::Style unfocused = lipgloss::new_style().set_border(lipgloss::hidden_border()).set_width(pane_width)
+	glaze::Style unfocused = glaze::new_style().set_border(glaze::hidden_border()).set_width(pane_width)
 		.padding(0, 1, 0, 1);
 
-	lipgloss::Style s = self.focused ? focused : unfocused;
+	glaze::Style s = self.focused ? focused : unfocused;
 
 	// Content width available for text (inside padding and borders)
 	int content_width = pane_width - 4; // 2 padding + 2 border chars
 	if (content_width < 1) content_width = 1;
 
 	// Cursor line highlight styles
-	lipgloss::Style cline_style = lipgloss::new_style().background(lipgloss::color_256(57))
-		.foreground(lipgloss::color_256(230));
-	lipgloss::Style placeholder_style = lipgloss::new_style().foreground(lipgloss::color_256(242));
-	String cursor_block               = tea::CURSOR_BLOCK;
+	glaze::Style cline_style = glaze::new_style().background(glaze::color_256(57))
+		.foreground(glaze::color_256(230));
+	glaze::Style placeholder_style = glaze::new_style().foreground(glaze::color_256(242));
+	String cursor_block               = milktea::CURSOR_BLOCK;
 
 	DString content = dstring::temp();
 	content.append_string(self.label);
@@ -185,7 +185,7 @@ struct SplitModel {
 	int cursor_blink;
 }
 
-fn tea::Cmd SplitModel.init(SplitModel* self) @dynamic {
+fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 	self.count = 2;
 	self.focus = 0;
 	self.editors[0].label = "Editor 1";
@@ -195,27 +195,27 @@ fn tea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 	self.editors[1].placeholder = "type something";
 	self.editors[2].label = "Editor 3";
 	self.editors[3].label = "Editor 4";
-	return tea::tick(500);
+	return milktea::tick(500);
 }
 
 
-fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
-		return tea::tick(500);
+		return milktea::tick(500);
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.TAB:
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.TAB:
 			if (k.shift) {
 				// Shift-Tab: previous pane
 				self.editors[self.focus].focused = false;
@@ -228,13 +228,13 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
 				self.focus = (self.focus + 1) % self.count;
 				self.editors[self.focus].focused = true;
 			}
-		case tea::KeyCode.BACKSPACE:
+		case milktea::KeyCode.BACKSPACE:
 			self.editors[self.focus].backspace();
-		case tea::KeyCode.ENTER:
+		case milktea::KeyCode.ENTER:
 			self.editors[self.focus].insert('\n');
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
 			if (k.ctrl) {
 				if (k.rune == 'n') {
 					// Ctrl+N - add editor
@@ -257,8 +257,8 @@ fn tea::Cmd SplitModel.update(SplitModel* self, tea::Msg msg) @dynamic {
 	return null;
 }
 
-fn tea::View SplitModel.view(SplitModel* self) @dynamic {
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 	bool show_cursor     = self.cursor_blink != 0;
 
 	int edit_h = self.height - 3;
@@ -281,7 +281,7 @@ fn tea::View SplitModel.view(SplitModel* self) @dynamic {
 	} else {
 		String joined = views[0];
 		for (int i = 1; i < self.count; i++) {
-			joined = lipgloss::join_horizontal(joined, views[i], 0);
+			joined = glaze::join_horizontal(joined, views[i], 0);
 		}
 		out.append_string(joined);
 	}
@@ -295,12 +295,12 @@ fn tea::View SplitModel.view(SplitModel* self) @dynamic {
 			)
 		)
 	);
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	SplitModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

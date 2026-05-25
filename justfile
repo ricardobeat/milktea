@@ -1,6 +1,6 @@
-# Build the tea static library
+# Build the milktea static library
 build:
-    c3c build tea
+    c3c build milktea
 
 # Build all example programs
 examples:

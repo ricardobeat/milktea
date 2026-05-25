@@ -1,7 +1,7 @@
 module fullscreen;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -13,45 +13,45 @@ struct FullscreenModel {
 	int height;
 }
 
-fn tea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
-	return tea::tick(1000);
+fn milktea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
+	return milktea::tick(1000);
 }
 
 
-fn tea::Cmd FullscreenModel.update(FullscreenModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.countdown--;
 		if (self.countdown <= 0) {
-			return tea::quit();
+			return milktea::quit();
 		}
-		return tea::tick(1000);
+		return milktea::tick(1000);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
-	lipgloss::Style number = lipgloss::new_style().foreground(lipgloss::color_hex("#ff5555")).set_bold(true);
+fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
+	glaze::Style number = glaze::new_style().foreground(glaze::color_hex("#ff5555")).set_bold(true);
 
-	lipgloss::Style label = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
+	glaze::Style label = glaze::new_style().foreground(glaze::color_hex("#888888"));
 
 	DString out    = dstring::temp();
 	String num_str = string::tformat("%d", self.countdown);
@@ -65,12 +65,12 @@ fn tea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(label.render("Press ESC or q to quit"));
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	FullscreenModel m = { .countdown = 10 };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

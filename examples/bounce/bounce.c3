@@ -1,7 +1,7 @@
 module bounce;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -16,23 +16,23 @@ struct BounceModel {
 	int ticks;
 }
 
-fn tea::Cmd BounceModel.init(BounceModel* self) @dynamic {
+fn milktea::Cmd BounceModel.init(BounceModel* self) @dynamic {
 	self.ball_x = 5;
 	self.ball_y = 3;
 	self.dx = 1;
 	self.dy = 1;
-	return tea::tick(33);
+	return milktea::tick(33);
 }
 
 
-fn tea::Cmd BounceModel.update(BounceModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.ticks++;
 
 		// Bounce area is smaller than the terminal
@@ -55,25 +55,25 @@ fn tea::Cmd BounceModel.update(BounceModel* self, tea::Msg msg) @dynamic {
 			if (self.ball_y > arena_h) self.ball_y = arena_h;
 		}
 
-		return tea::tick(33);
+		return milktea::tick(33);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View BounceModel.view(BounceModel* self) @dynamic {
+fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 	int arena_w = self.width - 4;
 	int arena_h = self.height - 6;
 	if (arena_w < 5) arena_w = 5;
@@ -101,7 +101,7 @@ fn tea::View BounceModel.view(BounceModel* self) @dynamic {
 		if (y < arena_h - 1) content.append_char('\n');
 	}
 
-	lipgloss::Style border = lipgloss::new_style()
+	glaze::Style border = glaze::new_style()
 		.set_border(
 			{
 				.top = "═",
@@ -119,15 +119,15 @@ fn tea::View BounceModel.view(BounceModel* self) @dynamic {
 	out.append_string(border.render(content.str_view()));
 	out.append_char('\n');
 
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 	out.append_string(hint.render("Bouncing ball  |  q/ESC quit"));
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	BounceModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

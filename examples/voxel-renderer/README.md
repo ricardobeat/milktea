@@ -1,14 +1,14 @@
 # Voxel Renderer Example
 
-A real-time 3D voxel renderer in the terminal. Displays the word "tea" extruded to 3 blocks thickness, rotating continuously in 3D space using perspective projection.
+A real-time 3D voxel renderer in the terminal. Displays the word "milktea" extruded to 3 blocks thickness, rotating continuously in 3D space using perspective projection.
 
 ## Features
 
-- **3D text**: Each character in "tea" is a 3×3×3 voxel block
+- **3D text**: Each character in "milktea" is a 3×3×3 voxel block
 - **Continuous rotation**: Animates on every frame with smooth rotation around x, y, and z axes
 - **Perspective projection**: Projects 3D coordinates to 2D screen space with depth
 - **Depth sorting**: Renders closer voxels on top (painter's algorithm)
-- **Real-time animation**: Uses `tea::tick()` for frame updates
+- **Real-time animation**: Uses `milktea::tick()` for frame updates
 
 ## How It Works
 
@@ -77,17 +77,17 @@ cd examples/voxel-renderer
 c3c run
 ```
 
-You should see "tea" rotating continuously in the center of your terminal.
+You should see "milktea" rotating continuously in the center of your terminal.
 
 ## Customization Ideas
 
 - **Different text**: Change the string in `create_text_voxels()`
 - **More voxels per char**: Adjust the nested loop ranges (currently -1 to 1 vertically)
 - **Different characters**: Use different `char_val` per voxel layer for striped effects
-- **Colors**: Extend `format_diff_line()` logic to add lipgloss colors based on depth or axis
+- **Colors**: Extend `format_diff_line()` logic to add glaze colors based on depth or axis
 - **Wireframe mode**: Only draw voxel edges instead of solid characters
 - **Multiple objects**: Create helper functions to generate other shapes (cubes, pyramids)
-- **Mouse control**: Add mouse input to rotate via `tea::MsgKind.MOUSE`
+- **Mouse control**: Add mouse input to rotate via `milktea::MsgKind.MOUSE`
 - **Faster rendering**: Replace the 2D character array with a more efficient sparse structure for large scenes
 - **Depth cues**: Use different characters for different depth ranges (e.g., `@` for closest, `.` for farthest)
 
@@ -97,6 +97,6 @@ You should see "tea" rotating continuously in the center of your terminal.
 - **Fixed-size arrays**: `char[256][80]` for the rendering canvas
 - **Depth buffer**: `float[256][80]` for painter's algorithm (depth sorting)
 - **Trigonometry**: `math::cos()`, `math::sin()` for rotations
-- **Real-time animation**: Frame counter with `tea::tick()`
+- **Real-time animation**: Frame counter with `milktea::tick()`
 - **Method chaining**: `.rotate_x().rotate_y().rotate_z().project()`
 - **Vim-style controls**: `q` to quit

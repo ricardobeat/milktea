@@ -2,11 +2,11 @@
 
 ## Summary
 
-Implemented a flexbox-style constraint layout system in the xray module (`src/xray/layout.c3`), added draw helpers to `ScreenBuffer`, and updated examples to use the new API.
+Implemented a flexbox-style constraint layout system in the xray module (`xray/layout.c3`), added draw helpers to `ScreenBuffer`, and updated examples to use the new API.
 
 ## Changes
 
-### 1. `src/xray/layout.c3` — New file
+### 1. `xray/layout.c3` — New file
 
 #### Rect
 
@@ -60,7 +60,7 @@ fn Rect      FlexNode.rect(&self)
 fn Rect      FlexNode.child_rect(&self, int idx)
 ```
 
-### 2. `src/xray/screen.c3` — Draw helpers added
+### 2. `xray/screen.c3` — Draw helpers added
 
 ```c3
 fn void ScreenBuffer.fill_rect(&self, Rect r, Style style)
@@ -86,7 +86,7 @@ xray::Rect[4] pane_rects;
 xray::layout_h(xray::new_rect(0, 0, self.width, edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
 ```
 
-Added `src/xray/**` to sources in `project.json`.
+Added `xray/**` to sources in `project.json`.
 
 ### 4. `examples/paint/paint.c3`
 
@@ -112,7 +112,7 @@ Mouse hit-testing now uses `palette_rect.contains()` and `canvas_rect.x/y` for c
 ### 5. `examples/wolf3d-server/wolf3d-server.c3`
 
 - **Welcome screen composite loop** simplified: removed dead `dlg_x/dlg_y` variables, use `cell_at()` instead of raw index math.
-- **Input dialog** (`ENTERING_NAME` / `TAG_INPUT`): replaced hand-drawn blue box with lipgloss-rendered box (rounded border, purple palette, matching welcome screen style). Centered using `FlexNode` with `JUSTIFY_CENTER` / `ALIGN_CENTER`.
+- **Input dialog** (`ENTERING_NAME` / `TAG_INPUT`): replaced hand-drawn blue box with glaze-rendered box (rounded border, purple palette, matching welcome screen style). Centered using `FlexNode` with `JUSTIFY_CENTER` / `ALIGN_CENTER`.
 - **Version bumped** to `0.2.6`.
 
 ## C3 Syntax Gotchas Discovered
@@ -133,13 +133,13 @@ cd milktea && c3c build wolf3d-server
 
 ## Files Modified
 
-- `src/xray/layout.c3` — New file
-- `src/xray/screen.c3` — Draw helpers appended
-- `src/xray/xray_test.c3` — 23 new tests (all passing, 98 total)
+- `xray/layout.c3` — New file
+- `xray/screen.c3` — Draw helpers appended
+- `xray/xray_test.c3` — 23 new tests (all passing, 98 total)
 - `examples/split-editors/split-editors.c3`
 - `examples/paint/paint.c3`
 - `examples/wolf3d-server/wolf3d-server.c3`
-- `project.json` — Added `src/xray/**` to split-editors and paint targets
+- `project.json` — Added `xray/**` to split-editors and paint targets
 
 ---
 
@@ -191,7 +191,7 @@ Two sub-issues working together:
 
 ## Changes
 
-### `src/tea/input.c3`
+### `milktea/input.c3`
 
 - `MouseButton` enum: added `MOUSE_WHEEL_UP`, `MOUSE_WHEEL_DOWN`
 - `parse_csi`: on unexpected byte — if ESC, stop before it (`csi.consumed = pos`); otherwise consume it (`csi.consumed = pos + 1`)
@@ -199,7 +199,7 @@ Two sub-issues working together:
 - SGR mouse parser: wheel buttons (btn_code >= 64) checked before bitmask
 - `parse_key` CSI invalid branch: returns `NONE` (discard) instead of `ESC` (phantom keypress)
 
-### `src/tea/tea.c3`
+### `milktea/milktea.c3`
 
 - Added `MouseMode` enum (`NONE`, `CELL_MOTION`, `ALL_MOTION`)
 - Added `mouse_mode` field to `View` and `Program`
@@ -209,21 +209,21 @@ Two sub-issues working together:
 - Blocking condition: blocks when stuck (incomplete data) with 100ms cap
 - `render_current_view`: enables/disables mouse mode on mode transitions
 
-### `src/jsrt/js_model.c3`
+### `taro/js_model.c3`
 
 - Mouse dispatch: forwards ALL mouse events to viewports with correct button/action names (`"wheel_up"`, `"wheel_down"`, `"press"`, `"release"`, `"motion"`)
-- Sets `view.mouse_mode = tea::MouseMode.MOUSE_MODE_CELL_MOTION` in `JsModel.view()`
+- Sets `view.mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION` in `JsModel.view()`
 - All `io::eprintfn("DEBUG ...")` calls gated behind `g_debug_log.enabled`
 
-### `src/pearls/viewport.c3`
+### `boba/viewport.c3`
 
 - `handle_mouse`: recognizes `"wheel_up"`/`"wheel_down"` with `"press"` action; kept legacy `"left"`/`"middle"` on `"motion"` as fallback
 
-### `src/jsrt/js_view.c3`
+### `taro/js_view.c3`
 
 - Viewport render loop: added `pos > content.len` guard and bounds-safe `pos` advancement to prevent C3 slice panic after last text line
 
-### `examples/jsrt/jsrt.c3`
+### `examples/taro/taro.c3`
 
 - Changed from `@run_program` macro to `@program` + `p.debug = debug` + `p.run()` to propagate `--debug` flag to Program's input logging
 
@@ -238,10 +238,10 @@ Two sub-issues working together:
 
 ```bash
 cd milktea && c3c test tea
-cd milktea && c3c build jsrt
+cd milktea && c3c build taro
 ```
 
-98 tests pass (tea static lib + xray renderer).
+98 tests pass (milktea static lib + xray renderer).
 
 ---
 
@@ -249,11 +249,11 @@ cd milktea && c3c build jsrt
 
 ## Summary
 
-Added animated border support (pulse, rainbow, race) as a lipgloss library feature, and fixed `Style.render()` width/height semantics to match Go lipgloss v2 — where `set_width(N)` and `set_height(N)` both mean **total outer size** (border + padding + content = N).
+Added animated border support (pulse, rainbow, race) as a glaze library feature, and fixed `Style.render()` width/height semantics to match Go glaze v2 — where `set_width(N)` and `set_height(N)` both mean **total outer size** (border + padding + content = N).
 
 ## Changes
 
-### 1. `src/lipgloss/border_anim.c3` — New file
+### 1. `glaze/border_anim.c3` — New file
 
 `BorderAnimation` enum with four modes:
 
@@ -274,15 +274,15 @@ fn String          Border.wrap_animated(int content_w, int content_h, BorderAnim
 
 Perimeter formula: `2 * (content_w + content_h) + 4` (includes 4 corners). Top row flows right-to-left for continuous motion.
 
-### 2. `src/lipgloss/style.c3` — Animation fields + height fix
+### 2. `glaze/style.c3` — Animation fields + height fix
 
 - Added `border_anim` and `border_anim_speed` fields to `Style` struct
 - Setters: `set_border_anim()`, `set_border_anim_speed()`, `with_border_anim()`, `with_border_anim_speed()`
 - Added `Style.render_content_only()` — renders styled content without border (used by animated path)
-- **Height semantics fix**: `render()` now subtracts `border_v` from `self.height` before filling, matching Go lipgloss v2 behavior
+- **Height semantics fix**: `render()` now subtracts `border_v` from `self.height` before filling, matching Go glaze v2 behavior
 - **`measure_height()` fix**: passes `outer_width` directly to `set_width()` instead of double-subtracting border
 
-### 3. `src/jsrt/js_view.c3` — JS wiring
+### 3. `taro/js_view.c3` — JS wiring
 
 - `props_to_style()`: parses `borderAnimation` and `borderAnimSpeed` props
 - All bordered component paths (box, textarea, viewport) pass full `area.w` / `area.h` to `set_width` / `set_height` instead of subtracting border+padding
@@ -295,10 +295,10 @@ Updated `set_width` / `set_height` calls to pass full area dimensions (removed m
 
 ## Architecture Decisions
 
-1. **Animation lives in lipgloss, not jsrt** — `Border.wrap_animated()` is a library function any C3 code can use. JS layer just wires props.
-2. **Per-character ANSI SGR** — each border character gets its own `\x1b[38;2;R;G;Bm` prefix. Works with both the lipgloss string pipeline and the screen buffer's `render_ansi_string()` parser.
+1. **Animation lives in glaze, not taro** — `Border.wrap_animated()` is a library function any C3 code can use. JS layer just wires props.
+2. **Per-character ANSI SGR** — each border character gets its own `\x1b[38;2;R;G;Bm` prefix. Works with both the glaze string pipeline and the screen buffer's `render_ansi_string()` parser.
 3. **Static frame + animated overlay** — slightly wasteful (border drawn twice) but simple and correct. Avoids duplicating the border layout logic.
-4. **Go lipgloss v2 semantics** — `set_width(N)` means total outer width. `render()` subtracts internally. Callers just pass the area size.
+4. **Go glaze v2 semantics** — `set_width(N)` means total outer width. `render()` subtracts internally. Callers just pass the area size.
 
 ## C3 Gotchas
 
@@ -309,18 +309,18 @@ Updated `set_width` / `set_height` calls to pass full area dimensions (removed m
 
 ## Build Targets
 
-All 10 pass: `jsrt`, `tea`, `counter`, `spinner`, `inputbox`, `canvas`, `split-editors`, `viewport`, `timer`, `list`.
+All 10 pass: `taro`, `tea`, `counter`, `spinner`, `inputbox`, `canvas`, `split-editors`, `viewport`, `timer`, `list`.
 
 ```bash
-cd milktea && c3c build jsrt
+cd milktea && c3c build taro
 cd milktea && c3c build tea
 ```
 
 ## Files Modified
 
-- `src/lipgloss/border_anim.c3` — New file (animated border renderer)
-- `src/lipgloss/style.c3` — Animation fields, height fix, `render_content_only()`
-- `src/jsrt/js_view.c3` — Prop parsing, width/height call sites, animated overlay
+- `glaze/border_anim.c3` — New file (animated border renderer)
+- `glaze/style.c3` — Animation fields, height fix, `render_content_only()`
+- `taro/js_view.c3` — Prop parsing, width/height call sites, animated overlay
 - `examples/inputbox/inputbox.c3` — Width/height call fix
 
 ---
@@ -335,9 +335,9 @@ Added a blinking block cursor to focused textareas via two complementary mechani
 
 ### Option 1 — Native cursor with color (OSC 12)
 
-- `tea::Cursor` gained a `color` field (hex string, e.g. `"#ff6600"`)
+- `milktea::Cursor` gained a `color` field (hex string, e.g. `"#ff6600"`)
 - `render.c3`: added `cursor_color_seq()` (`\x1b]12;color\x1b\\`) and `OSC_CURSOR_COLOR_RESET` (`\x1b]112\x1b\\`)
-- Both render paths (legacy `render_view_to` and the xray path in `tea.c3`) emit OSC 12 before the cursor shape sequence; `OSC_CURSOR_COLOR_RESET` is emitted in the cleanup defer on exit
+- Both render paths (legacy `render_view_to` and the xray path in `milktea.c3`) emit OSC 12 before the cursor shape sequence; `OSC_CURSOR_COLOR_RESET` is emitted in the cleanup defer on exit
 - `View.set_cursor_color(color String)` builder added
 - `js_view.c3`: on render, the focused textarea's screen-space cursor position and `cursorColor` prop are stored in a `g_focused_cursor` global; `js_model.c3` reads it after `render_vnode` and calls `view.set_cursor_shape(..., CURSOR_BLOCK, blink: true)` + `view.set_cursor_color()`
 - `hardwired.js`: `cursorColor: "#ff6600"` on the input textarea

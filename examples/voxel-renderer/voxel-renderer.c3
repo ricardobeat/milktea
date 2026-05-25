@@ -1,6 +1,6 @@
 module voxel_renderer;
 
-import tea;
+import milktea;
 import xray;
 import std::io;
 import std::math;
@@ -58,7 +58,7 @@ fn Vec3 Vec3.rotate_z(&self, float angle) {
 	return vec3(self.x * c - self.y * s, self.x * s + self.y * c, self.z);
 }
 
-fn tea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
+fn milktea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.frame = 0;
@@ -67,8 +67,8 @@ fn tea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
 	self.pixels = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
 	self.depth = mem::new_array(float, (sz)(self.width * self.height * 2));
 	create_voxels(self);
-	tea::Cmd[] cmds = { tea::tick() };
-	return tea::batch(cmds);
+	milktea::Cmd[] cmds = { milktea::tick() };
+	return milktea::batch(cmds);
 }
 
 const int GRID_W = 25;
@@ -169,8 +169,8 @@ fn void create_voxels(VoxelModel* self) {
 	}
 }
 
-fn tea::Cmd VoxelModel.update(VoxelModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
@@ -182,27 +182,27 @@ fn tea::Cmd VoxelModel.update(VoxelModel* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
 		self.rotation_x = (float)math::sin((float)self.frame * 0.003) * 0.15f;
 		self.rotation_y = (float)self.frame * 0.01f;
 		self.rotation_z = 0.0f;
-		return tea::tick();
+		return milktea::tick();
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View VoxelModel.view(VoxelModel* self) @dynamic {
+fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 	int w    = self.width;
 	int h    = self.height;
 	sz total = (sz)(w * h);
@@ -357,12 +357,12 @@ fn tea::View VoxelModel.view(VoxelModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main() {
 	VoxelModel* model = mem::new(VoxelModel);
-	if (catch err = tea::@run_program(model)) {
+	if (catch err = milktea::@run_program(model)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

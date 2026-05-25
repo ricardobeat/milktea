@@ -1,14 +1,14 @@
 module textinputs;
 
-import tea;
-import lipgloss;
-import pearls;
+import milktea;
+import glaze;
+import boba;
 import std::io;
 import std::core::string;
 import std::core::dstring;
 
 struct InputsModel {
-	pearls::TextInput[3] inputs;
+	boba::TextInput[3] inputs;
 	int focus;
 	bool submitted;
 	int width;
@@ -16,36 +16,36 @@ struct InputsModel {
 	int cursor_blink;
 }
 
-fn tea::Cmd InputsModel.init(InputsModel* self) @dynamic {
-	self.inputs[0] = pearls::new_text_input().with_placeholder("Nickname");
+fn milktea::Cmd InputsModel.init(InputsModel* self) @dynamic {
+	self.inputs[0] = boba::new_text_input().with_placeholder("Nickname");
 	self.inputs[0].focused = true;
-	self.inputs[1] = pearls::new_text_input().with_placeholder("Email");
-	self.inputs[2] = pearls::new_text_input().with_placeholder("Password").with_password();
-	return tea::tick(500, &on_blink);
+	self.inputs[1] = boba::new_text_input().with_placeholder("Email");
+	self.inputs[2] = boba::new_text_input().with_placeholder("Password").with_password();
+	return milktea::tick(500, &on_blink);
 }
 
-fn tea::Msg on_blink() {
-	return { .kind = tea::MsgKind.USER, .tag = 10 };
+fn milktea::Msg on_blink() {
+	return { .kind = milktea::MsgKind.USER, .tag = 10 };
 }
 
-fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.USER && msg.tag == 10) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == 10) {
 		self.cursor_blink = 1 - self.cursor_blink;
-		return tea::tick(500, &on_blink);
+		return milktea::tick(500, &on_blink);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.TAB:
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.TAB:
 			self.inputs[self.focus].focused = false;
 			if (k.shift) {
 				self.focus--;
@@ -54,35 +54,35 @@ fn tea::Cmd InputsModel.update(InputsModel* self, tea::Msg msg) @dynamic {
 				self.focus = (self.focus + 1) % 3;
 			}
 			self.inputs[self.focus].focused = true;
-		case tea::KeyCode.UP:
+		case milktea::KeyCode.UP:
 			self.inputs[self.focus].focused = false;
 			self.focus = (self.focus - 1 + 3) % 3;
 			self.inputs[self.focus].focused = true;
-		case tea::KeyCode.DOWN:
+		case milktea::KeyCode.DOWN:
 			self.inputs[self.focus].focused = false;
 			self.focus = (self.focus + 1) % 3;
 			self.inputs[self.focus].focused = true;
-		case tea::KeyCode.ENTER:
+		case milktea::KeyCode.ENTER:
 			if (self.focus < 2) {
 				self.inputs[self.focus].focused = false;
 				self.focus++;
 				self.inputs[self.focus].focused = true;
 			} else {
 				self.submitted = true;
-				return tea::quit();
+				return milktea::quit();
 			}
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	if (self.inputs[self.focus].handle_key(k)) return null;
 	return null;
 }
 
-fn tea::View InputsModel.view(InputsModel* self) @dynamic {
-	lipgloss::Style title = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
+	glaze::Style title = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(0, 0, 1, 0);
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	out.append_string(title.render("Sign Up"));
@@ -113,29 +113,29 @@ fn tea::View InputsModel.view(InputsModel* self) @dynamic {
 	out.append_char('\n');
 
 	if (self.focus == 2) {
-		lipgloss::Style btn = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff"))
-			.background(lipgloss::color_hex("#00d7ff"))
+		glaze::Style btn = glaze::new_style().foreground(glaze::color_hex("#ffffff"))
+			.background(glaze::color_hex("#00d7ff"))
 			.padding(0, 2, 0, 2)
 			.set_bold(true);
 		out.append_string(btn.render(" Submit "));
 	} else {
-		lipgloss::Style btn = lipgloss::new_style().foreground(lipgloss::color_hex("#888888")).padding(0, 2, 0, 2);
+		glaze::Style btn = glaze::new_style().foreground(glaze::color_hex("#888888")).padding(0, 2, 0, 2);
 		out.append_string(btn.render(" Submit "));
 	}
 	out.append_char('\n');
 	out.append_char('\n');
 	out.append_string(hint.render("TAB/Shift+TAB switch | ENTER submit | ESC quit"));
 
-	tea::View v = tea::new_alt_screen_view(out.str_view());
+	milktea::View v = milktea::new_alt_screen_view(out.str_view());
 	v.has_cursor = true;
-	v.cursor = tea::new_cursor(cursor_x, cursor_y);
+	v.cursor = milktea::new_cursor(cursor_x, cursor_y);
 	return v;
 }
 
 fn int main() {
 	InputsModel m = { };
 
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

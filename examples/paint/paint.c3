@@ -1,7 +1,7 @@
 module paint;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import xray;
 import std::io;
 import std::core::string;
@@ -108,7 +108,7 @@ struct Model {
 
 // ── Tea Model ─────────────────────────────────────────────────────────────────
 
-fn tea::Cmd Model.init(Model* self) @dynamic {
+fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.selected_color = 1;
 	self.tool = PaintTool.PAINT;
 	self.stroke_width = 1;
@@ -121,8 +121,8 @@ fn tea::Cmd Model.init(Model* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.term_width = msg.window_size.width;
 		self.term_height = msg.window_size.height;
 		// Row 0 = toolbar; remaining rows split into palette (5 wide) + canvas
@@ -135,7 +135,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.MOUSE) {
+	if (msg.kind == milktea::MsgKind.MOUSE) {
 		int col = msg.mouse.col;
 		int row = msg.mouse.row;
 
@@ -189,7 +189,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 		int crow       = (row - self.canvas_rect.y) * 2;
 		bool in_canvas = ccol >= 0 && ccol < self.canvas.width && crow >= 0 && crow < self.canvas.height;
 
-		if (msg.mouse.action == tea::MouseAction.MOUSE_PRESS && in_canvas) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && in_canvas) {
 			self.was_pressing = true;
 			int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
 			int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
@@ -199,7 +199,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 			return null;
 		}
 
-		if (msg.mouse.action == tea::MouseAction.MOUSE_MOTION && self.was_pressing && in_canvas) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.was_pressing && in_canvas) {
 			int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
 			int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
 			if (self.last_draw_col >= 0 && self.last_draw_row >= 0) {
@@ -212,7 +212,7 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 			return null;
 		}
 
-		if (msg.mouse.action == tea::MouseAction.MOUSE_RELEASE) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
 			self.was_pressing = false;
 			self.last_draw_col = -1;
 			self.last_draw_row = -1;
@@ -221,15 +221,15 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q' || k.rune == 'Q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
 			if (k.rune == 'p' || k.rune == 'P') {
 				self.tool = PaintTool.PAINT;
 			} else if (k.rune == 'e' || k.rune == 'E') {
@@ -263,8 +263,8 @@ fn String build_palette_column(Model* self) {
 		String cell_bg = PALETTE_HEX[color_idx];
 		String fg      = (color_idx == 7) ? "#000000" : "#ffffff";
 
-		lipgloss::Style s = lipgloss::new_style().foreground(lipgloss::color_hex(fg))
-			.background(lipgloss::color_hex(cell_bg));
+		glaze::Style s = glaze::new_style().foreground(glaze::color_hex(fg))
+			.background(glaze::color_hex(cell_bg));
 
 		for (int row = 0; row < 3; row++) {
 			String content = (selected && row == 1) ? "  ✓  " : "     ";
@@ -273,8 +273,8 @@ fn String build_palette_column(Model* self) {
 		}
 	}
 
-	lipgloss::Style s = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"))
-		.background(lipgloss::color_hex(bg_empty));
+	glaze::Style s = glaze::new_style().foreground(glaze::color_hex("#888888"))
+		.background(glaze::color_hex(bg_empty));
 	out.append_string(s.render(string::tformat("W:%d", self.stroke_width)));
 
 	return out.str_view();
@@ -287,8 +287,8 @@ fn String build_tools_toolbar(Model* self) {
 	out.append_string(" | ");
 	for (int w = 1; w <= 3; w++) {
 		bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
-		lipgloss::Style s = lipgloss::new_style().foreground(lipgloss::color_hex(active ? "#000000" : "#888888"))
-			.background(lipgloss::color_hex(active ? "#55ffff" : "#222222"));
+		glaze::Style s = glaze::new_style().foreground(glaze::color_hex(active ? "#000000" : "#888888"))
+			.background(glaze::color_hex(active ? "#55ffff" : "#222222"));
 		out.append_string(s.render(string::tformat("%d", w)));
 	}
 	out.append_string(" | ");
@@ -301,11 +301,11 @@ fn String build_tools_toolbar(Model* self) {
 
 fn String build_top_bar(Model* self, int width) {
 	String tools  = build_tools_toolbar(self);
-	int remaining = width - 1 - lipgloss::string_width(tools);
+	int remaining = width - 1 - glaze::string_width(tools);
 	if (remaining > 0) {
 		DString pad = dstring::temp();
 		for (int i = 0; i < remaining; i++) pad.append_char(' ');
-		return lipgloss::join_horizontal(tools, pad.str_view(), 0);
+		return glaze::join_horizontal(tools, pad.str_view(), 0);
 	}
 	return tools;
 }
@@ -316,8 +316,8 @@ fn String build_canvas_view(Canvas* c) {
 
 	// Two canvas pixel rows per terminal row via half-block characters.
 	for (int py = 0; py < c.height; py += 2) {
-		lipgloss::Style sep = lipgloss::new_style().foreground(lipgloss::color_hex("#444444"))
-			.background(lipgloss::color_hex(bg_empty));
+		glaze::Style sep = glaze::new_style().foreground(glaze::color_hex("#444444"))
+			.background(glaze::color_hex(bg_empty));
 		out.append_string(sep.render("|"));
 
 		for (int px = 0; px < c.width; px++) {
@@ -350,8 +350,8 @@ fn String build_canvas_view(Canvas* c) {
 				bg = bg_empty;
 			}
 
-			lipgloss::Style s = lipgloss::new_style().foreground(lipgloss::color_hex(fg))
-				.background(lipgloss::color_hex(bg));
+			glaze::Style s = glaze::new_style().foreground(glaze::color_hex(fg))
+				.background(glaze::color_hex(bg));
 			out.append_string(s.render(glyph));
 		}
 		out.append_char('\n');
@@ -361,31 +361,31 @@ fn String build_canvas_view(Canvas* c) {
 
 // ── View ──────────────────────────────────────────────────────────────────────
 
-fn tea::View Model.view(Model* self) @dynamic {
+fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.term_width == 0 || self.term_height == 0) {
-		return tea::new_alt_screen_view("");
+		return milktea::new_alt_screen_view("");
 	}
 
 	String top_bar      = build_top_bar(self, self.term_width);
 	String palette      = build_palette_column(self);
 	String canvas_view  = build_canvas_view(&self.canvas);
-	String content_area = lipgloss::join_horizontal(palette, canvas_view, 0);
-	String content      = lipgloss::join_vertical(lipgloss::Position.LEFT, top_bar, content_area);
+	String content_area = glaze::join_horizontal(palette, canvas_view, 0);
+	String content      = glaze::join_vertical(glaze::Position.LEFT, top_bar, content_area);
 
-	return tea::new_alt_screen_view(content).set_mouse_cursor("crosshair");
+	return milktea::new_alt_screen_view(content).set_mouse_cursor("crosshair");
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn int main() {
 	Model m = { };
-	tea::enter_alt_screen();
-	tea::enable_mouse();
+	milktea::enter_alt_screen();
+	milktea::enable_mouse();
 	defer {
-		tea::disable_mouse();
+		milktea::disable_mouse();
 	}
 
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -1,6 +1,6 @@
 module doom_fire;
 
-import tea;
+import milktea;
 import xray;
 import std::io;
 import std::core::string;
@@ -84,7 +84,7 @@ fn void init_fire_cells() {
 	}
 }
 
-fn tea::Cmd FireModel.init(FireModel* self) @dynamic {
+fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	ulong seed = (ulong)c3_time_ms_long();
 	srand((uint)seed);
 	self.startTime = c3_time_ms_long();
@@ -101,7 +101,7 @@ fn tea::Cmd FireModel.init(FireModel* self) @dynamic {
 
 	init_fire_cells();
 
-	return tea::tick();
+	return milktea::tick();
 }
 
 
@@ -123,8 +123,8 @@ fn void spread_pixel(FireModel* m, int idx) {
 	}
 }
 
-fn tea::Cmd FireModel.update(FireModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		int new_w = msg.window_size.width;
 		int new_h = msg.window_size.height * 2;
 		if (new_w > MAX_W) new_w = MAX_W;
@@ -145,30 +145,30 @@ fn tea::Cmd FireModel.update(FireModel* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		for (int x = 0; x < self.width; x++) {
 			for (int y = 0; y < self.height; y++) {
 				spread_pixel(self, y * self.width + x);
 			}
 		}
-		return tea::tick();
+		return milktea::tick();
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View FireModel.view(FireModel* self) @dynamic {
-	if (self.width == 0) return tea::new_view("Initializing...");
+fn milktea::View FireModel.view(FireModel* self) @dynamic {
+	if (self.width == 0) return milktea::new_view("Initializing...");
 
 	// Build cell grid directly — no string, no ANSI, no parsing.
 	// xray's diff engine handles minimal output.
@@ -191,12 +191,12 @@ fn tea::View FireModel.view(FireModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.view_cells, (sz)view_w, (sz)view_h);
+	return milktea::new_alt_cell_view(self.view_cells, (sz)view_w, (sz)view_h);
 }
 
 fn int main() {
 	FireModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

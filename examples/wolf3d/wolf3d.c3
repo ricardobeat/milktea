@@ -1,8 +1,8 @@
 module wolf3d;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import std::io;
 import std::math;
 import std::os;
@@ -56,7 +56,7 @@ struct Wolf3D {
 
 // ── Tea Methods ──────────────────────────────────────────────────────────────
 
-fn tea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
+fn milktea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.pos_x = 3.0f;
@@ -66,7 +66,7 @@ fn tea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
 	self.plane_x = 0.0f;
 	self.plane_y = 0.66f;
 	self.allocate_buffers();
-	return tea::tick();
+	return milktea::tick();
 }
 
 fn void Wolf3D.allocate_buffers(Wolf3D* self) {
@@ -76,8 +76,8 @@ fn void Wolf3D.allocate_buffers(Wolf3D* self) {
 	self.depth = mem::new_array(float, (sz)self.width);
 }
 
-fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
@@ -88,11 +88,11 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.KEY) {
-		tea::KeyMsg k = msg.key;
-		if (k.code == tea::KeyCode.ESC || (k.code == tea::KeyCode.RUNE && k.rune == 'q')) return tea::quit();
+	if (msg.kind == milktea::MsgKind.KEY) {
+		milktea::KeyMsg k = msg.key;
+		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
 
-		if (k.code == tea::KeyCode.RUNE) {
+		if (k.code == milktea::KeyCode.RUNE) {
 			switch (k.rune) {
 				case 'w': self.key_w = self.tick_count;
 				case 's': self.key_s = self.tick_count;
@@ -100,11 +100,11 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 				case 'd': self.key_right = self.tick_count;
 			}
 		}
-		if (k.code == tea::KeyCode.LEFT) self.key_left = self.tick_count;
-		if (k.code == tea::KeyCode.RIGHT) self.key_right = self.tick_count;
+		if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
+		if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.tick_count++;
 
 		float move_speed = 0.25f;
@@ -144,12 +144,12 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 			self.key_left = 0;
 		}
 
-		return tea::tick();
+		return milktea::tick();
 	}
 	return null;
 }
 
-fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
+fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 	int w  = self.width;
 	int h  = self.height;
 	int ph = h * 2;
@@ -271,12 +271,12 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main(String[] args) {
 	Wolf3D* app = mem::new(Wolf3D);
-	if (catch err = tea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

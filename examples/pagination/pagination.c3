@@ -1,8 +1,8 @@
 module pagination;
 
-import tea;
-import lipgloss;
-import pearls;
+import milktea;
+import glaze;
+import boba;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -10,27 +10,27 @@ import std::core::dstring;
 const int TOTAL_ITEMS = 50;
 
 struct PaginationModel {
-	pearls::Pagination pg;
+	boba::Pagination pg;
 	int cursor;
 	int width;
 	int height;
 	bool[1000] selected;
 }
 
-fn tea::Cmd PaginationModel.init(PaginationModel* self) @dynamic {
-	self.pg = pearls::new_pagination(8, TOTAL_ITEMS);
+fn milktea::Cmd PaginationModel.init(PaginationModel* self) @dynamic {
+	self.pg = boba::new_pagination(8, TOTAL_ITEMS);
 	return null;
 }
 
-fn tea::Cmd PaginationModel.update(PaginationModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	if (self.pg.handle_key(k)) return null;
 
@@ -38,39 +38,39 @@ fn tea::Cmd PaginationModel.update(PaginationModel* self, tea::Msg msg) @dynamic
 	int page_end   = self.pg.page_end();
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.UP:
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.UP:
 			if (self.cursor > page_start) self.cursor--;
-		case tea::KeyCode.DOWN:
+		case milktea::KeyCode.DOWN:
 			if (self.cursor < page_end - 1) self.cursor++;
-		case tea::KeyCode.HOME:
+		case milktea::KeyCode.HOME:
 			self.cursor = page_start;
-		case tea::KeyCode.END:
+		case milktea::KeyCode.END:
 			self.cursor = page_end - 1;
-		case tea::KeyCode.ENTER:
+		case milktea::KeyCode.ENTER:
 			self.selected[self.cursor] = !self.selected[self.cursor];
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < page_end - 1) self.cursor++;
 			}
 			if (k.rune == 'k') {
 				if (self.cursor > page_start) self.cursor--;
 			}
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View PaginationModel.view(PaginationModel* self) @dynamic {
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(0, 0, 1, 0);
-	lipgloss::Style cursor_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
-	lipgloss::Style check_style  = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00"));
-	lipgloss::Style dim_style    = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style cursor_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
+	glaze::Style check_style  = glaze::new_style().foreground(glaze::color_hex("#00ff00"));
+	glaze::Style dim_style    = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	int tp      = self.pg.total_pages();
@@ -101,12 +101,12 @@ fn tea::View PaginationModel.view(PaginationModel* self) @dynamic {
 	out.append_string(self.pg.view());
 	out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  ←→ pages  |  q quit"));
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	PaginationModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -1,7 +1,7 @@
 module progress;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -16,20 +16,20 @@ struct ProgressModel {
 	int height;
 }
 
-fn tea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
+fn milktea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
 	self.speed = 1;
-	return tea::tick(50);
+	return milktea::tick(50);
 }
 
 
-fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		if (!self.done) {
 			self.progress += self.speed;
 			if (self.progress >= TOTAL) {
@@ -37,41 +37,41 @@ fn tea::Cmd ProgressModel.update(ProgressModel* self, tea::Msg msg) @dynamic {
 				self.done = true;
 			}
 		}
-		return tea::tick(50);
+		return milktea::tick(50);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'f') self.speed = 5;
 			if (k.rune == 's') self.speed = 1;
 			if (k.rune == 'r') {
 				self.progress = 0;
 				self.done = false;
 				self.speed = 1;
-				return tea::tick(50);
+				return milktea::tick(50);
 			}
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View ProgressModel.view(ProgressModel* self) @dynamic {
-	lipgloss::Style title = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true)
+fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
+	glaze::Style title = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
 		.padding(0, 0, 1, 0);
 
-	lipgloss::Style done_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00")).set_bold(true);
+	glaze::Style done_style = glaze::new_style().foreground(glaze::color_hex("#00ff00")).set_bold(true);
 
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
-	lipgloss::Style box_style = lipgloss::new_style().set_border(lipgloss::rounded_border()).padding(1, 2, 1, 2);
+	glaze::Style box_style = glaze::new_style().set_border(glaze::rounded_border()).padding(1, 2, 1, 2);
 
 	int pct = (self.progress * 100) / TOTAL;
 
@@ -81,33 +81,33 @@ fn tea::View ProgressModel.view(ProgressModel* self) @dynamic {
 	content.append_char('\n');
 
 	// Main progress bar
-	String bar1 = lipgloss::progress_bar(
+	String bar1 = glaze::progress_bar(
 		40,
 		pct,
 		"█",
 		"░",
-		lipgloss::color_hex("#00d7ff"),
-		lipgloss::color_hex("#222222")
+		glaze::color_hex("#00d7ff"),
+		glaze::color_hex("#222222")
 	);
 
 	// Second bar with different style
-	String bar2 = lipgloss::progress_bar(
+	String bar2 = glaze::progress_bar(
 		40,
 		pct,
 		"■",
 		"□",
-		lipgloss::color_hex("#ff00ff"),
-		lipgloss::color_hex("#222222")
+		glaze::color_hex("#ff00ff"),
+		glaze::color_hex("#222222")
 	);
 
 	// Third bar with gradient feel
-	String bar3 = lipgloss::progress_bar(
+	String bar3 = glaze::progress_bar(
 		40,
 		pct,
 		"=",
 		"-",
-		lipgloss::color_hex("#00ff88"),
-		lipgloss::color_hex("#333333")
+		glaze::color_hex("#00ff88"),
+		glaze::color_hex("#333333")
 	);
 
 	content.append_string(string::tformat(" Download %s %d%%\n", bar1, pct));
@@ -125,12 +125,12 @@ fn tea::View ProgressModel.view(ProgressModel* self) @dynamic {
 		content.append_string(hint.render("  |  f fast  |  s slow  |  r restart  |  q quit"));
 	}
 
-	return tea::new_alt_screen_view(box_style.render(content.str_view()));
+	return milktea::new_alt_screen_view(box_style.render(content.str_view()));
 }
 
 fn int main() {
 	ProgressModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

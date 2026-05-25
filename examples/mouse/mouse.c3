@@ -1,7 +1,7 @@
 module mouse;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -11,46 +11,46 @@ struct Model {
 	int height;
 	int mouse_row;
 	int mouse_col;
-	tea::MouseButton last_button;
-	tea::MouseAction last_action;
+	milktea::MouseButton last_button;
+	milktea::MouseAction last_action;
 	bool dragging;
 	String[32] trail;
 	int trail_count;
 }
 
-fn tea::Cmd Model.init(Model* self) @dynamic {
+fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.mouse_row = 0;
 	self.mouse_col = 0;
-	self.last_button = tea::MouseButton.MOUSE_NONE;
-	self.last_action = tea::MouseAction.MOUSE_PRESS;
+	self.last_button = milktea::MouseButton.MOUSE_NONE;
+	self.last_action = milktea::MouseAction.MOUSE_PRESS;
 	self.dragging = false;
 	self.trail_count = 0;
 	return null;
 }
 
-fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.MOUSE) {
+	if (msg.kind == milktea::MsgKind.MOUSE) {
 		self.mouse_row = msg.mouse.row;
 		self.mouse_col = msg.mouse.col;
 		self.last_button = msg.mouse.button;
 		self.last_action = msg.mouse.action;
-		if (msg.mouse.action == tea::MouseAction.MOUSE_PRESS && msg.mouse.button == tea::MouseButton.MOUSE_LEFT) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
 			self.dragging = true;
 			if (self.trail_count < self.trail.len) {
 				self.trail[self.trail_count] = string::tformat("(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
 			}
 		}
-		if (msg.mouse.action == tea::MouseAction.MOUSE_RELEASE) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
 			self.dragging = false;
 		}
-		if (msg.mouse.action == tea::MouseAction.MOUSE_MOTION && self.dragging) {
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
 			if (self.trail_count < self.trail.len) {
 				self.trail[self.trail_count] = string::tformat("(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
@@ -59,14 +59,14 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'c') {
 				self.trail_count = 0;
 			}
@@ -75,12 +75,12 @@ fn tea::Cmd Model.update(Model* self, tea::Msg msg) @dynamic {
 	return null;
 }
 
-fn tea::View Model.view(Model* self) @dynamic {
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
+fn milktea::View Model.view(Model* self) @dynamic {
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
 
-	lipgloss::Style info_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff"));
+	glaze::Style info_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff"));
 
-	lipgloss::Style hint_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	out.append_string(title_style.render("Mouse Event Viewer"));
@@ -88,17 +88,17 @@ fn tea::View Model.view(Model* self) @dynamic {
 
 	String button_name = "none";
 	switch (self.last_button) {
-		case tea::MouseButton.MOUSE_LEFT: { button_name = "left"; }
-		case tea::MouseButton.MOUSE_MIDDLE: { button_name = "middle"; }
-		case tea::MouseButton.MOUSE_RIGHT: { button_name = "right"; }
+		case milktea::MouseButton.MOUSE_LEFT: { button_name = "left"; }
+		case milktea::MouseButton.MOUSE_MIDDLE: { button_name = "middle"; }
+		case milktea::MouseButton.MOUSE_RIGHT: { button_name = "right"; }
 		default: { }
 	}
 
 	String action_name = "press";
 	switch (self.last_action) {
-		case tea::MouseAction.MOUSE_PRESS: { action_name = "press"; }
-		case tea::MouseAction.MOUSE_RELEASE: { action_name = "release"; }
-		case tea::MouseAction.MOUSE_MOTION: { action_name = "motion"; }
+		case milktea::MouseAction.MOUSE_PRESS: { action_name = "press"; }
+		case milktea::MouseAction.MOUSE_RELEASE: { action_name = "release"; }
+		case milktea::MouseAction.MOUSE_MOTION: { action_name = "motion"; }
 		default: { }
 	}
 
@@ -123,21 +123,21 @@ fn tea::View Model.view(Model* self) @dynamic {
 
 	out.append_string("\n\n");
 	out.append_string(hint_style.render("Click/drag to track  |  c to clear  |  q to quit"));
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
-	tea::enter_alt_screen();
-	tea::enable_mouse();
+	milktea::enter_alt_screen();
+	milktea::enable_mouse();
 
-	if (catch err = tea::@run_program(&m)) {
-		tea::disable_mouse();
+	if (catch err = milktea::@run_program(&m)) {
+		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;
 	}
 
-	tea::disable_mouse();
+	milktea::disable_mouse();
 	io::printn("Bye!");
 	return 0;
 }

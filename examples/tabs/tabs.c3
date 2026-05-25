@@ -1,7 +1,7 @@
 module tabs;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -12,25 +12,25 @@ struct TabsModel {
 	int height;
 }
 
-fn tea::Cmd TabsModel.init(TabsModel* self) @dynamic {
+fn milktea::Cmd TabsModel.init(TabsModel* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd TabsModel.update(TabsModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd TabsModel.update(TabsModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == '1') self.active_tab = 0;
 			if (k.rune == '2') self.active_tab = 1;
 			if (k.rune == '3') self.active_tab = 2;
@@ -41,12 +41,12 @@ fn tea::Cmd TabsModel.update(TabsModel* self, tea::Msg msg) @dynamic {
 			if (k.rune == 'l') {
 				if (self.active_tab < 3) self.active_tab++;
 			}
-		case tea::KeyCode.LEFT:
+		case milktea::KeyCode.LEFT:
 			if (self.active_tab > 0) self.active_tab--;
-		case tea::KeyCode.RIGHT:
+		case milktea::KeyCode.RIGHT:
 			if (self.active_tab < 3) self.active_tab++;
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
@@ -61,17 +61,17 @@ fn String tab_content(int tab) {
 	}
 }
 
-fn tea::View TabsModel.view(TabsModel* self) @dynamic {
-	lipgloss::Style active_tab = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff"))
-		.background(lipgloss::color_hex("#00d7ff"))
+fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
+	glaze::Style active_tab = glaze::new_style().foreground(glaze::color_hex("#ffffff"))
+		.background(glaze::color_hex("#00d7ff"))
 		.padding(0, 2, 0, 2)
 		.set_bold(true);
 
-	lipgloss::Style inactive_tab = lipgloss::new_style().foreground(lipgloss::color_hex("#888888")).padding(0, 2, 0, 2);
+	glaze::Style inactive_tab = glaze::new_style().foreground(glaze::color_hex("#888888")).padding(0, 2, 0, 2);
 
-	lipgloss::Style content_style = lipgloss::new_style().padding(1, 2, 1, 2).set_border(lipgloss::rounded_border());
+	glaze::Style content_style = glaze::new_style().padding(1, 2, 1, 2).set_border(glaze::rounded_border());
 
-	lipgloss::Style hint_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666"));
+	glaze::Style hint_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	String[4] tab_names = { "Home", "About", "Keys", "Config" };
 
@@ -86,23 +86,23 @@ fn tea::View TabsModel.view(TabsModel* self) @dynamic {
 			tab_views[i] = inactive_tab.render(tab_names[i]);
 		}
 	}
-	out.append_string(lipgloss::join_horizontal_arr(lipgloss::Position.BOTTOM, tab_views[..], 0));
+	out.append_string(glaze::join_horizontal_arr(glaze::Position.BOTTOM, tab_views[..], 0));
 
 	out.append_char('\n');
 
 	// Content - use height to limit content area
 	String content = tab_content(self.active_tab);
-	String clipped = lipgloss::clip_lines(content, self.height - 4);
+	String clipped = glaze::clip_lines(content, self.height - 4);
 	out.append_string(content_style.render(clipped));
 	out.append_char('\n');
 	out.append_string(hint_style.render("← → switch tabs | q quit"));
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	TabsModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

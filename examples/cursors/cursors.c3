@@ -6,8 +6,8 @@
 // Tab / Shift+Tab cycles focus. q or Ctrl+C to quit.
 module cursors;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import xray;
 import std::io;
 
@@ -26,7 +26,7 @@ fn String cursor_crosshair(int x, int y, bool blink) {
 }
 
 fn String cursor_snake(int x, int y, bool blink) {
-	long now  = tea::time_ms();
+	long now  = milktea::time_ms();
 	int phase = (int)((now / 150) % 4);
 	switch (phase) {
 		case 0: return "█";
@@ -37,14 +37,14 @@ fn String cursor_snake(int x, int y, bool blink) {
 }
 
 fn String cursor_rainbow(int x, int y, bool blink) {
-	long now         = tea::time_ms();
+	long now         = milktea::time_ms();
 	int phase        = (int)((now / 100) % 6);
 	String[6] colors = { "\x1b[31m", "\x1b[33m", "\x1b[32m", "\x1b[36m", "\x1b[34m", "\x1b[35m", };
 	return string::tformat("%s█\x1b[0m", colors[phase]);
 }
 
 fn String cursor_matrix(int x, int y, bool blink) {
-	long now = tea::time_ms();
+	long now = milktea::time_ms();
 	int idx  = (int)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
 	uint cp  = 0x30A1u + (uint)idx; // katakana block
 	char[4] buf;
@@ -73,7 +73,7 @@ struct Entry {
 	DrawCursorFn draw;
 	int interval_ms;
 	// section B: draw == null; use native shape + color
-	tea::CursorShape shape;
+	milktea::CursorShape shape;
 	String native_color;
 	bool blink_native;
 	// input buffer
@@ -118,7 +118,7 @@ struct Model {
 	int height;
 }
 
-fn tea::Cmd Model.init(&self) @dynamic {
+fn milktea::Cmd Model.init(&self) @dynamic {
 	// Section A: draw-cursor
 	self.entries[0] = { .label = "fire", .border_color = "#ff4400", .interval_ms = 400, .draw = &cursor_fire };
 	self.entries[1] = { .label = "skull", .border_color = "#888888", .interval_ms = 500, .draw = &cursor_skull };
@@ -135,58 +135,58 @@ fn tea::Cmd Model.init(&self) @dynamic {
 	self.entries[6] = {
 		.label = "block",
 		.border_color = "#4488ff",
-		.shape = tea::CursorShape.CURSOR_BLOCK,
+		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "",
 		.blink_native = true
 	};
 	self.entries[7] = {
 		.label = "underline",
 		.border_color = "#44ccff",
-		.shape = tea::CursorShape.CURSOR_UNDERLINE,
+		.shape = milktea::CursorShape.CURSOR_UNDERLINE,
 		.native_color = "#00ccff",
 		.blink_native = true
 	};
 	self.entries[8] = {
 		.label = "bar",
 		.border_color = "#ff44cc",
-		.shape = tea::CursorShape.CURSOR_BAR,
+		.shape = milktea::CursorShape.CURSOR_BAR,
 		.native_color = "#ff44cc",
 		.blink_native = true
 	};
 	self.entries[9] = {
 		.label = "steady",
 		.border_color = "#ffaa00",
-		.shape = tea::CursorShape.CURSOR_BLOCK,
+		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "#ffaa00",
 		.blink_native = false
 	};
-	return tea::tick(16);
+	return milktea::tick(16);
 }
 
-fn tea::Cmd Model.update(&self, tea::Msg msg) @dynamic {
+fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
-		case tea::MsgKind.WINDOW_SIZE:
+		case milktea::MsgKind.WINDOW_SIZE:
 			self.width = msg.window_size.width;
 			self.height = msg.window_size.height;
-			return tea::tick(16);
-		case tea::MsgKind.TICK:
-			return tea::tick(16);
-		case tea::MsgKind.KEY:
-			tea::KeyMsg k = msg.key;
+			return milktea::tick(16);
+		case milktea::MsgKind.TICK:
+			return milktea::tick(16);
+		case milktea::MsgKind.KEY:
+			milktea::KeyMsg k = msg.key;
 			switch (k.code) {
-				case tea::KeyCode.CTRL_C:
-				case tea::KeyCode.ESC:
-					return tea::quit();
-				case tea::KeyCode.RUNE:
-					if (k.rune == 'q') return tea::quit();
+				case milktea::KeyCode.CTRL_C:
+				case milktea::KeyCode.ESC:
+					return milktea::quit();
+				case milktea::KeyCode.RUNE:
+					if (k.rune == 'q') return milktea::quit();
 					self.entries[self.focused].insert(k.rune);
-				case tea::KeyCode.BACKSPACE:
+				case milktea::KeyCode.BACKSPACE:
 					self.entries[self.focused].backspace();
-				case tea::KeyCode.LEFT:
+				case milktea::KeyCode.LEFT:
 					self.entries[self.focused].move_left();
-				case tea::KeyCode.RIGHT:
+				case milktea::KeyCode.RIGHT:
 					self.entries[self.focused].move_right();
-				case tea::KeyCode.TAB:
+				case milktea::KeyCode.TAB:
 					self.focused = k.shift ? (self.focused + N - 1) % N : (self.focused + 1) % N;
 				default:
 			}
@@ -195,7 +195,7 @@ fn tea::Cmd Model.update(&self, tea::Msg msg) @dynamic {
 	return null;
 }
 
-fn tea::View Model.view(&self) @dynamic {
+fn milktea::View Model.view(&self) @dynamic {
 	int w = self.width > 0 ? self.width : 80;
 	int h = self.height > 0 ? self.height : 24;
 
@@ -223,9 +223,9 @@ fn tea::View Model.view(&self) @dynamic {
 		String fc       = is_focused ? "#ffffff" : "#555555";
 
 		// Input box
-		lipgloss::Style box = lipgloss::new_style().set_border(lipgloss::rounded_border())
-			.set_border_fg(lipgloss::color_hex(bc))
-			.foreground(lipgloss::color_hex(fc))
+		glaze::Style box = glaze::new_style().set_border(glaze::rounded_border())
+			.set_border_fg(glaze::color_hex(bc))
+			.foreground(glaze::color_hex(fc))
 			.set_width(input_w);
 		String rendered = box.render(string::tformat("%s%s", PROMPT, e.text()));
 		screen.render_ansi_string((sz)BOX_LEFT, (sz)row, rendered, xray::default_style(), (sz)(row + 3));
@@ -240,7 +240,7 @@ fn tea::View Model.view(&self) @dynamic {
 			// Section A: paint draw-cursor — overlay_char writes exactly one
 			// cell slot so wide chars (emoji, katakana) never displace neighbors.
 			if (e.draw != null) {
-				long now     = tea::time_ms();
+				long now     = milktea::time_ms();
 				bool blink   = ((now / (long)e.interval_ms) % 2) == 0;
 				String drawn = e.draw(cx, cy, blink);
 				if (drawn.len > 0) {
@@ -252,7 +252,7 @@ fn tea::View Model.view(&self) @dynamic {
 		row += 3;
 	}
 
-	tea::View view = tea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
+	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
 	screen.destroy();
 	mem::free(screen);
 
@@ -273,7 +273,7 @@ fn void Model.on_destroy(&self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

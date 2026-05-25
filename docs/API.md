@@ -1,6 +1,6 @@
-# jsrt API Reference
+# taro API Reference
 
-The jsrt runtime embeds a QuickJS-based JavaScript engine inside a milktea C3 application. Scripts have access to built-in modules and globals for file I/O, networking, timers, console output, and TUI component bridges.
+The taro runtime embeds a QuickJS-based JavaScript engine inside a milktea C3 application. Scripts have access to built-in modules and globals for file I/O, networking, timers, console output, and TUI component bridges.
 
 All APIs are synchronous unless noted otherwise.
 
@@ -140,12 +140,12 @@ const path = getenv("PATH");
 
 ---
 
-### `"tea"` — milktea Framework
+### `"milktea"` — milktea Framework
 
 Re-exports the `tea` global and `h` helper for use in ES modules.
 
 ```js
-import { tea, h } from "tea";
+import { milktea, h } from "milktea";
 ```
 
 See [Global Objects](#global-objects) below for the full `tea` and `h` API.
@@ -167,22 +167,22 @@ Available in all scripts without imports.
 
 ### `h(type, props, ...children) → vnode`
 
-Creates a virtual DOM node for use with `tea.run()`.
+Creates a virtual DOM node for use with `milktea.run()`.
 
 ```js
-const btn = h("button", { onclick: () => tea.quit() }, "Exit");
+const btn = h("button", { onclick: () => milktea.quit() }, "Exit");
 ```
 
 Returns `{ type, props: {...}, children: [...] }`.
 
-### `tea` — milktea API
+### `milktea` — milktea API
 
 #### App lifecycle
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `tea.run(model)` | `model → void` | Register the application model. Required — scripts that do not call this will fail. |
-| `tea.quit()` | `→ "quit"` | Request application exit |
+| `milktea.run(model)` | `model → void` | Register the application model. Required — scripts that do not call this will fail. |
+| `milktea.quit()` | `→ "quit"` | Request application exit |
 
 The `model` object must implement:
 - `init()` — called once at startup, return `null` or a command
@@ -190,12 +190,12 @@ The `model` object must implement:
 - `view()` — return a string or vnode tree to render
 
 ```js
-tea.run({
+milktea.run({
   count: 0,
   init() { return null; },
   update(msg) {
-    if (tea.isKey(msg, "q") || tea.isKey(msg, "ctrl+c")) return tea.quit();
-    if (tea.isKey(msg, "space")) this.count++;
+    if (milktea.isKey(msg, "q") || milktea.isKey(msg, "ctrl+c")) return milktea.quit();
+    if (milktea.isKey(msg, "space")) this.count++;
     return this;
   },
   view() { return `Count: ${this.count}\nPress space, q to quit`; },
@@ -206,15 +206,15 @@ tea.run({
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `tea.tick(tag)` | `tag → cmd` | Schedule a tick event (used with `tea.batch`) |
-| `tea.batch(...cmds)` | `...cmds → cmd` | Run multiple commands concurrently |
+| `milktea.tick(tag)` | `tag → cmd` | Schedule a tick event (used with `milktea.batch`) |
+| `milktea.batch(...cmds)` | `...cmds → cmd` | Run multiple commands concurrently |
 
 #### Key helpers
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `tea.keyName(msg)` | `msg → string` | Extract the key code from a key message |
-| `tea.isKey(msg, code)` | `(msg, code) → boolean` | Check if a message matches a key code |
+| `milktea.keyName(msg)` | `msg → string` | Extract the key code from a key message |
+| `milktea.isKey(msg, code)` | `(msg, code) → boolean` | Check if a message matches a key code |
 
 Common key codes: `"q"`, `"space"`, `"enter"`, `"esc"`, `"tab"`, `"backspace"`, `"delete"`, `"up"`, `"down"`, `"left"`, `"right"`, `"ctrl+c"`, `"ctrl+z"`, `"ctrl+l"`.
 
@@ -222,21 +222,21 @@ Common key codes: `"q"`, `"space"`, `"enter"`, `"esc"`, `"tab"`, `"backspace"`, 
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `tea.textareaUpdate(id, msg)` | Forward a key event to the textarea |
-| `tea.textareaGetText(id)` | `→ string` | Get current text content |
-| `tea.textareaClear(id)` | Clear the textarea |
-| `tea.textareaGetCursor(id)` | `→ { row, col }` | Get cursor position |
+| `milktea.textareaUpdate(id, msg)` | Forward a key event to the textarea |
+| `milktea.textareaGetText(id)` | `→ string` | Get current text content |
+| `milktea.textareaClear(id)` | Clear the textarea |
+| `milktea.textareaGetCursor(id)` | `→ { row, col }` | Get cursor position |
 
 #### Viewport component
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `tea.viewportUpdate(id, msg)` | Forward a key event to the viewport |
-| `tea.viewportScrollToBottom(id)` | Scroll to the bottom |
-| `tea.viewportScrollUp(id)` | Scroll up one line |
-| `tea.viewportScrollDown(id)` | Scroll down one line |
-| `tea.viewportPageUp(id)` | Page up |
-| `tea.viewportPageDown(id)` | Page down |
+| `milktea.viewportUpdate(id, msg)` | Forward a key event to the viewport |
+| `milktea.viewportScrollToBottom(id)` | Scroll to the bottom |
+| `milktea.viewportScrollUp(id)` | Scroll up one line |
+| `milktea.viewportScrollDown(id)` | Scroll down one line |
+| `milktea.viewportPageUp(id)` | Page up |
+| `milktea.viewportPageDown(id)` | Page down |
 
 ---
 
@@ -315,16 +315,16 @@ const home = getenv("HOME");
 const configPath = home + "/.myapp/config.json";
 const config = file(configPath).json() || { count: 0 };
 
-tea.run({
+milktea.run({
   count: config.count,
   init() { return null; },
   update(msg) {
-    if (tea.isKey(msg, "q") || tea.isKey(msg, "ctrl+c")) {
+    if (milktea.isKey(msg, "q") || milktea.isKey(msg, "ctrl+c")) {
       // Save state before quitting
       write(configPath, JSON.stringify({ count: this.count }));
-      return tea.quit();
+      return milktea.quit();
     }
-    if (tea.isKey(msg, "space")) this.count++;
+    if (milktea.isKey(msg, "space")) this.count++;
     return this;
   },
   view() {

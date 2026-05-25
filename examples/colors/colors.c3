@@ -1,7 +1,7 @@
 module colors;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -11,33 +11,33 @@ struct ColorsModel {
 	int height;
 }
 
-fn tea::Cmd ColorsModel.init(ColorsModel* self) @dynamic {
+fn milktea::Cmd ColorsModel.init(ColorsModel* self) @dynamic {
 	return null;
 }
 
-fn tea::Cmd ColorsModel.update(ColorsModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd ColorsModel.update(ColorsModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View ColorsModel.view(ColorsModel* self) @dynamic {
+fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 	String[16] colors = {
 		"#000000", // Black
 		"#CD3131", // Red
@@ -68,7 +68,7 @@ fn tea::View ColorsModel.view(ColorsModel* self) @dynamic {
 				int idx      = row * 4 + col;
 				String color = colors[idx];
 
-				lipgloss::Style block = lipgloss::new_style().background(lipgloss::color_hex(color));
+				glaze::Style block = glaze::new_style().background(glaze::color_hex(color));
 
 				DString filler = dstring::temp();
 				for (int i = 0; i < block_width; i++) {
@@ -81,12 +81,12 @@ fn tea::View ColorsModel.view(ColorsModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	ColorsModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

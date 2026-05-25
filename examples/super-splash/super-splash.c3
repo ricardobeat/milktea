@@ -1,6 +1,6 @@
 module super_splash;
 
-import tea;
+import milktea;
 import xray;
 import std::io;
 import std::math;
@@ -223,7 +223,7 @@ fn void create_voxels(SuperSplashModel* self) {
 
 // ─── Lifecycle ───────────────────────────────────────────────
 
-fn tea::Cmd SuperSplashModel.init(SuperSplashModel* self) @dynamic {
+fn milktea::Cmd SuperSplashModel.init(SuperSplashModel* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.frame = 0;
@@ -236,11 +236,11 @@ fn tea::Cmd SuperSplashModel.init(SuperSplashModel* self) @dynamic {
 	self.depth = mem::new_array(float, (sz)(self.width * self.height * 2));
 	self.alpha = mem::new_array(float, (sz)(self.width * self.height * 2));
 	create_voxels(self);
-	return tea::tick();
+	return milktea::tick();
 }
 
-fn tea::Cmd SuperSplashModel.update(SuperSplashModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd SuperSplashModel.update(SuperSplashModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		sz total = (sz)(self.width * self.height);
@@ -258,15 +258,15 @@ fn tea::Cmd SuperSplashModel.update(SuperSplashModel* self, tea::Msg msg) @dynam
 		self.alpha = mem::new_array(float, (sz)(self.width * self.height * 2));
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
 		self.rotation_x = (float)math::sin((float)self.frame * 0.003) * 0.15f;
 		self.rotation_y = (float)self.frame * 0.01f;
 		self.rotation_z = 0.0f;
-		return tea::tick();
+		return milktea::tick();
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	return tea::quit();
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	return milktea::quit();
 }
 
 fn void SuperSplashModel.on_mount(SuperSplashModel* self) @dynamic {
@@ -280,7 +280,7 @@ fn void SuperSplashModel.on_blur(SuperSplashModel* self) @dynamic {
 
 // ─── View ────────────────────────────────────────────────────
 
-fn tea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
+fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	int w = self.width;
 	int h = self.height;
 	if (w < 2) w = 80;
@@ -513,12 +513,12 @@ fn tea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 fn int main() {
 	SuperSplashModel* m = mem::new(SuperSplashModel);
-	if (catch err = tea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

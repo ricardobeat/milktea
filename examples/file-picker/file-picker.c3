@@ -1,7 +1,7 @@
 module file_picker;
 
-import tea;
-import pearls;
+import milktea;
+import boba;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -9,63 +9,63 @@ import std::core::dstring;
 const int MSG_CLEAR_ERROR = 1;
 
 struct PickerModel {
-	pearls::FilePicker fp;
+	boba::FilePicker fp;
 	int width;
 	int height;
 	bool has_error;
 	String error_msg;
 }
 
-fn tea::Msg on_clear_error() {
-	return { .kind = tea::MsgKind.USER, .tag = MSG_CLEAR_ERROR };
+fn milktea::Msg on_clear_error() {
+	return { .kind = milktea::MsgKind.USER, .tag = MSG_CLEAR_ERROR };
 }
 
-fn tea::Cmd show_error(PickerModel* self, String msg) {
+fn milktea::Cmd show_error(PickerModel* self, String msg) {
 	self.has_error = true;
 	self.error_msg = msg;
-	return tea::tick(2000, &on_clear_error);
+	return milktea::tick(2000, &on_clear_error);
 }
 
-fn tea::Cmd PickerModel.init(PickerModel* self) @dynamic {
-	self.fp = pearls::new_file_picker(".");
+fn milktea::Cmd PickerModel.init(PickerModel* self) @dynamic {
+	self.fp = boba::new_file_picker(".");
 	self.fp.load_dir(".");
 	return null;
 }
 
-fn tea::Cmd PickerModel.update(PickerModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd PickerModel.update(PickerModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.fp.width = self.width;
 		self.fp.height = self.height;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.USER && msg.tag == MSG_CLEAR_ERROR) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_CLEAR_ERROR) {
 		self.has_error = false;
 		self.error_msg = "";
 		return null;
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 
 	if (self.fp.handle_key(k)) {
-		if (self.fp.selected.len > 0) return tea::quit();
+		if (self.fp.selected.len > 0) return milktea::quit();
 		return null;
 	}
 
 	return null;
 }
 
-fn tea::View PickerModel.view(PickerModel* self) @dynamic {
+fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
 	DString out = dstring::temp();
 
 	if (self.has_error) {
@@ -74,12 +74,12 @@ fn tea::View PickerModel.view(PickerModel* self) @dynamic {
 	}
 
 	out.append_string(self.fp.view());
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	PickerModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -1,7 +1,7 @@
 module focus_blur;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -13,62 +13,62 @@ struct FocusModel {
 	int height;
 }
 
-fn tea::Cmd FocusModel.init(FocusModel* self) @dynamic {
+fn milktea::Cmd FocusModel.init(FocusModel* self) @dynamic {
 	self.focused = true;
 	self.reporting = true;
 	return null;
 }
 
-fn tea::Cmd FocusModel.update(FocusModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.FOCUS) {
+fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.FOCUS) {
 		self.focused = true;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.BLUR) {
+	if (msg.kind == milktea::MsgKind.BLUR) {
 		self.focused = false;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 't') {
 				self.reporting = !self.reporting;
 				if (self.reporting) {
-					tea::enable_focus();
+					milktea::enable_focus();
 				} else {
-					tea::disable_focus();
+					milktea::disable_focus();
 				}
 			}
-		case tea::KeyCode.ESC:
-			return tea::quit();
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View FocusModel.view(FocusModel* self) @dynamic {
-	lipgloss::Style focused_style = lipgloss::new_style().foreground(lipgloss::color_hex("#00ff00")).set_bold(true)
+fn milktea::View FocusModel.view(FocusModel* self) @dynamic {
+	glaze::Style focused_style = glaze::new_style().foreground(glaze::color_hex("#00ff00")).set_bold(true)
 		.padding(2, 4, 2, 4)
-		.set_border(lipgloss::rounded_border());
+		.set_border(glaze::rounded_border());
 
-	lipgloss::Style blurred_style = lipgloss::new_style().foreground(lipgloss::color_hex("#666666")).padding(2, 4, 2, 4)
-		.set_border(lipgloss::rounded_border());
+	glaze::Style blurred_style = glaze::new_style().foreground(glaze::color_hex("#666666")).padding(2, 4, 2, 4)
+		.set_border(glaze::rounded_border());
 
-	lipgloss::Style hint = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
+	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#888888"));
 
 	String label      = self.focused ? "FOCUSED" : "BLURRED";
 	String desc       = self.focused ? "Terminal window is active" : "Terminal window is inactive";
-	lipgloss::Style s = self.focused ? focused_style : blurred_style;
+	glaze::Style s = self.focused ? focused_style : blurred_style;
 
 	DString out = dstring::temp();
 	out.append_string(s.render(string::tformat("%s\n%s", label, desc)));
@@ -79,12 +79,12 @@ fn tea::View FocusModel.view(FocusModel* self) @dynamic {
 			string::tformat("Focus reporting: %s\nPress t to toggle | q to quit", self.reporting ? "ON" : "OFF")
 		)
 	);
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	FocusModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

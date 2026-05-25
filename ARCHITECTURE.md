@@ -70,7 +70,7 @@ New `ViewBuf` type wrapping `DString` with chaining methods:
 ```c3
 ViewBuf buf = new_view_buf();
 buf.write(title.render("Hello")).writeln("").write(content);
-return tea::new_view(buf.str());
+return milktea::new_view(buf.str());
 ```
 
 Methods: `write(s)`, `writeln(s)`, `writec(c)`, `writef(fmt, ...)`, `str()`.
@@ -109,17 +109,17 @@ Note: `with_` prefix required because C3 doesn't allow methods with the same nam
 
 ## 8. `@program` / `@run_program` Macros
 
-Eliminates the unsafe `(tea::Model)&` cast in every example:
+Eliminates the unsafe `(milktea::Model)&` cast in every example:
 
 ```c3
 // Before:
 Counter c = {};
-Program p = { .model = (tea::Model)&c };
+Program p = { .model = (milktea::Model)&c };
 if (catch err = p.run()) { ... }
 
 // After:
 Counter c = {};
-if (catch err = tea::@run_program(&c)) { ... }
+if (catch err = milktea::@run_program(&c)) { ... }
 ```
 
 The macro handles the cast internally. `@program(&c)` creates a `Program`; `@run_program(&c)` creates and runs it.
@@ -138,15 +138,15 @@ In release mode these become optimizer hints. In safe mode they're runtime asser
 ## Files Changed
 
 ### New files
-- `src/tea/viewbuf.c3` — ViewBuf string builder
-- `src/tea/layout.c3` — Layout with auto cursor tracking
-- `src/tea/macros.c3` — `@program` / `@run_program` macros
+- `milktea/viewbuf.c3` — ViewBuf string builder
+- `milktea/layout.c3` — Layout with auto cursor tracking
+- `milktea/macros.c3` — `@program` / `@run_program` macros
 
 ### Modified files
-- `src/tea/tea.c3` — Program struct, lifecycle hooks, view builders, contracts
-- `src/tea/input.c3` — Contract on `parse_key()`
-- `src/tea/tty.c3` — Removed dead constant, cleaned up
-- `src/lipgloss/style.c3` — `with_*` shorthand methods
+- `milktea/milktea.c3` — Program struct, lifecycle hooks, view builders, contracts
+- `milktea/input.c3` — Contract on `parse_key()`
+- `milktea/tty.c3` — Removed dead constant, cleaned up
+- `glaze/style.c3` — `with_*` shorthand methods
 
 ### Unchanged (0.8.0 migration only)
 - All 13 files with `usz`/`isz` → `sz` replacements

@@ -1,8 +1,8 @@
 module space_example;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import std::io;
 import std::core::string;
 
@@ -23,10 +23,10 @@ struct SpaceModel {
 	xray::Cell[] view_cells;
 }
 
-fn tea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
+fn milktea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
 	ulong seed = (ulong)c3_time_ms_long();
 	srand((uint)seed);
-	return tea::tick(16);
+	return milktea::tick(16);
 }
 
 
@@ -66,34 +66,34 @@ fn void SpaceModel.compute_colors(SpaceModel* self) {
 	self.view_cells = mem::new_array(xray::Cell, cells_total);
 }
 
-fn tea::Cmd SpaceModel.update(SpaceModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.compute_colors();
 		return null;
 	}
 
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
-		return tea::tick(16);
+		return milktea::tick(16);
 	}
 
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q') return tea::quit();
+		case milktea::KeyCode.CTRL_C:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
 	return null;
 }
 
-fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
-	if (self.width == 0 || self.height == 0) return tea::new_view("");
+fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
+	if (self.width == 0 || self.height == 0) return milktea::new_view("");
 	if (!self.matrix_init) self.compute_colors();
 
 	int w      = self.width;
@@ -139,12 +139,12 @@ fn tea::View SpaceModel.view(SpaceModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.view_cells, (sz)w, (sz)view_h);
+	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)view_h);
 }
 
 fn int main() {
 	SpaceModel* m = mem::new(SpaceModel);
-	if (catch err = tea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

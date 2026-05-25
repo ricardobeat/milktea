@@ -18,9 +18,9 @@ const void* SQLITE_TRANSIENT = (void*)(uptr)0xFFFFFFFFFFFFFFFF;
 
 module wolf3d_server;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import std::io;
 import std::math;
 import std::os;
@@ -125,7 +125,7 @@ struct Wolf3D {
 	xray::ScreenBuffer* dialog;
 }
 
-fn tea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
+fn milktea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
 	self.dialog = null;
 	self.width = 80;
 	self.height = 24;
@@ -186,7 +186,7 @@ fn tea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
 	self.plane_y = self.dir_x * 0.66f;
 
 	self.allocate_buffers();
-	return tea::tick();
+	return milktea::tick();
 }
 
 fn void Wolf3D.allocate_buffers(Wolf3D* self) {
@@ -200,8 +200,8 @@ fn void Wolf3D.allocate_buffers(Wolf3D* self) {
 	}
 }
 
-fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
@@ -210,10 +210,10 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 		self.allocate_buffers();
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.KEY) {
-		tea::KeyMsg k = msg.key;
+	if (msg.kind == milktea::MsgKind.KEY) {
+		milktea::KeyMsg k = msg.key;
 		if (self.mode == WELCOME) {
-			if (k.code == tea::KeyCode.ENTER && self.name_len > 0) {
+			if (k.code == milktea::KeyCode.ENTER && self.name_len > 0) {
 				self.mode = PLAYING;
 				self.name_buf[self.name_len] = '\0';
 				self.server_state.mutex.lock()!!;
@@ -236,23 +236,23 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 				self.server_state.mutex.unlock();
 				io::printfn("Player joined: %s", &self.name_buf[0]);
 			}
-			if (k.code == tea::KeyCode.RUNE) {
+			if (k.code == milktea::KeyCode.RUNE) {
 				if (self.name_len < 31) {
 					self.name_buf[self.name_len++] = k.rune;
 				}
-			} else if (k.code == tea::KeyCode.BACKSPACE && self.name_len > 0) {
+			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
 				self.name_len--;
 			}
 			return null;
 		}
 		if (self.mode == ENTERING_NAME) {
-			if (k.code == tea::KeyCode.RUNE) {
+			if (k.code == milktea::KeyCode.RUNE) {
 				if (self.name_len < 31) {
 					self.name_buf[self.name_len++] = k.rune;
 				}
-			} else if (k.code == tea::KeyCode.BACKSPACE && self.name_len > 0) {
+			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
 				self.name_len--;
-			} else if (k.code == tea::KeyCode.ENTER && self.name_len > 0) {
+			} else if (k.code == milktea::KeyCode.ENTER && self.name_len > 0) {
 				self.mode = PLAYING;
 				self.name_buf[self.name_len] = '\0';
 				self.server_state.mutex.lock()!!;
@@ -277,13 +277,13 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 			}
 			return null;
 		} else if (self.mode == TAG_INPUT) {
-			if (k.code == tea::KeyCode.RUNE) {
+			if (k.code == milktea::KeyCode.RUNE) {
 				if (self.tag_len < 79) {
 					self.tag_buf[self.tag_len++] = k.rune;
 				}
-			} else if (k.code == tea::KeyCode.BACKSPACE && self.tag_len > 0) {
+			} else if (k.code == milktea::KeyCode.BACKSPACE && self.tag_len > 0) {
 				self.tag_len--;
-			} else if (k.code == tea::KeyCode.ENTER && self.tag_len > 0) {
+			} else if (k.code == milktea::KeyCode.ENTER && self.tag_len > 0) {
 				self.tag_buf[self.tag_len] = '\0';
 				self.server_state.mutex.lock()!!;
 				db_save_tag(
@@ -296,12 +296,12 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 				);
 				self.server_state.mutex.unlock();
 				self.mode = PLAYING;
-			} else if (k.code == tea::KeyCode.ESC) {
+			} else if (k.code == milktea::KeyCode.ESC) {
 				self.mode = PLAYING;
 			}
 			return null;
 		} else {
-			if (k.code == tea::KeyCode.RUNE) {
+			if (k.code == milktea::KeyCode.RUNE) {
 				if (k.rune == 't') {
 					float ray_dir_x    = self.dir_x;
 					float ray_dir_y    = self.dir_y;
@@ -357,11 +357,11 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 					}
 				}
 			}
-			if (k.code == tea::KeyCode.LEFT) self.key_left = self.tick_count;
-			if (k.code == tea::KeyCode.RIGHT) self.key_right = self.tick_count;
+			if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
+			if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
 		}
 	}
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.tick_count++;
 		if (self.mode == PLAYING) {
 			float move_speed = 0.25f;
@@ -421,12 +421,12 @@ fn tea::Cmd Wolf3D.update(Wolf3D* self, tea::Msg msg) @dynamic {
 			);
 			self.server_state.mutex.unlock();
 		}
-		return tea::tick();
+		return milktea::tick();
 	}
 	return null;
 }
 
-fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
+fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 	int w  = self.width;
 	int h  = self.height;
 	int ph = h * 2;
@@ -712,7 +712,7 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 			}
 		}
 
-		// ── Dialog via lipgloss ──
+		// ── Dialog via glaze ──
 		DString content = dstring::temp();
 		content.append_string("  WELCOME TO THE VOID  \n\n");
 		content.append_string("   Enter name: ");
@@ -723,18 +723,18 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		content.append_string("\n\n");
 		content.append_string("  [ Enter the Void ]  ");
 
-		lipgloss::Style box_st = lipgloss::new_style().set_border(lipgloss::double_border())
-			.set_border_fg(lipgloss::color_hex("#6450c8"))
-			.background(lipgloss::color_hex("#140a28"))
-			.foreground(lipgloss::color_hex("#c8b4ff"))
+		glaze::Style box_st = glaze::new_style().set_border(glaze::double_border())
+			.set_border_fg(glaze::color_hex("#6450c8"))
+			.background(glaze::color_hex("#140a28"))
+			.foreground(glaze::color_hex("#c8b4ff"))
 			.padding(1, 2, 1, 2);
 
 		String rendered = box_st.render(content.str_view());
 
-		// Center the dialog in the screen via lipgloss::place, then render
+		// Center the dialog in the screen via glaze::place, then render
 		// into the dialog buffer.  Padding spaces from place() have no bg
 		// style so they are transparent during compositing over the starfield.
-		String placed = lipgloss::place(w, h, rendered);
+		String placed = glaze::place(w, h, rendered);
 		self.dialog.clear();
 		self.dialog.render_ansi_string(0, 0, placed, xray::default_style());
 
@@ -762,13 +762,13 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		prompt[p_len++] = '_';
 		prompt[p_len] = '\0';
 
-		// Render the prompt box with lipgloss, center it with FlexNode
-		lipgloss::Style box_st = lipgloss::new_style().set_border(lipgloss::rounded_border())
-			.set_border_fg(lipgloss::color_hex("#6450c8"))
-			.background(lipgloss::color_hex("#140a28"))
-			.foreground(lipgloss::color_hex("#c8b4ff"));
+		// Render the prompt box with glaze, center it with FlexNode
+		glaze::Style box_st = glaze::new_style().set_border(glaze::rounded_border())
+			.set_border_fg(glaze::color_hex("#6450c8"))
+			.background(glaze::color_hex("#140a28"))
+			.foreground(glaze::color_hex("#c8b4ff"));
 		String rendered = box_st.render((String)prompt[:p_len]);
-		int box_w       = (int)lipgloss::string_width(rendered);
+		int box_w       = (int)glaze::string_width(rendered);
 		int box_h       = 3;
 
 		xray::FlexNode* root = xray::flex_col().with_justify(xray::JustifyContent.JUSTIFY_CENTER)
@@ -779,7 +779,7 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		xray::Rect box = root.child_rect(0);
 
 		self.dialog.clear();
-		self.dialog.render_ansi_string(0, 0, lipgloss::place(w, h, rendered), xray::default_style());
+		self.dialog.render_ansi_string(0, 0, glaze::place(w, h, rendered), xray::default_style());
 		for (int dy = 0; dy < box_h && box.y + dy < h; dy++) {
 			for (int dx = 0; dx < box_w && box.x + dx < w; dx++) {
 				xray::Cell c = *self.dialog.cell_at((sz)(box.x + dx), (sz)(box.y + dy));
@@ -790,7 +790,7 @@ fn tea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
 }
 
 // ── Server Implementation ──────────────────────────────────────────────────
@@ -1062,24 +1062,24 @@ fn int handle_client(void* arg) {
 		// Clear screen once at start (only needed if terminal is wider than our buffer)
 		write_socket(&s, (char[])"\x1b[2J");
 
-		// @pool per frame: frees temp allocations (lipgloss/dstring) each frame.
+		// @pool per frame: frees temp allocations (glaze/dstring) each frame.
 		// @pool_init above sets up tmem for this thread.
 		bool running = true;
 		char[1024] buf;
 		while (running) {
 			@pool() {
-				tea::View v = app.view();
+				milktea::View v = app.view();
 				render_cells_to(v.cells, v.cells_width, v.cells_height, &s);
 			};
 
 			// Poll socket with 0ms timeout — only read if data is available,
 			// so the loop keeps ticking and animating without input.
-			tea::PollFd pfd;
+			milktea::PollFd pfd;
 			pfd.fd = s.sock;
-			pfd.events = tea::POLLIN;
+			pfd.events = milktea::POLLIN;
 			pfd.revents = 0;
 
-			if (tea::poll(&pfd, 1, 0) > 0 && (pfd.revents & tea::POLLIN) != 0) {
+			if (milktea::poll(&pfd, 1, 0) > 0 && (pfd.revents & milktea::POLLIN) != 0) {
 				sz? read_result = s.read(buf[..]);
 				if (catch err = read_result) {
 					running = false;
@@ -1105,16 +1105,16 @@ fn int handle_client(void* arg) {
 						n = out_n;
 
 						if (n > 0) {
-							tea::ParseResult pr = tea::parse_key(buf[:n]);
+							milktea::ParseResult pr = milktea::parse_key(buf[:n]);
 							if (pr.consumed > 0) {
 								// Only quit on ESC/'q' when in PLAYING mode
 								// (input modes handle their own keys via update)
-								bool is_quit = (pr.key.code == tea::KeyCode.ESC
-									|| (pr.key.code == tea::KeyCode.RUNE && pr.key.rune == 'q'));
+								bool is_quit = (pr.key.code == milktea::KeyCode.ESC
+									|| (pr.key.code == milktea::KeyCode.RUNE && pr.key.rune == 'q'));
 								if (is_quit && app.mode == PLAYING) {
 									running = false;
 								} else {
-									app.update({ .kind = tea::MsgKind.KEY, .key = pr.key });
+									app.update({ .kind = milktea::MsgKind.KEY, .key = pr.key });
 								}
 							}
 						}
@@ -1122,7 +1122,7 @@ fn int handle_client(void* arg) {
 				}
 			}
 
-			if (running) app.update(tea::tick_msg());
+			if (running) app.update(milktea::tick_msg());
 			thread::sleep_ms(16);
 		}
 		write_socket(&s, (char[])"\x1b[?1049l\x1b[?25h");

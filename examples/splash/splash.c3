@@ -1,8 +1,8 @@
 module splash;
 
-import tea;
+import milktea;
 import xray;
-import lipgloss;
+import glaze;
 import std::io;
 import std::core::string;
 
@@ -19,13 +19,13 @@ struct SplashModel {
 	sz view_cells_len;
 }
 
-fn tea::Cmd SplashModel.init(SplashModel* self) @dynamic {
-	return tea::tick();
+fn milktea::Cmd SplashModel.init(SplashModel* self) @dynamic {
+	return milktea::tick();
 }
 
 
-fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		// Reallocate cell grid
@@ -35,12 +35,12 @@ fn tea::Cmd SplashModel.update(SplashModel* self, tea::Msg msg) @dynamic {
 		self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
-		return tea::tick();
+		return milktea::tick();
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	return tea::quit();
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	return milktea::quit();
 }
 
 fn int clamp_color(int v) {
@@ -93,7 +93,7 @@ fn void SplashModel.on_focus(SplashModel* self) @dynamic {
 fn void SplashModel.on_blur(SplashModel* self) @dynamic {
 }
 
-fn tea::View SplashModel.view(SplashModel* self) @dynamic {
+fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 	int w = self.width;
 	int h = self.height;
 	if (w < 2) w = 80;
@@ -154,12 +154,12 @@ fn tea::View SplashModel.view(SplashModel* self) @dynamic {
 		}
 	}
 
-	return tea::new_alt_cell_view(self.view_cells, (sz)w, (sz)rows);
+	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)rows);
 }
 
 fn int main() {
 	SplashModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

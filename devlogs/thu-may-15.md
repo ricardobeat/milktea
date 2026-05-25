@@ -3,16 +3,16 @@
 ## C3 Splash Example — SIGTRAP on `@optional` Methods
 
 ### Problem
-The splash example crashed with `SIGTRAP` (trace trap) when run in a real terminal. In non-TTY environments (e.g., piped), it failed with `tea::TTY_GETATTR_FAILED` instead.
+The splash example crashed with `SIGTRAP` (trace trap) when run in a real terminal. In non-TTY environments (e.g., piped), it failed with `milktea::TTY_GETATTR_FAILED` instead.
 
 ### Root Cause
-`enable_focus()` at `tea.c3:421` tells the terminal to send focus gain/loss events. When a focus event arrives, the event loop calls `self.model.on_focus()` / `self.model.on_blur()` — but `SplashModel` doesn't implement those `@optional` methods. In C3, calling an unimplemented optional method dereferences a null vtable entry, which traps.
+`enable_focus()` at `milktea.c3:421` tells the terminal to send focus gain/loss events. When a focus event arrives, the event loop calls `self.model.on_focus()` / `self.model.on_blur()` — but `SplashModel` doesn't implement those `@optional` methods. In C3, calling an unimplemented optional method dereferences a null vtable entry, which traps.
 
 **All 4 call sites were unguarded:**
-- `tea.c3:431` — `self.model.on_destroy()` (in defer block)
-- `tea.c3:465` — `self.model.on_mount()` (after init)
-- `tea.c3:530` — `self.model.on_focus()` (on FOCUS message)
-- `tea.c3:533` — `self.model.on_blur()` (on BLUR message)
+- `milktea.c3:431` — `self.model.on_destroy()` (in defer block)
+- `milktea.c3:465` — `self.model.on_mount()` (after init)
+- `milktea.c3:530` — `self.model.on_focus()` (on FOCUS message)
+- `milktea.c3:533` — `self.model.on_blur()` (on BLUR message)
 
 ### Fix
 The C3 idiom for safe optional method calls is `if (&self.model.on_method)` — the `&` operator checks if the vtable entry is non-null:
@@ -132,8 +132,8 @@ Tests inject `bytes.Buffer` for both input and output, avoiding any TTY dependen
 
 ### Current C3 Architecture
 ```
-Reader thread (tea.c3:224)  →  g_input_queue (ring buffer, mutex-protected)
-Main event loop (tea.c3:400) →  drains queue, processes, renders
+Reader thread (milktea.c3:224)  →  g_input_queue (ring buffer, mutex-protected)
+Main event loop (milktea.c3:400) →  drains queue, processes, renders
 ```
 
 The C3 port mirrors Go's architecture: a separate reader thread polls stdin every 50ms, pushes bytes into a ring buffer. The main loop drains the buffer non-blocking.

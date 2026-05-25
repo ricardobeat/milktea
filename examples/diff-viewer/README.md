@@ -45,7 +45,7 @@ In a real app, you'd read from `git diff` output or a file.
 
 ### Rendering
 
-`format_diff_line()` applies lipgloss styling:
+`format_diff_line()` applies glaze styling:
 - Foreground color based on line kind
 - Background color (cursor line) + bold if the cursor is on that line
 - Consistent formatting with line numbers and prefix characters

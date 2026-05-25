@@ -1,7 +1,7 @@
 module chat_example;
 
-import tea;
-import lipgloss;
+import milktea;
+import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
@@ -21,35 +21,35 @@ struct ChatModel {
 	int cursor_blink;
 }
 
-fn tea::Cmd ChatModel.init(ChatModel* self) @dynamic {
+fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
 	// Add some initial messages
 	self.messages[0] = "Welcome to the chat room!";
 	self.senders[0] = "system";
 	self.messages[1] = "Type a message and press Enter to send.";
 	self.senders[1] = "system";
 	self.msg_count = 2;
-	return tea::tick(500);
+	return milktea::tick(500);
 }
 
 
-fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
-	if (msg.kind == tea::MsgKind.WINDOW_SIZE) {
+fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		return null;
 	}
-	if (msg.kind == tea::MsgKind.TICK) {
+	if (msg.kind == milktea::MsgKind.TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
-		return tea::tick(500);
+		return milktea::tick(500);
 	}
-	if (msg.kind != tea::MsgKind.KEY) return null;
-	tea::KeyMsg k = msg.key;
+	if (msg.kind != milktea::MsgKind.KEY) return null;
+	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case tea::KeyCode.CTRL_C:
-		case tea::KeyCode.ESC:
-			return tea::quit();
-		case tea::KeyCode.ENTER:
+		case milktea::KeyCode.CTRL_C:
+		case milktea::KeyCode.ESC:
+			return milktea::quit();
+		case milktea::KeyCode.ENTER:
 			if (self.input_len > 0 && self.msg_count < 64) {
 				self.messages[self.msg_count] = (String)self.input_buf[:self.input_len];
 				self.senders[self.msg_count] = "You";
@@ -57,7 +57,7 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
 				self.input_len = 0;
 				self.input_cursor = 0;
 			}
-		case tea::KeyCode.BACKSPACE:
+		case milktea::KeyCode.BACKSPACE:
 			if (self.input_cursor > 0) {
 				for (sz i = self.input_cursor; i < self.input_len; i++) {
 					self.input_buf[i - 1] = self.input_buf[i];
@@ -65,12 +65,12 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
 				self.input_len--;
 				self.input_cursor--;
 			}
-		case tea::KeyCode.LEFT:
+		case milktea::KeyCode.LEFT:
 			if (self.input_cursor > 0) self.input_cursor--;
-		case tea::KeyCode.RIGHT:
+		case milktea::KeyCode.RIGHT:
 			if (self.input_cursor < self.input_len) self.input_cursor++;
-		case tea::KeyCode.RUNE:
-			if (k.rune == 'q' && self.input_len == 0) return tea::quit();
+		case milktea::KeyCode.RUNE:
+			if (k.rune == 'q' && self.input_len == 0) return milktea::quit();
 			if (self.input_len < BUF_SIZE - 1) {
 				for (sz i = self.input_len; i > self.input_cursor; i--) {
 					self.input_buf[i] = self.input_buf[i - 1];
@@ -84,12 +84,12 @@ fn tea::Cmd ChatModel.update(ChatModel* self, tea::Msg msg) @dynamic {
 	return null;
 }
 
-fn tea::View ChatModel.view(ChatModel* self) @dynamic {
-	lipgloss::Style you_style   = lipgloss::new_style().foreground(lipgloss::color_hex("#00d7ff")).set_bold(true);
-	lipgloss::Style sys_style   = lipgloss::new_style().foreground(lipgloss::color_hex("#888888"));
-	lipgloss::Style input_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ffffff"));
-	lipgloss::Style hint_style  = lipgloss::new_style().foreground(lipgloss::color_hex("#444444"));
-	lipgloss::Style border_style = lipgloss::new_style()
+fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
+	glaze::Style you_style   = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
+	glaze::Style sys_style   = glaze::new_style().foreground(glaze::color_hex("#888888"));
+	glaze::Style input_style = glaze::new_style().foreground(glaze::color_hex("#ffffff"));
+	glaze::Style hint_style  = glaze::new_style().foreground(glaze::color_hex("#444444"));
+	glaze::Style border_style = glaze::new_style()
 		.set_border(
 			{
 				.top = "-",
@@ -102,7 +102,7 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
 				.bottom_right = "+"
 			}
 		);
-	lipgloss::Style title_style = lipgloss::new_style().foreground(lipgloss::color_hex("#ff00ff")).set_bold(true);
+	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
 
 	int msg_area_h = self.height - 5;
 	if (msg_area_h < 3) msg_area_h = 3;
@@ -120,7 +120,7 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
 	for (int i = start; i < self.msg_count; i++) {
 		String sender     = self.senders[i];
 		String msg        = self.messages[i];
-		lipgloss::Style s = (sender == "You") ? you_style : sys_style;
+		glaze::Style s = (sender == "You") ? you_style : sys_style;
 		String prefix     = string::tformat("%s: ", sender);
 
 		// Word-wrap the message content
@@ -167,12 +167,12 @@ fn tea::View ChatModel.view(ChatModel* self) @dynamic {
 	out.append_string(border_style.render(input_line.str_view()));
 	out.append_char('\n');
 	out.append_string(hint_style.render("ENTER send | ESC quit"));
-	return tea::new_alt_screen_view(out.str_view());
+	return milktea::new_alt_screen_view(out.str_view());
 }
 
 fn int main() {
 	ChatModel m = { };
-	if (catch err = tea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
