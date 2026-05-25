@@ -76,6 +76,8 @@ struct GlbModel {
 	float cam_pz;
 	float cam_yaw;
 	float cam_pitch;
+	float model_yaw;
+	float model_pitch;
 }
 
 // ── GLB loading ───────────────────────────────────────────────────────────────
@@ -471,6 +473,11 @@ fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 	float cos_pitch = (float)math::cos(self.cam_pitch);
 	float sin_pitch = (float)math::sin(self.cam_pitch);
 
+	float cos_myaw   = (float)math::cos(self.model_yaw);
+	float sin_myaw   = (float)math::sin(self.model_yaw);
+	float cos_mpitch = (float)math::cos(self.model_pitch);
+	float sin_mpitch = (float)math::sin(self.model_pitch);
+
 	float light_x   =  0.4f;
 	float light_y   =  0.8f;
 	float light_z   = -0.5f;
@@ -482,18 +489,39 @@ fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 	for (int t = 0; t < self.triangle_count; t++) {
 		Triangle* tri = &self.triangles[t];
 
-		// Transform vertices to camera space
-		float rx0 = tri.v0.x - self.cam_px;
-		float ry0 = tri.v0.y - self.cam_py;
-		float rz0 = tri.v0.z - self.cam_pz;
-		float rx1 = tri.v1.x - self.cam_px;
-		float ry1 = tri.v1.y - self.cam_py;
-		float rz1 = tri.v1.z - self.cam_pz;
-		float rx2 = tri.v2.x - self.cam_px;
-		float ry2 = tri.v2.y - self.cam_py;
-		float rz2 = tri.v2.z - self.cam_pz;
+		// Step 1: Rotate model by model_yaw (Y) then model_pitch (X)
+		float mx0 = cos_myaw * tri.v0.x - sin_myaw * tri.v0.z;
+		float my0 = tri.v0.y;
+		float mz0 = sin_myaw * tri.v0.x + cos_myaw * tri.v0.z;
+		float mx1 = cos_myaw * tri.v1.x - sin_myaw * tri.v1.z;
+		float my1 = tri.v1.y;
+		float mz1 = sin_myaw * tri.v1.x + cos_myaw * tri.v1.z;
+		float mx2 = cos_myaw * tri.v2.x - sin_myaw * tri.v2.z;
+		float my2 = tri.v2.y;
+		float mz2 = sin_myaw * tri.v2.x + cos_myaw * tri.v2.z;
 
-		// Yaw rotation
+		float mx0p = mx0;
+		float my0p = cos_mpitch * my0 - sin_mpitch * mz0;
+		float mz0p = sin_mpitch * my0 + cos_mpitch * mz0;
+		float mx1p = mx1;
+		float my1p = cos_mpitch * my1 - sin_mpitch * mz1;
+		float mz1p = sin_mpitch * my1 + cos_mpitch * mz1;
+		float mx2p = mx2;
+		float my2p = cos_mpitch * my2 - sin_mpitch * mz2;
+		float mz2p = sin_mpitch * my2 + cos_mpitch * mz2;
+
+		// Step 2: Translate to camera space
+		float rx0 = mx0p - self.cam_px;
+		float ry0 = my0p - self.cam_py;
+		float rz0 = mz0p - self.cam_pz;
+		float rx1 = mx1p - self.cam_px;
+		float ry1 = my1p - self.cam_py;
+		float rz1 = mz1p - self.cam_pz;
+		float rx2 = mx2p - self.cam_px;
+		float ry2 = my2p - self.cam_py;
+		float rz2 = mz2p - self.cam_pz;
+
+		// Step 3: Camera yaw rotation (inverse of camera orientation)
 		float ax0 = cos_yaw * rx0 - sin_yaw * rz0;
 		float ay0 = ry0;
 		float az0 = sin_yaw * rx0 + cos_yaw * rz0;
@@ -504,7 +532,7 @@ fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 		float ay2 = ry2;
 		float az2 = sin_yaw * rx2 + cos_yaw * rz2;
 
-		// Pitch rotation
+		// Step 4: Camera pitch rotation
 		float cx0 = ax0;
 		float cy0 =  cos_pitch * ay0 + sin_pitch * az0;
 		float cz0 = -sin_pitch * ay0 + cos_pitch * az0;
@@ -518,18 +546,26 @@ fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 		// Near-clip check before projection
 		if (cz0 < 0.1f || cz1 < 0.1f || cz2 < 0.1f) continue;
 
-		// Rotate world-space normal to camera space for back-face cull
+		// Rotate world-space normal through model then camera for back-face cull
 		float nwx = tri.normal.x;
 		float nwy = tri.normal.y;
 		float nwz = tri.normal.z;
-		float nax =  cos_yaw * nwx - sin_yaw * nwz;
-		float nay =  nwy;
-		float naz =  sin_yaw * nwx + cos_yaw * nwz;
+		// Model rotation
+		float nmx = cos_myaw * nwx - sin_myaw * nwz;
+		float nmy = nwy;
+		float nmz = sin_myaw * nwx + cos_myaw * nwz;
+		float npx = nmx;
+		float npy = cos_mpitch * nmy - sin_mpitch * nmz;
+		float npz = sin_mpitch * nmy + cos_mpitch * nmz;
+		// Camera rotation
+		float nax =  cos_yaw * npx - sin_yaw * npz;
+		float nay =  npy;
+		float naz =  sin_yaw * npx + cos_yaw * npz;
 		float ncz = -sin_pitch * nay + cos_pitch * naz;
 		if (ncz > 0.0f) continue;
 
-		// World-space lighting
-		float diff = tri.normal.x * light_x + tri.normal.y * light_y + tri.normal.z * light_z;
+		// Fixed world-space light — use model-rotated normal
+		float diff = npx * light_x + npy * light_y + npz * light_z;
 		if (diff < 0.0f) diff = 0.0f;
 		float brightness = 0.30f + 0.70f * diff;
 
@@ -608,12 +644,20 @@ struct App {
 	float cam_pz;
 	float cam_yaw;
 	float cam_pitch;
+	float model_yaw;
+	float model_pitch;
 	float vel_fwd;
 	float vel_up;
 	float vel_yaw;
 	float vel_pitch;
 	float vel_pan;
 	bool auto_rotate;
+	// mouse state
+	bool dragging;
+	int drag_start_x;
+	int drag_start_y;
+	float drag_start_yaw;
+	float drag_start_pitch;
 	// last frame each key was seen (key repeat simulates held state)
 	int key_w;
 	int key_s;
@@ -660,6 +704,8 @@ fn void App.load_file(App* self, String path) {
 	self.cam_pz = -20.0f;
 	self.cam_yaw = 0.0f;
 	self.cam_pitch = 0.0f;
+	self.model_yaw = 0.0f;
+	self.model_pitch = 0.0f;
 	self.vel_fwd = 0.0f;
 	self.vel_up = 0.0f;
 	self.vel_yaw = 0.0f;
@@ -696,11 +742,14 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 	self.cam_pz = -20.0f;
 	self.cam_yaw = 0.0f;
 	self.cam_pitch = 0.0f;
+	self.model_yaw = 0.0f;
+	self.model_pitch = 0.0f;
 	self.vel_fwd = 0.0f;
 	self.vel_up = 0.0f;
 	self.vel_yaw = 0.0f;
 	self.vel_pan = 0.0f;
 	self.auto_rotate = true;
+	self.dragging = false;
 	scan_glb_files(self, ".");
 	return null;
 }
@@ -718,6 +767,43 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	}
 
 	if (self.mode == VIEWING) {
+		if (msg.kind == milktea::MsgKind.MOUSE) {
+			if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS) {
+				if (msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+					self.dragging = true;
+					self.drag_start_x = msg.mouse.col;
+					self.drag_start_y = msg.mouse.row;
+					self.drag_start_yaw = self.model_yaw;
+					self.drag_start_pitch = self.model_pitch;
+					self.auto_rotate = false;
+				} else if (msg.mouse.button == milktea::MouseButton.MOUSE_WHEEL_UP) {
+					float fwd_x =  (float)math::sin(self.cam_yaw) * (float)math::cos(self.cam_pitch);
+					float fwd_y = -(float)math::sin(self.cam_pitch);
+					float fwd_z =  (float)math::cos(self.cam_yaw) * (float)math::cos(self.cam_pitch);
+					self.cam_px += fwd_x * 0.2f;
+					self.cam_py += fwd_y * 0.2f;
+					self.cam_pz += fwd_z * 0.2f;
+				} else if (msg.mouse.button == milktea::MouseButton.MOUSE_WHEEL_DOWN) {
+					float fwd_x =  (float)math::sin(self.cam_yaw) * (float)math::cos(self.cam_pitch);
+					float fwd_y = -(float)math::sin(self.cam_pitch);
+					float fwd_z =  (float)math::cos(self.cam_yaw) * (float)math::cos(self.cam_pitch);
+					self.cam_px -= fwd_x * 0.2f;
+					self.cam_py -= fwd_y * 0.2f;
+					self.cam_pz -= fwd_z * 0.2f;
+				}
+			} else if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
+				if (msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+					self.dragging = false;
+				}
+			} else if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
+				int total_dx = msg.mouse.col - self.drag_start_x;
+				int total_dy = msg.mouse.row - self.drag_start_y;
+				self.model_yaw   = self.drag_start_yaw   + (float)total_dx / (float)self.width * 2.0f;
+				self.model_pitch = self.drag_start_pitch - (float)total_dy / (float)self.height * 2.0f;
+				if (self.model_pitch > 1.4f) self.model_pitch = 1.4f;
+				if (self.model_pitch < -1.4f) self.model_pitch = -1.4f;
+			}
+		}
 		if (msg.kind == milktea::MsgKind.KEY) {
 			milktea::KeyMsg k = msg.key;
 			if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'b')) {
@@ -770,19 +856,8 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 			if (self.model != null) {
 				self.model.frame++;
 				if (self.auto_rotate) {
-					// orbit camera around origin: position = -forward * dist
-					// forward = (sin(yaw)*cos(pitch), -sin(pitch), cos(yaw)*cos(pitch))
-					float orbit_dist  = 20.0f;
-					float orbit_yaw   = (float)self.model.frame * 0.01f;
-					float orbit_pitch = (float)math::sin((float)self.model.frame * 0.003) * 0.15f;
-					self.cam_yaw = orbit_yaw;
-					self.cam_pitch = orbit_pitch;
-					float fwd_x =  (float)math::sin(orbit_yaw) * (float)math::cos(orbit_pitch);
-					float fwd_y = -(float)math::sin(orbit_pitch);
-					float fwd_z =  (float)math::cos(orbit_yaw) * (float)math::cos(orbit_pitch);
-					self.cam_px = -fwd_x * orbit_dist;
-					self.cam_py = -fwd_y * orbit_dist;
-					self.cam_pz = -fwd_z * orbit_dist;
+					self.model_yaw   = (float)self.model.frame * 0.01f;
+					self.model_pitch = (float)math::sin((float)self.model.frame * 0.003) * 0.15f;
 				}
 
 				float accel_fwd   = 0.04f;
@@ -916,6 +991,8 @@ fn milktea::View App.view(App* self) @dynamic {
 		self.model.cam_pz = self.cam_pz;
 		self.model.cam_yaw = self.cam_yaw;
 		self.model.cam_pitch = self.cam_pitch;
+		self.model.model_yaw = self.model_yaw;
+		self.model.model_pitch = self.model_pitch;
 		return self.model.view();
 	}
 
@@ -975,6 +1052,8 @@ fn int main(String[] args) {
 			return 1;
 		}
 	}
+
+	milktea::enable_mouse();
 
 	if (catch err = milktea::@run_program(app)) {
 		io::printfn("Error: %s", err);
