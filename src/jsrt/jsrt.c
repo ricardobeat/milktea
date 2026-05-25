@@ -7,6 +7,9 @@
 #include <curl/curl.h>
 #include <libgen.h>   /* dirname */
 #include <limits.h>   /* PATH_MAX */
+#include <sys/stat.h> /* stat, mkdir */
+#include <dirent.h>   /* opendir, readdir, closedir */
+#include <unistd.h>   /* unlink */
 
 /*
  * jsrt.c - Thin C shim over the QuickJS C API
@@ -46,6 +49,50 @@ static const char _tea_module_src[] =
     "export const tea = globalThis.tea;\n"
     "export const h   = globalThis.h;\n";
 
+/* "fs" module — Bun-compatible file I/O API */
+static const char _fs_module_src[] =
+    "function file(path) {\n"
+    "  path = String(path);\n"
+    "  const f = {\n"
+    "    get path() { return path; },\n"
+    "    get name() { const p = path; const i = p.lastIndexOf('/'); return i >= 0 ? p.slice(i+1) : p; },\n"
+    "    get size() { return __fs_size(path); },\n"
+    "    get type() {\n"
+    "      const ext = (path.lastIndexOf('.') >= 0) ? path.slice(path.lastIndexOf('.')).toLowerCase() : '';\n"
+    "      const m = {'.txt':'text/plain','.json':'application/json','.js':'text/javascript','.ts':'text/javascript',\n"
+    "        '.html':'text/html','.css':'text/css','.xml':'text/xml','.csv':'text/csv','.md':'text/markdown',\n"
+    "        '.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp',\n"
+    "        '.svg':'image/svg+xml','.pdf':'application/pdf','.zip':'application/zip','.gz':'application/gzip',\n"
+    "        '.wasm':'application/wasm','.bin':'application/octet-stream'};\n"
+    "      return m[ext] || 'application/octet-stream';\n"
+    "    },\n"
+    "    exists()   { return __fs_exists(path); },\n"
+    "    text()     { return __fs_read_text(path); },\n"
+    "    json()     { const t = __fs_read_text(path); return t == null ? null : JSON.parse(t); },\n"
+    "    bytes()    { return __fs_read_bytes(path); },\n"
+    "    isFile()   { return __fs_is_file(path); },\n"
+    "    isDir()    { return __fs_is_dir(path); },\n"
+    "  };\n"
+    "  return f;\n"
+    "}\n"
+    "\n"
+    "function write(dest, data) {\n"
+    "  if (data && typeof data === 'object' && data.path) {\n"
+    "    return __fs_copy_file(String(data.path), String(dest));\n"
+    "  }\n"
+    "  if (data instanceof Uint8Array) {\n"
+    "    return __fs_write_bytes(String(dest), data);\n"
+    "  }\n"
+    "  return __fs_write_text(String(dest), String(data));\n"
+    "}\n"
+    "\n"
+    "export { file, write };\n"
+    "export function exists(p)    { return __fs_exists(String(p)); }\n"
+    "export function mkdir(p, o)  { return __fs_mkdir(String(p), o && o.recursive); }\n"
+    "export function readdir(p)   { return __fs_read_dir(String(p)); }\n"
+    "export function unlink(p)    { return __fs_unlink(String(p)); }\n"
+    "export function stat(p)      { return __fs_stat(String(p)); }\n";
+
 /* "os" module — pure C module exposing getenv */
 static JSValue _os_getenv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     (void)this_val;
@@ -67,7 +114,7 @@ static char* _module_normalize(JSContext* ctx, const char* base_name,
                                 const char* name, void* opaque) {
     (void)opaque;
     /* Built-in virtual modules — pass through unchanged */
-    if (strcmp(name, "tea") == 0 || strcmp(name, "os") == 0)
+    if (strcmp(name, "tea") == 0 || strcmp(name, "os") == 0 || strcmp(name, "fs") == 0)
         return js_strdup(ctx, name);
 
     /* Relative path: resolve against dirname(base_name) */
@@ -106,6 +153,16 @@ static JSModuleDef* _module_loader(JSContext* ctx, const char* name, void* opaqu
         JSModuleDef* m = JS_NewCModule(ctx, "os", _os_module_init);
         if (!m) return NULL;
         JS_AddModuleExport(ctx, m, "getenv");
+        return m;
+    }
+
+    /* ---- "fs" virtual module ---- */
+    if (strcmp(name, "fs") == 0) {
+        JSValue func = JS_Eval(ctx, _fs_module_src, strlen(_fs_module_src),
+                               "fs", JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+        if (JS_IsException(func)) return NULL;
+        JSModuleDef* m = (JSModuleDef*)JS_VALUE_GET_PTR(func);
+        JS_FreeValue(ctx, func);
         return m;
     }
 
@@ -1621,6 +1678,278 @@ static JSValue _js_viewport_page_down(JSContext* ctx, JSValueConst this_val, int
     return JS_UNDEFINED;
 }
 
+/* ============================================================
+ * fs module — C backing functions
+ * ============================================================ */
+
+/* __fs_read_text(path) → string | null */
+static JSValue _js_fs_read_text(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NULL;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_NULL;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) { JS_FreeCString(ctx, path); return JS_NULL; }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    rewind(f);
+
+    char* buf = (char*)malloc(sz + 1);
+    if (!buf) { fclose(f); JS_FreeCString(ctx, path); return JS_NULL; }
+
+    size_t n = fread(buf, 1, sz, f);
+    fclose(f);
+    buf[n] = '\0';
+
+    JSValue result = JS_NewStringLen(ctx, buf, n);
+    free(buf);
+    JS_FreeCString(ctx, path);
+    return result;
+}
+
+/* __fs_write_text(path, data) → boolean */
+static JSValue _js_fs_write_text(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+    const char* data = JS_ToCString(ctx, argv[1]);
+    if (!data) { JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    size_t datalen = strlen(data);
+    FILE* f = fopen(path, "wb");
+    if (!f) { JS_FreeCString(ctx, data); JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    size_t written = fwrite(data, 1, datalen, f);
+    fclose(f);
+    JS_FreeCString(ctx, data);
+    JS_FreeCString(ctx, path);
+    return written == datalen ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_write_bytes(path, uint8array) → boolean */
+static JSValue _js_fs_write_bytes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+
+    size_t len = 0;
+    uint8_t* buf = JS_GetArrayBuffer(ctx, &len, argv[1]);
+    if (!buf) {
+        /* Try typed array (Uint8Array) */
+        size_t byte_offset = 0, byte_length = 0;
+        JSValue abuf = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &byte_length, NULL);
+        if (!JS_IsException(abuf)) {
+            buf = JS_GetArrayBuffer(ctx, &len, abuf);
+            if (buf) { buf += byte_offset; len = byte_length; }
+            JS_FreeValue(ctx, abuf);
+        }
+    }
+    if (!buf) { JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    FILE* f = fopen(path, "wb");
+    if (!f) { JS_FreeCString(ctx, path); return JS_FALSE; }
+
+    size_t written = fwrite(buf, 1, len, f);
+    fclose(f);
+    JS_FreeCString(ctx, path);
+    return written == len ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_exists(path) → boolean */
+static JSValue _js_fs_exists(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+    struct stat st;
+    int r = stat(path, &st);
+    JS_FreeCString(ctx, path);
+    return r == 0 ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_size(path) → number (-1 if not found) */
+static JSValue _js_fs_size(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NewInt32(ctx, -1);
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_NewInt32(ctx, -1);
+    struct stat st;
+    int r = stat(path, &st);
+    JS_FreeCString(ctx, path);
+    if (r != 0) return JS_NewInt32(ctx, -1);
+    return JS_NewInt64(ctx, (int64_t)st.st_size);
+}
+
+/* __fs_is_file(path) → boolean */
+static JSValue _js_fs_is_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+    struct stat st;
+    int r = stat(path, &st);
+    JS_FreeCString(ctx, path);
+    return (r == 0 && S_ISREG(st.st_mode)) ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_is_dir(path) → boolean */
+static JSValue _js_fs_is_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+    struct stat st;
+    int r = stat(path, &st);
+    JS_FreeCString(ctx, path);
+    return (r == 0 && S_ISDIR(st.st_mode)) ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_read_json(path) → object | null (handled in JS via JSON.parse) */
+/* We don't need a separate C function — the JS module does text() + JSON.parse */
+
+/* __fs_read_bytes(path) → ArrayBuffer | null */
+static JSValue _js_fs_read_bytes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NULL;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_NULL;
+
+    FILE* f = fopen(path, "rb");
+    if (!f) { JS_FreeCString(ctx, path); return JS_NULL; }
+
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    rewind(f);
+
+    uint8_t* buf = (uint8_t*)malloc(sz);
+    if (!buf) { fclose(f); JS_FreeCString(ctx, path); return JS_NULL; }
+
+    size_t n = fread(buf, 1, sz, f);
+    fclose(f);
+    JS_FreeCString(ctx, path);
+
+    /* JS_NewArrayBufferCopy takes ownership of a copy; we free our buf */
+    JSValue result = JS_NewArrayBufferCopy(ctx, buf, n);
+    free(buf);
+    return result;
+}
+
+/* __fs_mkdir(path, recursive?) → boolean */
+static JSValue _js_fs_mkdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+
+    int recursive = (argc >= 2 && JS_ToBool(ctx, argv[1]));
+
+    if (recursive) {
+        /* Create parent directories recursively */
+        char tmp[PATH_MAX];
+        snprintf(tmp, sizeof(tmp), "%s", path);
+        for (char* p = tmp + 1; *p; p++) {
+            if (*p == '/') {
+                *p = '\0';
+                mkdir(tmp, 0755);
+                *p = '/';
+            }
+        }
+    }
+
+    int r = mkdir(path, 0755);
+    JS_FreeCString(ctx, path);
+    return r == 0 ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_unlink(path) → boolean */
+static JSValue _js_fs_unlink(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_FALSE;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_FALSE;
+    int r = unlink(path);
+    JS_FreeCString(ctx, path);
+    return r == 0 ? JS_TRUE : JS_FALSE;
+}
+
+/* __fs_read_dir(path) → string[] | null */
+static JSValue _js_fs_read_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NULL;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_NULL;
+
+    DIR* dir = opendir(path);
+    if (!dir) { JS_FreeCString(ctx, path); return JS_NULL; }
+
+    JSValue arr = JS_NewArray(ctx);
+    uint32_t idx = 0;
+    struct dirent* ent;
+    while ((ent = readdir(dir)) != NULL) {
+        /* Skip . and .. */
+        if (ent->d_name[0] == '.' && (ent->d_name[1] == '\0' ||
+            (ent->d_name[1] == '.' && ent->d_name[2] == '\0'))) continue;
+        JS_SetPropertyUint32(ctx, arr, idx++, JS_NewString(ctx, ent->d_name));
+    }
+    closedir(dir);
+    JS_FreeCString(ctx, path);
+    return arr;
+}
+
+/* __fs_copy_file(src, dest) → boolean */
+static JSValue _js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 2) return JS_FALSE;
+    const char* src = JS_ToCString(ctx, argv[0]);
+    if (!src) return JS_FALSE;
+    const char* dest = JS_ToCString(ctx, argv[1]);
+    if (!dest) { JS_FreeCString(ctx, src); return JS_FALSE; }
+
+    FILE* in = fopen(src, "rb");
+    if (!in) { JS_FreeCString(ctx, src); JS_FreeCString(ctx, dest); return JS_FALSE; }
+    FILE* out = fopen(dest, "wb");
+    if (!out) { fclose(in); JS_FreeCString(ctx, src); JS_FreeCString(ctx, dest); return JS_FALSE; }
+
+    char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        fwrite(buf, 1, n, out);
+    }
+    fclose(in);
+    fclose(out);
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    return JS_TRUE;
+}
+
+/* __fs_stat(path) → { size, isFile, isDir, mtimeMs } | null */
+static JSValue _js_fs_stat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    (void)this_val;
+    if (argc < 1) return JS_NULL;
+    const char* path = JS_ToCString(ctx, argv[0]);
+    if (!path) return JS_NULL;
+
+    struct stat st;
+    int r = stat(path, &st);
+    JS_FreeCString(ctx, path);
+    if (r != 0) return JS_NULL;
+
+    JSValue obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, obj, "size",    JS_NewInt64(ctx, (int64_t)st.st_size));
+    JS_SetPropertyStr(ctx, obj, "isFile",  S_ISREG(st.st_mode) ? JS_TRUE : JS_FALSE);
+    JS_SetPropertyStr(ctx, obj, "isDir",   S_ISDIR(st.st_mode) ? JS_TRUE : JS_FALSE);
+#if defined(__APPLE__)
+    JS_SetPropertyStr(ctx, obj, "mtimeMs", JS_NewInt64(ctx, (int64_t)st.st_mtimespec.tv_sec * 1000 + st.st_mtimespec.tv_nsec / 1000000));
+#else
+    JS_SetPropertyStr(ctx, obj, "mtimeMs", JS_NewInt64(ctx, (int64_t)st.st_mtim.tv_sec * 1000 + st.st_mtim.tv_nsec / 1000000));
+#endif
+    return obj;
+}
+
 void jsrt_register_async_globals(void* ctx) {
     if (!ctx) return;
     JSContext* c = (JSContext*)ctx;
@@ -1642,5 +1971,19 @@ void jsrt_register_async_globals(void* ctx) {
     JS_SetPropertyStr(c, global, "viewportScrollDown",     JS_NewCFunction(c, _js_viewport_scroll_down,     "viewportScrollDown",     1));
     JS_SetPropertyStr(c, global, "viewportPageUp",         JS_NewCFunction(c, _js_viewport_page_up,         "viewportPageUp",         1));
     JS_SetPropertyStr(c, global, "viewportPageDown",       JS_NewCFunction(c, _js_viewport_page_down,       "viewportPageDown",       1));
+    /* fs module backing functions */
+    JS_SetPropertyStr(c, global, "__fs_read_text",  JS_NewCFunction(c, _js_fs_read_text,  "__fs_read_text",  1));
+    JS_SetPropertyStr(c, global, "__fs_write_text", JS_NewCFunction(c, _js_fs_write_text, "__fs_write_text", 2));
+    JS_SetPropertyStr(c, global, "__fs_write_bytes",JS_NewCFunction(c, _js_fs_write_bytes,"__fs_write_bytes",2));
+    JS_SetPropertyStr(c, global, "__fs_exists",     JS_NewCFunction(c, _js_fs_exists,     "__fs_exists",     1));
+    JS_SetPropertyStr(c, global, "__fs_size",       JS_NewCFunction(c, _js_fs_size,       "__fs_size",       1));
+    JS_SetPropertyStr(c, global, "__fs_is_file",    JS_NewCFunction(c, _js_fs_is_file,    "__fs_is_file",    1));
+    JS_SetPropertyStr(c, global, "__fs_is_dir",     JS_NewCFunction(c, _js_fs_is_dir,     "__fs_is_dir",     1));
+    JS_SetPropertyStr(c, global, "__fs_read_bytes", JS_NewCFunction(c, _js_fs_read_bytes, "__fs_read_bytes", 1));
+    JS_SetPropertyStr(c, global, "__fs_mkdir",      JS_NewCFunction(c, _js_fs_mkdir,      "__fs_mkdir",      2));
+    JS_SetPropertyStr(c, global, "__fs_unlink",     JS_NewCFunction(c, _js_fs_unlink,     "__fs_unlink",     1));
+    JS_SetPropertyStr(c, global, "__fs_read_dir",   JS_NewCFunction(c, _js_fs_read_dir,   "__fs_read_dir",   1));
+    JS_SetPropertyStr(c, global, "__fs_copy_file",  JS_NewCFunction(c, _js_fs_copy_file,  "__fs_copy_file",  2));
+    JS_SetPropertyStr(c, global, "__fs_stat",       JS_NewCFunction(c, _js_fs_stat,       "__fs_stat",       1));
     JS_FreeValue(c, global);
 }
