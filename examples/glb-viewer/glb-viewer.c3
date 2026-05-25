@@ -38,13 +38,13 @@ fn Vec3 Vec3.rotate_z(&self, float angle) {
 	return vec3(self.x * c - self.y * s, self.x * s + self.y * c, self.z);
 }
 
-// ── Voxel face (same as voxel-renderer) ──────────────────────────────────────
+// ── Triangle (per-face polygon) ───────────────────────────────────────────────
 
-struct Voxel {
-	Vec3 pos;
-	Vec3 normal;
-	Vec3 tan_u;
-	Vec3 tan_v;
+struct Triangle {
+	Vec3 v0;
+	Vec3 v1;
+	Vec3 v2;
+	Vec3 normal; // world-space face normal
 	char r;
 	char g;
 	char b;
@@ -58,22 +58,12 @@ struct Pixel {
 
 // ── GLB geometry ─────────────────────────────────────────────────────────────
 
-// One triangle centroid + color after voxelization
-struct VoxPoint {
-	int x;
-	int y;
-	int z;
-	char r;
-	char g;
-	char b;
-}
-
-const int MAX_VOXELS = 16384;
+const int MAX_TRIANGLES = 65536;
 
 
 struct GlbModel {
-	Voxel[MAX_VOXELS] voxels;
-	int voxel_count;
+	Triangle[MAX_TRIANGLES] triangles;
+	int triangle_count;
 	int width;
 	int height;
 	int frame;
@@ -97,24 +87,12 @@ struct AccessorInfo {
 	int byte_offset;
 	int count;
 	int component_type; // 5126=float32, 5125=uint32, 5123=uint16
-	int num_components; // 1=SCALAR, 2=VEC2, 3=VEC3
 }
 
 struct BufferViewInfo {
 	int byte_offset;
 	int byte_length;
 	int byte_stride;
-}
-
-fn int components_for_type(char* type_str) {
-	if (type_str[0] == 'S') return 1; // SCALAR
-	if (type_str[1] == 'E') return 2; // VEC2
-	if (type_str[1] == 'E' + 1) return 3; // VEC3 — fallback below
-	// compare manually
-	if (type_str[0] == 'V' && type_str[3] == '2') return 2;
-	if (type_str[0] == 'V' && type_str[3] == '3') return 3;
-	if (type_str[0] == 'V' && type_str[3] == '4') return 4;
-	return 1;
 }
 
 // Read a little-endian uint32 from a byte buffer at offset
@@ -136,19 +114,6 @@ fn void parse_accessor(stb_json::Cursor* accessors_arr, int idx, AccessorInfo* o
 	out.byte_offset = stb_json::stbj_read_int_name(&acc, "byteOffset", 0);
 	out.count = stb_json::stbj_read_int_name(&acc, "count", 0);
 	out.component_type = stb_json::stbj_read_int_name(&acc, "componentType", 5126);
-	char[8] type_str;
-	stb_json::stbj_read_string_name(&acc, "type", &type_str, 8, "SCALAR");
-	if (type_str[0] == 'S') {
-		out.num_components = 1;
-	} else if (type_str[3] == '2') {
-		out.num_components = 2;
-	} else if (type_str[3] == '3') {
-		out.num_components = 3;
-	} else if (type_str[3] == '4') {
-		out.num_components = 4;
-	} else {
-		out.num_components = 1;
-	}
 }
 
 fn void parse_bufview(stb_json::Cursor* bvs_arr, int idx, BufferViewInfo* out) {
@@ -185,174 +150,60 @@ fn GlbModel*? load_glb(String path) {
 		return GLB_JSON_ERROR~;
 	}
 
-	// Navigate to meshes[0].primitives[0].attributes
+	// Navigate to meshes array
 	stb_json::Cursor meshes = stb_json::stbj_move_cursor_name(&root, "meshes");
-	stb_json::Cursor mesh0  = stb_json::stbj_move_cursor_index(&meshes, 0);
-	stb_json::Cursor prims  = stb_json::stbj_move_cursor_name(&mesh0, "primitives");
-	stb_json::Cursor prim0  = stb_json::stbj_move_cursor_index(&prims, 0);
-	stb_json::Cursor attrs  = stb_json::stbj_move_cursor_name(&prim0, "attributes");
-
-	int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
-	int uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
-	int idx_acc_idx = stb_json::stbj_read_int_name(&prim0, "indices", -1);
-
-	if (pos_acc_idx < 0 || idx_acc_idx < 0) return GLB_MESH_NOT_FOUND~;
+	int mesh_count          = stb_json::stbj_count_values(&meshes);
 
 	stb_json::Cursor accessors = stb_json::stbj_move_cursor_name(&root, "accessors");
 	stb_json::Cursor bvs       = stb_json::stbj_move_cursor_name(&root, "bufferViews");
 
-	AccessorInfo pos_acc;
-	parse_accessor(&accessors, pos_acc_idx, &pos_acc);
-	AccessorInfo idx_acc;
-	parse_accessor(&accessors, idx_acc_idx, &idx_acc);
-	BufferViewInfo pos_bv;
-	parse_bufview(&bvs, pos_acc.bv_index, &pos_bv);
-	BufferViewInfo idx_bv;
-	parse_bufview(&bvs, idx_acc.bv_index, &idx_bv);
+	// ── First pass: compute global bounding box from all primitives ─────────
 
-	sz pos_base   = (sz)(pos_bv.byte_offset + pos_acc.byte_offset);
-	sz pos_stride = (sz)(pos_bv.byte_stride > 0 ? pos_bv.byte_stride : 12);
-	sz idx_base   = (sz)(idx_bv.byte_offset + idx_acc.byte_offset);
-	bool idx32    = (idx_acc.component_type == 5125); // 5125=uint32, 5123=uint16
-
-	// UV accessor (for palette color lookup)
-	bool has_uv  = (uv_acc_idx >= 0);
-	sz uv_base   = 0;
-	sz uv_stride = 8;
-	if (has_uv) {
-		AccessorInfo uv_acc;
-		parse_accessor(&accessors, uv_acc_idx, &uv_acc);
-		BufferViewInfo uv_bv;
-		parse_bufview(&bvs, uv_acc.bv_index, &uv_bv);
-		uv_base = (sz)(uv_bv.byte_offset + uv_acc.byte_offset);
-		uv_stride = (sz)(uv_bv.byte_stride > 0 ? uv_bv.byte_stride : 8);
-	}
-
-	// Compute bounding box from accessor min/max (already in JSON)
-	// Fall back to scanning vertices
 	float min_x =  1e9f;
 	float max_x = -1e9f;
 	float min_y =  1e9f;
 	float max_y = -1e9f;
 	float min_z =  1e9f;
 	float max_z = -1e9f;
-	for (int i = 0; i < pos_acc.count; i++) {
-		sz base = pos_base + (sz)i * pos_stride;
-		float x = read_f32(bin, base);
-		float y = read_f32(bin, base + 4);
-		float z = read_f32(bin, base + 8);
-		if (x < min_x) min_x = x;
-		if (x > max_x) max_x = x;
-		if (y < min_y) min_y = y;
-		if (y > max_y) max_y = y;
-		if (z < min_z) min_z = z;
-		if (z > max_z) max_z = z;
+
+	for (int mi = 0; mi < mesh_count; mi++) {
+		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, mi);
+		stb_json::Cursor prims = stb_json::stbj_move_cursor_name(&mesh, "primitives");
+		int prim_count         = stb_json::stbj_count_values(&prims);
+
+		for (int pi = 0; pi < prim_count; pi++) {
+			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, pi);
+			stb_json::Cursor attrs = stb_json::stbj_move_cursor_name(&prim, "attributes");
+			int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
+			if (pos_acc_idx < 0) continue;
+
+			AccessorInfo pa;
+			parse_accessor(&accessors, pos_acc_idx, &pa);
+			BufferViewInfo pbv;
+			parse_bufview(&bvs, pa.bv_index, &pbv);
+			sz pbase   = (sz)(pbv.byte_offset + pa.byte_offset);
+			sz pstride = (sz)(pbv.byte_stride > 0 ? pbv.byte_stride : 12);
+
+			for (int i = 0; i < pa.count; i++) {
+				sz base = pbase + (sz)i * pstride;
+				float x = read_f32(bin, base);
+				float y = read_f32(bin, base + 4);
+				float z = read_f32(bin, base + 8);
+				if (x < min_x) min_x = x;
+				if (x > max_x) max_x = x;
+				if (y < min_y) min_y = y;
+				if (y > max_y) max_y = y;
+				if (z < min_z) min_z = z;
+				if (z > max_z) max_z = z;
+			}
+		}
 	}
+
 	float center_x = (min_x + max_x) / 2.0f;
 	float center_y = (min_y + max_y) / 2.0f;
 	float center_z = (min_z + max_z) / 2.0f;
 
-	// Allocate occupancy grid
-	int gx0        = (int)(min_x - center_x) - 1;
-	int gy0        = (int)(min_y - center_y) - 1;
-	int gz0        = (int)(min_z - center_z) - 1;
-	int gx1        = (int)(max_x - center_x) + 2;
-	int gy1        = (int)(max_y - center_y) + 2;
-	int gz1        = (int)(max_z - center_z) + 2;
-	int gdx        = gx1 - gx0;
-	int gdy        = gy1 - gy0;
-	int gdz        = gz1 - gz0;
-	sz grid_size   = (sz)(gdx * gdy * gdz);
-	bool* occupied = mem::new_array(bool, grid_size);
-	char* colors   = mem::new_array(char, grid_size * 3); // flat r,g,b per cell
-	defer mem::free(occupied);
-	defer mem::free(colors);
-
-	// Voxelize: snap each triangle centroid to integer grid
-	int tri_count = idx_acc.count / 3;
-	for (int ti = 0; ti < tri_count; ti++) {
-		int i0, i1, i2;
-		if (idx32) {
-			// uint32: 4 bytes per index
-			i0 = (int)read_u32(bin, idx_base + (sz)ti * 12);
-			i1 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 4);
-			i2 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 8);
-		} else {
-			// uint16: 2 bytes per index
-			char* p = bin + idx_base + (sz)ti * 6;
-			i0 = (int)((uint)p[0] | ((uint)p[1] << 8));
-			i1 = (int)((uint)p[2] | ((uint)p[3] << 8));
-			i2 = (int)((uint)p[4] | ((uint)p[5] << 8));
-		}
-
-		sz b0 = pos_base + (sz)i0 * pos_stride;
-		sz b1 = pos_base + (sz)i1 * pos_stride;
-		sz b2 = pos_base + (sz)i2 * pos_stride;
-
-		float cx3 = (read_f32(bin, b0) + read_f32(bin, b1) + read_f32(bin, b2)) / 3.0f - center_x;
-		float cy3 = (read_f32(bin, b0 + 4) + read_f32(bin, b1 + 4) + read_f32(bin, b2 + 4)) / 3.0f - center_y;
-		float cz3 = (read_f32(bin, b0 + 8) + read_f32(bin, b1 + 8) + read_f32(bin, b2 + 8)) / 3.0f - center_z;
-
-		int gx = (int)(cx3 + 0.5f) - gx0;
-		int gy = (int)(cy3 + 0.5f) - gy0;
-		int gz = (int)(cz3 + 0.5f) - gz0;
-
-		if (gx < 0 || gx >= gdx || gy < 0 || gy >= gdy || gz < 0 || gz >= gdz) continue;
-		sz gidx = (sz)(gx + gy * gdx + gz * gdx * gdy);
-
-		char cr = (char)180;
-		char cg = (char)180;
-		char cb = (char)200;
-		if (has_uv) {
-			float u     = read_f32(bin, uv_base + (sz)i0 * uv_stride);
-			int pal_idx = (int)(u * 255.0f + 0.5f);
-			if (pal_idx < 0) pal_idx = 0;
-			if (pal_idx > 255) pal_idx = 255;
-			// map palette index to a hue — R2D2 is mostly white/blue/silver
-			// without PNG decode we use the U value to shift hue
-			float t = (float)pal_idx / 255.0f;
-			cr = (char)(180.0f + t * 50.0f);
-			cg = (char)(180.0f + t * 20.0f);
-			cb = (char)(200.0f + t * 30.0f);
-		}
-
-		occupied[gidx] = true;
-		colors[gidx * 3] = cr;
-		colors[gidx * 3 + 1] = cg;
-		colors[gidx * 3 + 2] = cb;
-	}
-
-	// 6 face directions in grid space (x, y, z = grid axes; y=depth, z=up in grid)
-	// After axis remap (wy=gz, wz=gy): neighbour checks still use grid coords
-	int[6] nox = { 0, 0, 0, 0, 1, -1 }; // ±X
-	int[6] noy = { 0, 0, 1, -1, 0, 0 }; // ±Y (grid) = ±depth
-	int[6] noz = { 1, -1, 0, 0, 0, 0 }; // ±Z (grid) = ±up
-	// face normals in renderer space (after Y/Z swap)
-
-
-
-	float[6] fnx = { 0, 0, 0, 0, 1, -1 };
-	float[6] fny = { 1, -1, 0, 0, 0, 0 }; // grid Z → renderer Y
-	float[6] fnz = { 0, 0, 1, -1, 0, 0 }; // grid Y → renderer Z
-	// tangent half-extents in renderer space
-
-
-
-	float[6] tux = { 0.5f, 0.5f, 0.5f, 0.5f, 0, 0 };
-	float[6] tuy = { 0, 0, 0, 0, 0.5f, 0.5f };
-	float[6] tuz = { 0, 0, 0, 0, 0, 0 };
-	float[6] tvx = { 0, 0, 0, 0, 0, 0 };
-	float[6] tvy = { 0.5f, 0.5f, 0, 0, 0, 0 };
-	float[6] tvz = { 0, 0, 0.5f, 0.5f, 0.5f, 0.5f };
-	// face center offsets in renderer space
-
-
-
-	float[6] fox = { 0, 0, 0, 0, 0.5f, -0.5f };
-	float[6] foy = { 0.5f, -0.5f, 0, 0, 0, 0 }; // ±Z grid → ±Y renderer
-	float[6] foz = { 0, 0, 0.5f, -0.5f, 0, 0 }; // ±Y grid → ±Z renderer
-
-	// Normalize model so its longest axis spans ~10 units (fits comfortably in view)
+	// Normalize model so its longest axis spans ~10 units
 	float span_x   = max_x - min_x;
 	float span_y   = max_y - min_y;
 	float span_z   = max_z - min_z;
@@ -361,44 +212,119 @@ fn GlbModel*? load_glb(String path) {
 	if (span_z > max_span) max_span = span_z;
 	float scale = (max_span > 0.0f) ? (10.0f / max_span) : 1.0f;
 
+	// ── Second pass: load triangles from all primitives ─────────────────────
+
 	GlbModel* model = mem::new(GlbModel);
-	model.voxel_count = 0;
+	model.triangle_count = 0;
 
-	for (int igz = 0; igz < gdz; igz++) {
-		for (int igy = 0; igy < gdy; igy++) {
-			for (int igx = 0; igx < gdx; igx++) {
-				sz gidx = (sz)(igx + igy * gdx + igz * gdx * gdy);
-				if (!occupied[gidx]) continue;
+	for (int mi = 0; mi < mesh_count; mi++) {
+		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, mi);
+		stb_json::Cursor prims = stb_json::stbj_move_cursor_name(&mesh, "primitives");
+		int prim_count         = stb_json::stbj_count_values(&prims);
 
-				// scale and remap axes: GLB has Z-up, renderer uses Y-up
-				// swap Y and Z so R2D2 stands upright
-				float wx = (float)(igx + gx0) * scale;
-				float wy = (float)(igz + gz0) * scale; // Z becomes screen Y (up)
-				float wz = (float)(igy + gy0) * scale; // Y becomes depth
-				char cr  = colors[gidx * 3];
-				char cg2 = colors[gidx * 3 + 1];
-				char cb  = colors[gidx * 3 + 2];
+		for (int pi = 0; pi < prim_count; pi++) {
+			if (model.triangle_count >= MAX_TRIANGLES) break;
 
-				for (int f = 0; f < 6; f++) {
-					int nx3        = igx + nox[f];
-					int ny3        = igy + noy[f];
-					int nz3        = igz + noz[f];
-					bool neighbour = false;
-					if (nx3 >= 0 && nx3 < gdx && ny3 >= 0 && ny3 < gdy && nz3 >= 0 && nz3 < gdz) {
-						neighbour = occupied[(sz)(nx3 + ny3 * gdx + nz3 * gdx * gdy)];
-					}
-					if (neighbour) continue;
-					if (model.voxel_count >= MAX_VOXELS) break;
-					model.voxels[model.voxel_count++] = {
-						.pos = vec3(wx + fox[f] * scale, wy + foy[f] * scale, wz + foz[f] * scale),
-						.normal = vec3(fnx[f], fny[f], fnz[f]),
-						.tan_u = vec3(tux[f] * scale, tuy[f] * scale, tuz[f] * scale),
-						.tan_v = vec3(tvx[f] * scale, tvy[f] * scale, tvz[f] * scale),
-						.r = cr,
-						.g = cg2,
-						.b = cb,
-					};
+			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, pi);
+			stb_json::Cursor attrs = stb_json::stbj_move_cursor_name(&prim, "attributes");
+			int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
+			int idx_acc_idx = stb_json::stbj_read_int_name(&prim, "indices", -1);
+			int uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
+			if (pos_acc_idx < 0 || idx_acc_idx < 0) continue;
+
+			AccessorInfo pos_acc;
+			parse_accessor(&accessors, pos_acc_idx, &pos_acc);
+			AccessorInfo idx_acc;
+			parse_accessor(&accessors, idx_acc_idx, &idx_acc);
+			BufferViewInfo pos_bv;
+			parse_bufview(&bvs, pos_acc.bv_index, &pos_bv);
+			BufferViewInfo idx_bv;
+			parse_bufview(&bvs, idx_acc.bv_index, &idx_bv);
+
+			sz pos_base   = (sz)(pos_bv.byte_offset + pos_acc.byte_offset);
+			sz pos_stride = (sz)(pos_bv.byte_stride > 0 ? pos_bv.byte_stride : 12);
+			sz idx_base   = (sz)(idx_bv.byte_offset + idx_acc.byte_offset);
+			bool idx32    = (idx_acc.component_type == 5125);
+
+			bool has_uv  = (uv_acc_idx >= 0);
+			sz uv_base   = 0;
+			sz uv_stride = 8;
+			if (has_uv) {
+				AccessorInfo uv_acc;
+				parse_accessor(&accessors, uv_acc_idx, &uv_acc);
+				BufferViewInfo uv_bv;
+				parse_bufview(&bvs, uv_acc.bv_index, &uv_bv);
+				uv_base   = (sz)(uv_bv.byte_offset + uv_acc.byte_offset);
+				uv_stride = (sz)(uv_bv.byte_stride > 0 ? uv_bv.byte_stride : 8);
+			}
+
+			int tri_count = idx_acc.count / 3;
+			for (int ti = 0; ti < tri_count; ti++) {
+				if (model.triangle_count >= MAX_TRIANGLES) break;
+
+				int i0, i1, i2;
+				if (idx32) {
+					i0 = (int)read_u32(bin, idx_base + (sz)ti * 12);
+					i1 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 4);
+					i2 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 8);
+				} else {
+					char* p = bin + idx_base + (sz)ti * 6;
+					i0 = (int)((uint)p[0] | ((uint)p[1] << 8));
+					i1 = (int)((uint)p[2] | ((uint)p[3] << 8));
+					i2 = (int)((uint)p[4] | ((uint)p[5] << 8));
 				}
+
+				sz b0 = pos_base + (sz)i0 * pos_stride;
+				sz b1 = pos_base + (sz)i1 * pos_stride;
+				sz b2 = pos_base + (sz)i2 * pos_stride;
+
+				float v0x = (read_f32(bin, b0) - center_x) * scale;
+				float v0y = (read_f32(bin, b0 + 8) - center_z) * scale;
+				float v0z = (read_f32(bin, b0 + 4) - center_y) * scale;
+				float v1x = (read_f32(bin, b1) - center_x) * scale;
+				float v1y = (read_f32(bin, b1 + 8) - center_z) * scale;
+				float v1z = (read_f32(bin, b1 + 4) - center_y) * scale;
+				float v2x = (read_f32(bin, b2) - center_x) * scale;
+				float v2y = (read_f32(bin, b2 + 8) - center_z) * scale;
+				float v2z = (read_f32(bin, b2 + 4) - center_y) * scale;
+
+				float e1x = v1x - v0x;
+				float e1y = v1y - v0y;
+				float e1z = v1z - v0z;
+				float e2x = v2x - v0x;
+				float e2y = v2y - v0y;
+				float e2z = v2z - v0z;
+				float nx  = e1y * e2z - e1z * e2y;
+				float ny  = e1z * e2x - e1x * e2z;
+				float nz  = e1x * e2y - e1y * e2x;
+				float nl  = (float)math::sqrt(nx * nx + ny * ny + nz * nz);
+				if (nl > 0.0f) { nx /= nl; ny /= nl; nz /= nl; }
+				// Y/Z swap inverts handedness — negate to restore correct orientation
+				nx = -nx; ny = -ny; nz = -nz;
+
+				char cr = (char)180;
+				char cg = (char)180;
+				char cb = (char)200;
+				if (has_uv) {
+					float u     = read_f32(bin, uv_base + (sz)i0 * uv_stride);
+					int pal_idx = (int)(u * 255.0f + 0.5f);
+					if (pal_idx < 0) pal_idx = 0;
+					if (pal_idx > 255) pal_idx = 255;
+					float t = (float)pal_idx / 255.0f;
+					cr = (char)(180.0f + t * 50.0f);
+					cg = (char)(180.0f + t * 20.0f);
+					cb = (char)(200.0f + t * 30.0f);
+				}
+
+				model.triangles[model.triangle_count++] = {
+					.v0 = vec3(v0x, v0y, v0z),
+					.v1 = vec3(v1x, v1y, v1z),
+					.v2 = vec3(v2x, v2y, v2z),
+					.normal = vec3(nx, ny, nz),
+					.r = cr,
+					.g = cg,
+					.b = cb,
+				};
 			}
 		}
 	}
@@ -444,9 +370,7 @@ fn float edge_fn(float ax, float ay, float bx, float by, float px, float py) {
 }
 
 // Rasterize a triangle using top-left fill convention so coplanar adjacent
-// triangles tile exactly without double-shading shared edges. Uses constant
-// per-face depth (flat z) — sufficient for voxel faces since corner z's of a
-// single small quad are nearly equal.
+// triangles tile exactly without double-shading shared edges.
 fn void rasterize_tri(
 	GlbModel* self,
 	int w,
@@ -527,14 +451,6 @@ fn void rasterize_tri(
 	}
 }
 
-fn void rasterize_quad(GlbModel* self, int w, int ph, float[4] csx, float[4] csy, float[4] cz, Pixel col) {
-	// Quad corners in (u, v) order: 0=(-,-), 1=(-,+), 2=(+,-), 3=(+,+).
-	// Split along the 1↔2 diagonal into triangles (0,1,3) and (0,3,2).
-	float face_z = (cz[0] + cz[1] + cz[2] + cz[3]) * 0.25f;
-	rasterize_tri(self, w, ph, csx[0], csy[0], csx[1], csy[1], csx[3], csy[3], face_z, col);
-	rasterize_tri(self, w, ph, csx[0], csy[0], csx[3], csy[3], csx[2], csy[2], face_z, col);
-}
-
 fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 	int w     = self.width;
 	int h     = self.height;
@@ -563,98 +479,84 @@ fn milktea::View GlbModel.view(GlbModel* self) @dynamic {
 	light_y /= light_len;
 	light_z /= light_len;
 
-	for (int v = 0; v < self.voxel_count; v++) {
-		Vec3 p       = self.voxels[v].pos;
-		Vec3 n_world = self.voxels[v].normal;
+	for (int t = 0; t < self.triangle_count; t++) {
+		Triangle* tri = &self.triangles[t];
 
-		// translate into camera space, then rotate by inverse camera orientation
-		float rx = p.x - self.cam_px;
-		float ry = p.y - self.cam_py;
-		float rz = p.z - self.cam_pz;
+		// Transform vertices to camera space
+		float rx0 = tri.v0.x - self.cam_px;
+		float ry0 = tri.v0.y - self.cam_py;
+		float rz0 = tri.v0.z - self.cam_pz;
+		float rx1 = tri.v1.x - self.cam_px;
+		float ry1 = tri.v1.y - self.cam_py;
+		float rz1 = tri.v1.z - self.cam_pz;
+		float rx2 = tri.v2.x - self.cam_px;
+		float ry2 = tri.v2.y - self.cam_py;
+		float rz2 = tri.v2.z - self.cam_pz;
 
-		// rotate by -cam_yaw (around Y): R_y(-yaw)
-		float ax = cos_yaw * rx - sin_yaw * rz;
-		float ay = ry;
-		float az = sin_yaw * rx + cos_yaw * rz;
+		// Yaw rotation
+		float ax0 = cos_yaw * rx0 - sin_yaw * rz0;
+		float ay0 = ry0;
+		float az0 = sin_yaw * rx0 + cos_yaw * rz0;
+		float ax1 = cos_yaw * rx1 - sin_yaw * rz1;
+		float ay1 = ry1;
+		float az1 = sin_yaw * rx1 + cos_yaw * rz1;
+		float ax2 = cos_yaw * rx2 - sin_yaw * rz2;
+		float ay2 = ry2;
+		float az2 = sin_yaw * rx2 + cos_yaw * rz2;
 
-		// rotate by -cam_pitch (around X): R_x(-pitch)
-		p.x = ax;
-		p.y = cos_pitch * ay + sin_pitch * az;
-		p.z = -sin_pitch * ay + cos_pitch * az;
+		// Pitch rotation
+		float cx0 = ax0;
+		float cy0 =  cos_pitch * ay0 + sin_pitch * az0;
+		float cz0 = -sin_pitch * ay0 + cos_pitch * az0;
+		float cx1 = ax1;
+		float cy1 =  cos_pitch * ay1 + sin_pitch * az1;
+		float cz1 = -sin_pitch * ay1 + cos_pitch * az1;
+		float cx2 = ax2;
+		float cy2 =  cos_pitch * ay2 + sin_pitch * az2;
+		float cz2 = -sin_pitch * ay2 + cos_pitch * az2;
 
-		// rotate normal for back-face cull (yaw then pitch, same as point)
-		float nax =  cos_yaw * n_world.x - sin_yaw * n_world.z;
-		float nay =  n_world.y;
-		float naz =  sin_yaw * n_world.x + cos_yaw * n_world.z;
-		float ncx =  nax;
-		float ncy =  cos_pitch * nay + sin_pitch * naz;
+		// Near-clip check before projection
+		if (cz0 < 0.1f || cz1 < 0.1f || cz2 < 0.1f) continue;
+
+		// Rotate world-space normal to camera space for back-face cull
+		float nwx = tri.normal.x;
+		float nwy = tri.normal.y;
+		float nwz = tri.normal.z;
+		float nax =  cos_yaw * nwx - sin_yaw * nwz;
+		float nay =  nwy;
+		float naz =  sin_yaw * nwx + cos_yaw * nwz;
 		float ncz = -sin_pitch * nay + cos_pitch * naz;
-
-		// strict back-face cull: skip faces pointing away from the camera
 		if (ncz > 0.0f) continue;
 
-		if (p.z < 0.5f) continue;
-
-		Vec3 tu = self.voxels[v].tan_u;
-		Vec3 tv = self.voxels[v].tan_v;
-
-		// yaw
-		float taux = cos_yaw * tu.x - sin_yaw * tu.z;
-		float tauz = sin_yaw * tu.x + cos_yaw * tu.z;
-		tu.x = taux;
-		tu.z = tauz;
-		float tvux = cos_yaw * tv.x - sin_yaw * tv.z;
-		float tvuz = sin_yaw * tv.x + cos_yaw * tv.z;
-		tv.x = tvux;
-		tv.z = tvuz;
-
-		// pitch
-		float tauy2 =  cos_pitch * tu.y + sin_pitch * tu.z;
-		float tauz2 = -sin_pitch * tu.y + cos_pitch * tu.z;
-		tu.y = tauy2;
-		tu.z = tauz2;
-		float tvuy2 =  cos_pitch * tv.y + sin_pitch * tv.z;
-		float tvuz2 = -sin_pitch * tv.y + cos_pitch * tv.z;
-		tv.y = tvuy2;
-		tv.z = tvuz2;
-
-		// Project all 4 face-quad corners. Order: (-,-), (-,+), (+,-), (+,+).
-		float[4] csx_arr;
-		float[4] csy_arr;
-		float[4] cz_arr;
-		bool near_clipped = false;
-		float[4] cu       = { -1, -1, 1, 1 };
-		float[4] cv       = { -1, 1, -1, 1 };
-		for (int ci = 0; ci < 4; ci++) {
-			float cx3 = p.x + cu[ci] * tu.x + cv[ci] * tv.x;
-			float cy3 = p.y + cu[ci] * tu.y + cv[ci] * tv.y;
-			float cz3 = p.z + cu[ci] * tu.z + cv[ci] * tv.z;
-			if (cz3 < 0.1f) {
-				near_clipped = true;
-				break;
-			}
-			float sc = fov / cz3;
-			csx_arr[ci] = cx3 * sc * 2.0f + cx;
-			csy_arr[ci] = -cy3 * sc * 2.0f + cy;
-			cz_arr[ci] = cz3;
-		}
-		if (near_clipped) continue;
-
-		// world-space lighting — consistent shading regardless of camera orientation
-		float diff = n_world.x * light_x + n_world.y * light_y + n_world.z * light_z;
+		// World-space lighting
+		float diff = tri.normal.x * light_x + tri.normal.y * light_y + tri.normal.z * light_z;
 		if (diff < 0.0f) diff = 0.0f;
 		float brightness = 0.30f + 0.70f * diff;
 
 		Pixel col = {
-			(char)((float)self.voxels[v].r * brightness),
-			(char)((float)self.voxels[v].g * brightness),
-			(char)((float)self.voxels[v].b * brightness),
+			(char)((float)tri.r * brightness),
+			(char)((float)tri.g * brightness),
+			(char)((float)tri.b * brightness),
 		};
 
-		// Rasterize the quad as two triangles using edge-function coverage.
-		// Splitting into (0,1,3) and (0,3,2) so adjacent face-quads tile exactly
-		// along their shared edge with no slivers (no bbox bleed).
-		rasterize_quad(self, w, ph, csx_arr, csy_arr, cz_arr, col);
+		// Project to screen
+		float scx0 = (fov / cz0) * cx0 * 2.0f;
+		float scy0 = (fov / cz0) * -cy0 * 2.0f;
+		float scx1 = (fov / cz1) * cx1 * 2.0f;
+		float scy1 = (fov / cz1) * -cy1 * 2.0f;
+		float scx2 = (fov / cz2) * cx2 * 2.0f;
+		float scy2 = (fov / cz2) * -cy2 * 2.0f;
+
+		float sx0 = scx0 + cx;
+		float sy0 = scy0 + cy;
+		float sx1 = scx1 + cx;
+		float sy1 = scy1 + cy;
+		float sx2 = scx2 + cx;
+		float sy2 = scy2 + cy;
+
+		// Use average depth for z-buffer
+		float avg_z = (cz0 + cz1 + cz2) / 3.0f;
+		rasterize_tri(self, w, ph, sx0, sy0, sx1, sy1, sx2, sy2, avg_z, col);
 	}
 
 	// Combine into half-block cells
