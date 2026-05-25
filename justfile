@@ -10,3 +10,6 @@ examples:
         echo "Building $name..."
         c3c build "$name" || exit 1
     done
+
+format:
+    c3fmt --in-place .
