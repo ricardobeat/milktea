@@ -32,7 +32,7 @@ enum ConstraintKind : char {
 	CMAX,
 	CPERCENT,
 	CFILL,
-	CFIT,    // measure content; requires a MeasureFn + context pointer
+	CFIT, // measure content; requires a MeasureFn + context pointer
 }
 
 // MeasureFn is called during layout to size a CFIT child.
@@ -44,8 +44,8 @@ alias MeasureFn = fn int(void* ctx, int cross);
 struct Constraint {
 	ConstraintKind kind;
 	int value;
-	MeasureFn measure;  // only used when kind == CFIT
-	void* ctx;          // passed to measure
+	MeasureFn measure; // only used when kind == CFIT
+	void* ctx; // passed to measure
 }
 
 fn Constraint constraint_len(int n) {
@@ -88,7 +88,7 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 		sizes[i] = 0;
 	}
 
-	int fixed = 0;
+	int fixed             = 0;
 	int fill_weight_total = 0;
 	int[64] max_caps;
 	bool[64] is_fill;
@@ -147,11 +147,11 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 		for (int i = 0; i < n; i++) {
 			if (cs[i].kind == ConstraintKind.CFILL) {
 				int weight = cs[i].value;
-				int share = remaining * weight / fill_weight_total;
+				int share  = remaining * weight / fill_weight_total;
 				sizes[i] = share;
 			} else if (cs[i].kind == ConstraintKind.CMAX) {
 				int weight = 1;
-				int share = remaining * weight / fill_weight_total;
+				int share  = remaining * weight / fill_weight_total;
 				if (share > max_caps[i]) {
 					sizes[i] = max_caps[i];
 					clamped = true;
@@ -259,7 +259,10 @@ fn int layout_v_gap(Rect area, Constraint[] cs, int gap, Rect[] out_rects) {
 
 import std::core::mem;
 
-enum FlexDirection : char { ROW, COLUMN }
+enum FlexDirection : char {
+	ROW,
+	COLUMN
+}
 enum JustifyContent : char {
 	JUSTIFY_START,
 	JUSTIFY_CENTER,
@@ -278,20 +281,20 @@ enum AlignItems : char {
 const int MAX_FLEX_CHILDREN = 32;
 
 struct FlexNode {
-	Constraint main_size;    // size along main axis (default: CFILL weight=1)
-	Constraint cross_size;   // size along cross axis (default: CFILL weight=1 = stretch)
+	Constraint main_size; // size along main axis (default: CFILL weight=1)
+	Constraint cross_size; // size along cross axis (default: CFILL weight=1 = stretch)
 
 	FlexNode*[MAX_FLEX_CHILDREN] children;
 	int child_count;
 
-	FlexDirection direction;   // ROW or COLUMN
-	JustifyContent justify;    // default: JUSTIFY_START
-	AlignItems align;          // default: ALIGN_STRETCH
-	int gap;                   // gap between children in cells
+	FlexDirection direction; // ROW or COLUMN
+	JustifyContent justify; // default: JUSTIFY_START
+	AlignItems align; // default: ALIGN_STRETCH
+	int gap; // gap between children in cells
 
 	int pad_top, pad_right, pad_bottom, pad_left;
 
-	Rect computed_rect;        // filled by solve()
+	Rect computed_rect; // filled by solve()
 }
 
 // Constructors - all temp-allocated with sensible defaults
@@ -461,7 +464,7 @@ fn void FlexNode.solve(&self, Rect area) {
 
 	// Get main axis total
 	int main_total = self.direction == FlexDirection.ROW ? inner.w : inner.h;
-	int spare = main_total - content_size;
+	int spare      = main_total - content_size;
 	if (spare < 0) spare = 0;
 
 	// Apply JustifyContent offset adjustment
@@ -576,7 +579,7 @@ fn void FlexNode.solve(&self, Rect area) {
 fn Rect FlexNode.rect(&self) => self.computed_rect;
 
 fn Rect FlexNode.child_rect(&self, int idx) {
-	if (idx < 0 || idx >= self.child_count) return {};
+	if (idx < 0 || idx >= self.child_count) return { };
 	return self.children[idx].computed_rect;
 }
 

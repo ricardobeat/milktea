@@ -7,12 +7,12 @@ import std::core::dstring;
 // ============================================================
 
 bitstruct Attrs : char {
-	bool bold          : 0;
-	bool dim           : 1;
-	bool italic        : 2;
-	bool underline     : 3;
-	bool blink         : 4;
-	bool reverse       : 5;
+	bool bold : 0;
+	bool dim : 1;
+	bool italic : 2;
+	bool underline : 3;
+	bool blink : 4;
+	bool reverse : 5;
 	bool strikethrough : 6;
 }
 
@@ -26,17 +26,21 @@ struct Style {
 // Style constructors and builders
 
 fn Style default_style() {
-	return {};
+	return { };
 }
 
 fn bool Style.is_empty(&self) {
-	return self.fg.is_none() && self.bg.is_none() && self.underline_color.is_none() && !self.attrs.bold && !self.attrs.dim && !self.attrs.italic && !self.attrs.underline && !self.attrs.blink && !self.attrs.reverse && !self.attrs.strikethrough;
+	return self.fg.is_none() && self.bg.is_none() && self.underline_color.is_none() && !self.attrs.bold
+		&& !self.attrs.dim
+		&& !self.attrs.italic
+		&& !self.attrs.underline
+		&& !self.attrs.blink
+		&& !self.attrs.reverse
+		&& !self.attrs.strikethrough;
 }
 
 fn bool Style.eq(&self, Style other) {
-	return self.fg.eq(other.fg)
-		&& self.bg.eq(other.bg)
-		&& self.underline_color.eq(other.underline_color)
+	return self.fg.eq(other.fg) && self.bg.eq(other.bg) && self.underline_color.eq(other.underline_color)
 		&& self.attrs == other.attrs;
 }
 
@@ -128,12 +132,11 @@ fn String Style.to_sgr(&self) {
 fn String Style.diff_sgr(&self, Style prev) {
 	if (self.eq(prev)) return "";
 
-	DString ds = dstring::temp();
+	DString ds      = dstring::temp();
 	bool need_reset = false;
 
 	// Check if we need a full reset: attributes changed, or colors changed.
-	bool attrs_changed = self.attrs.bold != prev.attrs.bold
-		|| self.attrs.dim != prev.attrs.dim
+	bool attrs_changed = self.attrs.bold != prev.attrs.bold || self.attrs.dim != prev.attrs.dim
 		|| self.attrs.italic != prev.attrs.italic
 		|| self.attrs.underline != prev.attrs.underline
 		|| self.attrs.blink != prev.attrs.blink
@@ -200,7 +203,7 @@ const sz CELL_MAX_BYTES = 8;
 struct Cell {
 	char[CELL_MAX_BYTES] content;
 	char content_len;
-	char width;    // display width: 0=zero-width, 1=normal, 2=wide/CJK
+	char width; // display width: 0=zero-width, 1=normal, 2=wide/CJK
 	Style style;
 }
 

@@ -7,37 +7,37 @@ import std::core::dstring;
 // ============================================================
 
 fn void test_color_ansi_fg() @test {
-	Color c = color_ansi(1); // red
+	Color c    = color_ansi(1); // red
 	String sgr = c.to_sgr_fg();
 	assert(sgr == "\x1b[31m");
 }
 
 fn void test_color_ansi_bg() @test {
-	Color c = color_ansi(4); // blue
+	Color c    = color_ansi(4); // blue
 	String sgr = c.to_sgr_bg();
 	assert(sgr == "\x1b[44m");
 }
 
 fn void test_color_bright_fg() @test {
-	Color c = color_ansi(9); // bright red
+	Color c    = color_ansi(9); // bright red
 	String sgr = c.to_sgr_fg();
 	assert(sgr == "\x1b[91m");
 }
 
 fn void test_color_256_fg() @test {
-	Color c = color_256(196);
+	Color c    = color_256(196);
 	String sgr = c.to_sgr_fg();
 	assert(sgr == "\x1b[38;5;196m");
 }
 
 fn void test_color_truecolor_fg() @test {
-	Color c = color_rgb(255, 128, 0);
+	Color c    = color_rgb(255, 128, 0);
 	String sgr = c.to_sgr_fg();
 	assert(sgr == "\x1b[38;2;255;128;0m");
 }
 
 fn void test_color_truecolor_bg() @test {
-	Color c = color_rgb(0, 0, 0);
+	Color c    = color_rgb(0, 0, 0);
 	String sgr = c.to_sgr_bg();
 	assert(sgr == "\x1b[48;2;0;0;0m");
 }
@@ -104,12 +104,12 @@ fn void test_style_set_fg() @test {
 }
 
 fn void test_style_full_sgr() @test {
-	Style s = default_style()
-		.set_fg(color_ansi(1))
-		.set_bg(color_ansi(4))
-		.set_bold(true);
+	Style s    = default_style().set_fg(color_ansi(1)).set_bg(color_ansi(4)).set_bold(true);
 	String sgr = s.to_sgr();
 	// Should contain reset, bold, red fg, blue bg
+
+
+
 	assert(sgr.len > 0);
 	assert(sgr != "\x1b[0m"); // has attributes
 }
@@ -125,6 +125,9 @@ fn void test_style_diff_fg_change() @test {
 	Style next = default_style().set_fg(color_ansi(4));
 	String sgr = next.diff_sgr(prev);
 	// Should emit reset + new fg color
+
+
+
 	assert(sgr.len > 0);
 }
 
@@ -133,6 +136,9 @@ fn void test_style_diff_bold_off() @test {
 	Style next = default_style();
 	String sgr = next.diff_sgr(prev);
 	// Should emit \x1b[0m (reset clears bold)
+
+
+
 	assert(sgr.len > 0);
 }
 
@@ -149,7 +155,7 @@ fn void test_empty_cell() @test {
 
 fn void test_new_cell() @test {
 	Style s = default_style().set_fg(color_ansi(2));
-	Cell c = new_cell("A", 1, s);
+	Cell c  = new_cell("A", 1, s);
 	assert(c.width == 1);
 	assert(c.content_len == 1);
 	assert(c.content[0] == 'A');
@@ -180,7 +186,10 @@ fn void test_cell_neq_style() @test {
 
 fn void test_screen_buffer_new() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	assert(sb.width == 10);
 	assert(sb.height == 5);
@@ -193,7 +202,10 @@ fn void test_screen_buffer_new() @test {
 
 fn void test_screen_buffer_set_cell() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.swap(); // clear full_redraw for this test
 
 	Cell red = new_cell("X", 1, default_style().set_fg(color_ansi(1)));
@@ -208,7 +220,10 @@ fn void test_screen_buffer_set_cell() @test {
 
 fn void test_screen_buffer_set_string() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.swap();
 
 	sb.set_string(0, 0, "Hello", default_style());
@@ -223,58 +238,76 @@ fn void test_screen_buffer_set_string() @test {
 
 fn void test_screen_buffer_diff_no_changes() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.swap(); // clear full_redraw
 
 	// After swap, no changes → render_diff should produce nothing
 	DString out = dstring::temp();
-	Style pen = default_style();
+	Style pen   = default_style();
 	sb.render_diff(&out, &pen);
 	assert(out.str_view().len == 0);
 }
 
 fn void test_screen_buffer_diff_full_redraw() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	// full_redraw is true by default
 
 	sb.set_string(0, 0, "Hi", default_style());
 
-	DString out = dstring::temp();
 	Style pen = default_style();
 	sb.render_diff(&out, &pen);
 
 	String result = out.str_view();
 	// Should contain clear + home
+
+
+
 	assert(result.len > 0);
 	// Should contain cursor positioning and content
 }
 
 fn void test_screen_buffer_diff_incremental() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.set_string(0, 0, "Frame1", default_style());
 	DString out1 = dstring::temp();
-	Style pen1 = default_style();
+	Style pen1   = default_style();
 	sb.render_diff(&out1, &pen1);
 	sb.swap();
 
 	// Now change only row 1
 	sb.set_string(0, 1, "Changed", default_style());
 	DString out2 = dstring::temp();
-	Style pen2 = pen1; // carry over pen state
+	Style pen2   = pen1; // carry over pen state
 	sb.render_diff(&out2, &pen2);
 
 	String diff = out2.str_view();
 	// The diff should NOT contain a full clear
+
+
+
 	// It should only address row 2
+
 	assert(diff.len > 0);
 }
 
 fn void test_screen_buffer_needs_redraw() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	assert(sb.needs_redraw()); // full_redraw=true
 	sb.swap();
@@ -286,7 +319,10 @@ fn void test_screen_buffer_needs_redraw() @test {
 
 fn void test_screen_buffer_resize() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.swap();
 
 	sb.resize(20, 10);
@@ -328,7 +364,10 @@ fn void test_utf8_3byte() @test {
 
 fn void test_ansi_parser_plain_text() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "Hello", default_style());
 	Cell* c = sb.cell_at(0, 0);
@@ -338,7 +377,10 @@ fn void test_ansi_parser_plain_text() @test {
 
 fn void test_ansi_parser_bold() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b[1mB", default_style());
 	Cell* c = sb.cell_at(0, 0);
@@ -348,7 +390,10 @@ fn void test_ansi_parser_bold() @test {
 
 fn void test_ansi_parser_fg_color() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b[31mR", default_style());
 	Cell* c = sb.cell_at(0, 0);
@@ -359,7 +404,10 @@ fn void test_ansi_parser_fg_color() @test {
 
 fn void test_ansi_parser_truecolor() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b[38;2;255;128;0mX", default_style());
 	Cell* c = sb.cell_at(0, 0);
@@ -371,7 +419,10 @@ fn void test_ansi_parser_truecolor() @test {
 
 fn void test_ansi_parser_color_256() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b[38;5;196mX", default_style());
 	Cell* c = sb.cell_at(0, 0);
@@ -381,7 +432,10 @@ fn void test_ansi_parser_color_256() @test {
 
 fn void test_ansi_parser_reset() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b[1;31mR\x1b[0mN", default_style());
 	// First cell: bold red
@@ -396,7 +450,10 @@ fn void test_ansi_parser_reset() @test {
 
 fn void test_ansi_parser_newline() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "A\nB", default_style());
 	Cell* c1 = sb.cell_at(0, 0);
@@ -422,6 +479,9 @@ fn void test_rect_basic() @test {
 fn void test_rect_contains() @test {
 	Rect r = new_rect(5, 10, 20, 15);
 	// Top-left corner
+
+
+
 	assert(r.contains(5, 10));
 	// Last cell before right edge
 	assert(r.contains(24, 10));
@@ -440,7 +500,7 @@ fn void test_rect_contains() @test {
 }
 
 fn void test_rect_inset() @test {
-	Rect r = new_rect(0, 0, 20, 10);
+	Rect r     = new_rect(0, 0, 20, 10);
 	Rect inset = r.inset(2, 1, 2, 1);
 	assert(inset.x == 2);
 	assert(inset.y == 1);
@@ -449,9 +509,12 @@ fn void test_rect_inset() @test {
 }
 
 fn void test_rect_inset_clamp() @test {
-	Rect r = new_rect(0, 0, 4, 4);
+	Rect r     = new_rect(0, 0, 4, 4);
 	Rect inset = r.inset(3, 3, 3, 3);
 	// Should be clamped to 0, not negative
+
+
+
 	assert(inset.w == 0);
 	assert(inset.h == 0);
 }
@@ -462,11 +525,7 @@ fn void test_rect_inset_clamp() @test {
 
 fn void test_layout_h_len() @test {
 	Rect[8] out;
-	Constraint[3] constraints = {
-		constraint_len(5),
-		constraint_len(10),
-		constraint_len(5)
-	};
+	Constraint[3] constraints = { constraint_len(5), constraint_len(10), constraint_len(5) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].x == 0 && out[0].w == 5);
@@ -479,10 +538,7 @@ fn void test_layout_h_len() @test {
 
 fn void test_layout_h_fill() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_fill(1),
-		constraint_fill(1)
-	};
+	Constraint[2] constraints = { constraint_fill(1), constraint_fill(1) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 10);
@@ -491,10 +547,7 @@ fn void test_layout_h_fill() @test {
 
 fn void test_layout_h_fill_weighted() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_fill(1),
-		constraint_fill(2)
-	};
+	Constraint[2] constraints = { constraint_fill(1), constraint_fill(2) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	// Total weight is 3; 20 width split 1:2
@@ -506,11 +559,7 @@ fn void test_layout_h_fill_weighted() @test {
 
 fn void test_layout_h_mixed() @test {
 	Rect[8] out;
-	Constraint[3] constraints = {
-		constraint_len(5),
-		constraint_fill(1),
-		constraint_fill(2)
-	};
+	Constraint[3] constraints = { constraint_len(5), constraint_fill(1), constraint_fill(2) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 5);
@@ -522,10 +571,7 @@ fn void test_layout_h_mixed() @test {
 
 fn void test_layout_v_basic() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_len(5),
-		constraint_fill(1)
-	};
+	Constraint[2] constraints = { constraint_len(5), constraint_fill(1) };
 	layout_v(new_rect(0, 0, 10, 20), constraints[..], out[..]);
 
 	assert(out[0].y == 0 && out[0].h == 5);
@@ -536,10 +582,7 @@ fn void test_layout_v_basic() @test {
 
 fn void test_layout_h_percent() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_percent(25),
-		constraint_percent(75)
-	};
+	Constraint[2] constraints = { constraint_percent(25), constraint_percent(75) };
 	layout_h(new_rect(0, 0, 100, 1), constraints[..], out[..]);
 
 	assert(out[0].w == 25);
@@ -548,25 +591,19 @@ fn void test_layout_h_percent() @test {
 
 fn void test_layout_h_gap() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_fill(1),
-		constraint_fill(1)
-	};
+	Constraint[2] constraints = { constraint_fill(1), constraint_fill(1) };
 	layout_h_gap(new_rect(0, 0, 20, 1), constraints[..], 2, out[..]);
 
 	// Available = 20 - 2 (gap) = 18; each fill gets 9
 	assert(out[0].w == 9);
 	assert(out[0].x == 0);
 	assert(out[1].w == 9);
-	assert(out[1].x == 11);  // 9 + 2 (gap)
+	assert(out[1].x == 11); // 9 + 2 (gap)
 }
 
 fn void test_layout_h_max() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_max(5),
-		constraint_fill(1)
-	};
+	Constraint[2] constraints = { constraint_max(5), constraint_fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w <= 5);
@@ -576,10 +613,7 @@ fn void test_layout_h_max() @test {
 
 fn void test_layout_h_min() @test {
 	Rect[8] out;
-	Constraint[2] constraints = {
-		constraint_min(8),
-		constraint_fill(1)
-	};
+	Constraint[2] constraints = { constraint_min(8), constraint_fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w >= 8);
@@ -593,7 +627,10 @@ fn void test_layout_h_min() @test {
 
 fn void test_fill_rect() @test {
 	ScreenBuffer* sb = new_screen_buffer(10, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.fill_rect(new_rect(2, 1, 4, 3), default_style().set_bold(true));
 
@@ -617,7 +654,10 @@ fn void test_fill_rect() @test {
 
 fn void test_fill_rect_clamp() @test {
 	ScreenBuffer* sb = new_screen_buffer(5, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	// Should not panic/crash when rect extends beyond buffer
 	sb.fill_rect(new_rect(3, 3, 10, 10), default_style());
@@ -629,7 +669,10 @@ fn void test_fill_rect_clamp() @test {
 
 fn void test_draw_string_in_rect_basic() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.draw_string_in_rect(new_rect(2, 1, 10, 3), "Hello", default_style());
 
@@ -648,7 +691,10 @@ fn void test_draw_string_in_rect_basic() @test {
 
 fn void test_draw_string_in_rect_wrap() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.draw_string_in_rect(new_rect(0, 0, 5, 3), "HelloWorld", default_style());
 
@@ -667,7 +713,10 @@ fn void test_draw_string_in_rect_wrap() @test {
 
 fn void test_draw_string_in_rect_newline() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.draw_string_in_rect(new_rect(0, 0, 10, 3), "AB\nCD", default_style());
 
@@ -684,9 +733,15 @@ fn void test_draw_string_in_rect_newline() @test {
 
 fn void test_blit_opaque() @test {
 	ScreenBuffer* src = new_screen_buffer(5, 3);
-	defer { src.destroy(); mem::free(src); }
+	defer {
+		src.destroy();
+		mem::free(src);
+	}
 	ScreenBuffer* dst = new_screen_buffer(5, 3);
-	defer { dst.destroy(); mem::free(dst); }
+	defer {
+		dst.destroy();
+		mem::free(dst);
+	}
 
 	// Set 'X' at (0, 0) in src
 	Cell x_cell = new_cell("X", 1, default_style());
@@ -702,9 +757,15 @@ fn void test_blit_opaque() @test {
 
 fn void test_blit_transparent() @test {
 	ScreenBuffer* src = new_screen_buffer(5, 3);
-	defer { src.destroy(); mem::free(src); }
+	defer {
+		src.destroy();
+		mem::free(src);
+	}
 	ScreenBuffer* dst = new_screen_buffer(5, 3);
-	defer { dst.destroy(); mem::free(dst); }
+	defer {
+		dst.destroy();
+		mem::free(dst);
+	}
 
 	// Fill dst with blue background
 	dst.fill_rect(new_rect(0, 0, 5, 3), default_style().set_bg(color_ansi(4)));
@@ -719,11 +780,11 @@ fn void test_blit_transparent() @test {
 	// Cell (1, 1) should have 'X' with red bg (overwritten)
 	Cell* c = dst.cell_at(1, 1);
 	assert(c.content[0] == 'X');
-	assert(c.style.bg.index == 1);  // red
+	assert(c.style.bg.index == 1); // red
 
 	// Cell (0, 0) should still have blue background (transparent skip)
 	c = dst.cell_at(0, 0);
-	assert(c.style.bg.index == 4);  // blue
+	assert(c.style.bg.index == 4); // blue
 }
 
 // ============================================================
@@ -734,7 +795,10 @@ fn void test_wide_char_placeholder() @test {
 	// After writing a wide char (width=2), cell+1 must be an empty placeholder
 	// so the diff renderer doesn't output stale content in the second column.
 	ScreenBuffer* sb = new_screen_buffer(10, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	// Fill row with known content first
 	sb.set_string(0, 0, "ABCDEFGHIJ", default_style());
@@ -758,14 +822,21 @@ fn void test_wide_char_render_frame() @test {
 	// render_frame should produce visually correct output:
 	// wide char counts as 2 columns, so content after it stays aligned.
 	ScreenBuffer* sb = new_screen_buffer(6, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	// Write "A中B" — A(1) + 中(2) + B(1) = 4 visual cols, then 2 spaces
 	sb.render_ansi_string(0, 0, "A\xe4\xb8\xadB", default_style());
 
 	String frame = sb.render_frame_row(0);
 	// Should start with "A中B" followed by spaces to fill width=6
+
+
+
 	// 中 is 3 UTF-8 bytes but 2 terminal cols → frame has A, 中, B, space, space
+
 	assert(frame.starts_with("A\xe4\xb8\xadB"));
 }
 
@@ -774,7 +845,10 @@ fn void test_wide_char_doesnt_displace_border() @test {
 	// Simulate the cursors example: │ (col 1), space, >, space, cursor(col 4), space, │ (col 6)
 	// │ is U+2502 = 0xE2 0x94 0x82 (3 bytes, width=1)
 	ScreenBuffer* sb = new_screen_buffer(10, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	// Write: │ >   │ starting at col 0
 	// cols:   0 1 2 3 4 5 6
@@ -804,7 +878,10 @@ fn void test_wide_char_doesnt_displace_border() @test {
 fn void test_overlay_char_single_slot() @test {
 	// overlay_char writes exactly one cell slot; col+1 is never touched.
 	ScreenBuffer* sb = new_screen_buffer(10, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.set_string(0, 0, "ABCDEFGHIJ", default_style());
 	sb.swap();
@@ -826,7 +903,10 @@ fn void test_render_diff_wide_char_columns() @test {
 	// to terminal column N+2. Verify the diff output contains the correct
 	// CUP sequence when a cell after a wide char changes.
 	ScreenBuffer* sb = new_screen_buffer(10, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	// Frame 1: "A中BCD     "
 	sb.render_ansi_string(0, 0, "A\xe4\xb8\xadBCD", default_style());
@@ -848,7 +928,10 @@ fn void test_render_diff_wide_char_columns() @test {
 
 fn void test_render_frame_row() @test {
 	ScreenBuffer* sb = new_screen_buffer(5, 2);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.set_string(0, 0, "Hello", default_style());
 	sb.set_string(0, 1, "World", default_style());
@@ -864,7 +947,10 @@ fn void test_osc_sequence_skipped() @test {
 	// OSC sequences (e.g. cursor color \x1b]12;#ff0000\x1b\) must not
 	// produce visible characters in the buffer.
 	ScreenBuffer* sb = new_screen_buffer(10, 1);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.render_ansi_string(0, 0, "\x1b]12;#ff0000\x1b\\AB", default_style());
 
@@ -876,7 +962,10 @@ fn void test_osc_sequence_skipped() @test {
 
 fn void test_blit_ansi() @test {
 	ScreenBuffer* sb = new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 
 	sb.blit_ansi(2, 1, 5, 2, "\x1b[31mHi\x1b[0m", false);
 
@@ -884,7 +973,7 @@ fn void test_blit_ansi() @test {
 	Cell* c = sb.cell_at(2, 1);
 	assert(c.content[0] == 'H');
 	assert(c.style.fg.kind == ColorKind.ANSI);
-	assert(c.style.fg.index == 1);  // red
+	assert(c.style.fg.index == 1); // red
 
 	// Cell at (3, 1) should be 'i' with red color
 	c = sb.cell_at(3, 1);

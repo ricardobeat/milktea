@@ -133,8 +133,8 @@ fn void Compositor.flatten(Compositor* self) {
 	self.bounds_h = 0;
 	for (sz i = 0; i < self.entry_count; i++) {
 		CompositeEntry* e = &self.entries[i];
-		int right = e.abs_x + e.width;
-		int bottom = e.abs_y + e.height;
+		int right         = e.abs_x + e.width;
+		int bottom        = e.abs_y + e.height;
 		if (right > self.bounds_w) self.bounds_w = right;
 		if (bottom > self.bounds_h) self.bounds_h = bottom;
 	}
@@ -143,13 +143,19 @@ fn void Compositor.flatten(Compositor* self) {
 fn void Compositor.flatten_recursive(Compositor* self, Layer* layer, int parent_x, int parent_y) {
 	int abs_x = layer.x + parent_x;
 	int abs_y = layer.y + parent_y;
-	int w = string_width(layer.content);
-	int h = count_lines(layer.content);
+	int w     = string_width(layer.content);
+	int h     = count_lines(layer.content);
 
 	// Don't add the invisible root layer
 	if (layer != self.root || layer.content.len > 0) {
 		if (self.entry_count < MAX_LAYERS) {
-			self.entries[self.entry_count] = { .layer = layer, .abs_x = abs_x, .abs_y = abs_y, .width = w, .height = h };
+			self.entries[self.entry_count] = {
+				.layer = layer,
+				.abs_x = abs_x,
+				.abs_y = abs_y,
+				.width = w,
+				.height = h
+			};
 			self.entry_count++;
 		}
 	}
@@ -196,8 +202,8 @@ const int MAX_CANVAS_H = 200;
 fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, CompositeEntry* e) {
 	// Split layer content into lines
 	String[MAX_LAYOUT_LINES] lines;
-	sz line_count = 0;
-	sz start = 0;
+	sz line_count  = 0;
+	sz start       = 0;
 	String content = e.layer.content;
 	for (sz i = 0; i <= content.len; i++) {
 		if (i == content.len || content[i] == '\n') {
@@ -216,8 +222,8 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 		if (row < 0 || row >= canvas_h) continue;
 
 		String line = lines[li];
-		int col = e.abs_x;
-		sz ci = 0;
+		int col     = e.abs_x;
+		sz ci       = 0;
 
 		// If this is the first layer touching this row, initialize with spaces
 		if (!init[row]) {
@@ -233,11 +239,11 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 		// A proper implementation would track cell positions through ANSI sequences.
 		// For now, we rebuild the row with the new content overlaid.
 		DString new_row = dstring::temp();
-		String old = rows[row].str_view();
-		int old_col = 0;
-		sz oi = 0;
-		sz line_i = 0;
-		int write_col = col;
+		String old      = rows[row].str_view();
+		int old_col     = 0;
+		sz oi           = 0;
+		sz line_i       = 0;
+		int write_col   = col;
 
 		// Copy old content up to the layer's x position
 		while (oi < old.len && old_col < write_col) {
@@ -263,6 +269,9 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 
 		// Count visual chars in the new line to know where to resume
 		int new_chars = 0;
+
+
+
 		{
 			sz ni = 0;
 			while (ni < line.len) {

@@ -7,11 +7,11 @@ import std::core::dstring;
 // ============================================================
 
 enum Position : char {
-	TOP,     // vertical: top
-	CENTER,  // horizontal or vertical: center
-	BOTTOM,  // vertical: bottom
-	LEFT,    // horizontal: left
-	RIGHT,   // horizontal: right
+	TOP,    // vertical: top
+	CENTER, // horizontal or vertical: center
+	BOTTOM, // vertical: bottom
+	LEFT,   // horizontal: left
+	RIGHT,  // horizontal: right
 }
 
 // ============================================================
@@ -64,11 +64,11 @@ fn String join_horizontal_pos(Position pos, String left, String right, int gap) 
 	LineSet rl = split_lines(right);
 
 	int max_left_w = max_line_width(&ll);
-	int total = (int)ll.count;
+	int total      = (int)ll.count;
 	if ((int)rl.count > total) total = (int)rl.count;
 
 	// Compute vertical offset for alignment
-	int left_pad = 0;
+	int left_pad  = 0;
 	int right_pad = 0;
 	if (pos == Position.CENTER) {
 		left_pad = (total - (int)ll.count) / 2;
@@ -84,7 +84,7 @@ fn String join_horizontal_pos(Position pos, String left, String right, int gap) 
 		int li = i - left_pad;
 		if (li >= 0 && li < (int)ll.count) {
 			String l = ll.lines[li];
-			int l_w = string_width(l);
+			int l_w  = string_width(l);
 			out.append_string(l);
 			for (int p = l_w; p < max_left_w + gap; p++) out.append_char(' ');
 		} else {
@@ -131,7 +131,7 @@ fn String join_vertical_pos(Position pos, String top, String bottom) {
 
 	int max_top_w = max_line_width(&tl);
 	int max_bot_w = max_line_width(&bl);
-	int max_w = max_top_w;
+	int max_w     = max_top_w;
 	if (max_bot_w > max_w) max_w = max_bot_w;
 
 	DString out = dstring::temp();
@@ -139,7 +139,7 @@ fn String join_vertical_pos(Position pos, String top, String bottom) {
 	// Top block
 	for (sz i = 0; i < tl.count; i++) {
 		String line = tl.lines[i];
-		int w = string_width(line);
+		int w       = string_width(line);
 		if (pos == Position.CENTER) {
 			int pad = (max_w - w) / 2;
 			for (int p = 0; p < pad; p++) out.append_char(' ');
@@ -157,7 +157,7 @@ fn String join_vertical_pos(Position pos, String top, String bottom) {
 	// Bottom block
 	for (sz i = 0; i < bl.count; i++) {
 		String line = bl.lines[i];
-		int w = string_width(line);
+		int w       = string_width(line);
 		if (pos == Position.CENTER) {
 			int pad = (max_w - w) / 2;
 			for (int p = 0; p < pad; p++) out.append_char(' ');
@@ -198,7 +198,7 @@ fn String place(int width, int height, String content) {
 // place_pos places content at the given horizontal and vertical positions
 // within a box of the specified width and height.
 fn String place_pos(int width, int height, Position hpos, Position vpos, String content) {
-	LineSet ls = split_lines(content);
+	LineSet ls    = split_lines(content);
 	int content_w = max_line_width(&ls);
 	int content_h = (int)ls.count;
 
@@ -222,7 +222,7 @@ fn String place_pos(int width, int height, Position hpos, Position vpos, String 
 	// Content lines
 	for (sz i = 0; i < ls.count; i++) {
 		String line = ls.lines[i];
-		int w = string_width(line);
+		int w       = string_width(line);
 
 		// Horizontal offset
 		int pad_left = 0;
@@ -253,12 +253,12 @@ fn String place_pos(int width, int height, Position hpos, Position vpos, String 
 // ============================================================
 
 fn String place_horizontal(int width, Position pos, String content) {
-	LineSet ls = split_lines(content);
+	LineSet ls  = split_lines(content);
 	DString out = dstring::temp();
 
 	for (sz i = 0; i < ls.count; i++) {
 		String line = ls.lines[i];
-		int w = string_width(line);
+		int w       = string_width(line);
 
 		int pad_left = 0;
 		if (pos == Position.CENTER) {
@@ -282,7 +282,7 @@ fn String place_horizontal(int width, Position pos, String content) {
 // ============================================================
 
 fn String place_vertical(int height, Position pos, String content) {
-	LineSet ls = split_lines(content);
+	LineSet ls    = split_lines(content);
 	int content_h = (int)ls.count;
 
 	int pad_top = 0;

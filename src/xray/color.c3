@@ -16,10 +16,10 @@ enum ColorKind : char {
 
 struct Color {
 	ColorKind kind;
-	char index;     // ANSI (0-15) or ANSI256 (0-255) palette index
-	char r;         // truecolor red
-	char g;         // truecolor green
-	char b;         // truecolor blue
+	char index; // ANSI (0-15) or ANSI256 (0-255) palette index
+	char r; // truecolor red
+	char g; // truecolor green
+	char b; // truecolor blue
 }
 
 // Constructors
@@ -129,18 +129,18 @@ fn void init_palette() @local {
 	g_palette_initialized = true;
 
 	// 0-7: Standard ANSI colors
-	g_palette_256[0]  = color_rgb(0, 0, 0);
-	g_palette_256[1]  = color_rgb(128, 0, 0);
-	g_palette_256[2]  = color_rgb(0, 128, 0);
-	g_palette_256[3]  = color_rgb(128, 128, 0);
-	g_palette_256[4]  = color_rgb(0, 0, 128);
-	g_palette_256[5]  = color_rgb(128, 0, 128);
-	g_palette_256[6]  = color_rgb(0, 128, 128);
-	g_palette_256[7]  = color_rgb(192, 192, 192);
+	g_palette_256[0] = color_rgb(0, 0, 0);
+	g_palette_256[1] = color_rgb(128, 0, 0);
+	g_palette_256[2] = color_rgb(0, 128, 0);
+	g_palette_256[3] = color_rgb(128, 128, 0);
+	g_palette_256[4] = color_rgb(0, 0, 128);
+	g_palette_256[5] = color_rgb(128, 0, 128);
+	g_palette_256[6] = color_rgb(0, 128, 128);
+	g_palette_256[7] = color_rgb(192, 192, 192);
 
 	// 8-15: Bright ANSI colors
-	g_palette_256[8]  = color_rgb(128, 128, 128);
-	g_palette_256[9]  = color_rgb(255, 0, 0);
+	g_palette_256[8] = color_rgb(128, 128, 128);
+	g_palette_256[9] = color_rgb(255, 0, 0);
 	g_palette_256[10] = color_rgb(0, 255, 0);
 	g_palette_256[11] = color_rgb(255, 255, 0);
 	g_palette_256[12] = color_rgb(0, 0, 255);
@@ -174,13 +174,13 @@ fn Color palette_256(char idx) {
 // index in the 256-color palette using squared Euclidean distance.
 fn char downsample_truecolor_to_256(char r, char g, char b) {
 	init_palette();
-	char best = 16;
+	char best     = 16;
 	int best_dist = 0x7fffffff;
 	for (char i = 16; i < 232; i++) {
-		Color c = g_palette_256[i];
-		int dr = (int)r - (int)c.r;
-		int dg = (int)g - (int)c.g;
-		int db = (int)b - (int)c.b;
+		Color c  = g_palette_256[i];
+		int dr   = (int)r - (int)c.r;
+		int dg   = (int)g - (int)c.g;
+		int db   = (int)b - (int)c.b;
 		int dist = dr * dr + dg * dg + db * db;
 		if (dist < best_dist) {
 			best_dist = dist;
@@ -188,10 +188,10 @@ fn char downsample_truecolor_to_256(char r, char g, char b) {
 		}
 	}
 	for (char i = 232; i < 255; i++) {
-		Color c = g_palette_256[i];
-		int dr = (int)r - (int)c.r;
-		int dg = (int)g - (int)c.g;
-		int db = (int)b - (int)c.b;
+		Color c  = g_palette_256[i];
+		int dr   = (int)r - (int)c.r;
+		int dg   = (int)g - (int)c.g;
+		int db   = (int)b - (int)c.b;
 		int dist = dr * dr + dg * dg + db * db;
 		if (dist < best_dist) {
 			best_dist = dist;
@@ -212,13 +212,13 @@ fn char downsample_256_to_ansi(char idx) {
 
 fn char downsample_truecolor_to_ansi(char r, char g, char b) {
 	init_palette();
-	char best = 0;
+	char best     = 0;
 	int best_dist = 0x7fffffff;
 	for (char i = 0; i < 16; i++) {
-		Color c = g_palette_256[i];
-		int dr = (int)r - (int)c.r;
-		int dg = (int)g - (int)c.g;
-		int db = (int)b - (int)c.b;
+		Color c  = g_palette_256[i];
+		int dr   = (int)r - (int)c.r;
+		int dg   = (int)g - (int)c.g;
+		int db   = (int)b - (int)c.b;
 		int dist = dr * dr + dg * dg + db * db;
 		if (dist < best_dist) {
 			best_dist = dist;

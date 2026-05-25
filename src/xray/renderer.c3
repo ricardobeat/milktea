@@ -5,7 +5,7 @@ import std::core::dstring;
 // ============================================================
 // Renderer — wraps ScreenBuffer with synchronized output (mode 2026)
 // and manages the render-to-terminal pipeline.
-//
+// 
 // Usage:
 //   Renderer r = new_renderer(width, height, &write_stdout_fn);
 //   defer r.destroy();
@@ -18,16 +18,16 @@ import std::core::dstring;
 // WriteFn is the signature for the terminal output function.
 alias WriteFn = fn void(char[] bytes);
 
-const String SYNC_BEGIN = "\x1b[?2026h";
-const String SYNC_END   = "\x1b[?2026l";
+const String SYNC_BEGIN      = "\x1b[?2026h";
+const String SYNC_END        = "\x1b[?2026l";
 const String HIDE_CURSOR_SEQ = "\x1b[?25l";
 const String SHOW_CURSOR_SEQ = "\x1b[?25h";
 
 struct Renderer {
 	ScreenBuffer* screen;
-	WriteFn write_fn;     // function to write bytes to terminal
-	Style pen_style;      // current terminal SGR state
-	bool sync_supported;  // terminal supports mode 2026
+	WriteFn write_fn; // function to write bytes to terminal
+	Style pen_style; // current terminal SGR state
+	bool sync_supported; // terminal supports mode 2026
 	sz width;
 	sz height;
 }
