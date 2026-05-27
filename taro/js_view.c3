@@ -1220,15 +1220,31 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						if (w_arg) rt.free_value(w_arg);
 						if (r_arg) rt.free_value(r_arg);
 						if (result && !rt.is_null(result)) {
-							ZString cstr = taro_to_cstring(rt.ctx, result);
-							if (cstr) {
-								screen.render_ansi_string(
-									(sz)area.x,
-									(sz)(area.y + r),
-									cstr.str_view(),
-									xray::default_style()
-								);
-								taro_free_cstring(rt.ctx, cstr);
+							// Fast path: Uint8Array — direct cell writes, no ANSI parsing
+							if (rt.is_uint8_array(result)) {
+								char[] data = rt.get_uint8_array_data(result);
+								sz cell_count = data.len / 6;
+								sz sx = (sz)area.x;
+								sz sy = (sz)(area.y + r);
+								for (sz ci = 0; ci < cell_count; ci++) {
+									sz off = ci * 6;
+									xray::Color fg = xray::color_rgb(data[off], data[off + 1], data[off + 2]);
+									xray::Color bg = xray::color_rgb(data[off + 3], data[off + 4], data[off + 5]);
+									xray::Style st = xray::default_style().set_fg(fg).set_bg(bg);
+									screen.set_cell(sx + ci, sy, xray::new_cell("\xe2\x96\x80", 1, st));
+								}
+							} else {
+								// String path (backward compatible)
+								ZString cstr = taro_to_cstring(rt.ctx, result);
+								if (cstr) {
+									screen.render_ansi_string(
+										(sz)area.x,
+										(sz)(area.y + r),
+										cstr.str_view(),
+										xray::default_style()
+									);
+									taro_free_cstring(rt.ctx, cstr);
+								}
 							}
 							rt.free_value(result);
 						}

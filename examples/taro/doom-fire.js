@@ -72,8 +72,6 @@ tea.run({
 
   view() {
     const self = this;
-    const vh = this.h >> 1;
-    this.frame++;
 
     return h("draw", { animate: 60, fn: (cw, ri) => {
       // Spread once per render (ri=0 = first row call)
@@ -82,14 +80,19 @@ tea.run({
       const fy  = ri * 2;
       const fy2 = fy + 1;
       const cols = Math.min(cw, self.w);
+      // Bail early for rows beyond the fire height
+      if (fy >= self.h) return "";
+
       const f = self.fire, w = self.w;
-      let out = "";
+      const buf = new Uint8Array(cols * 6);
+      let ci = 0;
       for (let x = 0; x < cols; x++) {
         const t = FIRE_COLORS[f[fy * w + x] || 0];
         const b = FIRE_COLORS[f[fy2 * w + x] || 0];
-        out += `\x1b[38;2;${t[0]};${t[1]};${t[2]};48;2;${b[0]};${b[1]};${b[2]}m▀`;
+        buf[ci++] = t[0]; buf[ci++] = t[1]; buf[ci++] = t[2];
+        buf[ci++] = b[0]; buf[ci++] = b[1]; buf[ci++] = b[2];
       }
-      return out + "\x1b[0m";
+      return buf;
     }});
   },
 });

@@ -671,6 +671,47 @@ void* taro_array_item(void* ctx, void* val, int idx) {
 }
 
 /* ============================================================
+ * Typed array helpers
+ * ============================================================ */
+
+int taro_is_uint8array(void* ctx, void* val) {
+    if (!ctx || !val) return 0;
+    JSContext* c = (JSContext*)ctx;
+    JSValue obj = *(JSValue*)val;
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue buf = JS_GetTypedArrayBuffer(c, obj, &byte_offset, &byte_length, &bytes_per_element);
+    if (JS_IsException(buf)) return 0;
+    int is_u8 = (bytes_per_element == 1) ? 1 : 0;
+    JS_FreeValue(c, buf);
+    return is_u8;
+}
+
+uint8_t* taro_get_uint8array(void* ctx, void* val, size_t* out_len) {
+    if (!ctx || !val) {
+        *out_len = 0;
+        return NULL;
+    }
+    JSContext* c = (JSContext*)ctx;
+    JSValue obj = *(JSValue*)val;
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue buf = JS_GetTypedArrayBuffer(c, obj, &byte_offset, &byte_length, &bytes_per_element);
+    if (JS_IsException(buf)) {
+        *out_len = 0;
+        return NULL;
+    }
+
+    size_t buf_len;
+    uint8_t* base = JS_GetArrayBuffer(c, &buf_len, buf);
+    JS_FreeValue(c, buf);
+    if (!base) {
+        *out_len = 0;
+        return NULL;
+    }
+    *out_len = byte_length;
+    return base + byte_offset;
+}
+
+/* ============================================================
  * Monotonic clock
  * ============================================================ */
 

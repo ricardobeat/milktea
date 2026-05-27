@@ -24,6 +24,8 @@ extern fn int taro_is_string(void* ctx, void* val);
 extern fn int taro_is_array(void* ctx, void* val);
 extern fn int taro_array_length(void* ctx, void* val);
 extern fn void* taro_array_item(void* ctx, void* val, int idx);
+extern fn int taro_is_uint8array(void* ctx, void* val);
+extern fn char* taro_get_uint8array(void* ctx, void* val, sz* out_len);
 
 extern fn int taro_eval_module(void* rt, void* ctx, ZString src, sz len, ZString filename);
 extern fn long taro_now_ms();
@@ -205,6 +207,16 @@ fn int Runtime.array_length(&self, void* val) {
 
 fn void* Runtime.array_item(&self, void* val, int idx) {
 	return taro_array_item(self.ctx, val, idx);
+}
+
+fn bool Runtime.is_uint8_array(&self, void* val) {
+	return taro_is_uint8array(self.ctx, val) != 0;
+}
+
+fn char[] Runtime.get_uint8_array_data(&self, void* val) {
+	sz len = 0;
+	char* data = taro_get_uint8array(self.ctx, val, &len);
+	return data[:len];
 }
 
 fn void Runtime.execute_jobs(&self) {
