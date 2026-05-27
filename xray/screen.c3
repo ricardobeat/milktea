@@ -698,6 +698,70 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 }
 
 // ============================================================
+// Border drawing
+// ============================================================
+
+struct Border {
+	String top_left;
+	String top;
+	String top_right;
+	String left;
+	String right;
+	String bottom_left;
+	String bottom;
+	String bottom_right;
+}
+
+fn Border rounded_border() {
+	return {
+		.top_left = "╭", .top = "─", .top_right = "╮",
+		.left = "│", .right = "│",
+		.bottom_left = "╰", .bottom = "─", .bottom_right = "╯",
+	};
+}
+
+fn Border normal_border() {
+	return {
+		.top_left = "+", .top = "-", .top_right = "+",
+		.left = "|", .right = "|",
+		.bottom_left = "+", .bottom = "-", .bottom_right = "+",
+	};
+}
+
+// draw_border draws border characters around rect r into the screen buffer
+// using the given style, and returns the inner rect (r inset by 1 on all sides).
+fn Rect ScreenBuffer.draw_border(&self, Rect r, Border b, Style style) {
+	if (r.w < 2 || r.h < 2) return r;
+
+	sz x0 = (sz)r.x;
+	sz y0 = (sz)r.y;
+	sz x1 = (sz)(r.x + r.w - 1);
+	sz y1 = (sz)(r.y + r.h - 1);
+
+	// Top row
+	DString top = dstring::temp();
+	top.append_string(b.top_left);
+	for (int i = 0; i < r.w - 2; i++) top.append_string(b.top);
+	top.append_string(b.top_right);
+	self.set_string(x0, y0, top.str_view(), style);
+
+	// Bottom row
+	DString bot = dstring::temp();
+	bot.append_string(b.bottom_left);
+	for (int i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
+	bot.append_string(b.bottom_right);
+	self.set_string(x0, y1, bot.str_view(), style);
+
+	// Left and right sides
+	for (sz row = y0 + 1; row < y1; row++) {
+		self.set_string(x0, row, b.left, style);
+		self.set_string(x1, row, b.right, style);
+	}
+
+	return new_rect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+}
+
+// ============================================================
 // Debug helpers
 // ============================================================
 
