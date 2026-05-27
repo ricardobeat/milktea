@@ -665,24 +665,6 @@ fn void? Program.run(Program* self) {
 				break;
 			}
 
-			// Log raw input bytes and parsed result to stderr (TEA_DEBUG=1)
-			if (self.debug) {
-				io::eprintfn(
-					"INPUT consumed=%d kind=%d key=%d rune='%c' mouse_btn=%d mouse_act=%d",
-					(int)pr.consumed,
-					(int)pr.kind,
-					(int)pr.key.code,
-					pr.key.rune,
-					(int)pr.mouse.button,
-					(int)pr.mouse.action
-				);
-				io::eprintf("  raw:");
-				for (sz bi = 0; bi < pr.consumed && bi < self.pending_len; bi++) {
-					io::eprintf(" %02x", (int)self.pending[bi]);
-				}
-				io::eprintf("\n");
-			}
-
 			for (sz i = pr.consumed; i < self.pending_len; i++) {
 				self.pending[i - pr.consumed] = self.pending[i];
 			}

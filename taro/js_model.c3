@@ -50,6 +50,60 @@ struct DebugLog {
 
 DebugLog g_debug_log = { };
 
+// ── Timing stats ring buffer (5s window) ───────────────────────────────────
+const int TIMING_MAX = 512;
+
+struct TimingSample {
+	long js_ms;
+	long vnode_ms;
+}
+
+struct TimingStats {
+	TimingSample[TIMING_MAX] buf;
+	int head;
+	int count;
+}
+
+TimingStats g_timing = { };
+
+fn void timing_push(long js_ms, long vnode_ms) {
+	TimingSample s = { .js_ms = js_ms, .vnode_ms = vnode_ms };
+	g_timing.buf[g_timing.head] = s;
+	g_timing.head = (g_timing.head + 1) % TIMING_MAX;
+	if (g_timing.count < TIMING_MAX) g_timing.count++;
+}
+
+struct TimingAgg {
+	long avg_js;
+	long avg_vnode;
+	long peak_js;
+	long peak_vnode;
+	int n;
+}
+
+fn TimingAgg timing_agg() {
+	long sum_js = 0;
+	long sum_vn = 0;
+	long peak_js = 0;
+	long peak_vn = 0;
+	int n = g_timing.count;
+	int start = n >= TIMING_MAX ? g_timing.head : 0;
+	for (int i = 0; i < n; i++) {
+		TimingSample s = g_timing.buf[(start + i) % TIMING_MAX];
+		sum_js += s.js_ms;
+		sum_vn += s.vnode_ms;
+		if (s.js_ms > peak_js) peak_js = s.js_ms;
+		if (s.vnode_ms > peak_vn) peak_vn = s.vnode_ms;
+	}
+	return {
+		.avg_js = n > 0 ? sum_js / n : 0,
+		.avg_vnode = n > 0 ? sum_vn / n : 0,
+		.peak_js = peak_js,
+		.peak_vnode = peak_vn,
+		.n = n,
+	};
+}
+
 fn void debug_log_init() {
 	g_debug_log.enabled = false;
 	g_debug_log.count = 0;
@@ -58,6 +112,7 @@ fn void debug_log_init() {
 
 fn void debug_log_event(milktea::Msg msg) {
 	if (!g_debug_log.enabled) return;
+	if (msg.kind == milktea::MsgKind.TICK) return;
 	DebugEvent e = { };
 	e.seq = g_debug_log.seq++;
 	e.kind = msg.kind;
@@ -169,26 +224,42 @@ fn String debug_event_str(DebugEvent* e) {
 fn void render_debug_overlay(xray::ScreenBuffer* screen, int screen_w, int screen_h) {
 	if (!g_debug_log.enabled) return;
 
-	glaze::Style header_style = glaze::new_style().foreground(glaze::color_hex("#888888")).set_width(screen_w);
-	String header = header_style.render(
-		"── debug events ──────────────────────────────────────────"
-	);
-	screen.render_ansi_string(0, 0, header, xray::default_style());
+	TimingAgg agg = timing_agg();
 
-	int max_lines = screen_h - 1;
-	int start     = 0;
-	if (g_debug_log.count > max_lines) start = g_debug_log.count - max_lines;
-	int row = 1;
-	for (int i = start; i < g_debug_log.count && row < screen_h; i++, row++) {
+	// Build panel content
+	DString body = dstring::temp();
+	body.append_string(string::tformat("js  avg=%d pk=%d", (int)agg.avg_js, (int)agg.peak_js));
+	body.append_string("\n");
+	body.append_string(string::tformat("vn  avg=%d pk=%d", (int)agg.avg_vnode, (int)agg.peak_vnode));
+	body.append_string("\n");
+	body.append_string(string::tformat("frames=%d", agg.n));
+
+	// Show last 6 non-tick events
+	int show = 6;
+	int ev_start = g_debug_log.count > show ? g_debug_log.count - show : 0;
+	for (int i = ev_start; i < g_debug_log.count; i++) {
 		DebugEvent* e = &g_debug_log.events[i];
-		DString line  = dstring::temp();
-		String num    = string::tformat("%4d ", (int)e.seq);
-		line.append_string(num);
-		line.append_string(debug_event_str(e));
-
-		glaze::Style s = glaze::new_style().foreground(glaze::color_hex("#aaaaaa")).set_width(screen_w);
-		screen.render_ansi_string(0, (sz)row, s.render(line.str_view()), xray::default_style());
+		body.append_string("\n");
+		body.append_string(debug_event_str(e));
 	}
+
+	String content = body.str_view();
+	glaze::Style panel = glaze::new_style()
+		.set_border(glaze::rounded_border())
+		.set_border_fg(glaze::color_hex("#444444"))
+		.foreground(glaze::color_hex("#aaaaaa"))
+		.set_width(26);
+	String rendered = panel.render(content);
+
+	// Count rendered lines to size the overlay
+	int lines = 1;
+	for (sz i = 0; i < rendered.len; i++) {
+		if (rendered[i] == '\n') lines++;
+	}
+
+	sz px = screen_w >= 28 ? (sz)(screen_w - 28) : 0;
+	sz py = 0;
+	screen.blit_ansi(px, py, 26, (sz)lines + 2, rendered, false);
 }
 
 // Requested tick delay from the last render pass. -1 means no tick requested.
@@ -238,7 +309,6 @@ fn milktea::Cmd JsModel.init(&self) @dynamic {
 fn milktea::Cmd JsModel.update(&self, milktea::Msg msg) @dynamic {
 	// Debug: log every event
 	debug_log_event(msg);
-	if (g_debug_log.enabled) io::eprintfn("DEBUG update: kind=%d", (int)msg.kind);
 
 	// Forward mouse scroll events to native viewports before JS
 	if (msg.kind == milktea::MsgKind.MOUSE) {
@@ -300,9 +370,7 @@ fn milktea::Cmd JsModel.update(&self, milktea::Msg msg) @dynamic {
 	}
 
 	void* js_msg = msg_to_js(&self.rt, msg);
-	if (g_debug_log.enabled) io::eprintfn("DEBUG update: calling JS update");
 	void* result = self.rt.call1(fn_val, self.js_model_obj, js_msg);
-	if (g_debug_log.enabled) io::eprintfn("DEBUG update: JS update done");
 	self.rt.free_value(fn_val);
 	self.rt.free_value(js_msg);
 	self.rt.execute_jobs();
@@ -331,11 +399,10 @@ fn milktea::Cmd JsModel.js_tick_cmd(&self) @inline {
 }
 
 fn milktea::View JsModel.view(&self) @dynamic {
-	if (g_debug_log.enabled) io::eprintfn("DEBUG view: start");
 	int w = self.term_w > 0 ? self.term_w : 80;
 	int h = self.term_h > 0 ? self.term_h : 24;
 
-	if (g_debug_log.enabled) io::eprintfn("DEBUG view: calling JS view");
+	long t_js_start = taro_now_ms();
 	void* fn_val = self.rt.get_prop(self.js_model_obj, "view");
 	void* result = null;
 	if (fn_val != null && self.rt.is_function(fn_val)) {
@@ -344,7 +411,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	} else {
 		if (fn_val != null) self.rt.free_value(fn_val);
 	}
-	if (g_debug_log.enabled) io::eprintfn("DEBUG view: JS view done");
+	long t_js_ms = taro_now_ms() - t_js_start;
 
 	// vnode path: walk the tree, fill a ScreenBuffer, return cell view
 	// Always use screen buffer so we can overlay errors on top
@@ -362,9 +429,12 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	if (result != null && is_vnode(&self.rt, result)) {
 		g_render_tick_ms = -1;
 		reset_focused_cursor();
-		if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode start");
+		long t_vnode_start = taro_now_ms();
 		render_vnode(&self.rt, result, self.screen, area);
-		if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode done");
+		long t_vnode_ms = taro_now_ms() - t_vnode_start;
+		if (g_debug_log.enabled) {
+			timing_push(t_js_ms, t_vnode_ms);
+		}
 		self.rt.free_value(result);
 	} else if (result != null) {
 		// string path (legacy): render as text into screen buffer

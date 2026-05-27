@@ -1226,12 +1226,20 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 								sz cell_count = data.len / 6;
 								sz sx = (sz)area.x;
 								sz sy = (sz)(area.y + r);
+								sz row_base = sy * screen.width + sx;
 								for (sz ci = 0; ci < cell_count; ci++) {
 									sz off = ci * 6;
-									xray::Color fg = xray::color_rgb(data[off], data[off + 1], data[off + 2]);
-									xray::Color bg = xray::color_rgb(data[off + 3], data[off + 4], data[off + 5]);
-									xray::Style st = xray::default_style().set_fg(fg).set_bg(bg);
-									screen.set_cell(sx + ci, sy, xray::new_cell("\xe2\x96\x80", 1, st));
+									xray::Cell cell;
+									cell.content[0] = (char)0xe2;
+									cell.content[1] = (char)0x96;
+									cell.content[2] = (char)0x80;
+									cell.content_len = 3;
+									cell.width = 1;
+									cell.style = {
+										.fg = { .kind = xray::ColorKind.TRUECOLOR, .r = data[off], .g = data[off + 1], .b = data[off + 2] },
+										.bg = { .kind = xray::ColorKind.TRUECOLOR, .r = data[off + 3], .g = data[off + 4], .b = data[off + 5] },
+									};
+									screen.cells[row_base + ci] = cell;
 								}
 							} else {
 								// String path (backward compatible)
