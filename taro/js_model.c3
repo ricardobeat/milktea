@@ -16,6 +16,7 @@ struct JsModel {
 	long frame_count;
 	io::File profile_file;
 	bool profile_file_open;
+	xray::ScreenBuffer* screen;
 }
 
 // ── Native debug event log ─────────────────────────────────────────────────
@@ -347,14 +348,22 @@ fn milktea::View JsModel.view(&self) @dynamic {
 
 	// vnode path: walk the tree, fill a ScreenBuffer, return cell view
 	// Always use screen buffer so we can overlay errors on top
-	xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
-	xray::Rect area            = xray::new_rect(0, 0, w, h);
+	// Reuse persistent screen buffer to avoid dangling pointers (the View's
+	// cells slice must outlive this function call — the renderer reads it
+	// after view() returns).
+	if (self.screen == null) {
+		self.screen = xray::new_screen_buffer((sz)w, (sz)h);
+	} else if ((int)self.screen.width != w || (int)self.screen.height != h) {
+		self.screen.resize((sz)w, (sz)h);
+	}
+	self.screen.clear();
+	xray::Rect area = xray::new_rect(0, 0, w, h);
 
 	if (result != null && is_vnode(&self.rt, result)) {
 		g_render_tick_ms = -1;
 		reset_focused_cursor();
 		if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode start");
-		render_vnode(&self.rt, result, screen, area);
+		render_vnode(&self.rt, result, self.screen, area);
 		if (g_debug_log.enabled) io::eprintfn("DEBUG view: render_vnode done");
 		self.rt.free_value(result);
 	} else if (result != null) {
@@ -364,7 +373,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		if (cstr) {
 			String content = string::tformat("%s", cstr.str_view());
 			taro_free_cstring(self.rt.ctx, cstr);
-			screen.render_ansi_string(0, 0, content, xray::default_style());
+			self.screen.render_ansi_string(0, 0, content, xray::default_style());
 		}
 	}
 
@@ -383,15 +392,15 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		}
 		int overlay_y = h - line_count;
 		if (overlay_y < 0) overlay_y = 0;
-		screen.render_ansi_string(1, (sz)overlay_y, rendered, xray::default_style());
+		self.screen.render_ansi_string(1, (sz)overlay_y, rendered, xray::default_style());
 	}
 
 	// Debug event log overlay
 	if (g_debug_log.enabled) {
-		render_debug_overlay(screen, w, h);
+		render_debug_overlay(self.screen, w, h);
 	}
 
-	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:screen.width * screen.height], screen.width, screen.height);
+	milktea::View view = milktea::new_alt_cell_view(self.screen.cells[0:self.screen.width * self.screen.height], self.screen.width, self.screen.height);
 	view.mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION;
 
 	int cx, cy;
@@ -404,8 +413,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		}
 	}
 
-	screen.destroy();
-	mem::free(screen);
+
 
 	// Memory profiling: log per-frame stats to profile.log
 	if (self.mem_profile && self.profile_file_open) {
@@ -429,6 +437,10 @@ fn milktea::View JsModel.view(&self) @dynamic {
 fn void JsModel.on_destroy(&self) @dynamic {
 	if (self.profile_file_open) {
 		self.profile_file.close();
+	}
+	if (self.screen != null) {
+		self.screen.destroy();
+		mem::free(self.screen);
 	}
 	self.rt.free_value(self.js_model_obj);
 	self.rt.free();

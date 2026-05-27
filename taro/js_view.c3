@@ -467,6 +467,74 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 	return xray::constraint_fill(1);
 }
 
+// ── Draw animation cache ──────────────────────────────────────────────────────
+// When a <draw> vnode has animate={fps}, rendered cells are cached and only
+// re-invoked at the target rate. Intermediate frames replay the cache.
+
+const int DRAW_CACHE_MAX = 8;
+const int DRAW_CACHE_MAX_CELLS = 16384; // max ~128x128 cells per entry
+
+struct DrawCacheEntry {
+	int x, y, w, h;
+	long last_ms;
+	long interval_ms;
+	int cell_count;
+	xray::Cell[DRAW_CACHE_MAX_CELLS] cells;
+	bool active;
+}
+
+DrawCacheEntry[DRAW_CACHE_MAX] g_draw_cache = { };
+int g_draw_cache_count = 0;
+
+fn DrawCacheEntry* draw_cache_find(int x, int y, int w, int h) @local {
+	for (int i = 0; i < g_draw_cache_count; i++) {
+		DrawCacheEntry* e = &g_draw_cache[i];
+		if (e.active && e.x == x && e.y == y && e.w == w && e.h == h) return e;
+	}
+	return null;
+}
+
+fn DrawCacheEntry* draw_cache_get_or_create(int x, int y, int w, int h, long interval_ms) @local {
+	int total = w * h;
+	if (total > DRAW_CACHE_MAX_CELLS) return null;
+	DrawCacheEntry* existing = draw_cache_find(x, y, w, h);
+	if (existing) {
+		existing.interval_ms = interval_ms;
+		return existing;
+	}
+	if (g_draw_cache_count >= DRAW_CACHE_MAX) return null;
+	DrawCacheEntry* e = &g_draw_cache[g_draw_cache_count++];
+	e.x = x;
+	e.y = y;
+	e.w = w;
+	e.h = h;
+	e.interval_ms = interval_ms;
+	e.last_ms = 0;
+	e.cell_count = 0;
+	e.active = true;
+	return e;
+}
+
+fn void draw_cache_store(DrawCacheEntry* e, xray::ScreenBuffer* screen) @local {
+	int total = e.w * e.h;
+	e.cell_count = total;
+	for (int row = 0; row < e.h; row++) {
+		for (int col = 0; col < e.w; col++) {
+			sz src_idx = (sz)((e.y + row) * (int)screen.width + (e.x + col));
+			e.cells[row * e.w + col] = screen.cells[src_idx];
+		}
+	}
+}
+
+fn void draw_cache_replay(DrawCacheEntry* e, xray::ScreenBuffer* screen) @local {
+	for (int row = 0; row < e.h; row++) {
+		for (int col = 0; col < e.w; col++) {
+			sz dst_idx = (sz)((e.y + row) * (int)screen.width + (e.x + col));
+			screen.cells[dst_idx] = e.cells[row * e.w + col];
+		}
+	}
+}
+
 // render_vnode walks a vnode tree, filling screen with content in area.
 // key is the position hash for this node — used to look up component state.
 fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray::Rect area) {
@@ -1117,32 +1185,64 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 	} else if (type == "draw") {
 		// draw: calls a JS function fn(width, height) -> string for each row in the rect.
 		// If props.fn is a function, call it once per visible row with (row_width, row_index).
+		// Props.animate: bool → auto-tick at ~60fps (16ms).
+		//                number → target fps (e.g. 30 = 30fps, 5 = 5fps).
+		//                When animate is set, drawing is throttled to the target rate;
+		//                intermediate frames replay the last cached render.
 		if (props && !rt.is_null(props)) {
-			void* fn_val = rt.get_prop(props, "fn");
-			if (fn_val && !rt.is_null(fn_val) && rt.is_function(fn_val)) {
-				void* undef = null; // null this
-				for (int r = 0; r < area.h; r++) {
-					void* w_arg  = rt.new_int32(area.w);
-					void* r_arg  = rt.new_int32(r);
-					void* result = rt.call2(fn_val, undef, w_arg, r_arg);
-					if (w_arg) rt.free_value(w_arg);
-					if (r_arg) rt.free_value(r_arg);
-					if (result && !rt.is_null(result)) {
-						ZString cstr = taro_to_cstring(rt.ctx, result);
-						if (cstr) {
-							screen.render_ansi_string(
-								(sz)area.x,
-								(sz)(area.y + r),
-								cstr.str_view(),
-								xray::default_style()
-							);
-							taro_free_cstring(rt.ctx, cstr);
-						}
-						rt.free_value(result);
+			int fps = get_prop_int(rt, props, "animate", 0);
+			bool anim_bool = !fps ? get_prop_bool(rt, props, "animate") : false;
+			bool has_animate = fps > 0 || anim_bool;
+			long interval_ms = has_animate ? (fps > 0 ? 1000 / fps : 16) : 0;
+			if (interval_ms < 1) interval_ms = 1;
+
+			DrawCacheEntry* cache = null;
+			bool should_redraw = true;
+			if (has_animate) {
+				cache = draw_cache_get_or_create(area.x, area.y, area.w, area.h, interval_ms);
+				if (cache) {
+					long now = taro_now_ms();
+					if (cache.last_ms > 0 && (now - cache.last_ms) < interval_ms) {
+						should_redraw = false;
 					}
 				}
+				request_render_tick(interval_ms);
 			}
-			if (fn_val) rt.free_value(fn_val);
+
+			if (should_redraw) {
+				void* fn_val = rt.get_prop(props, "fn");
+				if (fn_val && !rt.is_null(fn_val) && rt.is_function(fn_val)) {
+					void* undef = null; // null this
+					for (int r = 0; r < area.h; r++) {
+						void* w_arg  = rt.new_int32(area.w);
+						void* r_arg  = rt.new_int32(r);
+						void* result = rt.call2(fn_val, undef, w_arg, r_arg);
+						if (w_arg) rt.free_value(w_arg);
+						if (r_arg) rt.free_value(r_arg);
+						if (result && !rt.is_null(result)) {
+							ZString cstr = taro_to_cstring(rt.ctx, result);
+							if (cstr) {
+								screen.render_ansi_string(
+									(sz)area.x,
+									(sz)(area.y + r),
+									cstr.str_view(),
+									xray::default_style()
+								);
+								taro_free_cstring(rt.ctx, cstr);
+							}
+							rt.free_value(result);
+						}
+					}
+				}
+				if (fn_val) rt.free_value(fn_val);
+
+				if (cache) {
+					draw_cache_store(cache, screen);
+					cache.last_ms = taro_now_ms();
+				}
+			} else if (cache && cache.cell_count > 0) {
+				draw_cache_replay(cache, screen);
+			}
 		}
 	}
 
