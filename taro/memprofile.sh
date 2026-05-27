@@ -1,42 +1,25 @@
 #!/bin/bash
-# memprofile.sh - Run taro with memory profiling enabled
+# memprofile.sh - Graph and summarize a profile.log file
 #
 # Usage:
-#   ./memprofile.sh [duration_seconds] [js_file]
+#   ./memprofile.sh [profile_log_path]
 #
 # Examples:
-#   ./memprofile.sh                    # profile for 10s, use default JS
-#   ./memprofile.sh 30                 # profile for 30s
-#   ./memprofile.sh 10 dist/app.js     # profile specific JS file
-#
-# The script:
-#   1. Runs the app with HW_MEMPROFILE=1 (enables per-frame memory logging)
-#   2. Captures CSV stats to a temp file
-#   3. On exit, renders an ASCII graph and summary stats
+#   ./memprofile.sh                    # reads ./profile.log
+#   ./memprofile.sh path/to/profile.log
 
 set -euo pipefail
 
-DURATION="${1:-10}"
-JS_FILE="${2:-dist/milktea.js}"
-TMPFILE=$(mktemp /tmp/taro-memprofile-XXXXXX.csv)
-GRAPHFILE=$(mktemp /tmp/taro-memgraph-XXXXXX.txt)
-trap 'rm -f "$TMPFILE" "$GRAPHFILE"' EXIT
+PROFILE_LOG="${1:-profile.log}"
 
-if [ ! -f "$JS_FILE" ]; then
-    echo "Error: $JS_FILE not found. Run 'just build' first." >&2
+if [ ! -f "$PROFILE_LOG" ]; then
+    echo "Error: $PROFILE_LOG not found." >&2
     exit 1
 fi
 
-echo "Profiling memory for ${DURATION}s... (press Ctrl+C to stop early)"
-echo ""
-
-# Run the app in background, capturing stderr (where MEMPROFILE lines go)
-HW_MEMPROFILE=1 timeout "$DURATION" ./taro "$JS_FILE" 2> >(grep '^MEMPROFILE:' | sed 's/^MEMPROFILE://' > "$TMPFILE") || true
-
-LINES=$(wc -l < "$TMPFILE" | tr -d ' ')
+LINES=$(wc -l < "$PROFILE_LOG" | tr -d ' ')
 if [ "$LINES" -lt 2 ]; then
-    echo "No memory data captured. Is the app rendering frames?"
-    echo "Check that your JS calls milktea.run(model) and renders a view."
+    echo "Error: $PROFILE_LOG has no frame data." >&2
     exit 1
 fi
 
@@ -91,7 +74,7 @@ END {
         (first_qjs > 0 ? (last_qjs - first_qjs) * 100.0 / first_qjs : 0),
         (first_rss > 0 ? (last_rss - first_rss) * 100.0 / first_rss : 0)
 }
-' "$TMPFILE"
+' "$PROFILE_LOG"
 echo ""
 
 # ── ASCII Graph ──────────────────────────────────────────────────────────
@@ -108,7 +91,7 @@ NR==1 { next }
     rss[frames] = $8 + 0  # process RSS
 }
 END {
-    if (frames == 0) return
+    if (frames == 0) exit
 
     # Find min/max for QJS heap
     min_v = val[1]; max_v = val[1]
@@ -152,7 +135,7 @@ END {
     printf "%10s +%s\n", "", sep
     printf "%10s  frame 1%*sframe %d\n", "", W - 12, "", frames
 }
-' "$TMPFILE"
+' "$PROFILE_LOG"
 
 echo ""
 echo "=== Process RSS Over Time ==="
@@ -167,7 +150,7 @@ NR==1 { next }
     val[frames] = $8 + 0  # RSS in KB
 }
 END {
-    if (frames == 0) return
+    if (frames == 0) exit
 
     min_v = val[1]; max_v = val[1]
     for (i = 2; i <= frames; i++) {
@@ -205,8 +188,4 @@ END {
     for (i = 0; i < W; i++) sep = sep "-"
     printf "%8s   +%s\n", "", sep
 }
-' "$TMPFILE"
-
-echo ""
-echo "Data saved to: $TMPFILE"
-echo "Re-run with:   awk -F',' '{print NR-1, \$2}' $TMPFILE | gnuplot -e 'set terminal dumb; plot -' (if gnuplot available)"
+' "$PROFILE_LOG"

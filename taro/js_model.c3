@@ -3,6 +3,7 @@ import milktea;
 import xray;
 import glaze;
 import std::io;
+import std::io::file;
 import std::core::mem;
 import std::core::dstring;
 
@@ -13,6 +14,8 @@ struct JsModel {
 	int term_h;
 	bool mem_profile;
 	long frame_count;
+	io::File profile_file;
+	bool profile_file_open;
 }
 
 // ── Native debug event log ─────────────────────────────────────────────────
@@ -205,16 +208,18 @@ fn milktea::Cmd JsModel.init(&self) @dynamic {
 	}
 	if (debug_val != null) self.rt.free_value(debug_val);
 
-	// Check if --memprofile flag was set via globalThis.__memprofile or HW_MEMPROFILE env
+	// Check if HW_MEMPROFILE env var is set
 	if (taro_memprofile_enabled()) self.mem_profile = true;
-	void* memprofile_val = self.rt.get_global_prop("__memprofile");
-	if (memprofile_val != null && !self.rt.is_null(memprofile_val)) {
-		self.mem_profile = true;
-	}
-	if (memprofile_val != null) self.rt.free_value(memprofile_val);
 
 	if (self.mem_profile) {
-		io::eprintfn("MEMPROFILE:frame,qjs_used,qjs_obj,qjs_str,shim_allocs,shim_frees,shim_bytes,process_rss_kb");
+		if (try f = file::open("profile.log", "w")) {
+			self.profile_file = f;
+			self.profile_file_open = true;
+			io::fprintfn(&self.profile_file, "frame,qjs_used,qjs_obj,qjs_str,shim_allocs,shim_frees,shim_bytes,process_rss_kb");
+		} else {
+			io::eprintfn("Warning: could not open profile.log for writing");
+			self.mem_profile = false;
+		}
 	}
 
 	void* fn_val = self.rt.get_prop(self.js_model_obj, "init");
@@ -402,12 +407,12 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	screen.destroy();
 	mem::free(screen);
 
-	// Memory profiling: log per-frame stats to stderr
-	if (self.mem_profile) {
+	// Memory profiling: log per-frame stats to profile.log
+	if (self.mem_profile && self.profile_file_open) {
 		MemStats ms = self.rt.mem_stats();
 		long rss = taro_rss_kb();
 		self.frame_count++;
-		io::eprintfn("MEMPROFILE:%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld",
+		io::fprintfn(&self.profile_file, "%d,%d,%d,%d,%d,%d,%d,%d",
 			self.frame_count,
 			ms.qjs_memory_used,
 			ms.qjs_obj_count,
@@ -422,6 +427,9 @@ fn milktea::View JsModel.view(&self) @dynamic {
 }
 
 fn void JsModel.on_destroy(&self) @dynamic {
+	if (self.profile_file_open) {
+		self.profile_file.close();
+	}
 	self.rt.free_value(self.js_model_obj);
 	self.rt.free();
 }

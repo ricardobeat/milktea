@@ -6,16 +6,19 @@ import std::io;
 
 fn int main(String[] args) {
 	if (args.len < 2) {
-		io::eprintfn("Usage: taro [--debug] <script.js>");
+		io::eprintfn("Usage: taro [--debug] [--profile] <script.js>");
 		return 1;
 	}
 
-	// Parse --debug flag from args
-	bool debug     = false;
-	int script_idx = 1;
+	// Parse --debug and --profile flags from args
+	bool debug       = false;
+	bool memprofile  = false;
+	int script_idx   = 1;
 	for (int i = 1; i < args.len; i++) {
 		if (args[i] == "--debug") {
 			debug = true;
+		} else if (args[i] == "--profile") {
+			memprofile = true;
 		} else {
 			script_idx = i;
 		}
@@ -38,6 +41,11 @@ fn int main(String[] args) {
 	// Inject __debug flag into JS globalThis before Run()
 	if (debug) {
 		model.rt.eval("globalThis.__debug = true");
+	}
+
+	// Inject --profile flag
+	if (memprofile) {
+		model.mem_profile = true;
 	}
 
 	milktea::Program p = milktea::@program(&model);
