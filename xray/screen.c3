@@ -762,6 +762,72 @@ fn Rect ScreenBuffer.draw_border(&self, Rect r, Border b, Style style) {
 }
 
 // ============================================================
+// Gradient drawing
+// ============================================================
+
+fn char lerp_u8(char a, char b, int t, int max_t) @local {
+	if (max_t <= 0) return a;
+	return (char)(((int)a * (max_t - t) + (int)b * t) / max_t);
+}
+
+fn Color lerp_color(Color a, Color b, int t, int max_t) @local {
+	return color_rgb(lerp_u8(a.r, b.r, t, max_t), lerp_u8(a.g, b.g, t, max_t), lerp_u8(a.b, b.b, t, max_t));
+}
+
+// fill_gradient_v sets the background of every cell in r to a vertical
+// gradient from c1 (top) to c2 (bottom). Call after content is drawn so
+// text cells keep their foreground but gain the gradient background.
+fn void ScreenBuffer.fill_gradient_v(&self, Rect r, Color c1, Color c2) {
+	if (r.w <= 0 || r.h <= 0) return;
+	int max_t = r.h > 1 ? r.h - 1 : 1;
+	for (int row = 0; row < r.h; row++) {
+		int abs_row = r.y + row;
+		if (abs_row < 0 || (sz)abs_row >= self.height) continue;
+		Color c = lerp_color(c1, c2, row, max_t);
+		for (int col = 0; col < r.w; col++) {
+			int abs_col = r.x + col;
+			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
+			self.cells[(sz)abs_row * self.width + (sz)abs_col].style.bg = c;
+		}
+	}
+}
+
+// draw_gradient_border draws a rounded border whose colour interpolates
+// vertically from c1 (top) to c2 (bottom). Returns the inner rect.
+fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Color c2) {
+	if (r.w < 2 || r.h < 2) return r;
+	sz x0 = (sz)r.x;
+	sz y0 = (sz)r.y;
+	sz x1 = (sz)(r.x + r.w - 1);
+	sz y1 = (sz)(r.y + r.h - 1);
+	int max_t = r.h > 1 ? r.h - 1 : 1;
+
+	// Top row: c1
+	DString top = dstring::temp();
+	top.append_string(b.top_left);
+	for (int i = 0; i < r.w - 2; i++) top.append_string(b.top);
+	top.append_string(b.top_right);
+	self.set_string(x0, y0, top.str_view(), (Style){ .fg = c1 });
+
+	// Bottom row: c2
+	DString bot = dstring::temp();
+	bot.append_string(b.bottom_left);
+	for (int i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
+	bot.append_string(b.bottom_right);
+	self.set_string(x0, y1, bot.str_view(), (Style){ .fg = c2 });
+
+	// Sides: interpolate per row
+	for (sz row = y0 + 1; row < y1; row++) {
+		Color c = lerp_color(c1, c2, (int)(row - y0), max_t);
+		Style sty = { .fg = c };
+		self.set_string(x0, row, b.left, sty);
+		self.set_string(x1, row, b.right, sty);
+	}
+
+	return new_rect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+}
+
+// ============================================================
 // Debug helpers
 // ============================================================
 
