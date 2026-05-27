@@ -21,7 +21,7 @@
 //   Ctrl+A / E    — jump to start/end of input
 //   Ctrl+C / q    — quit (only when input is empty)
 
-import { milktea, h } from "milktea";
+import { tea, h } from "milktea";
 import { LLM } from "./llm.js";
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ function render_bg_row(w, row_offset, dim_hex, bg_hex) {
 
 // ── Main model ───────────────────────────────────────────────────────────────
 
-milktea.run({
+tea.run({
   init() {
     this.output = []; // { text, style } — style: "normal" | "thinking" | "dim"
     this.width = 80;
@@ -140,7 +140,7 @@ milktea.run({
         return;
       }
       this.output.push({ text, style: style || "normal" });
-      milktea.viewportScrollToBottom("output");
+      tea.viewportScrollToBottom("output");
     });
 
     if (this.llm.apiKeyMissing) {
@@ -168,7 +168,7 @@ milktea.run({
       const code = msg.code;
 
       if (code === "esc") {
-        if (this.focused === "none") return milktea.quit();
+        if (this.focused === "none") return tea.quit();
         this.focused = "none";
         return;
       }
@@ -178,11 +178,11 @@ milktea.run({
         return;
       }
 
-      if (code === "c" && msg.ctrl) return milktea.quit();
+      if (code === "c" && msg.ctrl) return tea.quit();
 
       // Forward scroll keys to viewport
       if (this.focused !== "input") {
-        milktea.viewportUpdate("output", {
+        tea.viewportUpdate("output", {
           code,
           ctrl: msg.ctrl || false,
           alt: msg.alt || false,
@@ -195,14 +195,14 @@ milktea.run({
 
       if (this.focused === "input") {
         if (code === "enter" && !msg.shift) {
-          const prompt = milktea.textareaGetText("input").trim();
+          const prompt = tea.textareaGetText("input").trim();
           if (prompt) {
-            milktea.textareaClear("input");
+            tea.textareaClear("input");
             this.llm.send(prompt);
           }
           return;
         }
-        milktea.textareaUpdate("input", {
+        tea.textareaUpdate("input", {
           code,
           ctrl: msg.ctrl || false,
           alt: msg.alt || false,

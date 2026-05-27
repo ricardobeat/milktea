@@ -135,7 +135,7 @@ globalThis.console = {
   info(...args)  { this.log(...args); },
 };
 
-globalThis.milktea = {
+globalThis.tea = {
   run(model) {
     globalThis.__taro_model = model;
   },

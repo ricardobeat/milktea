@@ -40,6 +40,23 @@ extern fn long taro_next_timer_ms();
 extern fn int taro_has_pending_fetch();
 extern fn int taro_is_job_pending(void* rt);
 
+// ── Memory profiling ────────────────────────────────────────────────────────
+
+struct MemStats {
+    long qjs_memory_used;
+    long qjs_malloc_count;
+    long qjs_obj_count;
+    long qjs_str_count;
+    long shim_malloc_count;
+    long shim_free_count;
+    long shim_malloc_bytes;
+}
+
+extern fn MemStats taro_mem_stats(void* rt);
+extern fn void taro_gc(void* rt);
+extern fn long taro_rss_kb();
+extern fn int taro_memprofile_enabled();
+
 faultdef JS_ERROR;
 
 struct Runtime {
@@ -196,6 +213,14 @@ fn void Runtime.execute_jobs(&self) {
 
 fn void Runtime.run_timers(&self) {
 	taro_run_timers(self.rt, self.ctx);
+}
+
+fn MemStats Runtime.mem_stats(&self) {
+	return taro_mem_stats(self.rt);
+}
+
+fn void Runtime.force_gc(&self) {
+	taro_gc(self.rt);
 }
 
 fn void Runtime.drain_fetch(&self) {

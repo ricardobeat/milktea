@@ -20,7 +20,7 @@
 //   Click output area — focus output (enables scroll keys)
 //   Click input area  — focus input (enables typing)
 
-import { milktea, h } from "milktea";
+import { tea, h } from "milktea";
 import { getenv } from "os";
 
 const API_KEY = getenv("MINIMAX_API_KEY") || "";
@@ -31,7 +31,7 @@ const SYSTEM_PROMPT =
   "You are an expert coding assistant. Be concise and precise. " +
   "Format code blocks with markdown fences. Prefer short explanations.";
 
-milktea.run({
+tea.run({
   init() {
     this.input      = "";
     this.messages   = [];
@@ -92,7 +92,7 @@ milktea.run({
       if (code === "page_up")   { this.scroll = Math.min(this.scroll + Math.floor(ph / 2), Math.max(0, this.output.length - ph)); return; }
       if (code === "page_down") { this.scroll = Math.max(0, this.scroll - Math.floor(ph / 2)); return; }
 
-      if ((code === "c" && msg.ctrl) || (code === "q" && this.input === "")) return milktea.quit();
+      if ((code === "c" && msg.ctrl) || (code === "q" && this.input === "")) return tea.quit();
 
       // Typing only when input is focused and not loading
       if (this.focused !== "input" || this.loading) return;

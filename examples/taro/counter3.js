@@ -1,13 +1,13 @@
-import { milktea, h } from "milktea";
+import { tea, h } from "milktea";
 
-milktea.run({
+tea.run({
   init() {
     this.count = 0;
   },
   update(msg) {
     if (msg.kind === "key") {
       switch (msg.code) {
-        case "q": return milktea.quit();
+        case "q": return tea.quit();
         case "up":   this.count++; break;
         case "down": this.count--; break;
         case "r":    this.count = 0; break;

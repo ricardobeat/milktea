@@ -1,4 +1,4 @@
-#include "../../vendor/quickjs/quickjs.h"
+#include "../vendor/quickjs/quickjs.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -19,6 +19,76 @@
  * JSValue or JSRuntime directly.
  */
 
+/* ============================================================
+ * Memory profiling
+ * ============================================================ */
+
+static long _taro_malloc_count = 0;
+static long _taro_free_count   = 0;
+static long _taro_malloc_bytes = 0;
+
+typedef struct {
+    long qjs_memory_used;      /* QuickJS internal heap (memory_used_size) */
+    long qjs_malloc_count;     /* QuickJS malloc calls */
+    long qjs_obj_count;        /* live JS objects */
+    long qjs_str_count;        /* live JS strings */
+    long shim_malloc_count;    /* _taro_alloc_value calls */
+    long shim_free_count;      /* taro_free_value calls */
+    long shim_malloc_bytes;    /* bytes passed through _taro_alloc_value */
+} taro_mem_stats_t;
+
+taro_mem_stats_t taro_mem_stats(void* rt) {
+    taro_mem_stats_t s = {0};
+    if (rt) {
+        JSMemoryUsage mu;
+        JS_ComputeMemoryUsage((JSRuntime*)rt, &mu);
+        s.qjs_memory_used = (long)mu.memory_used_size;
+        s.qjs_malloc_count = (long)mu.malloc_count;
+        s.qjs_obj_count = (long)mu.obj_count;
+        s.qjs_str_count = (long)mu.str_count;
+    }
+    s.shim_malloc_count = _taro_malloc_count;
+    s.shim_free_count = _taro_free_count;
+    s.shim_malloc_bytes = _taro_malloc_bytes;
+    return s;
+}
+
+void taro_gc(void* rt) {
+    if (rt) JS_RunGC((JSRuntime*)rt);
+}
+
+/* Get current process RSS in KB via mach task info (macOS) */
+#ifdef __APPLE__
+#include <mach/mach.h>
+long taro_rss_kb(void) {
+    struct mach_task_basic_info info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    kern_return_t kr = task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                                 (task_info_t)&info, &count);
+    if (kr != KERN_SUCCESS) return 0;
+    return (long)(info.resident_size / 1024);
+}
+#elif defined(__linux__)
+#include <stdio.h>
+long taro_rss_kb(void) {
+    FILE* f = fopen("/proc/self/statm", "r");
+    if (!f) return 0;
+    long pages = 0;
+    fscanf(f, "%ld", &pages);
+    fclose(f);
+    return pages * 4; /* assume 4KB pages */
+}
+#else
+long taro_rss_kb(void) { return 0; }
+#endif
+
+/* Check if HW_MEMPROFILE env var is set (non-empty, non-"0") */
+int taro_memprofile_enabled(void) {
+    const char* v = getenv("HW_MEMPROFILE");
+    if (!v || v[0] == '\0' || v[0] == '0') return 0;
+    return 1;
+}
+
 /* Last JS error message + stack, cleared on successful call */
 static char _taro_last_error[4096] = {0};
 
@@ -35,6 +105,8 @@ static void* _taro_alloc_value(JSValue val) {
     JSValue* ptr = (JSValue*)malloc(sizeof(JSValue));
     if (!ptr) return NULL;
     *ptr = val;
+    _taro_malloc_count++;
+    _taro_malloc_bytes += (long)sizeof(JSValue);
     return ptr;
 }
 
@@ -43,10 +115,10 @@ static void* _taro_alloc_value(JSValue val) {
  * ============================================================ */
 
 /* Source for the "milktea" module — re-exports everything from globalThis so that
-   both script-mode (counter.js) and module-mode (import { milktea } from "milktea")
+   both script-mode (counter.js) and module-mode (import { tea } from "milktea")
    users share the same runtime objects. */
 static const char _milktea_module_src[] =
-    "export const milktea = globalThis.milktea;\n"
+    "export const tea = globalThis.tea;\n"
     "export const h   = globalThis.h;\n";
 
 /* "fs" module — Bun-compatible file I/O API */
@@ -471,6 +543,7 @@ void taro_free_value(void* ctx, void* val) {
     }
 
     free(val);
+    _taro_free_count++;
 }
 
 typedef void* (*taro_cfunc_t)(void* ctx, void* this_val, int argc, void** argv);

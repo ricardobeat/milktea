@@ -1,4 +1,4 @@
-import { milktea, h } from "milktea";
+import { tea, h } from "milktea";
 import { LLM } from "./llm.js";
 const MD_BOLD = "\x1B[1m";
 const MD_ITALIC = "\x1B[3m";
@@ -95,7 +95,7 @@ function render_bg_row(w, row_offset, dim_hex, bg_hex) {
   out += RESET;
   return out;
 }
-milktea.run({
+tea.run({
   init() {
     this.output = [];
     this.width = 80;
@@ -110,7 +110,7 @@ milktea.run({
         return;
       }
       this.output.push({ text, style: style || "normal" });
-      milktea.viewportScrollToBottom("output");
+      tea.viewportScrollToBottom("output");
     });
     if (this.llm.apiKeyMissing) {
       this.llm._push("\u26A0  MINIMAX_API_KEY is not set. Export it and restart.", "dim");
@@ -130,7 +130,7 @@ milktea.run({
     if (msg.kind === "key") {
       const code = msg.code;
       if (code === "esc") {
-        if (this.focused === "none") return milktea.quit();
+        if (this.focused === "none") return tea.quit();
         this.focused = "none";
         return;
       }
@@ -138,9 +138,9 @@ milktea.run({
         this.focused = this.focused === "input" ? "output" : "input";
         return;
       }
-      if (code === "c" && msg.ctrl) return milktea.quit();
+      if (code === "c" && msg.ctrl) return tea.quit();
       if (this.focused !== "input") {
-        milktea.viewportUpdate("output", {
+        tea.viewportUpdate("output", {
           code,
           ctrl: msg.ctrl || false,
           alt: msg.alt || false,
@@ -151,14 +151,14 @@ milktea.run({
       if (this.llm.loading) return;
       if (this.focused === "input") {
         if (code === "enter" && !msg.shift) {
-          const prompt = milktea.textareaGetText("input").trim();
+          const prompt = tea.textareaGetText("input").trim();
           if (prompt) {
-            milktea.textareaClear("input");
+            tea.textareaClear("input");
             this.llm.send(prompt);
           }
           return;
         }
-        milktea.textareaUpdate("input", {
+        tea.textareaUpdate("input", {
           code,
           ctrl: msg.ctrl || false,
           alt: msg.alt || false,

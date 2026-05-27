@@ -11,6 +11,8 @@ struct JsModel {
 	void* js_model_obj;
 	int term_w;
 	int term_h;
+	bool mem_profile;
+	long frame_count;
 }
 
 // ── Native debug event log ─────────────────────────────────────────────────
@@ -203,6 +205,18 @@ fn milktea::Cmd JsModel.init(&self) @dynamic {
 	}
 	if (debug_val != null) self.rt.free_value(debug_val);
 
+	// Check if --memprofile flag was set via globalThis.__memprofile or HW_MEMPROFILE env
+	if (taro_memprofile_enabled()) self.mem_profile = true;
+	void* memprofile_val = self.rt.get_global_prop("__memprofile");
+	if (memprofile_val != null && !self.rt.is_null(memprofile_val)) {
+		self.mem_profile = true;
+	}
+	if (memprofile_val != null) self.rt.free_value(memprofile_val);
+
+	if (self.mem_profile) {
+		io::eprintfn("MEMPROFILE:frame,qjs_used,qjs_obj,qjs_str,shim_allocs,shim_frees,shim_bytes,process_rss_kb");
+	}
+
 	void* fn_val = self.rt.get_prop(self.js_model_obj, "init");
 	if (fn_val != null) {
 		if (self.rt.is_function(fn_val)) {
@@ -387,6 +401,23 @@ fn milktea::View JsModel.view(&self) @dynamic {
 
 	screen.destroy();
 	mem::free(screen);
+
+	// Memory profiling: log per-frame stats to stderr
+	if (self.mem_profile) {
+		MemStats ms = self.rt.mem_stats();
+		long rss = taro_rss_kb();
+		self.frame_count++;
+		io::eprintfn("MEMPROFILE:%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld",
+			self.frame_count,
+			ms.qjs_memory_used,
+			ms.qjs_obj_count,
+			ms.qjs_str_count,
+			ms.shim_malloc_count,
+			ms.shim_free_count,
+			ms.shim_malloc_bytes,
+			rss);
+	}
+
 	return view;
 }
 
@@ -401,7 +432,7 @@ fn JsModel? load_js_model(String js_src, String filename = "<input>") {
 	taro_fetch_init();
 	rt.register_globals();
 
-	// Always evaluate milktea.js as a global script first — sets up globalThis.milktea,
+	// Always evaluate milktea.js as a global script first — sets up globalThis.tea,
 	// globalThis.h, console, setInterval, etc. The "milktea" ES module re-exports
 	// these same objects, so both script and module users share one instance.
 	String stdlib_str = (String)$embed("milktea.js");

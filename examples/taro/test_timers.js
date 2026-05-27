@@ -56,13 +56,13 @@ setTimeout(() => {
 setTimeout(() => {
   console.log("Timer tests: " + passed + " passed, " + failed + " failed");
   if (failed === 0) console.log("ALL PASSED");
-  return milktea.quit();
+  return tea.quit();
 }, 200);
 
-milktea.run({
+tea.run({
   init() {},
   update(msg) {
-    if (msg.kind === "key" && msg.code === "q") return milktea.quit();
+    if (msg.kind === "key" && msg.code === "q") return tea.quit();
   },
   view() {
     return h("col", {},

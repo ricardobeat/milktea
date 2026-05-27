@@ -1,4 +1,4 @@
-milktea.run({
+tea.run({
   init() {
     this.count = 7;
   },
@@ -7,7 +7,7 @@ milktea.run({
     if (msg.kind === "key") {
       switch (msg.key.code) {
         case "q":
-          return milktea.quit();
+          return tea.quit();
         case "up":
           return this.count++;
         case "down":
