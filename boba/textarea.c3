@@ -34,8 +34,7 @@ fn Textarea new_textarea(int width, int height) {
 	t.show_line_numbers = true;
 	t.focused_style = glaze::new_style().foreground(glaze::color_hex("#ffffff"));
 	t.blurred_style = glaze::new_style().foreground(glaze::color_hex("#888888"));
-	t.cursor_style = glaze::new_style().background(glaze::color_hex("#ffffff"))
-		.foreground(glaze::color_hex("#000000"));
+	t.cursor_style = glaze::new_style().background(glaze::color_hex("#ffffff")).foreground(glaze::color_hex("#000000"));
 	t.line_number_style = glaze::new_style().foreground(glaze::color_hex("#555555"));
 	t.prompt_style = glaze::new_style().foreground(glaze::color_hex("#555555"));
 	return t;
