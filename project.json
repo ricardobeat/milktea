@@ -24,6 +24,19 @@
       "opt": "Os",
       "linked-libraries": ["curl"]
     },
+    "bench-draw": {
+      "type": "executable",
+      "sources": ["xray/**", "bench/bench_draw.c3"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "O3"
+    },
+    "bench-ffi": {
+      "type": "executable",
+      "sources": ["bench/bench_ffi.c3"],
+      "c-sources": ["milktea/tty_winsize.c", "taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
+      "opt": "O3",
+      "linked-libraries": ["curl"]
+    },
     "counter": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "examples/counter/**"],

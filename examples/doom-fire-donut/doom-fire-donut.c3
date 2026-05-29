@@ -54,7 +54,7 @@ fn void spread_pixel(Model* m, int idx) {
 	int dst     = idx - rnd + 1;
 	int buf_len = m.fire_w * m.fire_h;
 	if (dst - m.fire_w >= 0 && dst - m.fire_w < buf_len) {
-		int decay   = (rand() & 1) ? 0 : 1.5;
+		int decay   = (rand() & 1) ? 0 : 1;
 		int new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.fire_w] = new_val;
