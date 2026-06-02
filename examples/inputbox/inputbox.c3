@@ -59,8 +59,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	int w = self.width > 0 ? self.width : 80;
 	int h = self.height > 0 ? self.height : 24;
 
-	xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
-	xray::Rect full            = xray::new_rect(0, 0, w, h);
+	xray::Rect full = xray::new_rect(0, 0, w, h);
 
 	// Three rows: header(1) | output(fill) | input(3) | help(1)
 	xray::Constraint[4] cs = {
@@ -73,42 +72,32 @@ fn milktea::View Model.view(&self) @dynamic {
 	xray::layout_v_gap(full, cs[..], 0, rects[..]);
 
 	// Header
-	glaze::Style hdr = glaze::new_style().foreground(glaze::color_hex("#00ffcc")).set_bold(true).set_width(w);
-	String hdr_str      = hdr.render("  INPUTBOX TEST");
-	screen.render_ansi_string((sz)rects[0].x, (sz)rects[0].y, hdr_str, xray::default_style());
+	String hdr_str = glaze::new_style()
+		.foreground(glaze::color_hex("#00ffcc")).set_bold(true).set_width(w)
+		.render("  INPUTBOX TEST");
 
 	// Output area
-	glaze::Style out_style = glaze::new_style().foreground(glaze::color_hex("#aaaaaa")).set_width(rects[1].w)
-		.set_height(rects[1].h);
-	String out_str = out_style.render(self.output.str_view());
-	screen.render_ansi_string((sz)rects[1].x, (sz)rects[1].y, out_str, xray::default_style());
+	String out_str = glaze::new_style()
+		.foreground(glaze::color_hex("#aaaaaa"))
+		.set_width(rects[1].w).set_height(rects[1].h)
+		.render(self.output.str_view());
 
 	// Input box: bordered, pad_x=1
-	glaze::Style inp_style = glaze::new_style().foreground(glaze::color_hex("#ffff00"))
+	String inp_content = string::tformat("> %s█", self.input.str_view());
+	String inp_str     = glaze::new_style()
+		.foreground(glaze::color_hex("#ffff00"))
 		.set_border(glaze::rounded_border())
 		.padding(0, 1, 0, 1)
-		.set_width(rects[2].w)
-		.set_height(rects[2].h);
-	String inp_content = string::tformat("> %s█", self.input.str_view());
-	String inp_str     = inp_style.render(inp_content);
-	screen.render_ansi_string(
-		(sz)rects[2].x,
-		(sz)rects[2].y,
-		inp_str,
-		xray::default_style(),
-		(sz)(rects[2].y + rects[2].h)
-	);
+		.set_width(rects[2].w).set_height(rects[2].h)
+		.render(inp_content);
 
 	// Help line
-	glaze::Style help_style = glaze::new_style().foreground(glaze::color_hex("#555555")).set_width(w);
-	String help_len_str        = string::tformat("  input len: %d chars", (int)self.input.len());
-	String help_str            = help_style.render(help_len_str);
-	screen.render_ansi_string((sz)rects[3].x, (sz)rects[3].y, help_str, xray::default_style());
+	String help_str = glaze::new_style()
+		.foreground(glaze::color_hex("#555555")).set_width(w)
+		.render(string::tformat("  input len: %d chars", (int)self.input.len()));
 
-	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
-	screen.destroy();
-	mem::free(screen);
-	return view;
+	String doc = glaze::join_vertical(glaze::Position.LEFT, hdr_str, out_str, inp_str, help_str);
+	return milktea::new_alt_screen_view(doc);
 }
 
 fn void Model.on_destroy(&self) @dynamic {
