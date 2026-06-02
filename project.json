@@ -2,7 +2,7 @@
   "langrev": "1",
   "warnings": ["no-unused-parameter", "no-unused-import"],
   "macos-min-version": "26.0",
-  "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**"],
+  "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**", "test/**"],
   "targets": {
     "milktea": {
       "type": "static-lib",
