@@ -261,6 +261,7 @@ fn void test_screen_buffer_diff_full_redraw() @test {
 
 	sb.set_string(0, 0, "Hi", default_style());
 
+	DString out = dstring::temp();
 	Style pen = default_style();
 	sb.render_diff(&out, &pen);
 
