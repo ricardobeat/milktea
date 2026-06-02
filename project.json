@@ -1,318 +1,626 @@
 {
-  "langrev": "1",
-  "warnings": ["no-unused-parameter", "no-unused-import"],
-  "macos-min-version": "26.0",
-  "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**", "test/**"],
-  "targets": {
-    "milktea": {
-      "type": "static-lib",
-      "sources": ["milktea/**", "glaze/**"],
-      "c-sources": ["milktea/tty_winsize.c"]
-    },
-    "taro": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "boba/**", "taro/**", "examples/taro/**"],
-      "c-sources": [
-        "milktea/tty_winsize.c",
-        "taro/taro.c",
-        "vendor/quickjs/quickjs.c",
-        "vendor/quickjs/cutils.c",
-        "vendor/quickjs/libregexp.c",
-        "vendor/quickjs/libunicode.c",
-        "vendor/quickjs/dtoa.c"
-      ],
-      "opt": "Os",
-      "linked-libraries": ["curl"]
-    },
-    "bench-draw": {
-      "type": "executable",
-      "sources": ["xray/**", "bench/bench_draw.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "O3"
-    },
-    "bench-ffi": {
-      "type": "executable",
-      "sources": ["bench/bench_ffi.c3"],
-      "c-sources": ["milktea/tty_winsize.c", "taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
-      "opt": "O3",
-      "linked-libraries": ["curl"]
-    },
-    "counter": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/counter/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "list": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/list/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "spinner": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/spinner/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "timer": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/timer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "fullscreen": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/fullscreen/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "tabs": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/tabs/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "pagination": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/pagination/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "viewport": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/viewport/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "spinners": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/spinners/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "progress": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/progress/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "bounce": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/bounce/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "composable-views": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/composable-views/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "focus-blur": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/focus-blur/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "doom-fire": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "doom-fire-milktea": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire-milktea.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "doom-fire-3d": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/doom-fire-3d/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "doom-fire-donut": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/glb/glb.c3", "examples/doom-fire-donut/**", "examples/glb-viewer/stb_json.c3"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "textinputs": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/textinputs/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "canvas": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/canvas/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "vanish": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/vanish/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "space": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/space/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "splash": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/splash/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "split-editors": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/split-editors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "file-picker": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/file-picker/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "chat": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/chat/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "batch": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/batch/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "mouse": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/mouse/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "paint": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/paint/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "colors": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/colors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "diff-viewer": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/diff-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "voxel-renderer": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/voxel-renderer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "super-splash": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/super-splash/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "glb-viewer": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/glb/glb.c3", "examples/glb-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/glb-viewer/stb_json_impl.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "minecraft": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**", "examples/minecraft/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "wolf3d": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**", "examples/wolf3d/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "wolf3d-server": {
-      "type": "executable",
-      "sources": ["src/**", "examples/wolf3d-server/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true,
-      "linked-libraries": ["sqlite3"],
-      "linker-search-paths": ["/opt/homebrew/lib"]
-    },
-    "cursors": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/cursors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "O0"
-    },
-    "inputbox": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/inputbox/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "O0"
-    },
-    "oiia": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "examples/oiia-player/**", "examples/glb-viewer/stb_json.c3"],
-      "c-sources": [
-        "milktea/tty_winsize.c",
-        "examples/oiia-player/stb_image_impl.c",
-        "examples/glb-viewer/stb_json_impl.c"
-      ],
-      "opt": "Os",
-      "strip-unused": true
-    }
-  }
+	"langrev": "1",
+	"warnings": [
+		"no-unused-parameter",
+		"no-unused-import"
+	],
+	"macos-min-version": "26.0",
+	"sources": [
+		"milktea/**",
+		"glaze/**",
+		"boba/**",
+		"xray/**",
+		"taro/**",
+		"src/**",
+		"test/**"
+	],
+	"targets": {
+		"milktea": {
+			"type": "static-lib",
+			"sources": [
+				"milktea/**",
+				"glaze/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			]
+		},
+		"taro": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"boba/**",
+				"taro/**",
+				"examples/taro/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c",
+				"taro/taro.c",
+				"vendor/quickjs/quickjs.c",
+				"vendor/quickjs/cutils.c",
+				"vendor/quickjs/libregexp.c",
+				"vendor/quickjs/libunicode.c",
+				"vendor/quickjs/dtoa.c"
+			],
+			"opt": "Os",
+			"linked-libraries": [
+				"curl"
+			]
+		},
+		"bench-draw": {
+			"type": "executable",
+			"sources": [
+				"xray/**",
+				"bench/bench_draw.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "O3"
+		},
+		"bench-ffi": {
+			"type": "executable",
+			"sources": [
+				"bench/bench_ffi.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c",
+				"taro/taro.c",
+				"vendor/quickjs/quickjs.c",
+				"vendor/quickjs/cutils.c",
+				"vendor/quickjs/libregexp.c",
+				"vendor/quickjs/libunicode.c",
+				"vendor/quickjs/dtoa.c"
+			],
+			"opt": "O3",
+			"linked-libraries": [
+				"curl"
+			]
+		},
+		"counter": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/counter/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"list": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/list/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"spinner": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/spinner/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"timer": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/timer/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"fullscreen": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/fullscreen/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"tabs": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/tabs/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"pagination": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/pagination/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"viewport": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/viewport/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"spinners": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/spinners/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"progress": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/progress/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"bounce": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/bounce/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"composable-views": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/composable-views/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"focus-blur": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/focus-blur/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"doom-fire": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/doom-fire/doom-fire.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"doom-fire-milktea": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/doom-fire/doom-fire-milktea.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"doom-fire-3d": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/doom-fire-3d/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"doom-fire-donut": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/glb/glb.c3",
+				"examples/doom-fire-donut/**",
+				"examples/glb-viewer/stb_json.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c",
+				"examples/glb-viewer/stb_json_impl.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"textinputs": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/textinputs/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"canvas": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/canvas/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"vanish": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/vanish/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"space": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/space/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"splash": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/splash/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"split-editors": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"examples/split-editors/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"file-picker": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/file-picker/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"chat": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/chat/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"batch": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/batch/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"mouse": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/mouse/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"paint": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"examples/paint/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"colors": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/colors/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"diff-viewer": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/diff-viewer/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"voxel-renderer": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/voxel-renderer/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"super-splash": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/super-splash/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"glb-viewer": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/glb/glb.c3",
+				"examples/glb-viewer/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c",
+				"examples/glb-viewer/stb_json_impl.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"minecraft": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"boba/**",
+				"xray/**",
+				"taro/**",
+				"src/**",
+				"examples/minecraft/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"wolf3d": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"boba/**",
+				"xray/**",
+				"taro/**",
+				"src/**",
+				"examples/wolf3d/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"wolf3d-server": {
+			"type": "executable",
+			"sources": [
+				"src/**",
+				"examples/wolf3d-server/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true,
+			"linked-libraries": [
+				"sqlite3"
+			],
+			"linker-search-paths": [
+				"/opt/homebrew/lib"
+			]
+		},
+		"cursors": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"examples/cursors/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "O0"
+		},
+		"inputbox": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"examples/inputbox/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "O0"
+		},
+		"oiia": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/oiia-player/**",
+				"examples/glb-viewer/stb_json.c3"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c",
+				"examples/oiia-player/stb_image_impl.c",
+				"examples/glb-viewer/stb_json_impl.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
+		"color-swatches": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"examples/color-swatches/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		}
+	}
 }

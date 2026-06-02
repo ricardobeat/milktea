@@ -90,7 +90,7 @@ fn View Layout.view(Layout* self) {
 // LayoutNode — declarative constraint-based layout
 // ============================================================
 
-const sz MAX_LAYOUT_NODES = 16;
+const sz MAX_LAYOUT_NODES = 32;
 
 // LayoutNode pairs a layout constraint with a glaze style and content string.
 // Used with hstack / vstack for declarative composition.
