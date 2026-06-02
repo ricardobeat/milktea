@@ -108,11 +108,36 @@ fn Cell* ScreenBuffer.cell_at(&self, sz col, sz row) {
 	return &self.cells[row * self.width + col];
 }
 
+// is_block_char returns true if the cell's content is a Unicode block
+// element (U+2580–U+259F). These characters fill the cell visually
+// with their fg color, so fg acts as the effective background.
+fn bool is_block_char(Cell* cell) @local {
+	uint cp;
+	utf8_decode(cell.content_str(), &cp);
+	return cp >= 0x2580 && cp <= 0x259F;
+}
+
 // set_cell writes a cell at (col, row). Marks the line dirty if
 // the new cell differs from what's already there.
+// Channels set to TRANSPARENT inherit from the existing cell —
+// the new cell's content and fg are written, but the bg (or fg)
+// that was already in the buffer is preserved.
+// For block characters whose bg is NONE, the fg is used instead,
+// since block glyphs fill the cell with their foreground color.
 fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 	if (col >= self.width || row >= self.height) return;
 	sz idx = row * self.width + col;
+	if (cell.style.bg.kind == ColorKind.TRANSPARENT) {
+		Cell* existing = &self.cells[idx];
+		if (existing.style.bg.kind == ColorKind.NONE && is_block_char(existing)) {
+			cell.style.bg = existing.style.fg;
+		} else {
+			cell.style.bg = existing.style.bg;
+		}
+	}
+	if (cell.style.fg.kind == ColorKind.TRANSPARENT) {
+		cell.style.fg = self.cells[idx].style.fg;
+	}
 	if (!self.cells[idx].eq(cell)) {
 		self.cells[idx] = cell;
 		self.dirty_lines[row] = true;
@@ -230,7 +255,12 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 				// Emit style diff
 				String sgr = cell.style.diff_sgr(*pen_style);
 				if (sgr.len > 0) out.append_string(sgr);
-				*pen_style = cell.style;
+				// Update pen — skip TRANSPARENT channels so they don't
+				// overwrite the terminal's current state.
+				if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen_style.fg = cell.style.fg;
+				if (cell.style.bg.kind != ColorKind.TRANSPARENT) pen_style.bg = cell.style.bg;
+				pen_style.attrs = cell.style.attrs;
+				pen_style.underline_color = cell.style.underline_color;
 
 				// Emit cell content
 				out.append_string(cell.content_str());
@@ -277,7 +307,11 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 			// Style diff
 			String sgr = cell.style.diff_sgr(*pen_style);
 			if (sgr.len > 0) out.append_string(sgr);
-			*pen_style = cell.style;
+			// Update pen — skip TRANSPARENT channels
+			if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen_style.fg = cell.style.fg;
+			if (cell.style.bg.kind != ColorKind.TRANSPARENT) pen_style.bg = cell.style.bg;
+			pen_style.attrs = cell.style.attrs;
+			pen_style.underline_color = cell.style.underline_color;
 
 			// Content
 			out.append_string(cell.content_str());
@@ -303,7 +337,11 @@ fn String ScreenBuffer.render_ansi(&self) {
 			Cell cell = self.cells[line_start + col];
 			String sgr = cell.style.diff_sgr(pen);
 			if (sgr.len > 0) out.append_string(sgr);
-			pen = cell.style;
+			// Update pen — skip TRANSPARENT channels
+			if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen.fg = cell.style.fg;
+			if (cell.style.bg.kind != ColorKind.TRANSPARENT) pen.bg = cell.style.bg;
+			pen.attrs = cell.style.attrs;
+			pen.underline_color = cell.style.underline_color;
 			out.append_string(cell.content_str());
 			if (cell.width == 2) col++;
 		}
@@ -925,10 +963,13 @@ fn String ScreenBuffer.render_diff_str(&self) {
 
 // blit composites src ScreenBuffer onto self at (dst_x, dst_y).
 // If transparent is true, skip src cells where content is ' ' (space, 0x20) AND bg is ColorKind.NONE.
+// Cells with TRANSPARENT bg or fg are always skipped — they inherit from the destination.
 fn void ScreenBuffer.blit(&self, sz dst_x, sz dst_y, ScreenBuffer* src, bool transparent) {
 	for (sz row = 0; row < src.height; row++) {
 		for (sz col = 0; col < src.width; col++) {
 			Cell c = src.cells[row * src.width + col];
+			// Always skip TRANSPARENT cells — they mean "keep what's underneath"
+			if (c.style.bg.kind == ColorKind.TRANSPARENT || c.style.fg.kind == ColorKind.TRANSPARENT) continue;
 			if (transparent) {
 				// Skip if content is space AND bg is NONE
 				if (c.content_len == 1 && c.content[0] == ' ' && c.style.bg.kind == ColorKind.NONE) continue;

@@ -11,6 +11,8 @@ const String SGR_FOCUS_ON         = "\x1b[?1004h";
 const String SGR_FOCUS_OFF        = "\x1b[?1004l";
 const String SGR_MOUSE_SGR_ON     = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const String SGR_MOUSE_SGR_OFF    = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+const String SGR_MOUSE_ALL_ON     = "\x1b[?1003h\x1b[?1006h";
+const String SGR_MOUSE_ALL_OFF    = "\x1b[?1006l\x1b[?1003l";
 const String SGR_CURSOR_BLINK_OFF = "\x1b[?12l";
 const String SGR_CURSOR_BLINK_ON  = "\x1b[?12h";
 
@@ -110,11 +112,11 @@ fn void disable_focus() {
 	write_stdout((char[])SGR_FOCUS_OFF);
 }
 
-fn void enable_mouse() {
-	write_stdout((char[])SGR_MOUSE_SGR_ON);
+fn void enable_mouse(bool all_motion = false) {
+	write_stdout((char[])(all_motion ? SGR_MOUSE_ALL_ON : SGR_MOUSE_SGR_ON));
 }
-fn void disable_mouse() {
-	write_stdout((char[])SGR_MOUSE_SGR_OFF);
+fn void disable_mouse(bool all_motion = false) {
+	write_stdout((char[])(all_motion ? SGR_MOUSE_ALL_OFF : SGR_MOUSE_SGR_OFF));
 }
 
 fn String cursor_to(int row, int col) {

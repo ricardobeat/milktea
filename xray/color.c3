@@ -8,10 +8,11 @@ import std::core::dstring;
 // ============================================================
 
 enum ColorKind : char {
-	NONE,      // unset / default terminal color
-	ANSI,      // basic 16 colors (0-15)
-	ANSI256,   // xterm 256-color palette index
-	TRUECOLOR, // 24-bit RGB
+	NONE,        // unset / default terminal color
+	ANSI,        // basic 16 colors (0-15)
+	ANSI256,     // xterm 256-color palette index
+	TRUECOLOR,   // 24-bit RGB
+	TRANSPARENT, // compositing: inherit from underlying layer
 }
 
 struct Color {
@@ -26,6 +27,10 @@ struct Color {
 
 fn Color color_none() {
 	return { .kind = ColorKind.NONE };
+}
+
+fn Color color_transparent() {
+	return { .kind = ColorKind.TRANSPARENT };
 }
 
 fn Color color_ansi(char code) {
@@ -67,7 +72,9 @@ fn bool Color.is_none(&self) {
 fn bool Color.eq(&self, Color other) {
 	if (self.kind != other.kind) return false;
 	switch (self.kind) {
-		case ColorKind.NONE: return true;
+		case ColorKind.NONE:
+		case ColorKind.TRANSPARENT:
+			return true;
 		case ColorKind.ANSI:
 		case ColorKind.ANSI256:
 			return self.index == other.index;

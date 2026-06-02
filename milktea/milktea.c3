@@ -107,6 +107,12 @@ fn View View.set_mouse_cursor(self, String name) {
 	return v;
 }
 
+fn View View.set_mouse_mode(self, MouseMode mode) {
+	View v = self;
+	v.mouse_mode = mode;
+	return v;
+}
+
 // should_support_sync_output checks env vars to estimate whether the
 // terminal supports synchronized output (mode 2026). This is a heuristic
 // matching the Go version's shouldQuerySynchronizedOutput().
@@ -729,9 +735,9 @@ fn void Program.render_current_view(Program* self) {
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (v.mouse_mode != self.mouse_mode) {
 			if (v.mouse_mode == MOUSE_MODE_NONE) {
-				disable_mouse();
+				disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
 			} else {
-				enable_mouse();
+				enable_mouse(v.mouse_mode == MOUSE_MODE_ALL_MOTION);
 			}
 			self.mouse_mode = v.mouse_mode;
 		}
