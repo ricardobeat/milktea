@@ -273,22 +273,26 @@ fn void test_snap_border_wrap_multiline() @test {
 // ============================================================
 
 fn void test_snap_place_center() @test {
-	String out = glaze::place(20, 5, "hi");
+	String placed = glaze::place(20, 5, "hi");
+	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_center", out);
 }
 
 fn void test_snap_place_pos() @test {
-	String out = glaze::place_pos(20, 5, glaze::Position.LEFT, glaze::Position.TOP, "tl");
+	String placed = glaze::place_pos(20, 5, glaze::Position.LEFT, glaze::Position.TOP, "tl");
+	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_pos", out);
 }
 
 fn void test_snap_place_horizontal() @test {
-	String out = glaze::place_horizontal(20, glaze::Position.CENTER, "mid");
+	String placed = glaze::place_pos(20, 5, glaze::Position.RIGHT, glaze::Position.CENTER, "mid");
+	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_horizontal", out);
 }
 
 fn void test_snap_place_vertical() @test {
-	String out = glaze::place_vertical(5, glaze::Position.BOTTOM, "bot");
+	String placed = glaze::place_pos(20, 5, glaze::Position.CENTER, glaze::Position.BOTTOM, "bot");
+	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_vertical", out);
 }
 
