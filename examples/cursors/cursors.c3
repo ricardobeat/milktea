@@ -13,19 +13,20 @@ import std::io;
 
 // ── section A: draw-cursor callbacks ─────────────────────────────────────────
 
-fn String cursor_fire(int x, int y, bool blink) {
+fn String cursor_fire(int x, int y, bool blink, String under) {
 	return blink ? "🔥" : "";
 }
 
-fn String cursor_skull(int x, int y, bool blink) {
+fn String cursor_skull(int x, int y, bool blink, String under) {
 	return blink ? "💀" : "";
 }
 
-fn String cursor_crosshair(int x, int y, bool blink) {
+fn String cursor_crosshair(int x, int y, bool blink, String under) {
+	if (!blink && under.len > 0) return under;
 	return blink ? "\x1b[1;33m✛\x1b[0m" : "\x1b[2;33m✛\x1b[0m";
 }
 
-fn String cursor_snake(int x, int y, bool blink) {
+fn String cursor_snake(int x, int y, bool blink, String under) {
 	long now  = milktea::time_ms();
 	int phase = (int)((now / 150) % 4);
 	switch (phase) {
@@ -36,14 +37,24 @@ fn String cursor_snake(int x, int y, bool blink) {
 	}
 }
 
-fn String cursor_rainbow(int x, int y, bool blink) {
-	long now         = milktea::time_ms();
-	int phase        = (int)((now / 100) % 6);
-	String[6] colors = { "\x1b[31m", "\x1b[33m", "\x1b[32m", "\x1b[36m", "\x1b[34m", "\x1b[35m", };
-	return string::tformat("%s█\x1b[0m", colors[phase]);
+fn String cursor_rainbow(int x, int y, bool blink, String under) {
+	long now = milktea::time_ms();
+	// 2-second full cycle through the spectrum
+	double t = ((double)(now % 2000)) / 2000.0;
+	int seg = (int)(t * 6.0);
+	double frac = (t * 6.0) - (double)seg;
+	glaze::Color[7] stops = {
+		glaze::color_hex("#ff0000"), glaze::color_hex("#ffff00"),
+		glaze::color_hex("#00ff00"), glaze::color_hex("#00ffff"),
+		glaze::color_hex("#0000ff"), glaze::color_hex("#ff00ff"),
+		glaze::color_hex("#ff0000"),
+	};
+	glaze::Color c = glaze::blend_luv(stops[seg], stops[seg + 1], frac);
+	return glaze::new_style().foreground(c).render("█");
 }
 
-fn String cursor_matrix(int x, int y, bool blink) {
+fn String cursor_matrix(int x, int y, bool blink, String under) {
+	if (!blink && under.len > 0) return under;
 	long now = milktea::time_ms();
 	int idx  = (int)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
 	uint cp  = 0x30A1u + (uint)idx; // katakana block
@@ -64,7 +75,7 @@ fn String cursor_matrix(int x, int y, bool blink) {
 
 // ── entry types ───────────────────────────────────────────────────────────────
 
-alias DrawCursorFn = fn String(int x, int y, bool blink);
+alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
 
 struct Entry {
 	String label;
@@ -116,6 +127,8 @@ struct Model {
 	int focused;
 	int width;
 	int height;
+	int prev_cx;
+	int prev_cy;
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
@@ -242,15 +255,26 @@ fn milktea::View Model.view(&self) @dynamic {
 			if (e.draw != null) {
 				long now     = milktea::time_ms();
 				bool blink   = ((now / (long)e.interval_ms) % 2) == 0;
-				String drawn = e.draw(cx, cy, blink);
+				// After cursor moves, force one frame of showing the
+				// underlying character so it's never permanently hidden.
+				bool moved   = (cx != self.prev_cx || cy != self.prev_cy);
+				if (moved) blink = false;
+				xray::Cell* uc = screen.cell_at((sz)cx, (sz)cy);
+				String under = (uc != null && uc.content_len > 0) ? uc.content_str() : "";
+				String drawn = e.draw(cx, cy, blink, under);
 				if (drawn.len > 0) {
 					screen.overlay_char((sz)cx, (sz)cy, drawn, xray::default_style());
+				} else if (under.len > 0) {
+					screen.overlay_char((sz)cx, (sz)cy, under, xray::default_style());
 				}
 			}
 		}
 
 		row += 3;
 	}
+
+	self.prev_cx = focused_cx;
+	self.prev_cy = focused_cy;
 
 	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
 	screen.destroy();
