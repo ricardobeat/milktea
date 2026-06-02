@@ -5,6 +5,28 @@ import xray;
 
 const String SNAP = "xray";
 
+// Render each row of the screen buffer as a newline-separated string.
+// Unlike render_diff_str(), this produces inline output with no cursor
+// positioning — safe for snapshot preview.
+fn String render_rows(xray::ScreenBuffer* sb) @local {
+	DString out = dstring::temp();
+	xray::Style pen = xray::default_style();
+	for (int row = 0; row < sb.height; row++) {
+		for (int col = 0; col < sb.width; col++) {
+			Cell* c = sb.cell_at(col, row);
+			String sgr = c.style.diff_sgr(pen);
+			if (sgr.len > 0) {
+				out.append_string(sgr);
+				pen = c.style;
+			}
+			out.append_string(c.content_str());
+		}
+		if (row < sb.height - 1) out.append_char('\n');
+	}
+	if (!pen.is_empty()) out.append_string("\x1b[0m");
+	return out.str_view();
+}
+
 // ============================================================
 // Layout — constraint basics
 // ============================================================
@@ -13,7 +35,7 @@ fn void test_snap_layout_h_fill() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 40, .h = 1 };
 	xray::Constraint[2] cs = { xray::constraint_fill(1), xray::constraint_fill(1) };
 	xray::Rect[2] out;
-	xray::layout_h(area, cs[..], out[..]);
+	xray::layout_h_gap(area, cs[..], 1, out[..]);
 
 	// Render the two halves as bordered boxes
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 3);
@@ -29,7 +51,7 @@ fn void test_snap_layout_h_fill() @test {
 	sb.set_string(li.x, li.y, "L", sty);
 	sb.set_string(ri.x, ri.y, "R", sty);
 
-	snapshot::assert_snapshot(SNAP, "layout_h_fill", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_h_fill", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -51,7 +73,7 @@ fn void test_snap_layout_v_fill() @test {
 	sb.set_string(tbi.x, tbi.y, "top", sty);
 	sb.set_string(bbi.x, bbi.y, "bot", sty);
 
-	snapshot::assert_snapshot(SNAP, "layout_v_fill", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_v_fill", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -69,7 +91,7 @@ fn void test_snap_layout_h_len_fill() @test {
 	sb.set_string(out[0].x, 0, "fixed-10", s1);
 	sb.set_string(out[1].x, 0, "fill-rest", s2);
 
-	snapshot::assert_snapshot(SNAP, "layout_h_len_fill", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_h_len_fill", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -89,7 +111,7 @@ fn void test_snap_layout_h_three_cols() @test {
 	sb.set_string(out[1].x, 0, "center", sb_sty);
 	sb.set_string(out[2].x, 0, "right", sc);
 
-	snapshot::assert_snapshot(SNAP, "layout_h_three_cols", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_h_three_cols", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -107,7 +129,7 @@ fn void test_snap_layout_v_three_rows() @test {
 	sb.set_string(0, out[1].y, "body", sty);
 	sb.set_string(0, out[2].y, "ftr", sty);
 
-	snapshot::assert_snapshot(SNAP, "layout_v_three_rows", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_v_three_rows", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -129,7 +151,7 @@ fn void test_snap_layout_h_percent() @test {
 	sb.set_string(out[0].x, 0, "25pct", s1);
 	sb.set_string(out[1].x, 0, "fill", s2);
 
-	snapshot::assert_snapshot(SNAP, "layout_h_percent", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_h_percent", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -147,7 +169,7 @@ fn void test_snap_layout_h_gap() @test {
 	sb.set_string(out[1].x, 0, "B", sty);
 	sb.set_string(out[2].x, 0, "C", sty);
 
-	snapshot::assert_snapshot(SNAP, "layout_h_gap", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "layout_h_gap", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -164,7 +186,7 @@ fn void test_snap_screen_plain_text() @test {
 	sb.set_string(0, 1, "second line", sty);
 	sb.set_string(0, 2, "third", sty);
 
-	snapshot::assert_snapshot(SNAP, "screen_plain_text", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_plain_text", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -177,7 +199,7 @@ fn void test_snap_screen_styled_text() @test {
 	sb.set_string(0, 0, "RED", red);
 	sb.set_string(4, 0, "green", grn);
 
-	snapshot::assert_snapshot(SNAP, "screen_styled_text", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_styled_text", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -190,7 +212,7 @@ fn void test_snap_screen_truecolor() @test {
 	sb.set_string(0, 0, "pink", s1);
 	sb.set_string(5, 0, "blue", s2);
 
-	snapshot::assert_snapshot(SNAP, "screen_truecolor", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_truecolor", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -209,7 +231,7 @@ fn void test_snap_screen_bordered() @test {
 	xray::Style txt = xray::default_style().set_fg(xray::color_ansi(7));
 	sb.set_string(inner.x, inner.y, "inside", txt);
 
-	snapshot::assert_snapshot(SNAP, "screen_bordered", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_bordered", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -228,7 +250,7 @@ fn void test_snap_screen_two_bordered() @test {
 	sb.set_string(li.x, li.y, "left", txt);
 	sb.set_string(ri.x, ri.y, "right", txt);
 
-	snapshot::assert_snapshot(SNAP, "screen_two_bordered", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_two_bordered", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
@@ -260,7 +282,74 @@ fn void test_snap_screen_layout_render() @test {
 	Rect inner = sb.draw_border(zones[1], b, bdr_sty);
 	sb.set_string(inner.x, inner.y, "content here", txt_sty);
 
-	snapshot::assert_snapshot(SNAP, "screen_layout_render", sb.render_diff_str());
+	snapshot::assert_snapshot(SNAP, "screen_layout_render", render_rows(sb));
+	sb.destroy();
+	mem::free(sb);
+}
+
+// ============================================================
+// Complex nested layout
+// ============================================================
+
+fn void test_snap_screen_nested_layout() @test {
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(60, 18);
+	sb.clear();
+
+	xray::Rect screen = { .x = 0, .y = 0, .w = 60, .h = 18 };
+
+	// Top-level: header(3) + body(fill) + footer(2)
+	xray::Constraint[3] vcs = { xray::constraint_len(3), xray::constraint_fill(1), xray::constraint_len(2) };
+	xray::Rect[3] vzones;
+	xray::layout_v(screen, vcs[..], vzones[..]);
+
+	// Body: sidebar(18) + content(fill)
+	xray::Constraint[2] hcs = { xray::constraint_len(18), xray::constraint_fill(1) };
+	xray::Rect[2] hzones;
+	xray::layout_h(vzones[1], hcs[..], hzones[..]);
+
+	// Styles
+	xray::Style hdr_sty = xray::default_style().set_fg(xray::color_hex("#ffffff")).set_bg(xray::color_hex("#1a5276")).set_bold(true);
+	xray::Style sidebar_sty = xray::default_style().set_fg(xray::color_hex("#aed6f1"));
+	xray::Style content_sty = xray::default_style().set_fg(xray::color_hex("#f0f0f0"));
+	xray::Style footer_sty = xray::default_style().set_fg(xray::color_hex("#888888"));
+	xray::Style accent_sty = xray::default_style().set_fg(xray::color_hex("#ff5fd7")).set_bold(true);
+
+	xray::Style bdr_cyan = xray::default_style().set_fg(xray::color_hex("#00afaf"));
+	xray::Style bdr_magenta = xray::default_style().set_fg(xray::color_hex("#d75fd7"));
+	xray::Style bdr_yellow = xray::default_style().set_fg(xray::color_hex("#ffd700"));
+
+	// Header: full-width bar with title
+	sb.set_string(1, vzones[0].y, "  Dashboard", hdr_sty);
+	sb.set_string(40, vzones[0].y, "v1.0.0", footer_sty);
+
+	// Sidebar: bordered with nav items
+	Rect side_inner = sb.draw_border(hzones[0], xray::rounded_border(), bdr_cyan);
+	sb.set_string(side_inner.x, side_inner.y, "Navigation", accent_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 1), "  Home", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 2), "  Settings", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 3), "  About", sidebar_sty);
+
+	// Content: nested split — main area + info card
+	xray::Rect content_area = hzones[1];
+	xray::Constraint[2] ccs = { xray::constraint_fill(1), xray::constraint_len(12) };
+	xray::Rect[2] czones;
+	xray::layout_v(content_area, ccs[..], czones[..]);
+
+	// Main content bordered box
+	Rect main_inner = sb.draw_border(czones[0], xray::normal_border(), bdr_magenta);
+	sb.set_string(main_inner.x, main_inner.y, "Main content area", content_sty);
+	sb.set_string(main_inner.x, (sz)(main_inner.y + 1), "with multiple lines", content_sty);
+
+	// Info card
+	Rect card_inner = sb.draw_border(czones[1], xray::rounded_border(), bdr_yellow);
+	sb.set_string(card_inner.x, card_inner.y, "Info", accent_sty);
+	sb.set_string(card_inner.x, (sz)(card_inner.y + 1), " items: 42", footer_sty);
+
+	// Footer: status bar
+	sb.set_string(1, vzones[2].y, "ready", xray::default_style().set_fg(xray::color_hex("#00ff87")));
+	sb.set_string(40, vzones[2].y, "ctrl-q quit", footer_sty);
+
+	snapshot::assert_snapshot(SNAP, "screen_nested_layout", render_rows(sb));
 	sb.destroy();
 	mem::free(sb);
 }
