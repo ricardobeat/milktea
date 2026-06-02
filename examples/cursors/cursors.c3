@@ -39,15 +39,14 @@ fn String cursor_snake(int x, int y, bool blink, String under) {
 
 fn String cursor_rainbow(int x, int y, bool blink, String under) {
 	long now = milktea::time_ms();
-	// 2-second full cycle through the spectrum
-	double t = ((double)(now % 2000)) / 2000.0;
+	double t = ((double)(now % 1500)) / 1500.0;
 	int seg = (int)(t * 6.0);
-	double frac = (t * 6.0) - (double)seg;
+	double frac = t * 6.0 - (double)seg;
 	glaze::Color[7] stops = {
-		glaze::color_hex("#ff0000"), glaze::color_hex("#ffff00"),
-		glaze::color_hex("#00ff00"), glaze::color_hex("#00ffff"),
-		glaze::color_hex("#0000ff"), glaze::color_hex("#ff00ff"),
-		glaze::color_hex("#ff0000"),
+		glaze::hsl(0.0, 1.0, 0.5), glaze::hsl(1.0 / 6.0, 1.0, 0.5),
+		glaze::hsl(2.0 / 6.0, 1.0, 0.5), glaze::hsl(3.0 / 6.0, 1.0, 0.5),
+		glaze::hsl(4.0 / 6.0, 1.0, 0.5), glaze::hsl(5.0 / 6.0, 1.0, 0.5),
+		glaze::hsl(1.0, 1.0, 0.5),
 	};
 	glaze::Color c = glaze::blend_luv(stops[seg], stops[seg + 1], frac);
 	return glaze::new_style().foreground(c).render("█");

@@ -80,6 +80,87 @@ fn void _luv_to_xyz(double lv, double uv, double vv, double* x, double* y, doubl
 	*z = (*y) * (12.0 - 3.0 * up - 20.0 * vp) / (4.0 * vp);
 }
 
+// ── HSL ────────────────────────────────────────────────────────────────────
+
+fn double _hue_to_rgb(double p, double q, double t) @local {
+	if (t < 0.0) t += 1.0;
+	if (t > 1.0) t -= 1.0;
+	if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+	if (t < 0.5) return q;
+	if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+	return p;
+}
+
+// hsl constructs a TRUECOLOR Color from HSL values.
+// h: 0.0→1.0 wraps the full colour wheel (0=red, 0.33=green, 0.66=blue).
+// s: 0.0 (grey) → 1.0 (full saturation).
+// l: 0.0 (black) → 0.5 (vivid) → 1.0 (white).
+fn Color hsl(double h, double s, double l) @export {
+	double r, g, b;
+	if (s < 1e-10) {
+		r = l; g = l; b = l;
+	} else {
+		double q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+		double p = 2.0 * l - q;
+		r = _hue_to_rgb(p, q, h + 1.0 / 3.0);
+		g = _hue_to_rgb(p, q, h);
+		b = _hue_to_rgb(p, q, h - 1.0 / 3.0);
+	}
+	return {
+		.kind = ColorKind.TRUECOLOR,
+		.r = (char)(int)(r * 255.0 + 0.5),
+		.g = (char)(int)(g * 255.0 + 0.5),
+		.b = (char)(int)(b * 255.0 + 0.5),
+	};
+}
+
+fn void _rgb_to_hsl(char ri, char gi, char bi, double* h, double* s, double* l) @local {
+	double r = (double)ri / 255.0;
+	double g = (double)gi / 255.0;
+	double b = (double)bi / 255.0;
+	double max = r;
+	if (g > max) max = g;
+	if (b > max) max = b;
+	double min = r;
+	if (g < min) min = g;
+	if (b < min) min = b;
+	*l = (max + min) * 0.5;
+	if (max - min < 1e-10) {
+		*h = 0.0;
+		*s = 0.0;
+		return;
+	}
+	double d = max - min;
+	*s = *l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
+	if (max == r) {
+		*h = (g - b) / d + (g < b ? 6.0 : 0.0);
+	} else if (max == g) {
+		*h = (b - r) / d + 2.0;
+	} else {
+		*h = (r - g) / d + 4.0;
+	}
+	*h /= 6.0;
+}
+
+// blend_hsl interpolates between two TRUECOLOR Colors in HSL space.
+// Hue takes the shortest path around the wheel.
+fn Color blend_hsl(Color a, Color b, double t) @export {
+	double h1, s1, l1;
+	double h2, s2, l2;
+	_rgb_to_hsl(a.r, a.g, a.b, &h1, &s1, &l1);
+	_rgb_to_hsl(b.r, b.g, b.b, &h2, &s2, &l2);
+
+	// Shortest-path hue interpolation
+	double dh = h2 - h1;
+	if (dh > 0.5)  dh -= 1.0;
+	if (dh < -0.5) dh += 1.0;
+	double h = h1 + t * dh;
+	if (h < 0.0) h += 1.0;
+	if (h >= 1.0) h -= 1.0;
+
+	return hsl(h, s1 + t * (s2 - s1), l1 + t * (l2 - l1));
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 // blend_luv interpolates between two TRUECOLOR Colors in LUV space.
