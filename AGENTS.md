@@ -69,6 +69,21 @@ glaze::new_style()
 
 Use `draw_border` on the `ScreenBuffer` when you need the inner `Rect` back for layout; use glaze's `.border()` when you just want a box around a string.
 
+## LayoutNode — declarative layout (in milktea)
+
+Pairs xray constraints with glaze styling for declarative composition:
+
+```c3
+milktea::LayoutNode[2] nodes = {
+    { xray::constraint_len(3), glaze::new_style().set_bold(true), "Header" },
+    { xray::constraint_fill(1), glaze::new_style(), "Body" },
+};
+String doc = milktea::vstack(area, nodes[..]);          // vertical, gap=0
+String doc = milktea::vstack(area, nodes[..], 2);       // vertical, gap=2 rows
+String row = milktea::hstack(area, nodes[..]);           // horizontal
+String row = milktea::hstack(area, nodes[..], 1);       // horizontal, gap=1 col
+```
+
 ## Returning a View
 
 **Simple case** — build a string (with glaze), hand it to milktea:
