@@ -19,14 +19,14 @@ fn Border no_border() {
 
 fn Border normal_border() {
 	return {
-		.top = "-",
-		.bottom = "-",
-		.left = "|",
-		.right = "|",
-		.top_left = "+",
-		.top_right = "+",
-		.bottom_left = "+",
-		.bottom_right = "+"
+		.top = "─",
+		.bottom = "─",
+		.left = "│",
+		.right = "│",
+		.top_left = "┌",
+		.top_right = "┐",
+		.bottom_left = "└",
+		.bottom_right = "┘"
 	};
 }
 
