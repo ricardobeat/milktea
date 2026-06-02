@@ -35,8 +35,8 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.seconds = 0;
 	self.step = 0;
 	milktea::tick(80, &on_spin);
-	milktea::tick(1000, &on_timer);
-	milktea::tick(500, &on_step);
+	milktea::every(1000, &on_timer);
+	milktea::every(500, &on_step);
 	return null;
 }
 
@@ -54,12 +54,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TIMER) {
 		self.seconds++;
-		return milktea::tick(1000, &on_timer);
+		return milktea::every(1000, &on_timer);
 	}
 
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_STEP) {
 		self.step++;
-		return milktea::tick(500, &on_step);
+		return milktea::every(500, &on_step);
 	}
 
 	if (msg.kind != milktea::MsgKind.KEY) return null;
@@ -94,8 +94,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
 
 	String spin_view  = spin_style.render(string::tformat("%s Spinning...", spin));
-	String timer_view = timer_style.render(string::tformat("Timer\n%02d seconds", self.seconds));
-	String step_view  = step_style.render(string::tformat("Steps\n%d half-seconds", self.step));
+	String timer_view = timer_style.render(string::tformat("Timer (every 1s)\n%02d seconds", self.seconds));
+	String step_view  = step_style.render(string::tformat("Steps (every 500ms)\n%d half-seconds", self.step));
 
 	String top_row   = glaze::join_horizontal(spin_view, timer_view, 2);
 	String main_view = glaze::join_vertical(glaze::Position.LEFT, top_row, step_view);

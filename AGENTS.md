@@ -16,6 +16,26 @@ fn View view();
 `view` returns a `View` built from a cell grid or a plain string.  
 Launch with `milktea::@run_program(&model)`.
 
+### Timers — `tick()` and `every()`
+
+Both schedule a one-shot timer that fires after the given delay, then deliver
+a `TICK` message (or a custom callback's message) to the model. The model
+must re-arm the timer from `update()` to keep it firing.
+
+```c3
+milktea::tick(16);    // fires after 16ms — use for animations/frame pacing
+milktea::every(1000); // fires at the next wall-clock second boundary — use for clocks
+```
+
+**`tick(ms)`** — delay is measured from when you call it. Successive calls
+drift by `update+render` time. Best for animations where the only thing that
+matters is the *gap* between frames.
+
+**`every(ms)`** — deadline is snapped to the next multiple of `ms` relative
+to wall-clock time, so successive calls stay locked to absolute time
+regardless of drift. Best for clocks, countdowns, and periodic sync. A 1s
+display will tick exactly on `:00` forever, even if `update()` takes a few ms.
+
 ## glaze — styling
 
 Builds ANSI-escaped strings. Chain calls, then call `.render(content)`:
