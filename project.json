@@ -408,6 +408,20 @@
 			"opt": "Os",
 			"strip-unused": true
 		},
+		"clock": {
+			"type": "executable",
+			"sources": [
+				"milktea/**",
+				"glaze/**",
+				"xray/**",
+				"examples/clock/**"
+			],
+			"c-sources": [
+				"milktea/tty_winsize.c"
+			],
+			"opt": "Os",
+			"strip-unused": true
+		},
 		"ticks": {
 			"type": "executable",
 			"sources": [
