@@ -461,6 +461,28 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
 	return null;
 }
 
+// every registers a timer that fires at the next clock boundary (wall-clock aligned).
+// Unlike tick(), the deadline is snapped to the next multiple of interval_ms,
+// so successive calls stay locked to absolute time regardless of drift.
+// Use for clock displays, countdowns, and periodic sync.
+// Default: 16ms (~60fps) sending a TICK message.
+fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg) {
+	if (g_program == null) return null;
+	sz now     = time_ms();
+	sz elapsed = now % interval_ms;
+	sz delay   = elapsed == 0 ? interval_ms : interval_ms - elapsed;
+	sz deadline = now + delay;
+	for (sz i = 0; i < MAX_TIMERS; i++) {
+		if (!g_program.timers[i].active) {
+			g_program.timers[i].active = true;
+			g_program.timers[i].deadline_ms = deadline;
+			g_program.timers[i].callback = callback;
+			break;
+		}
+	}
+	return null;
+}
+
 // run executes the event loop for the program.
 fn void? Program.run(Program* self) {
 	g_program = self;
