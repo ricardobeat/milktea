@@ -88,6 +88,20 @@ fn void ScreenBuffer.clear(&self) {
 	}
 }
 
+// clear_range clears only rows [start_row, end_row) to empty and marks them dirty.
+fn void ScreenBuffer.clear_range(&self, sz start_row, sz end_row) {
+	if (start_row >= self.height) return;
+	if (end_row > self.height) end_row = self.height;
+	Cell empty = empty_cell();
+	for (sz row = start_row; row < end_row; row++) {
+		sz base = row * self.width;
+		for (sz col = 0; col < self.width; col++) {
+			self.cells[base + col] = empty;
+		}
+		self.dirty_lines[row] = true;
+	}
+}
+
 // cell_at returns a pointer to the cell at (col, row), or null if out of bounds.
 fn Cell* ScreenBuffer.cell_at(&self, sz col, sz row) {
 	if (col >= self.width || row >= self.height) return null;
@@ -273,6 +287,30 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 			if (cell.width == 2) col++;
 		}
 	}
+}
+
+// render_ansi converts the entire cell grid to a flat ANSI string.
+// Unlike render_diff, this produces inline output with no cursor positioning —
+// suitable for returning from a view() function.
+fn String ScreenBuffer.render_ansi(&self) {
+	DString out = dstring::temp();
+	Style pen = default_style();
+
+	for (sz row = 0; row < self.height; row++) {
+		if (row > 0) out.append_char('\n');
+		sz line_start = row * self.width;
+		for (sz col = 0; col < self.width; col++) {
+			Cell cell = self.cells[line_start + col];
+			String sgr = cell.style.diff_sgr(pen);
+			if (sgr.len > 0) out.append_string(sgr);
+			pen = cell.style;
+			out.append_string(cell.content_str());
+			if (cell.width == 2) col++;
+		}
+	}
+	// Reset at end so trailing state doesn't leak
+	if (!pen.is_empty()) out.append_string("\x1b[0m");
+	return out.copy_str(tmem);
 }
 
 // ============================================================

@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import std::core::mem;
 import std::thread;
 import std::time;
 import std::io;
@@ -59,12 +60,6 @@ fn View new_view(String content) {
 // new_alt_screen_view creates a View with alt screen enabled.
 fn View new_alt_screen_view(String content) {
 	return { .content = content, .alt_screen = true };
-}
-
-// new_cell_view creates a View backed by a direct cell grid.
-// Bypasses string parsing — cells are written straight into the screen buffer.
-fn View new_cell_view(xray::Cell[] cells, sz width, sz height) {
-	return { .cells = cells, .cells_width = width, .cells_height = height };
 }
 
 // new_alt_cell_view creates an alt-screen View backed by a direct cell grid.
@@ -243,6 +238,10 @@ struct Program {
 
 	// Last rendered content height (rows), for clean exit in inline (non-alt-screen) mode.
 	sz last_content_rows;
+
+	// Content cache — skip reparse when view string is unchanged.
+	String last_view_content;
+	sz last_view_content_rows;
 }
 
 // File-scope input queue — not inside Program to avoid copies.
@@ -762,33 +761,47 @@ fn void Program.render_current_view(Program* self) {
 					}
 					self.last_content_rows = rows;
 				} else {
-					// String path — clear buffer then parse ANSI content line by line
-					r.screen.clear();
+					// String path — parse ANSI content into screen buffer.
+					// Skip clear+reparse when content is unchanged (cache hit).
 					String content = v.content;
-					sz row         = 0;
-					sz col         = 0;
-					sz line_start  = 0;
-					for (sz i = 0; i <= content.len; i++) {
-						if (i == content.len || content[i] == '\n') {
-							sz line_len = i - line_start;
-							if (line_len > 0) {
-								String line = content[line_start:line_len];
-								// Strip leading \r if present
+					bool content_changed = content.ptr != self.last_view_content.ptr
+						|| content.len != self.last_view_content.len
+						|| (content.len > 0 && !mem::equals(content.ptr, self.last_view_content.ptr, content.len));
 
-
-
-								if (line.len > 0 && line[0] == '\r') {
-									line = line[1..];
+					if (content_changed) {
+						// Clear only the rows touched by the previous frame,
+						// not the entire buffer — preserves dirty tracking for
+						// rows that happen to be identical after reparse.
+						sz prev_rows = self.last_view_content_rows;
+						sz cur_row   = 0;
+						sz col       = 0;
+						sz line_start = 0;
+						for (sz i = 0; i <= content.len; i++) {
+							if (i == content.len || content[i] == '\n') {
+								if (cur_row < prev_rows) {
+									r.screen.clear_range(cur_row, cur_row + 1);
 								}
-								// Use ANSI parser to handle glaze SGR sequences
-								r.screen.render_ansi_string(col, row, line, xray::default_style());
+								sz line_len = i - line_start;
+								if (line_len > 0) {
+									String line = content[line_start:line_len];
+									if (line.len > 0 && line[0] == '\r') {
+										line = line[1..];
+									}
+									r.screen.render_ansi_string(col, cur_row, line, xray::default_style());
+								}
+								cur_row++;
+								col = 0;
+								line_start = i + 1;
 							}
-							row++;
-							col = 0;
-							line_start = i + 1;
 						}
+						// Clear any leftover rows from the previous frame
+						if (cur_row < prev_rows) {
+							r.screen.clear_range(cur_row, prev_rows);
+						}
+						self.last_view_content = content;
+						self.last_view_content_rows = cur_row;
+						self.last_content_rows = cur_row;
 					}
-					self.last_content_rows = row;
 				}
 
 				// Handle cursor
