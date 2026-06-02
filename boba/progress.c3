@@ -57,30 +57,14 @@ fn void Progress.incr_percent(&self, double amount) {
 
 // view returns the rendered progress bar string.
 fn String Progress.view(&self) {
-	if (self.width < 3) return "";
-
-	int inner  = self.width - 2; // minus [ and ]
-	int filled = (int)((inner * self.percent + 50) / 100);
-	if (filled > inner) filled = inner;
-	if (filled < 0) filled = 0;
-
-	DString out = dstring::temp();
-	out.append_char('[');
-
-	if (self.fill_style.fg.kind != glaze::ColorKind.NONE) {
-		out.append_string(self.fill_style.render(""));
-	}
-	for (int i = 0; i < filled; i++) out.append_string(self.fill_char);
-	if (self.fill_style.fg.kind != glaze::ColorKind.NONE) out.append_string("\x1b[0m");
-
-	if (self.empty_style.fg.kind != glaze::ColorKind.NONE) {
-		out.append_string(self.empty_style.render(""));
-	}
-	for (int i = filled; i < inner; i++) out.append_string(self.empty_char);
-	if (self.empty_style.fg.kind != glaze::ColorKind.NONE) out.append_string("\x1b[0m");
-
-	out.append_char(']');
-	return out.str_view();
+	return glaze::progress_bar(
+		self.width,
+		(int)self.percent,
+		self.fill_char,
+		self.empty_char,
+		self.fill_style.fg,
+		self.empty_style.fg
+	);
 }
 
 // view_with_percent returns the bar with a percentage label.
