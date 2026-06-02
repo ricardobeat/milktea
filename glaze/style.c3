@@ -382,22 +382,16 @@ fn String Style.render(self, String input) {
 	for (sz i = 0; i < line_count; i++) {
 		String line = lines[i];
 
-		// Build styled line: pad_left + content + reset + fill spaces + pad_right.
-		DString styled = dstring::temp();
-		for (int j = 0; j < self.pad_left; j++) styled.append_char(' ');
-		styled.append_string(line);
+		// Build styled line: pad_left + content + fill + pad_right.
+		// Padding stays outside the SGR region.
 		int current_len = string_width(line) + self.pad_left;
 		int fill        = (target_width + self.pad_left) - current_len;
-		if (fill > 0) {
-			// Reset any styles opened inside `line` before writing fill spaces.
-			styled.append_string("\x1b[0m");
-			for (int j = 0; j < fill; j++) styled.append_char(' ');
-		}
-		for (int j = 0; j < self.pad_right; j++) styled.append_char(' ');
+		if (fill < 0) fill = 0;
 
-		String styled_str = styled.str_view();
+		// Pad left (unstyled).
+		for (int j = 0; j < self.pad_left; j++) body.append_char(' ');
 
-		// Wrap with SGR if needed.
+		// Content (styled).
 		if (has_attrs) {
 			body.append_string("\x1b[");
 			bool first = true;
@@ -425,11 +419,15 @@ fn String Style.render(self, String input) {
 				self.bg.write_sgr_params(&body, false);
 			}
 			body.append_string("m");
-			body.append_string(styled_str);
+			body.append_string(line);
 			body.append_string("\x1b[0m");
 		} else {
-			body.append_string(styled_str);
+			body.append_string(line);
 		}
+
+		// Fill + pad right (unstyled).
+		for (int j = 0; j < fill; j++) body.append_char(' ');
+		for (int j = 0; j < self.pad_right; j++) body.append_char(' ');
 
 		body.append_char('\n');
 	}
