@@ -61,42 +61,34 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	xray::Rect full = xray::new_rect(0, 0, w, h);
 
-	// Three rows: header(1) | output(fill) | input(3) | help(1)
-	xray::Constraint[4] cs = {
-		xray::constraint_len(1),
-		xray::constraint_fill(1),
-		xray::constraint_len(3),
-		xray::constraint_len(1),
-	};
-	xray::Rect[4] rects;
-	xray::layout_v_gap(full, cs[..], 0, rects[..]);
-
-	// Header
-	String hdr_str = glaze::new_style()
-		.foreground(glaze::color_hex("#00ffcc")).set_bold(true).set_width(w)
-		.render("  INPUTBOX TEST");
-
-	// Output area
-	String out_str = glaze::new_style()
-		.foreground(glaze::color_hex("#aaaaaa"))
-		.set_width(rects[1].w).set_height(rects[1].h)
-		.render(self.output.str_view());
-
-	// Input box: bordered, pad_x=1
 	String inp_content = string::tformat("> %s█", self.input.str_view());
-	String inp_str     = glaze::new_style()
-		.foreground(glaze::color_hex("#ffff00"))
-		.set_border(glaze::rounded_border())
-		.padding(0, 1, 0, 1)
-		.set_width(rects[2].w).set_height(rects[2].h)
-		.render(inp_content);
+	String help_text   = string::tformat("  input len: %d chars", (int)self.input.len());
 
-	// Help line
-	String help_str = glaze::new_style()
-		.foreground(glaze::color_hex("#555555")).set_width(w)
-		.render(string::tformat("  input len: %d chars", (int)self.input.len()));
+	milktea::LayoutNode[4] nodes = {
+		{
+			xray::constraint_len(1),
+			glaze::new_style().foreground(glaze::color_hex("#00ffcc")).set_bold(true).set_width(w),
+			"  INPUTBOX TEST",
+		},
+		{
+			xray::constraint_fill(1),
+			glaze::new_style().foreground(glaze::color_hex("#aaaaaa")),
+			self.output.str_view(),
+		},
+		{
+			xray::constraint_len(3),
+			glaze::new_style().foreground(glaze::color_hex("#ffff00"))
+				.set_border(glaze::rounded_border()).padding(0, 1, 0, 1),
+			inp_content,
+		},
+		{
+			xray::constraint_len(1),
+			glaze::new_style().foreground(glaze::color_hex("#555555")).set_width(w),
+			help_text,
+		},
+	};
 
-	String doc = glaze::join_vertical(glaze::Position.LEFT, hdr_str, out_str, inp_str, help_str);
+	String doc = milktea::vstack(full, nodes[..]);
 	return milktea::new_alt_screen_view(doc);
 }
 
