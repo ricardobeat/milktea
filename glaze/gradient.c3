@@ -161,6 +161,86 @@ fn Color blend_hsl(Color a, Color b, double t) @export {
 	return hsl(h, s1 + t * (s2 - s1), l1 + t * (l2 - l1));
 }
 
+// ── HCL (cylindrical LUV) ──────────────────────────────────────────────────
+
+fn void _luv_to_hcl(double l, double u, double v, double* h, double* c, double* hcl_l) @local {
+	*c = math::sqrt(u * u + v * v);
+	*hcl_l = l;
+	if (*c < 1e-10) {
+		*h = 0.0;
+		return;
+	}
+	*h = math::atan2(v, u) * 180.0 / math::PI;
+	if (*h < 0.0) *h += 360.0;
+}
+
+fn void _hcl_to_luv(double h, double c, double l, double* u, double* v) @local {
+	double rad = h * math::PI / 180.0;
+	*u = c * math::cos(rad);
+	*v = c * math::sin(rad);
+}
+
+// hcl constructs a TRUECOLOR Color from HCL values.
+// h: hue in degrees (0=red, 120=green, 240=blue, wraps at 360).
+// c: chroma (0=grey, ~100-150 for vivid colours at mid lightness).
+// l: perceptual lightness (0=black, 100=white).
+fn Color hcl(double h, double c, double l) @export {
+	double u, v;
+	_hcl_to_luv(h, c, l, &u, &v);
+
+	double x, y, z;
+	_luv_to_xyz(l, u, v, &x, &y, &z);
+	double r, g, b;
+	_xyz_to_rgb(x, y, z, &r, &g, &b);
+
+	if (r < 0.0) r = 0.0; if (r > 1.0) r = 1.0;
+	if (g < 0.0) g = 0.0; if (g > 1.0) g = 1.0;
+	if (b < 0.0) b = 0.0; if (b > 1.0) b = 1.0;
+
+	return {
+		.kind = ColorKind.TRUECOLOR,
+		.r = (char)(int)(_delinearize(r) * 255.0 + 0.5),
+		.g = (char)(int)(_delinearize(g) * 255.0 + 0.5),
+		.b = (char)(int)(_delinearize(b) * 255.0 + 0.5),
+	};
+}
+
+// blend_hcl interpolates between two TRUECOLOR Colors in HCL space.
+// Hue takes the shortest path around the wheel.
+fn Color blend_hcl(Color a, Color b, double t) @export {
+	// a → LUV → HCL
+	double ar = _linearize((double)a.r / 255.0);
+	double ag = _linearize((double)a.g / 255.0);
+	double ab = _linearize((double)a.b / 255.0);
+	double ax, ay, az;
+	_rgb_to_xyz(ar, ag, ab, &ax, &ay, &az);
+	double al, au, av;
+	_xyz_to_luv(ax, ay, az, &al, &au, &av);
+	double ah, ac, acl;
+	_luv_to_hcl(al, au, av, &ah, &ac, &acl);
+
+	// b → LUV → HCL
+	double br = _linearize((double)b.r / 255.0);
+	double bg = _linearize((double)b.g / 255.0);
+	double bb = _linearize((double)b.b / 255.0);
+	double bx, by, bz;
+	_rgb_to_xyz(br, bg, bb, &bx, &by, &bz);
+	double bl, bu, bv;
+	_xyz_to_luv(bx, by, bz, &bl, &bu, &bv);
+	double bh, bc, bcl;
+	_luv_to_hcl(bl, bu, bv, &bh, &bc, &bcl);
+
+	// Shortest-path hue
+	double dh = bh - ah;
+	if (dh > 180.0)  dh -= 360.0;
+	if (dh < -180.0) dh += 360.0;
+	double h = ah + t * dh;
+	if (h < 0.0) h += 360.0;
+	if (h >= 360.0) h -= 360.0;
+
+	return hcl(h, ac + t * (bc - ac), acl + t * (bcl - acl));
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 // blend_luv interpolates between two TRUECOLOR Colors in LUV space.
