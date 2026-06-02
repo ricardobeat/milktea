@@ -217,7 +217,6 @@ fn milktea::View Model.view(&self) @dynamic {
 		if (p.col < 0 || p.col >= w || p.row < 0 || p.row >= h) continue;
 
 		sz idx = (sz)p.row * (sz)w + (sz)p.col;
-		xray::Cell* cell = &screen.cells[idx];
 
 		// Fade based on remaining life
 		double fade = (double)p.life / 20.0;
@@ -228,15 +227,14 @@ fn milktea::View Model.view(&self) @dynamic {
 		char pb = (char)(int)((double)p.color.b * fade);
 
 		String ch = SPARKLES[i % 6];
-		xray::Style s = xray::default_style().set_fg(xray::color_rgb(pr, pg, pb));
-		// Full-block cells use fg as their visual background
-		if (cell.style.fg.kind == xray::ColorKind.TRUECOLOR) {
-			s = s.set_bg(cell.style.fg);
-		}
+		xray::Style s = xray::default_style()
+			.set_fg(xray::color_rgb(pr, pg, pb))
+			.set_bg(xray::color_transparent());
 		screen.set_cell((sz)p.col, (sz)p.row, xray::new_cell(ch, 1, s));
 	}
 
-	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
+	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h)
+		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 	screen.destroy();
 	mem::free(screen);
 
@@ -245,7 +243,6 @@ fn milktea::View Model.view(&self) @dynamic {
 
 fn int main() {
 	Model m;
-	milktea::enable_mouse();
 	if (catch err = milktea::@run_program(&m)) {
 		io::printfn("Error: %s", err);
 		return 1;

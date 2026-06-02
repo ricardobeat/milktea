@@ -43,7 +43,7 @@ layout_v(area, cs[..], out[..]);   // vertical split
 layout_h(area, cs[..], out[..]);   // horizontal split
 ```
 
-Constraint kinds: `constraint_len(n)` fixed, `constraint_fill(w)` weighted fill,  
+Constraint kinds: `constraint_len(n)` fixed, `constraint_fill(w)` weighted fill,
 `constraint_percent(p)`, `constraint_min(n)`, `constraint_max(n)`.
 
 Shrink a rect with `rect.inset(left, top, right, bottom)`.
@@ -57,6 +57,21 @@ canvas.render_ansi_string(x, y, ansi_str, default_style(), max_row, max_col);
 canvas.set_string(x, y, text, style);
 canvas.draw_border(rect, rounded_border(), style);  // draws border, returns inner rect
 ```
+
+**TRANSPARENT color** — compositing primitive for overlays:
+
+```c3
+xray::Style s = xray::default_style()
+    .set_fg(sparkle_color)
+    .set_bg(xray::color_transparent());
+canvas.set_cell(col, row, xray::new_cell(ch, 1, s));
+```
+
+`set_cell` resolves TRANSPARENT bg by inheriting from the existing cell. For block
+characters (`█▀▄▌▐░▒▓` U+2580–U+259F) whose bg is NONE, the cell's fg is used instead,
+since block glyphs fill the cell with their foreground. In `blit`, TRANSPARENT cells are
+skipped entirely (keep what's underneath). In `diff_sgr`, TRANSPARENT channels emit no SGR
+and trigger no reset.
 
 Borders can also be applied directly in glaze without touching the cell grid — useful in the simple string-based path:
 

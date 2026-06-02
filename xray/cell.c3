@@ -30,7 +30,9 @@ fn Style default_style() {
 }
 
 fn bool Style.is_empty(&self) {
-	return self.fg.is_none() && self.bg.is_none() && self.underline_color.is_none() && !self.attrs.bold
+	return (self.fg.is_none() || self.fg.kind == ColorKind.TRANSPARENT)
+		&& (self.bg.is_none() || self.bg.kind == ColorKind.TRANSPARENT)
+		&& self.underline_color.is_none() && !self.attrs.bold
 		&& !self.attrs.dim
 		&& !self.attrs.italic
 		&& !self.attrs.underline
@@ -129,6 +131,9 @@ fn String Style.to_sgr(&self) {
 // Style.diff_sgr emits ONLY the SGR codes that differ from `prev`.
 // This is the key optimization for the diff renderer — avoids
 // re-emitting unchanged attributes.
+// Colors set to TRANSPARENT are skipped entirely — they inherit
+// whatever the terminal currently has, so no SGR is emitted and
+// no reset is triggered for that channel.
 fn String Style.diff_sgr(&self, Style prev) {
 	if (self.eq(prev)) return "";
 
@@ -147,11 +152,15 @@ fn String Style.diff_sgr(&self, Style prev) {
 		need_reset = true;
 	}
 
-	if (!prev.fg.is_none() && (self.fg.is_none() || !self.fg.eq(prev.fg))) {
-		need_reset = true;
+	if (self.fg.kind != ColorKind.TRANSPARENT) {
+		if (!prev.fg.is_none() && (self.fg.is_none() || !self.fg.eq(prev.fg))) {
+			need_reset = true;
+		}
 	}
-	if (!prev.bg.is_none() && (self.bg.is_none() || !self.bg.eq(prev.bg))) {
-		need_reset = true;
+	if (self.bg.kind != ColorKind.TRANSPARENT) {
+		if (!prev.bg.is_none() && (self.bg.is_none() || !self.bg.eq(prev.bg))) {
+			need_reset = true;
+		}
 	}
 
 	if (need_reset) {
@@ -165,11 +174,11 @@ fn String Style.diff_sgr(&self, Style prev) {
 		if (self.attrs.reverse) ds.append_string(";7");
 		if (self.attrs.strikethrough) ds.append_string(";9");
 		ds.append_char('m');
-		// Re-apply colors
-		if (!self.fg.is_none()) {
+		// Re-apply colors (skip TRANSPARENT — keep terminal state)
+		if (!self.fg.is_none() && self.fg.kind != ColorKind.TRANSPARENT) {
 			ds.append_string(self.fg.to_sgr_fg());
 		}
-		if (!self.bg.is_none()) {
+		if (!self.bg.is_none() && self.bg.kind != ColorKind.TRANSPARENT) {
 			ds.append_string(self.bg.to_sgr_bg());
 		}
 	} else {
@@ -182,11 +191,11 @@ fn String Style.diff_sgr(&self, Style prev) {
 		if (!prev.attrs.reverse && self.attrs.reverse) ds.append_string("\x1b[7m");
 		if (!prev.attrs.strikethrough && self.attrs.strikethrough) ds.append_string("\x1b[9m");
 
-		// Colors changed but no reset needed
-		if (!self.fg.eq(prev.fg) && !self.fg.is_none()) {
+		// Colors changed but no reset needed (skip TRANSPARENT)
+		if (self.fg.kind != ColorKind.TRANSPARENT && !self.fg.eq(prev.fg) && !self.fg.is_none()) {
 			ds.append_string(self.fg.to_sgr_fg());
 		}
-		if (!self.bg.eq(prev.bg) && !self.bg.is_none()) {
+		if (self.bg.kind != ColorKind.TRANSPARENT && !self.bg.eq(prev.bg) && !self.bg.is_none()) {
 			ds.append_string(self.bg.to_sgr_bg());
 		}
 	}
