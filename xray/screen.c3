@@ -722,9 +722,9 @@ fn Border rounded_border() {
 
 fn Border normal_border() {
 	return {
-		.top_left = "+", .top = "-", .top_right = "+",
-		.left = "|", .right = "|",
-		.bottom_left = "+", .bottom = "-", .bottom_right = "+",
+		.top_left = "┌", .top = "─", .top_right = "┐",
+		.left = "│", .right = "│",
+		.bottom_left = "└", .bottom = "─", .bottom_right = "┘",
 	};
 }
 

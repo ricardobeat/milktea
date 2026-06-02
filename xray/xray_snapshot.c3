@@ -292,10 +292,10 @@ fn void test_snap_screen_layout_render() @test {
 // ============================================================
 
 fn void test_snap_screen_nested_layout() @test {
-	xray::ScreenBuffer* sb = xray::new_screen_buffer(60, 18);
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(60, 24);
 	sb.clear();
 
-	xray::Rect screen = { .x = 0, .y = 0, .w = 60, .h = 18 };
+	xray::Rect screen = { .x = 0, .y = 0, .w = 60, .h = 24 };
 
 	// Top-level: header(3) + body(fill) + footer(2)
 	xray::Constraint[3] vcs = { xray::constraint_len(3), xray::constraint_fill(1), xray::constraint_len(2) };
@@ -326,12 +326,15 @@ fn void test_snap_screen_nested_layout() @test {
 	Rect side_inner = sb.draw_border(hzones[0], xray::rounded_border(), bdr_cyan);
 	sb.set_string(side_inner.x, side_inner.y, "Navigation", accent_sty);
 	sb.set_string(side_inner.x, (sz)(side_inner.y + 1), "  Home", sidebar_sty);
-	sb.set_string(side_inner.x, (sz)(side_inner.y + 2), "  Settings", sidebar_sty);
-	sb.set_string(side_inner.x, (sz)(side_inner.y + 3), "  About", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 2), "  Files", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 3), "  Search", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 4), "  Settings", sidebar_sty);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 6), "───────────", bdr_cyan);
+	sb.set_string(side_inner.x, (sz)(side_inner.y + 7), "  About", sidebar_sty);
 
 	// Content: nested split — main area + info card
 	xray::Rect content_area = hzones[1];
-	xray::Constraint[2] ccs = { xray::constraint_fill(1), xray::constraint_len(12) };
+	xray::Constraint[2] ccs = { xray::constraint_fill(1), xray::constraint_len(6) };
 	xray::Rect[2] czones;
 	xray::layout_v(content_area, ccs[..], czones[..]);
 
