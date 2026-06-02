@@ -164,7 +164,6 @@ enum MsgKind : char {
 	FOCUS,
 	BLUR,
 	MOUSE,
-	BATCH,
 	QUIT,
 	TICK,
 	USER,
@@ -208,12 +207,9 @@ struct TimerEntry {
 }
 
 // Program holds all mutable runtime state for a running TUI.
-// Replaces the previous global batch/timer state, enabling
-// sequential multi-instance use and proper testability.
+// Enables sequential multi-instance use and proper testability.
 struct Program {
 	Model model;
-	Cmd[MAX_BATCH] batch_cmds;
-	int batch_count;
 	TimerEntry[MAX_TIMERS] timers;
 	bool in_alt_screen;
 	MouseMode mouse_mode;
@@ -363,10 +359,6 @@ fn Msg make_quit_msg() @local {
 	return { .kind = MsgKind.QUIT };
 }
 
-fn Msg make_batch_msg() @local {
-	return { .kind = MsgKind.BATCH };
-}
-
 // tick_msg creates a TICK message for animation/timers.
 fn Msg tick_msg() {
 	return { .kind = MsgKind.TICK };
@@ -376,31 +368,6 @@ fn Msg tick_msg() {
 const String CURSOR_BLOCK     = "\xe2\x96\x88"; // █
 const String CURSOR_UNDERLINE = "\xe2\x96\x84"; // ▄
 const String CURSOR_BAR       = "\xe2\x96\x82"; // ▂
-
-// batch collects non-null Cmds and returns a Cmd that dispatches them concurrently.
-// Uses the global program pointer to store the batch, which is safe because
-// batch() is always called from within the event loop (during model.Update).
-<*
- @require cmds.len > 0
- @require cmds.len <= MAX_BATCH
-*>
-fn Cmd batch(Cmd[] cmds) {
-	Cmd[MAX_BATCH] filtered;
-	int count = 0;
-	for (sz i = 0; i < cmds.len && count < MAX_BATCH; i++) {
-		if (cmds[i] != null) {
-			filtered[count] = cmds[i];
-			count++;
-		}
-	}
-	if (count == 0) return null;
-	if (count == 1) return filtered[0];
-	if (g_program == null) return filtered[0];
-	for (int i = 0; i < count; i++) {
-		g_program.batch_cmds[g_program.batch_count++] = filtered[i];
-	}
-	return &make_batch_msg;
-}
 
 fn Cmd quit() {
 	return &make_quit_msg;
@@ -457,29 +424,12 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // dispatch processes a message through the model, returning true if QUIT was seen.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
-	if (m.kind == MsgKind.BATCH) {
-		Cmd[MAX_BATCH] cmds;
-		int count = self.batch_count;
-		for (sz i = 0; i < count; i++) cmds[i] = self.batch_cmds[i];
-		self.batch_count = 0;
-		for (int i = 0; i < count; i++) {
-			Msg sub = cmds[i]();
-			if (sub.kind != MsgKind.NONE) {
-				if (dispatch(self, model, sub)) return true;
-			}
-		}
-		return false;
-	}
 	Cmd c     = model.update(m);
 	int chain = 0;
 	while (c != null && chain < MAX_BATCH) {
 		Msg next = c();
 		if (next.kind == MsgKind.QUIT) return true;
 		if (next.kind == MsgKind.NONE) break;
-		if (next.kind == MsgKind.BATCH) {
-			if (dispatch(self, model, next)) return true;
-			break;
-		}
 		c = model.update(next);
 		chain++;
 	}
@@ -516,7 +466,6 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
 // run executes the event loop for the program.
 fn void? Program.run(Program* self) {
 	g_program = self;
-	self.batch_count = 0;
 	self.pending_len = 0;
 	self.in_alt_screen = false;
 	self.send_head = 0;

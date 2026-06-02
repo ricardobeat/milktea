@@ -67,8 +67,8 @@ fn milktea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
 	self.pixels = mem::new_array(Pixel, (sz)(self.width * self.height * 2));
 	self.depth = mem::new_array(float, (sz)(self.width * self.height * 2));
 	create_voxels(self);
-	milktea::Cmd[] cmds = { milktea::tick() };
-	return milktea::batch(cmds);
+	milktea::tick();
+	return null;
 }
 
 const int GRID_W = 25;

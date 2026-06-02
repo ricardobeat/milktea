@@ -408,12 +408,12 @@
 			"opt": "Os",
 			"strip-unused": true
 		},
-		"batch": {
+		"ticks": {
 			"type": "executable",
 			"sources": [
 				"milktea/**",
 				"glaze/**",
-				"examples/batch/**"
+				"examples/ticks/**"
 			],
 			"c-sources": [
 				"milktea/tty_winsize.c"

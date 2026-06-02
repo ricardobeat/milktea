@@ -1,4 +1,4 @@
-module batch;
+module ticks;
 
 import milktea;
 import glaze;
@@ -6,9 +6,9 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_SPIN = 1;
-const int MSG_TICK = 2;
-const int MSG_STEP = 3;
+const int MSG_SPIN  = 1;
+const int MSG_TIMER = 2;
+const int MSG_STEP  = 3;
 
 struct Model {
 	int spin_frame;
@@ -22,8 +22,8 @@ fn milktea::Msg on_spin() {
 	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
 }
 
-fn milktea::Msg on_tick() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_TICK };
+fn milktea::Msg on_timer() {
+	return { .kind = milktea::MsgKind.USER, .tag = MSG_TIMER };
 }
 
 fn milktea::Msg on_step() {
@@ -34,12 +34,10 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.spin_frame = 0;
 	self.seconds = 0;
 	self.step = 0;
-	// Start three independent timers using batch
-	milktea::Cmd spin_cmd = milktea::tick(80, &on_spin);
-	milktea::Cmd tick_cmd = milktea::tick(1000, &on_tick);
-	milktea::Cmd step_cmd = milktea::tick(500, &on_step);
-	milktea::Cmd[3] cmds  = { spin_cmd, tick_cmd, step_cmd };
-	return milktea::batch(cmds[..]);
+	milktea::tick(80, &on_spin);
+	milktea::tick(1000, &on_timer);
+	milktea::tick(500, &on_step);
+	return null;
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
@@ -54,9 +52,9 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return milktea::tick(80, &on_spin);
 	}
 
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TICK) {
+	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TIMER) {
 		self.seconds++;
-		return milktea::tick(1000, &on_tick);
+		return milktea::tick(1000, &on_timer);
 	}
 
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_STEP) {

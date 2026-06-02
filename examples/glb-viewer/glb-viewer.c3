@@ -13,8 +13,8 @@ import std::core::string;
 // ── Tea model callbacks ──────────────────────────────────────────────────────
 
 fn milktea::Cmd glb::GlbModel.init(glb::GlbModel* self) @dynamic {
-	milktea::Cmd[] cmds = { milktea::tick() };
-	return milktea::batch(cmds);
+	milktea::tick();
+	return null;
 }
 
 fn milktea::Cmd glb::GlbModel.update(glb::GlbModel* self, milktea::Msg msg) @dynamic {
