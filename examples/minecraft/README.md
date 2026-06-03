@@ -27,6 +27,6 @@ Ensure you have the `c3c` compiler installed, then run:
 
 ```bash
 cd bubbletea-c3
-c3c build minecraft
-./out/minecraft
+c3c build examples/minecraft
+./out/examples/minecraft
 ```

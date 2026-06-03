@@ -7,8 +7,9 @@ examples:
     #!/usr/bin/env sh
     for dir in examples/*/; do
         name=$(basename "$dir")
-        echo "Building $name..."
-        c3c build "$name" || exit 1
+        [ "$name" = "lib" ] && continue
+        echo "Building examples/$name..."
+        c3c build "examples/$name" || exit 1
     done
 
 format:
