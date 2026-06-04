@@ -247,7 +247,6 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 
 		// Copy old content up to the layer's x position
 		while (oi < old.len && old_col < write_col) {
-			// Skip ANSI sequences in old content
 			if (old[oi] == '\x1b' && oi + 1 < old.len && old[oi + 1] == '[') {
 				new_row.append_char(old[oi]);
 				oi++;
@@ -258,20 +257,23 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 					if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
 				}
 			} else {
+				// Advance one UTF-8 codepoint (counts as 1 column)
 				new_row.append_char(old[oi]);
+				char b = old[oi];
+				sz clen = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
+				for (sz k = 1; k < clen && oi + k < old.len; k++) {
+					new_row.append_char(old[oi + k]);
+				}
+				oi += clen;
 				old_col++;
-				oi++;
 			}
 		}
 
 		// Write the new layer content
 		new_row.append_string(line);
 
-		// Count visual chars in the new line to know where to resume
+		// Count visual columns in the new line
 		int new_chars = 0;
-
-
-
 		{
 			sz ni = 0;
 			while (ni < line.len) {
@@ -283,8 +285,10 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 						if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
 					}
 				} else {
+					char b = line[ni];
+					sz char_len = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
+					ni += char_len;
 					new_chars++;
-					ni++;
 				}
 			}
 		}
@@ -300,13 +304,12 @@ fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, Comp
 					if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
 				}
 			} else {
+				char b = old[oi];
+				sz char_len = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
+				oi += char_len;
 				old_col++;
-				oi++;
 			}
 		}
-
-		// Reset SGR before copying remaining old content
-		if (oi < old.len) new_row.append_string("\x1b[0m");
 
 		// Copy remaining old content
 		while (oi < old.len) {
