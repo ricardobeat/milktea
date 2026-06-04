@@ -105,6 +105,10 @@ fn int string_width(String s) {
 				continue;
 			}
 			// Narrow symbols (width 1 in most terminals)
+			if (cp >= 0x2000 && cp <= 0x20ff) {
+				w += 1;
+				continue;
+			} // General Punctuation (em dash, en dash, quotes, etc.)
 			if (cp >= 0x2100 && cp <= 0x21ff) {
 				w += 1;
 				continue;
@@ -130,6 +134,10 @@ fn int string_width(String s) {
 				w += 1;
 				continue;
 			}
+			if (cp >= 0x2400 && cp <= 0x27ff) {
+				w += 1;
+				continue;
+			} // Enclosed Alphanumerics, Dingbats, misc symbols
 			// Braille
 			if (cp >= 0x2800 && cp <= 0x28ff) {
 				w += 1;
