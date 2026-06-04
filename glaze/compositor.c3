@@ -165,6 +165,20 @@ fn void Compositor.flatten_recursive(Compositor* self, Layer* layer, int parent_
 	}
 }
 
+// ============================================================
+// Cell-grid compositor canvas — each cell stores its own SGR
+// prefix so overlays never affect cells they don't write.
+// ============================================================
+
+struct CanvasCell {
+	char[8] content;
+	char    content_len; // 0 = unwritten (space, no style)
+	String  sgr;         // raw SGR sequence active at this cell (temp-alloc)
+}
+
+const int MAX_CANVAS_W = 512;
+const int MAX_CANVAS_H = 200;
+
 // Render composites all layers onto a canvas and returns the result.
 fn String Compositor.render(Compositor* self) {
 	if (self.entry_count == 0) return "";
@@ -172,154 +186,138 @@ fn String Compositor.render(Compositor* self) {
 	int w = self.bounds_w;
 	int h = self.bounds_h;
 	if (w <= 0 || h <= 0) return "";
+	if (w > MAX_CANVAS_W) w = MAX_CANVAS_W;
+	if (h > MAX_CANVAS_H) h = MAX_CANVAS_H;
 
-	// Create canvas: grid of cells, each holding a string fragment
-	// We use a flat DString grid — each cell is a column in a row
-	DString[MAX_CANVAS_H] canvas_rows;
-	bool[MAX_CANVAS_H] canvas_init;
-	for (int r = 0; r < h && r < MAX_CANVAS_H; r++) {
-		canvas_rows[r] = dstring::temp();
-		canvas_init[r] = false;
+	// Allocate cell grid on the heap; freed at end of this function.
+	sz total         = (sz)w * (sz)h;
+	CanvasCell* grid = mem::new_array(CanvasCell, total);
+	defer mem::free(grid);
+
+	// Initialize all cells to space with no style.
+	for (sz i = 0; i < total; i++) {
+		grid[i].content[0]  = ' ';
+		grid[i].content_len = 0; // 0 = default space, no sgr needed
+		grid[i].sgr         = "";
 	}
 
-	// Draw each layer in z-order
+	// Draw each layer in z-order onto the cell grid.
 	for (sz i = 0; i < self.entry_count; i++) {
 		CompositeEntry* e = &self.entries[i];
-		draw_layer(canvas_rows[..], canvas_init[..], w, h, e);
+		draw_layer_cells(grid, w, h, e);
 	}
 
-	// Assemble output
-	DString out = dstring::temp();
-	for (int r = 0; r < h && r < MAX_CANVAS_H; r++) {
-		out.append_string(canvas_rows[r].str_view());
-		if (r < h - 1) out.append_char('\n');
+	// Serialize cell grid to ANSI string.
+	DString out      = dstring::temp();
+	String  prev_sgr = "";
+	for (int r = 0; r < h; r++) {
+		if (r > 0) out.append_char('\n');
+		for (int c = 0; c < w; c++) {
+			CanvasCell* cell = &grid[(sz)r * (sz)w + (sz)c];
+			// Emit SGR only when it changes.
+			if (cell.sgr != prev_sgr) {
+				if (cell.sgr.len > 0) {
+					out.append_string(cell.sgr);
+				} else if (prev_sgr.len > 0) {
+					// Transitioning back to plain — emit reset.
+					out.append_string("\x1b[0m");
+				}
+				prev_sgr = cell.sgr;
+			}
+			if (cell.content_len > 0) {
+				out.append_string(canvas_cell_str(cell));
+			} else {
+				out.append_char(' ');
+			}
+		}
 	}
+	// Reset at end so styles don't leak into surrounding output.
+	if (prev_sgr.len > 0) out.append_string("\x1b[0m");
 	return out.str_view();
 }
 
-const int MAX_CANVAS_H = 200;
+// draw_layer_cells paints a single layer entry into the cell grid.
+// ANSI SGR sequences update a running accumulator; non-SGR escape
+// sequences are discarded. Each printable cell gets the current
+// accumulator as its self-contained style prefix.
+fn void draw_layer_cells(CanvasCell* grid, int canvas_w, int canvas_h, CompositeEntry* e) @local {
+	String  content  = e.layer.content;
+	sz      i        = 0;
+	int     row      = e.abs_y;
+	int     col      = e.abs_x;
+	DString cur_sgr  = dstring::temp();
 
-fn void draw_layer(DString[] rows, bool[] init, int canvas_w, int canvas_h, CompositeEntry* e) {
-	// Split layer content into lines
-	String[MAX_LAYOUT_LINES] lines;
-	sz line_count  = 0;
-	sz start       = 0;
-	String content = e.layer.content;
-	for (sz i = 0; i <= content.len; i++) {
-		if (i == content.len || content[i] == '\n') {
-			if (line_count < MAX_LAYOUT_LINES) {
-				lines[line_count] = content[start:i - start];
-				line_count++;
+	while (i < content.len) {
+		char b = content[i];
+
+		// ANSI escape sequence
+		if (b == '\x1b' && i + 1 < content.len && content[i + 1] == '[') {
+			i += 2; // skip ESC [
+			sz param_start = i;
+			while (i < content.len && ((content[i] >= '0' && content[i] <= '9') || content[i] == ';')) {
+				i++;
 			}
-			start = i + 1;
-			if (i == content.len) break;
-		}
-	}
-
-	// Draw each line of the layer at the correct position
-	for (sz li = 0; li < line_count; li++) {
-		int row = e.abs_y + (int)li;
-		if (row < 0 || row >= canvas_h) continue;
-
-		String line = lines[li];
-		int col     = e.abs_x;
-		sz ci       = 0;
-
-		// If this is the first layer touching this row, initialize with spaces
-		if (!init[row]) {
-			// Pre-fill with spaces to canvas width
-			for (int p = 0; p < canvas_w; p++) rows[row].append_char(' ');
-			init[row] = true;
-		}
-
-		// Write the line content into the row at the correct column offset.
-		// We need to handle ANSI sequences (pass through) and regular chars
-		// (overwrite at position).
-		// For simplicity, we just overwrite the entire row segment.
-		// A proper implementation would track cell positions through ANSI sequences.
-		// For now, we rebuild the row with the new content overlaid.
-		DString new_row = dstring::temp();
-		String old      = rows[row].str_view();
-		int old_col     = 0;
-		sz oi           = 0;
-		sz line_i       = 0;
-		int write_col   = col;
-
-		// Copy old content up to the layer's x position
-		while (oi < old.len && old_col < write_col) {
-			if (old[oi] == '\x1b' && oi + 1 < old.len && old[oi + 1] == '[') {
-				new_row.append_char(old[oi]);
-				oi++;
-				while (oi < old.len) {
-					new_row.append_char(old[oi]);
-					char c = old[oi];
-					oi++;
-					if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
-				}
-			} else {
-				// Advance one UTF-8 codepoint (counts as 1 column)
-				new_row.append_char(old[oi]);
-				char b = old[oi];
-				sz clen = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
-				for (sz k = 1; k < clen && oi + k < old.len; k++) {
-					new_row.append_char(old[oi + k]);
-				}
-				oi += clen;
-				old_col++;
-			}
-		}
-
-		// Write the new layer content
-		new_row.append_string(line);
-
-		// Count visual columns in the new line
-		int new_chars = 0;
-		{
-			sz ni = 0;
-			while (ni < line.len) {
-				if (line[ni] == '\x1b' && ni + 1 < line.len && line[ni + 1] == '[') {
-					ni += 2;
-					while (ni < line.len) {
-						char c = line[ni];
-						ni++;
-						if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
+			if (i >= content.len) break;
+			char final_byte = content[i];
+			i++;
+			if (final_byte == 'm') {
+				String params = content[param_start:i - param_start - 1];
+				// Check for reset: bare \x1b[m or any param that is "0"
+				bool has_reset = params.len == 0;
+				if (!has_reset) {
+					sz pi = 0;
+					while (pi <= params.len) {
+						sz pend = pi;
+						while (pend < params.len && params[pend] != ';') pend++;
+						String tok = params[pi:pend - pi];
+						if (tok.len == 0 || tok == "0") {
+							has_reset = true;
+							break;
+						}
+						pi = pend + 1;
 					}
-				} else {
-					char b = line[ni];
-					sz char_len = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
-					ni += char_len;
-					new_chars++;
 				}
+				if (has_reset) cur_sgr.clear();
+				// Re-append the full original sequence (including params + 'm').
+				cur_sgr.append_string("\x1b[");
+				cur_sgr.append_string(params);
+				cur_sgr.append_char('m');
 			}
+			// Other CSI sequences (cursor movement etc.) — discard
+			continue;
 		}
 
-		// Skip old content that was overwritten
-		int end_col = write_col + new_chars;
-		while (oi < old.len && old_col < end_col) {
-			if (old[oi] == '\x1b' && oi + 1 < old.len && old[oi + 1] == '[') {
-				oi += 2;
-				while (oi < old.len) {
-					char c = old[oi];
-					oi++;
-					if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) break;
-				}
-			} else {
-				char b = old[oi];
-				sz char_len = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
-				oi += char_len;
-				old_col++;
+		// Newline
+		if (b == '\n') {
+			row++;
+			col = e.abs_x;
+			i++;
+			continue;
+		}
+
+		// Printable character (UTF-8)
+		sz clen = (b & 0x80) == 0 ? 1 : (b & 0xe0) == 0xc0 ? 2 : (b & 0xf0) == 0xe0 ? 3 : 4;
+
+		if (row >= 0 && row < canvas_h && col >= 0 && col < canvas_w) {
+			CanvasCell* cell = &grid[(sz)row * (sz)canvas_w + (sz)col];
+			// Write content bytes
+			sz copy_len = clen;
+			if (copy_len > 8) copy_len = 8;
+			for (sz k = 0; k < copy_len && i + k < content.len; k++) {
+				cell.content[k] = content[i + k];
 			}
+			cell.content_len = (char)copy_len;
+			// Snapshot current SGR accumulator (stable temp-alloc copy)
+			cell.sgr = cur_sgr.copy_str(tmem);
 		}
 
-		// Copy remaining old content
-		while (oi < old.len) {
-			new_row.append_char(old[oi]);
-			oi++;
-		}
-
-		// Replace the row
-		rows[row] = new_row;
+		col++;
+		i += clen;
 	}
+}
+
+fn String canvas_cell_str(CanvasCell* cell) @local {
+	return (String)((char*)&cell.content)[:cell.content_len];
 }
 
 fn int count_lines(String s) @local {
