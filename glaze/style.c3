@@ -315,6 +315,17 @@ fn int Style.measure_height(self, String input, int outer_width) {
 	return lines;
 }
 
+fn void color_whitespace(DString* buf, Color* bg, bool has_bg, int n) @local {
+	if (n <= 0) return;
+	if (has_bg) {
+		buf.append_string("\x1b[");
+		bg.write_sgr_params(buf, false);
+		buf.append_string("m");
+	}
+	for (int j = 0; j < n; j++) buf.append_char(' ');
+	if (has_bg) buf.append_string("\x1b[0m");
+}
+
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
@@ -362,6 +373,7 @@ fn String Style.render(self, String input) {
 
 	bool has_attrs = self.fg.kind != ColorKind.NONE || self.bg.kind != ColorKind.NONE || self.bold || self.italic
 		|| self.underline;
+	bool has_bg = self.bg.kind != ColorKind.NONE;
 
 	// Total line width = content + padding (border is applied after)
 	int line_width = target_width + self.pad_left + self.pad_right;
@@ -371,10 +383,7 @@ fn String Style.render(self, String input) {
 
 	// Top padding lines.
 	for (int i = 0; i < self.pad_top; i++) {
-		for (int j = 0; j < line_width; j++) body.append_char(' ');
-		if (has_attrs) {
-			body.append_string("\x1b[0m");
-		}
+		color_whitespace(&body, &self.bg, has_bg, line_width);
 		body.append_char('\n');
 	}
 
@@ -383,13 +392,12 @@ fn String Style.render(self, String input) {
 		String line = lines[i];
 
 		// Build styled line: pad_left + content + fill + pad_right.
-		// Padding stays outside the SGR region.
 		int current_len = string_width(line) + self.pad_left;
 		int fill        = (target_width + self.pad_left) - current_len;
 		if (fill < 0) fill = 0;
 
-		// Pad left (unstyled).
-		for (int j = 0; j < self.pad_left; j++) body.append_char(' ');
+		// Pad left.
+		color_whitespace(&body, &self.bg, has_bg, self.pad_left);
 
 		// Content (styled).
 		if (has_attrs) {
@@ -414,30 +422,58 @@ fn String Style.render(self, String input) {
 				self.fg.write_sgr_params(&body, true);
 				first = false;
 			}
-			if (self.bg.kind != ColorKind.NONE) {
+			if (has_bg) {
 				if (!first) body.append_char(';');
 				self.bg.write_sgr_params(&body, false);
 			}
 			body.append_string("m");
-			body.append_string(line);
+			// Write line content, re-applying outer style after any inner resets.
+			sz li = 0;
+			while (li < line.len) {
+				// Detect \x1b[0m or \x1b[0;...m (full reset)
+				if (line[li] == '\x1b' && li + 2 < line.len && line[li+1] == '[') {
+					// Find end of escape
+					sz esc_start = li;
+					li += 2;
+					while (li < line.len && line[li] != 'm' && line[li] != 'A' && line[li] != 'B'
+						&& line[li] != 'C' && line[li] != 'D' && line[li] != 'H'
+						&& line[li] != 'J' && line[li] != 'K') li++;
+					if (li < line.len) li++;
+					body.append_string(line[esc_start:li - esc_start]);
+					// If it was a reset (starts with \x1b[0), re-apply outer style
+					if (line[esc_start + 2] == '0') {
+						bool rf = true;
+						if (self.bold)      { body.append_string(rf ? "\x1b[1m" : ""); rf = false; }
+						if (self.fg.kind != ColorKind.NONE) {
+							body.append_string("\x1b[");
+							self.fg.write_sgr_params(&body, true);
+							body.append_string("m");
+						}
+						if (has_bg) {
+							body.append_string("\x1b[");
+							self.bg.write_sgr_params(&body, false);
+							body.append_string("m");
+						}
+					}
+				} else {
+					body.append_char(line[li]);
+					li++;
+				}
+			}
 			body.append_string("\x1b[0m");
 		} else {
 			body.append_string(line);
 		}
 
-		// Fill + pad right (unstyled).
-		for (int j = 0; j < fill; j++) body.append_char(' ');
-		for (int j = 0; j < self.pad_right; j++) body.append_char(' ');
+		// Fill + pad right.
+		color_whitespace(&body, &self.bg, has_bg, fill + self.pad_right);
 
 		body.append_char('\n');
 	}
 
 	// Bottom padding lines.
 	for (int i = 0; i < self.pad_bottom; i++) {
-		for (int j = 0; j < line_width; j++) body.append_char(' ');
-		if (has_attrs) {
-			body.append_string("\x1b[0m");
-		}
+		color_whitespace(&body, &self.bg, has_bg, line_width);
 		body.append_char('\n');
 	}
 
@@ -460,14 +496,13 @@ fn String Style.render(self, String input) {
 			bottom_extra = extra;
 		}
 
-		// Write top extra, then body, then bottom extra
 		for (int i = 0; i < top_extra; i++) {
-			for (int j = 0; j < line_width; j++) out.append_char(' ');
+			color_whitespace(&out, &self.bg, has_bg, line_width);
 			out.append_char('\n');
 		}
 		out.append_string(body.str_view());
 		for (int i = 0; i < bottom_extra; i++) {
-			for (int j = 0; j < line_width; j++) out.append_char(' ');
+			color_whitespace(&out, &self.bg, has_bg, line_width);
 			out.append_char('\n');
 		}
 	} else {
