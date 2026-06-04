@@ -156,19 +156,18 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 // Build a shadowed panel: returns {panel_layer, shadow_layer} via compositor layers.
 // shadow is at z=0, panel at z=1. Both positioned at (x, y) — shadow auto-offset.
 fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, int z) {
-	// Measure panel: max line width and line count
+	// Measure panel width and height by splitting on newlines and using string_width per line.
 	int pw = 0;
-	int ph = 1;
-	int lw = 0;
-	bool in_ansi = false;
-	for (sz i = 0; i < panel_str.len; i++) {
-		char c = panel_str[i];
-		if (c == '\x1b') { in_ansi = true; continue; }
-		if (in_ansi) { if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) in_ansi = false; continue; }
-		if (c == '\n') { if (lw > pw) pw = lw; lw = 0; ph++; }
-		else { lw++; }
+	int ph = 0;
+	sz start = 0;
+	for (sz i = 0; i <= panel_str.len; i++) {
+		if (i == panel_str.len || panel_str[i] == '\n') {
+			int lw = glaze::string_width(panel_str[start:i - start]);
+			if (lw > pw) pw = lw;
+			ph++;
+			start = i + 1;
+		}
 	}
-	if (lw > pw) pw = lw;
 
 	glaze::Style shadow_style = glaze::new_style()
 		.background(glaze::color_hex(C_SHADOW))
