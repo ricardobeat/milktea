@@ -138,36 +138,38 @@ fn String join_vertical_pos(Position pos, String top, String bottom) {
 
 	// Top block
 	for (sz i = 0; i < tl.count; i++) {
-		String line = tl.lines[i];
-		int w       = string_width(line);
+		String line    = tl.lines[i];
+		int w          = string_width(line);
+		int lead       = 0;
 		if (pos == Position.CENTER) {
-			int pad = (max_w - w) / 2;
-			for (int p = 0; p < pad; p++) out.append_char(' ');
+			lead = (max_w - w) / 2;
+			for (int p = 0; p < lead; p++) out.append_char(' ');
 		} else if (pos == Position.RIGHT) {
-			int pad = max_w - w;
-			for (int p = 0; p < pad; p++) out.append_char(' ');
+			lead = max_w - w;
+			for (int p = 0; p < lead; p++) out.append_char(' ');
 		}
 		out.append_string(line);
 		if (pos != Position.RIGHT) {
-			for (int p = w; p < max_w; p++) out.append_char(' ');
+			for (int p = w + lead; p < max_w; p++) out.append_char(' ');
 		}
 		out.append_char('\n');
 	}
 
 	// Bottom block
 	for (sz i = 0; i < bl.count; i++) {
-		String line = bl.lines[i];
-		int w       = string_width(line);
+		String line    = bl.lines[i];
+		int w          = string_width(line);
+		int lead       = 0;
 		if (pos == Position.CENTER) {
-			int pad = (max_w - w) / 2;
-			for (int p = 0; p < pad; p++) out.append_char(' ');
+			lead = (max_w - w) / 2;
+			for (int p = 0; p < lead; p++) out.append_char(' ');
 		} else if (pos == Position.RIGHT) {
-			int pad = max_w - w;
-			for (int p = 0; p < pad; p++) out.append_char(' ');
+			lead = max_w - w;
+			for (int p = 0; p < lead; p++) out.append_char(' ');
 		}
 		out.append_string(line);
 		if (pos != Position.RIGHT) {
-			for (int p = w; p < max_w; p++) out.append_char(' ');
+			for (int p = w + lead; p < max_w; p++) out.append_char(' ');
 		}
 		if (i < bl.count - 1) out.append_char('\n');
 	}
