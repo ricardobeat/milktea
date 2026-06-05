@@ -524,7 +524,7 @@ fn String Style.render(self, String input) {
 	}
 
 	if (!border_is_empty) {
-		return self.border.wrap_with_color(rendered, self.border_fg);
+		return self.border.wrap_with_color(rendered, self.border_fg, self.bg);
 	}
 	return rendered.tcopy();
 }

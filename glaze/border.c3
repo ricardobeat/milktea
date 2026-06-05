@@ -90,7 +90,7 @@ fn String Border.wrap(self, String input) {
 	return self.wrap_with_color(input, { .kind = ColorKind.NONE });
 }
 
-fn String Border.wrap_with_color(self, String input, Color border_fg) {
+fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }) {
 	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
 		&& self.top_left.len == 0
 		&& self.top_right.len == 0
@@ -98,12 +98,19 @@ fn String Border.wrap_with_color(self, String input, Color border_fg) {
 		&& self.bottom_right.len == 0;
 	if (is_empty) return input.tcopy();
 
-	bool color_border = border_fg.kind != ColorKind.NONE;
+	bool color_border = border_fg.kind != ColorKind.NONE || border_bg.kind != ColorKind.NONE;
 	DString sgr_open  = dstring::temp();
 	String sgr_close  = "\x1b[0m";
 	if (color_border) {
-		sgr_open.append_string("\x1b[");
-		border_fg.write_sgr_params(&sgr_open, true);
+		sgr_open.append_string("\x1b[0");
+		if (border_fg.kind != ColorKind.NONE) {
+			sgr_open.append_char(';');
+			border_fg.write_sgr_params(&sgr_open, true);
+		}
+		if (border_bg.kind != ColorKind.NONE) {
+			sgr_open.append_char(';');
+			border_bg.write_sgr_params(&sgr_open, false);
+		}
 		sgr_open.append_char('m');
 	}
 	String sgr_open_str = sgr_open.str_view();
