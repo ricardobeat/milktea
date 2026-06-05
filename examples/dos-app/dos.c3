@@ -179,6 +179,59 @@ fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, in
 	comp.add_layer(glaze::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
 }
 
+// dos_button renders a DOS-style button: solid bg block with half-block shadow.
+// Row 0: "  label  " in btn_bg, right edge is ▐ (btn_bg fg, shadow bg)
+// Row 1: "▀▀▀▀▀▀▀▀▀▀" in shadow fg on panel_bg (bottom + corner shadow)
+// focused=true uses C_YELLOW bg with C_BLACK text; false uses C_DARK bg with C_WHITE text.
+fn String dos_button(String label, bool focused) {
+	String btn_bg   = focused ? C_YELLOW : C_DARK;
+	String txt_fg   = focused ? C_BLACK  : C_WHITE;
+	String shad     = C_SHADOW;
+	String panel_bg = C_DARK;
+
+	// Face: "  label  " padded 2 on each side
+	int face_w = (int)label.len + 4; // 2 pad each side
+
+	glaze::Color btn_col   = glaze::color_hex(btn_bg);
+	glaze::Color txt_col   = glaze::color_hex(txt_fg);
+	glaze::Color shad_col  = glaze::color_hex(shad);
+	glaze::Color panel_col = glaze::color_hex(panel_bg);
+
+	DString out = dstring::temp();
+
+	// Row 0: face + right shadow char
+	// bg=btn, fg=txt: "  label  "
+	out.append_string("\x1b[0m\x1b[");
+	txt_col.write_sgr_params(&out, true);
+	out.append_char(';');
+	btn_col.write_sgr_params(&out, false);
+	out.append_string("m  ");
+	out.append_string(label);
+	out.append_string("  ");
+	// right shadow: ▐ with fg=btn (upper half keeps btn color), bg=shadow
+	out.append_string("\x1b[0m\x1b[");
+	btn_col.write_sgr_params(&out, true);
+	out.append_char(';');
+	shad_col.write_sgr_params(&out, false);
+	out.append_string("m\xe2\x96\x90"); // ▐ U+2590
+	out.append_string("\x1b[0m");
+
+	out.append_char('\n');
+
+	// Row 1: bottom shadow ▀ chars across face width, then a space for corner
+	// ▀ U+2580: fg=shadow, bg=panel → lower half is panel color, upper is shadow
+	out.append_string("\x1b[0m\x1b[");
+	shad_col.write_sgr_params(&out, true);
+	out.append_char(';');
+	panel_col.write_sgr_params(&out, false);
+	out.append_string("m");
+	for (int i = 0; i < face_w; i++) out.append_string("\xe2\x96\x80"); // ▀ U+2580
+	// corner: one more shadow-colored space
+	out.append_string(" \x1b[0m");
+
+	return out.copy_str(tmem);
+}
+
 fn String get_menu_item(int menu_sel, int item) {
 	switch (menu_sel) {
 		case 0: return FILE_ITEMS[item];
@@ -349,24 +402,8 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 			.foreground(glaze::color_hex(C_YELLOW))
 			.set_bold(true);
 
-		glaze::Style btn_ok_style = glaze::new_style()
-			.foreground(self.modal_btn == 0 ? glaze::color_hex(C_BLACK)  : glaze::color_hex(C_WHITE))
-			.background(self.modal_btn == 0 ? glaze::color_hex(C_YELLOW) : glaze::color_hex(C_DARK))
-			.set_bold(self.modal_btn == 0)
-			.set_border(glaze::normal_border())
-			.set_border_fg(self.modal_btn == 0 ? glaze::color_hex(C_YELLOW) : glaze::color_hex(C_GRAY))
-			.padding(0, 2, 0, 2);
-
-		glaze::Style btn_cancel_style = glaze::new_style()
-			.foreground(self.modal_btn == 1 ? glaze::color_hex(C_BLACK)  : glaze::color_hex(C_WHITE))
-			.background(self.modal_btn == 1 ? glaze::color_hex(C_YELLOW) : glaze::color_hex(C_DARK))
-			.set_bold(self.modal_btn == 1)
-			.set_border(glaze::normal_border())
-			.set_border_fg(self.modal_btn == 1 ? glaze::color_hex(C_YELLOW) : glaze::color_hex(C_GRAY))
-			.padding(0, 2, 0, 2);
-
-		String btn_ok     = btn_ok_style.render("  OK  ");
-		String btn_cancel = btn_cancel_style.render("Cancel");
+		String btn_ok     = dos_button("  OK  ", self.modal_btn == 0);
+		String btn_cancel = dos_button("Cancel", self.modal_btn == 1);
 		String buttons    = glaze::join_horizontal_arr(glaze::Position.CENTER, { btn_ok, btn_cancel }, 4);
 
 		String modal_title = modal_title_style.render("About milktea");
