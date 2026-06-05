@@ -212,12 +212,12 @@ fn String dos_button(String label, bool focused) {
 	out.append_string("m  ");
 	out.append_string(label);
 	out.append_string("  ");
-	// right shadow: full block — bg=SHADOW makes it a solid shadow column
+	// right shadow: lower-half block — upper half is panel (gap), lower half is shadow
 	out.append_string("\x1b[0m\x1b[");
 	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
-	shad_col.write_sgr_params(&out, false);
-	out.append_string("m\xe2\x96\x88"); // █ U+2588 full block
+	panel_col.write_sgr_params(&out, false);
+	out.append_string("m\xe2\x96\x84"); // ▄ U+2584 lower half block
 	// trailing bare space (col face_w+1) — equalises row width to face_w+2
 	out.append_string("\x1b[0m ");
 
