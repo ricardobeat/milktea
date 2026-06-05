@@ -390,7 +390,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	// ── Modal ─────────────────────────────────────────────────────────────────
 	if (self.modal_open) {
 		int modal_w  = 42;
-		int modal_h  = 9;
+		int modal_h  = 10;
 		int modal_rw = modal_w + 2; // +2 for double border
 		int modal_rh = modal_h + 2;
 		int modal_x  = (w - modal_rw) / 2;
@@ -417,7 +417,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		String modal_title = modal_title_style.render("About milktea");
 		String modal_body  = "A Bubble Tea-inspired TUI framework\nfor the C3 programming language.\n\nVersion 0.1.0  —  MIT License";
 		String modal_inner = glaze::join_vertical_arr(glaze::Position.CENTER,
-			{ modal_title, modal_body, buttons });
+			{ modal_title, modal_body, "", buttons });
 		String modal_panel = modal_style.render(modal_inner);
 
 		add_shadowed(comp, modal_panel, modal_x, modal_y, 30);
