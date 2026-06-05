@@ -399,13 +399,17 @@ fn String Style.render(self, String input) {
 	for (sz i = 0; i < line_count; i++) {
 		String line = lines[i];
 
-		// Build styled line: pad_left + content + fill + pad_right.
-		int current_len = string_width(line) + self.pad_left;
-		int fill        = (target_width + self.pad_left) - current_len;
-		if (fill < 0) fill = 0;
+		// Build styled line: pad_left + [h_align lead] + content + fill + pad_right.
+		int content_w   = string_width(line);
+		int slack       = target_width - content_w;
+		if (slack < 0) slack = 0;
+		int h_lead      = 0;
+		if (self.h_align == Position.CENTER) { h_lead = slack / 2; }
+		else if (self.h_align == Position.RIGHT) { h_lead = slack; }
+		int fill        = slack - h_lead;
 
-		// Pad left.
-		color_whitespace(&body, &self.bg, has_bg, self.pad_left);
+		// Pad left + horizontal alignment lead.
+		color_whitespace(&body, &self.bg, has_bg, self.pad_left + h_lead);
 
 		// Content (styled).
 		if (has_attrs) {
