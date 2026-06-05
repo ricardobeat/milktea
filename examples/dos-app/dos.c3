@@ -223,17 +223,19 @@ fn String dos_button(String label, bool focused) {
 
 	out.append_char('\n');
 
-	// ── Row 1: [ ]  [▄ × (face_w+1)] ────────────────────────────────────────
-	// bare space at col 0 (the 1-block left gap), then bottom+corner shadow
-	// ▄ U+2584: fg=SHADOW, bg=PANEL → lower half = shadow, upper half = panel
+	// ── Row 1: [ ]  [▀ × face_w] ────────────────────────────────────────────
+	// bare space at col 0 (the 1-block left gap), then bottom shadow
+	// ▀ U+2580: fg=SHADOW, bg=PANEL → upper half = shadow, lower half = panel
+	// face_w blocks (not face_w+1) — right-shadow column already covers col face_w
 	out.append_string("\x1b[0m ");
 	out.append_string("\x1b[0m\x1b[");
 	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	panel_col.write_sgr_params(&out, false);
 	out.append_string("m");
-	for (int i = 0; i <= face_w; i++) out.append_string("\xe2\x96\x84"); // ▄ U+2584
-	out.append_string("\x1b[0m");
+	for (int i = 0; i < face_w; i++) out.append_string("\xe2\x96\x80"); // ▀ U+2580
+	// trailing space to match row 0 width (face_w+2)
+	out.append_string("\x1b[0m ");
 
 	return out.copy_str(tmem);
 }
