@@ -179,55 +179,63 @@ fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, in
 	comp.add_layer(glaze::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
 }
 
-// dos_button renders a DOS-style button: solid bg block with half-block shadow.
-// Row 0: "  label  " in btn_bg, right edge is ▐ (btn_bg fg, shadow bg)
-// Row 1: "▀▀▀▀▀▀▀▀▀▀" in shadow fg on panel_bg (bottom + corner shadow)
-// focused=true uses C_YELLOW bg with C_BLACK text; false uses C_DARK bg with C_WHITE text.
+// dos_button renders a DOS-style 3D button with half-block shadow.
+//
+// Layout (face_w = label.len + 4):
+//   row 0:  [face: face_w cols, bg=face_bg]  [▐: fg=face_bg, bg=shadow]
+//   row 1:  [space, bg=panel]  [▀ × (face_w+1): fg=shadow, bg=panel]
+//
+// The ▐ right-shadow char has fg=face_bg (always the unfocused C_DARK) so the
+// upper-left half shows the face color. Corner cell row1/col(face_w+1) = ▀
+// so the shadow wraps cleanly around the bottom-right.
+// Focus only changes face_bg (yellow vs dark) and txt_fg; shadow is always
+// C_SHADOW fg on C_DARK (panel) bg.
 fn String dos_button(String label, bool focused) {
-	String btn_bg   = focused ? C_YELLOW : C_DARK;
-	String txt_fg   = focused ? C_BLACK  : C_WHITE;
-	String shad     = C_SHADOW;
-	String panel_bg = C_DARK;
+	// Face bg changes on focus; shadow colors are always the same.
+	glaze::Color face_col  = glaze::color_hex(focused ? C_YELLOW : C_DARK);
+	glaze::Color txt_col   = glaze::color_hex(focused ? C_BLACK  : C_WHITE);
+	glaze::Color shad_col  = glaze::color_hex(C_SHADOW);
+	glaze::Color panel_col = glaze::color_hex(C_DARK);
+	// For the ▐ char: fg shows the unfocused face color (so it reads as the
+	// button edge regardless of focus), bg is shadow.
+	glaze::Color edge_col  = glaze::color_hex(C_DARK);
 
-	// Face: "  label  " padded 2 on each side
-	int face_w = (int)label.len + 4; // 2 pad each side
-
-	glaze::Color btn_col   = glaze::color_hex(btn_bg);
-	glaze::Color txt_col   = glaze::color_hex(txt_fg);
-	glaze::Color shad_col  = glaze::color_hex(shad);
-	glaze::Color panel_col = glaze::color_hex(panel_bg);
+	int face_w = (int)label.len + 4; // 2-space padding each side
 
 	DString out = dstring::temp();
 
-	// Row 0: face + right shadow char
-	// bg=btn, fg=txt: "  label  "
-	out.append_string("\x1b[0m\x1b[");
+	// ── Row 0: face ──────────────────────────────────────────────────────────
+	// face cells: bg=face_col, fg=txt_col
+	out.append_string("\x1b[0;");
 	txt_col.write_sgr_params(&out, true);
 	out.append_char(';');
-	btn_col.write_sgr_params(&out, false);
+	face_col.write_sgr_params(&out, false);
 	out.append_string("m  ");
 	out.append_string(label);
 	out.append_string("  ");
-	// right shadow: ▐ with fg=btn (upper half keeps btn color), bg=shadow
-	out.append_string("\x1b[0m\x1b[");
-	btn_col.write_sgr_params(&out, true);
+	// right shadow: ▐  fg=edge_col (face-colored upper half), bg=shadow
+	out.append_string("\x1b[0;");
+	edge_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	shad_col.write_sgr_params(&out, false);
-	out.append_string("m\xe2\x96\x90"); // ▐ U+2590
-	out.append_string("\x1b[0m");
+	out.append_string("m\xe2\x96\x90\x1b[0m"); // ▐ U+2590
 
 	out.append_char('\n');
 
-	// Row 1: bottom shadow ▀ chars across face width, then a space for corner
-	// ▀ U+2580: fg=shadow, bg=panel → lower half is panel color, upper is shadow
-	out.append_string("\x1b[0m\x1b[");
+	// ── Row 1: bottom + corner shadow ────────────────────────────────────────
+	// 1 leading space under the face left edge (no shadow there), bg=panel
+	out.append_string("\x1b[0;");
+	panel_col.write_sgr_params(&out, false);
+	out.append_string("m ");
+	// ▀ × face_w covering the face bottom, + 1 for the corner under ▐
+	// fg=shadow, bg=panel → upper half = shadow color, lower half = panel
+	out.append_string("\x1b[0;");
 	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	panel_col.write_sgr_params(&out, false);
 	out.append_string("m");
-	for (int i = 0; i < face_w; i++) out.append_string("\xe2\x96\x80"); // ▀ U+2580
-	// corner: one more shadow-colored space
-	out.append_string(" \x1b[0m");
+	for (int i = 0; i <= face_w; i++) out.append_string("\xe2\x96\x80"); // ▀ U+2580
+	out.append_string("\x1b[0m");
 
 	return out.copy_str(tmem);
 }
