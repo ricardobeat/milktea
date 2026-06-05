@@ -179,61 +179,60 @@ fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, in
 	comp.add_layer(glaze::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
 }
 
-// dos_button renders a DOS-style 3D button with half-block shadow.
+// dos_button renders a classic DOS-style raised button with drop shadow.
 //
-// Layout (face_w = label.len + 4):
-//   row 0:  [face: face_w cols, bg=face_bg]  [▐: fg=face_bg, bg=shadow]
-//   row 1:  [space, bg=panel]  [▀ × (face_w+1): fg=shadow, bg=panel]
+// Layout (face_w = label.len + 4, pad 2 each side):
 //
-// The ▐ right-shadow char has fg=face_bg (always the unfocused C_DARK) so the
-// upper-left half shows the face color. Corner cell row1/col(face_w+1) = ▀
-// so the shadow wraps cleanly around the bottom-right.
-// Focus only changes face_bg (yellow vs dark) and txt_fg; shadow is always
-// C_SHADOW fg on C_DARK (panel) bg.
+//   col:   0 … face_w-1  face_w  face_w+1
+//   row 0: [  face  ···]  [█]     [ ]
+//   row 1: [ ]  [▄ ··· ▄  ▄]
+//
+// Row 0: face (bg=FACE, fg=TXT) + full-block right shadow (bg=SHADOW, fg=SHADOW) + bare space
+// Row 1: bare space + lower-half-block bottom+corner shadow (fg=SHADOW, bg=PANEL)
+//
+// Both rows are face_w+2 wide so join_* sees equal widths.
+// Focus changes FACE color (yellow focused, C_GRAY unfocused) and TXT color.
+// Shadow is always SHADOW/PANEL — invariant.
 fn String dos_button(String label, bool focused) {
-	// Face bg changes on focus; shadow colors are always the same.
-	glaze::Color face_col  = glaze::color_hex(focused ? C_YELLOW : C_DARK);
-	glaze::Color txt_col   = glaze::color_hex(focused ? C_BLACK  : C_WHITE);
+	glaze::Color face_col  = glaze::color_hex(focused ? C_YELLOW : C_GRAY);
+	glaze::Color txt_col   = glaze::color_hex(focused ? C_BLACK  : C_BLACK);
 	glaze::Color shad_col  = glaze::color_hex(C_SHADOW);
 	glaze::Color panel_col = glaze::color_hex(C_DARK);
-	// For the ▐ char: fg shows the unfocused face color (so it reads as the
-	// button edge regardless of focus), bg is shadow.
-	glaze::Color edge_col  = glaze::color_hex(C_DARK);
 
 	int face_w = (int)label.len + 4; // 2-space padding each side
 
 	DString out = dstring::temp();
 
-	// ── Row 0: face + right shadow + trailing space ──────────────────────────
-	// Total width = face_w + 2 (face + ▐ + 1 trailing space for alignment)
-	out.append_string("\x1b[0;");
+	// ── Row 0: face  [█]  [ ] ────────────────────────────────────────────────
+	// Start with explicit reset so face colors are never inherited from context.
+	out.append_string("\x1b[0m\x1b[");
 	txt_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	face_col.write_sgr_params(&out, false);
 	out.append_string("m  ");
 	out.append_string(label);
 	out.append_string("  ");
-	// right shadow: ▐  fg=edge_col (face-colored upper half), bg=shadow
-	out.append_string("\x1b[0;");
-	edge_col.write_sgr_params(&out, true);
+	// right shadow: full block — bg=SHADOW makes it a solid shadow column
+	out.append_string("\x1b[0m\x1b[");
+	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	shad_col.write_sgr_params(&out, false);
-	out.append_string("m\xe2\x96\x90"); // ▐ U+2590
-	// trailing space so row 0 width matches row 1 (face_w + 2)
+	out.append_string("m\xe2\x96\x88"); // █ U+2588 full block
+	// trailing bare space (col face_w+1) — equalises row width to face_w+2
 	out.append_string("\x1b[0m ");
 
 	out.append_char('\n');
 
-	// ── Row 1: leading space + bottom shadow + corner ────────────────────────
-	// 1 leading bare space (col 0, no shadow), then face_w+1 ▀ chars (cols 1..face_w+1)
-	// Total width = 1 + face_w + 1 = face_w + 2, matching row 0
-	out.append_string(" ");
-	out.append_string("\x1b[0;");
+	// ── Row 1: [ ]  [▄ × (face_w+1)] ────────────────────────────────────────
+	// bare space at col 0 (the 1-block left gap), then bottom+corner shadow
+	// ▄ U+2584: fg=SHADOW, bg=PANEL → lower half = shadow, upper half = panel
+	out.append_string("\x1b[0m ");
+	out.append_string("\x1b[0m\x1b[");
 	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	panel_col.write_sgr_params(&out, false);
 	out.append_string("m");
-	for (int i = 0; i <= face_w; i++) out.append_string("\xe2\x96\x80"); // ▀ U+2580
+	for (int i = 0; i <= face_w; i++) out.append_string("\xe2\x96\x84"); // ▄ U+2584
 	out.append_string("\x1b[0m");
 
 	return out.copy_str(tmem);
