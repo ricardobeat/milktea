@@ -204,8 +204,8 @@ fn String dos_button(String label, bool focused) {
 
 	DString out = dstring::temp();
 
-	// ── Row 0: face ──────────────────────────────────────────────────────────
-	// face cells: bg=face_col, fg=txt_col
+	// ── Row 0: face + right shadow + trailing space ──────────────────────────
+	// Total width = face_w + 2 (face + ▐ + 1 trailing space for alignment)
 	out.append_string("\x1b[0;");
 	txt_col.write_sgr_params(&out, true);
 	out.append_char(';');
@@ -218,17 +218,16 @@ fn String dos_button(String label, bool focused) {
 	edge_col.write_sgr_params(&out, true);
 	out.append_char(';');
 	shad_col.write_sgr_params(&out, false);
-	out.append_string("m\xe2\x96\x90\x1b[0m"); // ▐ U+2590
+	out.append_string("m\xe2\x96\x90"); // ▐ U+2590
+	// trailing space so row 0 width matches row 1 (face_w + 2)
+	out.append_string("\x1b[0m ");
 
 	out.append_char('\n');
 
-	// ── Row 1: bottom + corner shadow ────────────────────────────────────────
-	// 1 leading space under the face left edge (no shadow there), bg=panel
-	out.append_string("\x1b[0;");
-	panel_col.write_sgr_params(&out, false);
-	out.append_string("m ");
-	// ▀ × face_w covering the face bottom, + 1 for the corner under ▐
-	// fg=shadow, bg=panel → upper half = shadow color, lower half = panel
+	// ── Row 1: leading space + bottom shadow + corner ────────────────────────
+	// 1 leading bare space (col 0, no shadow), then face_w+1 ▀ chars (cols 1..face_w+1)
+	// Total width = 1 + face_w + 1 = face_w + 2, matching row 0
+	out.append_string(" ");
 	out.append_string("\x1b[0;");
 	shad_col.write_sgr_params(&out, true);
 	out.append_char(';');
