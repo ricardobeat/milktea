@@ -26,11 +26,5 @@ fn milktea::View VanishModel.view(VanishModel* self) @dynamic {
 
 fn int main() {
 	VanishModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	// Nothing printed after exit — terminal is clean
-	return 0;
+	return milktea::@run(&m);
 }

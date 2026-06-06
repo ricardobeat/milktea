@@ -70,11 +70,6 @@ fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
 
 fn int main() {
 	FullscreenModel m = { .countdown = 10 };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Time's up!");
+	milktea::@run(&m);
 	return 0;
 }

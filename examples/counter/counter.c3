@@ -42,10 +42,6 @@ fn milktea::View Counter.view(Counter* self) @dynamic {
 
 fn int main() {
 	Counter c = { };
-	if (catch err = milktea::@run_program(&c)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-	io::printn("\nBye!");
+	milktea::@run(&c);
 	return 0;
 }

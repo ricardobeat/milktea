@@ -159,11 +159,5 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 
 fn int main() {
 	SplashModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Bye!");
-	return 0;
+	return milktea::@run(&m);
 }

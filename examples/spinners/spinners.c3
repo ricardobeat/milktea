@@ -119,11 +119,5 @@ fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
 
 fn int main() {
 	SpinnersModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Bye!");
-	return 0;
+	return milktea::@run(&m);
 }

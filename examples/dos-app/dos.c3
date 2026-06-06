@@ -428,9 +428,5 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 
 fn int main() {
 	DosModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-	return 0;
+	return milktea::@run(&m);
 }
