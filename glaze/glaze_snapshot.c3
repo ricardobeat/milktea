@@ -348,3 +348,40 @@ fn void test_snap_progress_bar_empty() @test {
 	String out = glaze::progress_bar(16, 0, "#", "-", glaze::color_ansi(2), glaze::color_ansi(8));
 	snapshot::assert_snapshot(SNAP, "progress_bar_empty", out);
 }
+
+// ============================================================
+// string_width — Unicode display width
+// ============================================================
+
+fn void test_string_width_ascii() @test {
+	assert(glaze::string_width("hello") == 5);
+	assert(glaze::string_width("ab") == 2);
+}
+
+fn void test_string_width_arrows() @test {
+	assert(glaze::string_width("↑") == 1);
+	assert(glaze::string_width("↓") == 1);
+	assert(glaze::string_width("↑↓") == 2);
+	assert(glaze::string_width("Use ↑↓ to move") == 14);
+}
+
+fn void test_string_width_box_drawing() @test {
+	assert(glaze::string_width("─") == 1);
+	assert(glaze::string_width("╭──╮") == 4);
+	assert(glaze::string_width("│") == 1);
+}
+
+fn void test_string_width_braille() @test {
+	assert(glaze::string_width("⠋") == 1);
+	assert(glaze::string_width("⠙⠹⠸") == 3);
+}
+
+fn void test_string_width_emoji() @test {
+	assert(glaze::string_width("🎉") == 2);
+}
+
+fn void test_string_width_ansi_skipped() @test {
+	// ANSI escape sequences must not contribute to display width
+	String styled = glaze::new_style().foreground(glaze::color_hex("#ff0000")).render("hello");
+	assert(glaze::string_width(styled) == 5);
+}

@@ -81,3 +81,4 @@ fn void test_snap_hstack_three_cols() @test {
 	out = glaze::join_horizontal(out, v2, 0);
 	snapshot::assert_snapshot(SNAP, "hstack_three_cols", out);
 }
+
