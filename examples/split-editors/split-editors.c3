@@ -43,11 +43,11 @@ fn String Editor.text(Editor* self) {
 }
 
 fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor) {
-	glaze::Style focused = glaze::new_style().set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#3b82f6"))
-		.set_width(pane_width)
+	glaze::Style focused = glaze::style().border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#3b82f6"))
+		.width(pane_width)
 		.padding(0, 1, 0, 1);
-	glaze::Style unfocused = glaze::new_style().set_border(glaze::hidden_border()).set_width(pane_width)
+	glaze::Style unfocused = glaze::style().border(glaze::hidden_border()).width(pane_width)
 		.padding(0, 1, 0, 1);
 
 	glaze::Style s = self.focused ? focused : unfocused;
@@ -57,9 +57,9 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 	if (content_width < 1) content_width = 1;
 
 	// Cursor line highlight styles
-	glaze::Style cline_style = glaze::new_style().background(glaze::color_256(57))
+	glaze::Style cline_style = glaze::style().background(glaze::color_256(57))
 		.foreground(glaze::color_256(230));
-	glaze::Style placeholder_style = glaze::new_style().foreground(glaze::color_256(242));
+	glaze::Style placeholder_style = glaze::style().foreground(glaze::color_256(242));
 	String cursor_block               = milktea::CURSOR_BLOCK;
 
 	DString content = dstring::temp();
@@ -258,7 +258,7 @@ fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	bool show_cursor     = self.cursor_blink != 0;
 
 	int edit_h = self.height - 3;

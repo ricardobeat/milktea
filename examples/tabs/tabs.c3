@@ -36,26 +36,26 @@ const String[3] TAB_CONTENTS = {
 };
 
 fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
-	glaze::Style active_style = glaze::new_style()
+	glaze::Style active_style = glaze::style()
 		.foreground(glaze::color_hex("#ffffff"))
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#874bfc"))
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#874bfc"))
 		.padding(0, 1, 0, 1)
-		.set_bold(true);
+		.bold(true);
 
-	glaze::Style inactive_style = glaze::new_style()
+	glaze::Style inactive_style = glaze::style()
 		.foreground(glaze::color_hex("#626262"))
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#3c3c3c"))
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#3c3c3c"))
 		.padding(0, 1, 0, 1);
 
-	glaze::Style content_style = glaze::new_style()
+	glaze::Style content_style = glaze::style()
 		.foreground(glaze::color_hex("#dddddd"))
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#874bfc"))
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#874bfc"))
 		.padding(1, 2, 1, 2)
-		.set_width(50)
-		.set_height(8)
+		.width(50)
+		.height(8)
 		.align(glaze::Position.LEFT, glaze::Position.TOP);
 
 	String[3] tab_views;

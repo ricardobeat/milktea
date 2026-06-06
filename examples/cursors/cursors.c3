@@ -40,7 +40,7 @@ fn String cursor_snake(int x, int y, bool blink, String under) {
 fn String cursor_rainbow(int x, int y, bool blink, String under) {
 	long now = milktea::time_ms();
 	double t = ((double)(now % 1500)) / 1500.0;
-	return glaze::new_style().foreground(glaze::hcl(t * 360.0, 100.0, 60.0)).render("█");
+	return glaze::style().foreground(glaze::hcl(t * 360.0, 100.0, 60.0)).render("█");
 }
 
 fn String cursor_matrix(int x, int y, bool blink, String under) {
@@ -226,10 +226,10 @@ fn milktea::View Model.view(&self) @dynamic {
 		String fc       = is_focused ? "#ffffff" : "#555555";
 
 		// Input box
-		glaze::Style box = glaze::new_style().set_border(glaze::rounded_border())
-			.set_border_fg(glaze::color_hex(bc))
+		glaze::Style box = glaze::style().border(glaze::rounded_border())
+			.border_fg(glaze::color_hex(bc))
 			.foreground(glaze::color_hex(fc))
-			.set_width(input_w);
+			.width(input_w);
 		String rendered = box.render(string::tformat("%s%s", PROMPT, e.text()));
 		screen.render_ansi_string((sz)BOX_LEFT, (sz)row, rendered, xray::default_style(), (sz)(row + 3));
 

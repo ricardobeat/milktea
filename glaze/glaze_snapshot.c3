@@ -10,40 +10,40 @@ const String SNAP = "glaze";
 // ============================================================
 
 fn void test_snap_style_plain() @test {
-	String out = glaze::new_style().render("hello");
+	String out = glaze::style().render("hello");
 	snapshot::assert_snapshot(SNAP, "style_plain", out);
 }
 
 fn void test_snap_style_fg() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.foreground(glaze::color_hex("#ff5fd7"))
 		.render("colored");
 	snapshot::assert_snapshot(SNAP, "style_fg", out);
 }
 
 fn void test_snap_style_fg_ansi() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.foreground(glaze::color_ansi(1))
 		.render("red");
 	snapshot::assert_snapshot(SNAP, "style_fg_ansi", out);
 }
 
 fn void test_snap_style_fg_256() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.foreground(glaze::color_256(208))
 		.render("orange");
 	snapshot::assert_snapshot(SNAP, "style_fg_256", out);
 }
 
 fn void test_snap_style_bg() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.background(glaze::color_hex("#000087"))
 		.render("bg");
 	snapshot::assert_snapshot(SNAP, "style_bg", out);
 }
 
 fn void test_snap_style_fg_bg() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.foreground(glaze::color_hex("#ffffff"))
 		.background(glaze::color_hex("#333333"))
 		.render("both");
@@ -51,29 +51,29 @@ fn void test_snap_style_fg_bg() @test {
 }
 
 fn void test_snap_style_bold() @test {
-	String out = glaze::new_style()
-		.set_bold(true)
+	String out = glaze::style()
+		.bold(true)
 		.render("bold");
 	snapshot::assert_snapshot(SNAP, "style_bold", out);
 }
 
 fn void test_snap_style_italic() @test {
-	String out = glaze::new_style()
-		.set_italic(true)
+	String out = glaze::style()
+		.italic(true)
 		.render("italic");
 	snapshot::assert_snapshot(SNAP, "style_italic", out);
 }
 
 fn void test_snap_style_underline() @test {
-	String out = glaze::new_style()
-		.set_underline(true)
+	String out = glaze::style()
+		.underline(true)
 		.render("underline");
 	snapshot::assert_snapshot(SNAP, "style_underline", out);
 }
 
 fn void test_snap_style_bold_fg() @test {
-	String out = glaze::new_style()
-		.set_bold(true)
+	String out = glaze::style()
+		.bold(true)
 		.foreground(glaze::color_ansi(2))
 		.render("bold green");
 	snapshot::assert_snapshot(SNAP, "style_bold_fg", out);
@@ -84,23 +84,23 @@ fn void test_snap_style_bold_fg() @test {
 // ============================================================
 
 fn void test_snap_style_width() @test {
-	String out = glaze::new_style()
-		.set_width(20)
+	String out = glaze::style()
+		.width(20)
 		.render("wide");
 	snapshot::assert_snapshot(SNAP, "style_width", out);
 }
 
 fn void test_snap_style_height() @test {
-	String out = glaze::new_style()
-		.set_height(3)
+	String out = glaze::style()
+		.height(3)
 		.render("tall");
 	snapshot::assert_snapshot(SNAP, "style_height", out);
 }
 
 fn void test_snap_style_width_height() @test {
-	String out = glaze::new_style()
-		.set_width(12)
-		.set_height(4)
+	String out = glaze::style()
+		.width(12)
+		.height(4)
 		.render("box");
 	snapshot::assert_snapshot(SNAP, "style_width_height", out);
 }
@@ -110,14 +110,14 @@ fn void test_snap_style_width_height() @test {
 // ============================================================
 
 fn void test_snap_style_padding() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.padding(1, 2, 1, 2)
 		.render("padded");
 	snapshot::assert_snapshot(SNAP, "style_padding", out);
 }
 
 fn void test_snap_style_padding_fg() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.padding(1, 3, 1, 3)
 		.foreground(glaze::color_hex("#00ff87"))
 		.render("green pad");
@@ -129,24 +129,24 @@ fn void test_snap_style_padding_fg() @test {
 // ============================================================
 
 fn void test_snap_style_align_center() @test {
-	String out = glaze::new_style()
-		.set_width(20)
+	String out = glaze::style()
+		.width(20)
 		.align(glaze::Position.CENTER, glaze::Position.CENTER)
 		.render("centered");
 	snapshot::assert_snapshot(SNAP, "style_align_center", out);
 }
 
 fn void test_snap_style_align_right() @test {
-	String out = glaze::new_style()
-		.set_width(20)
+	String out = glaze::style()
+		.width(20)
 		.align_horizontal(glaze::Position.RIGHT)
 		.render("right");
 	snapshot::assert_snapshot(SNAP, "style_align_right", out);
 }
 
 fn void test_snap_style_align_bottom() @test {
-	String out = glaze::new_style()
-		.set_height(5)
+	String out = glaze::style()
+		.height(5)
 		.align_vertical(glaze::Position.BOTTOM)
 		.render("bottom");
 	snapshot::assert_snapshot(SNAP, "style_align_bottom", out);
@@ -157,62 +157,62 @@ fn void test_snap_style_align_bottom() @test {
 // ============================================================
 
 fn void test_snap_style_border_rounded() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
+	String out = glaze::style()
+		.border(glaze::rounded_border())
 		.render("rounded");
 	snapshot::assert_snapshot(SNAP, "style_border_rounded", out);
 }
 
 fn void test_snap_style_border_thick() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::thick_border())
+	String out = glaze::style()
+		.border(glaze::thick_border())
 		.render("thick");
 	snapshot::assert_snapshot(SNAP, "style_border_thick", out);
 }
 
 fn void test_snap_style_border_double() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::double_border())
+	String out = glaze::style()
+		.border(glaze::double_border())
 		.render("double");
 	snapshot::assert_snapshot(SNAP, "style_border_double", out);
 }
 
 fn void test_snap_style_border_normal() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::normal_border())
+	String out = glaze::style()
+		.border(glaze::normal_border())
 		.render("normal");
 	snapshot::assert_snapshot(SNAP, "style_border_normal", out);
 }
 
 fn void test_snap_style_border_colored() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#ff5fd7"))
+	String out = glaze::style()
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#ff5fd7"))
 		.render("pink border");
 	snapshot::assert_snapshot(SNAP, "style_border_colored", out);
 }
 
 fn void test_snap_style_border_fg() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
+	String out = glaze::style()
+		.border(glaze::rounded_border())
 		.foreground(glaze::color_ansi(3))
-		.set_border_fg(glaze::color_ansi(6))
+		.border_fg(glaze::color_ansi(6))
 		.render("yellow text, cyan border");
 	snapshot::assert_snapshot(SNAP, "style_border_fg", out);
 }
 
 fn void test_snap_style_border_padding() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
+	String out = glaze::style()
+		.border(glaze::rounded_border())
 		.padding(1, 2, 1, 2)
 		.render("border + padding");
 	snapshot::assert_snapshot(SNAP, "style_border_padding", out);
 }
 
 fn void test_snap_style_border_width() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
-		.set_width(20)
+	String out = glaze::style()
+		.border(glaze::rounded_border())
+		.width(20)
 		.render("fixed width");
 	snapshot::assert_snapshot(SNAP, "style_border_width", out);
 }
@@ -222,16 +222,16 @@ fn void test_snap_style_border_width() @test {
 // ============================================================
 
 fn void test_snap_style_multiline() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
+	String out = glaze::style()
+		.border(glaze::rounded_border())
 		.render("line one\nline two\nline three");
 	snapshot::assert_snapshot(SNAP, "style_multiline", out);
 }
 
 fn void test_snap_style_multiline_border_width() @test {
-	String out = glaze::new_style()
-		.set_border(glaze::rounded_border())
-		.set_width(20)
+	String out = glaze::style()
+		.border(glaze::rounded_border())
+		.width(20)
 		.render("short\na much longer line here\nmid");
 	snapshot::assert_snapshot(SNAP, "style_multiline_border_width", out);
 }
@@ -241,14 +241,14 @@ fn void test_snap_style_multiline_border_width() @test {
 // ============================================================
 
 fn void test_snap_style_full() @test {
-	String out = glaze::new_style()
+	String out = glaze::style()
 		.foreground(glaze::color_hex("#ffaf00"))
 		.background(glaze::color_hex("#1c1c1c"))
-		.set_bold(true)
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#87afaf"))
+		.bold(true)
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#87afaf"))
 		.padding(1, 2, 1, 2)
-		.set_width(24)
+		.width(24)
 		.align_horizontal(glaze::Position.CENTER)
 		.render("full style");
 	snapshot::assert_snapshot(SNAP, "style_full", out);
@@ -274,25 +274,25 @@ fn void test_snap_border_wrap_multiline() @test {
 
 fn void test_snap_place_center() @test {
 	String placed = glaze::place(20, 5, "hi");
-	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
+	String out = glaze::style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_center", out);
 }
 
 fn void test_snap_place_pos() @test {
 	String placed = glaze::place_pos(20, 5, glaze::Position.LEFT, glaze::Position.TOP, "tl");
-	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
+	String out = glaze::style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_pos", out);
 }
 
 fn void test_snap_place_horizontal() @test {
 	String placed = glaze::place_pos(20, 5, glaze::Position.RIGHT, glaze::Position.CENTER, "mid");
-	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
+	String out = glaze::style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_horizontal", out);
 }
 
 fn void test_snap_place_vertical() @test {
 	String placed = glaze::place_pos(20, 5, glaze::Position.CENTER, glaze::Position.BOTTOM, "bot");
-	String out = glaze::new_style().background(glaze::color_hex("#333333")).render(placed);
+	String out = glaze::style().background(glaze::color_hex("#333333")).render(placed);
 	snapshot::assert_snapshot(SNAP, "place_vertical", out);
 }
 
@@ -382,6 +382,6 @@ fn void test_string_width_emoji() @test {
 
 fn void test_string_width_ansi_skipped() @test {
 	// ANSI escape sequences must not contribute to display width
-	String styled = glaze::new_style().foreground(glaze::color_hex("#ff0000")).render("hello");
+	String styled = glaze::style().foreground(glaze::color_hex("#ff0000")).render("hello");
 	assert(glaze::string_width(styled) == 5);
 }

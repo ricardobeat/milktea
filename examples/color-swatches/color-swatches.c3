@@ -77,9 +77,9 @@ fn milktea::View Model.view(&self) @dynamic {
 	int w = self.width > 0 ? self.width : 80;
 	int h = self.height > 0 ? self.height : 24;
 
-	glaze::Style title_s = glaze::new_style().foreground(glaze::color_hex("#ffffff")).set_bold(true);
-	glaze::Style label_s = glaze::new_style().foreground(glaze::color_hex("#888888"));
-	glaze::Style label_hi = glaze::new_style().foreground(glaze::color_hex("#cccccc")).set_bold(true);
+	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#ffffff")).bold(true);
+	glaze::Style label_s = glaze::style().foreground(glaze::color_hex("#888888"));
+	glaze::Style label_hi = glaze::style().foreground(glaze::color_hex("#cccccc")).bold(true);
 
 	glaze::Color red  = glaze::color_hex("#ff0000");
 	glaze::Color blue = glaze::color_hex("#0000ff");
@@ -94,7 +94,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row1.append_string("\n  ");
 		for (int i = 0; i < cols; i++) {
-			row1.append_string(glaze::new_style().foreground(glaze::blend_luv(red, blue, (double)i / (double)(cols - 1))).render("█"));
+			row1.append_string(glaze::style().foreground(glaze::blend_luv(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
@@ -102,7 +102,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row2.append_string("\n  ");
 		for (int i = 0; i < cols; i++) {
-			row2.append_string(glaze::new_style().foreground(glaze::blend_hsl(red, blue, (double)i / (double)(cols - 1))).render("█"));
+			row2.append_string(glaze::style().foreground(glaze::blend_hsl(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
@@ -110,7 +110,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row3.append_string("\n  ");
 		for (int i = 0; i < cols; i++) {
-			row3.append_string(glaze::new_style().foreground(glaze::blend_hcl(red, blue, (double)i / (double)(cols - 1))).render("█"));
+			row3.append_string(glaze::style().foreground(glaze::blend_hcl(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
@@ -127,7 +127,7 @@ fn milktea::View Model.view(&self) @dynamic {
 			} else {
 				c = glaze::blend_luv(blue, red, (double)(i - third * 2) / (double)(cols - third * 2));
 			}
-			row4.append_string(glaze::new_style().foreground(c).render("█"));
+			row4.append_string(glaze::style().foreground(c).render("█"));
 		}
 	}
 
@@ -135,7 +135,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row5.append_string("\n  ");
 		for (int i = 0; i < cols; i++) {
-			row5.append_string(glaze::new_style().foreground(glaze::hsl((double)i / (double)cols, 1.0, 0.5)).render("█"));
+			row5.append_string(glaze::style().foreground(glaze::hsl((double)i / (double)cols, 1.0, 0.5)).render("█"));
 		}
 	}
 
@@ -143,7 +143,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row6.append_string("\n  ");
 		for (int i = 0; i < cols; i++) {
-			row6.append_string(glaze::new_style().foreground(glaze::hcl((double)i / (double)cols * 360.0, 100.0, 60.0)).render("█"));
+			row6.append_string(glaze::style().foreground(glaze::hcl((double)i / (double)cols * 360.0, 100.0, 60.0)).render("█"));
 		}
 	}
 
@@ -152,7 +152,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	for (int pass = 0; pass < 2; pass++) {
 		if (pass == 1) row7.append_string("\n  ");
 		for (int i = 0; i < 8; i++) {
-			row7.append_string(glaze::new_style().foreground(glaze::color_hex(hex_colors[i])).render("████"));
+			row7.append_string(glaze::style().foreground(glaze::color_hex(hex_colors[i])).render("████"));
 		}
 	}
 
@@ -207,28 +207,28 @@ fn milktea::View Model.view(&self) @dynamic {
 	});
 
 	String v00 = title_s.render_in(r00, "  COLOUR SPACE COMPARISON");
-	String v01 = glaze::new_style().render_in(r01, "");
+	String v01 = glaze::style().render_in(r01, "");
 	String v02 = label_hi.render_in(r02, lbl1.str_view());
-	String v03 = glaze::new_style().render_in(r03, grad1.str_view());
-	String v04 = glaze::new_style().render_in(r04, "");
+	String v03 = glaze::style().render_in(r03, grad1.str_view());
+	String v04 = glaze::style().render_in(r04, "");
 	String v05 = label_hi.render_in(r05, lbl2.str_view());
-	String v06 = glaze::new_style().render_in(r06, grad2.str_view());
-	String v07 = glaze::new_style().render_in(r07, "");
+	String v06 = glaze::style().render_in(r06, grad2.str_view());
+	String v07 = glaze::style().render_in(r07, "");
 	String v08 = label_hi.render_in(r08, lbl3.str_view());
-	String v09 = glaze::new_style().render_in(r09, grad3.str_view());
-	String v10 = glaze::new_style().render_in(r10, "");
+	String v09 = glaze::style().render_in(r09, grad3.str_view());
+	String v10 = glaze::style().render_in(r10, "");
 	String v11 = label_hi.render_in(r11, lbl4.str_view());
-	String v12 = glaze::new_style().render_in(r12, grad4.str_view());
-	String v13 = glaze::new_style().render_in(r13, "");
+	String v12 = glaze::style().render_in(r12, grad4.str_view());
+	String v13 = glaze::style().render_in(r13, "");
 	String v14 = label_hi.render_in(r14, lbl5.str_view());
-	String v15 = glaze::new_style().render_in(r15, grad5.str_view());
-	String v16 = glaze::new_style().render_in(r16, "");
+	String v15 = glaze::style().render_in(r15, grad5.str_view());
+	String v16 = glaze::style().render_in(r16, "");
 	String v17 = label_hi.render_in(r17, lbl6.str_view());
-	String v18 = glaze::new_style().render_in(r18, grad6.str_view());
-	String v19 = glaze::new_style().render_in(r19, "");
+	String v18 = glaze::style().render_in(r18, grad6.str_view());
+	String v19 = glaze::style().render_in(r19, "");
 	String v20 = label_hi.render_in(r20, lbl7.str_view());
-	String v21 = glaze::new_style().render_in(r21, grad7.str_view());
-	String v22 = glaze::new_style().render_in(r22, "");
+	String v21 = glaze::style().render_in(r21, grad7.str_view());
+	String v22 = glaze::style().render_in(r22, "");
 
 	String content = v00;
 	content = glaze::join_vertical(glaze::Position.LEFT, content, v01);

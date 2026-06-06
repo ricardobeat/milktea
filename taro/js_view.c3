@@ -712,11 +712,11 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			String frame = style.render("");
 			screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
 			// Animated border overlay (if borderAnimation is set)
-			if (has_border && style.border_anim != glaze::BorderAnimation.NONE) {
-				String anim_frame = style.border.wrap_animated(
+			if (has_border && style.border_animation != glaze::BorderAnimation.NONE) {
+				String anim_frame = style.border_style.wrap_animated(
 					area.w - border_pad,
 					area.h - border_pad,
-					style.border_anim,
+					style.border_animation,
 					style,
 					taro_now_ms()
 				);
@@ -727,7 +727,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					xray::default_style(),
 					(sz)(area.y + area.h)
 				);
-				request_render_tick((long)glaze::border_anim_tick_ms(style.border_anim));
+				request_render_tick((long)glaze::border_anim_tick_ms(style.border_animation));
 			}
 			// Inner rect sits inside border + padding
 			xray::Rect inner = xray::new_rect(area.x + offset_x, area.y + offset_y, inner_w, inner_h);
@@ -761,7 +761,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			if (content_w < 1) content_w = 1;
 			if (content_h < 1) content_h = 1;
 			String content = collect_text(rt, vnode);
-			if (has_border && style.border_anim != glaze::BorderAnimation.NONE) {
+			if (has_border && style.border_animation != glaze::BorderAnimation.NONE) {
 				// Animated: render content without border, then wrap with animated border.
 				if (get_prop_int(rt, props, "width", 0) == 0) {
 					style = style.set_width(area.w);
@@ -770,10 +770,10 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					style = style.set_height(area.h);
 				}
 				String content_rendered = style.render_content_only(content);
-				String anim_border = style.border.wrap_animated(
+				String anim_border = style.border_style.wrap_animated(
 					content_w,
 					content_h,
-					style.border_anim,
+					style.border_animation,
 					style,
 					taro_now_ms()
 				);
@@ -792,7 +792,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					xray::default_style(),
 					(sz)(area.y + area.h)
 				);
-				request_render_tick((long)glaze::border_anim_tick_ms(style.border_anim));
+				request_render_tick((long)glaze::border_anim_tick_ms(style.border_animation));
 			} else {
 				if (get_prop_int(rt, props, "width", 0) == 0) {
 					style = style.set_width(area.w);
@@ -892,11 +892,11 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				frame_style = frame_style.set_width(area.w).set_height(area.h);
 				String frame = frame_style.render("");
 				screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
-				if (has_border && frame_style.border_anim != glaze::BorderAnimation.NONE) {
-					String anim_frame = frame_style.border.wrap_animated(
+				if (has_border && frame_style.border_animation != glaze::BorderAnimation.NONE) {
+					String anim_frame = frame_style.border_style.wrap_animated(
 						area.w - border_pad,
 						area.h - border_pad,
-						frame_style.border_anim,
+						frame_style.border_animation,
 						frame_style,
 						taro_now_ms()
 					);
@@ -907,7 +907,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						xray::default_style(),
 						(sz)(area.y + area.h)
 					);
-					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_anim));
+					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_animation));
 				}
 			}
 			// Write content lines directly into the inner rect
@@ -1090,11 +1090,11 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				frame_style = frame_style.set_width(area.w).set_height(area.h);
 				String frame = frame_style.render("");
 				screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
-				if (has_border && frame_style.border_anim != glaze::BorderAnimation.NONE) {
-					String anim_frame = frame_style.border.wrap_animated(
+				if (has_border && frame_style.border_animation != glaze::BorderAnimation.NONE) {
+					String anim_frame = frame_style.border_style.wrap_animated(
 						area.w - border_pad,
 						area.h - border_pad,
-						frame_style.border_anim,
+						frame_style.border_animation,
 						frame_style,
 						taro_now_ms()
 					);
@@ -1105,7 +1105,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						xray::default_style(),
 						(sz)(area.y + area.h)
 					);
-					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_anim));
+					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_animation));
 				}
 			}
 

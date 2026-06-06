@@ -723,8 +723,8 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		content.append_string("\n\n");
 		content.append_string("  [ Enter the Void ]  ");
 
-		glaze::Style box_st = glaze::new_style().set_border(glaze::double_border())
-			.set_border_fg(glaze::color_hex("#6450c8"))
+		glaze::Style box_st = glaze::style().border(glaze::double_border())
+			.border_fg(glaze::color_hex("#6450c8"))
 			.background(glaze::color_hex("#140a28"))
 			.foreground(glaze::color_hex("#c8b4ff"))
 			.padding(1, 2, 1, 2);
@@ -763,8 +763,8 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		prompt[p_len] = '\0';
 
 		// Render the prompt box with glaze, center it with FlexNode
-		glaze::Style box_st = glaze::new_style().set_border(glaze::rounded_border())
-			.set_border_fg(glaze::color_hex("#6450c8"))
+		glaze::Style box_st = glaze::style().border(glaze::rounded_border())
+			.border_fg(glaze::color_hex("#6450c8"))
 			.background(glaze::color_hex("#140a28"))
 			.foreground(glaze::color_hex("#c8b4ff"));
 		String rendered = box_st.render((String)prompt[:p_len]);

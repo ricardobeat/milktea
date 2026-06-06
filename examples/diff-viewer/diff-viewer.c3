@@ -148,7 +148,7 @@ fn void adjust_scroll(DiffModel* self) {
 fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	DString out = dstring::temp();
 
-	glaze::Style header_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style header_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	String header                = header_style.render("diff-viewer | j/k or arrows to scroll | q to quit");
 
 	out.append_string(header);
@@ -166,7 +166,7 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	}
 
 	out.append_char('\n');
-	glaze::Style footer_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style footer_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	String footer                = footer_style.render(
 		string::tformat("Line %d / %d", self.cursor + 1, self.line_count)
 	);
@@ -177,7 +177,7 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 
 fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 	String prefix         = " ";
-	glaze::Style style = glaze::new_style();
+	glaze::Style style = glaze::style();
 
 	switch (line.kind) {
 		case FILE_HEADER:
@@ -198,7 +198,7 @@ fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 	}
 
 	if (is_cursor) {
-		style = style.background(glaze::color_hex("#444444")).set_bold(true);
+		style = style.background(glaze::color_hex("#444444")).bold(true);
 	}
 
 	String content = style.render(string::tformat("%s%s", prefix, line.content));

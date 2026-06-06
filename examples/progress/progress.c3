@@ -64,14 +64,14 @@ fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dyn
 }
 
 fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
-	glaze::Style title = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(0, 0, 1, 0);
 
-	glaze::Style done_style = glaze::new_style().foreground(glaze::color_hex("#00ff00")).set_bold(true);
+	glaze::Style done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).bold(true);
 
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 
-	glaze::Style box_style = glaze::new_style().set_border(glaze::rounded_border()).padding(1, 2, 1, 2);
+	glaze::Style box_style = glaze::style().border(glaze::rounded_border()).padding(1, 2, 1, 2);
 
 	int pct = (self.progress * 100) / TOTAL;
 

@@ -83,15 +83,15 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	glaze::Border timer_border = (self.focus == 0) ? active_border : inactive_border;
 	glaze::Border spin_border  = (self.focus == 1) ? active_border : inactive_border;
 
-	glaze::Style timer_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true)
+	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(timer_border);
+		.border(timer_border);
 
-	glaze::Style spin_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(spin_border);
+		.border(spin_border);
 
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	String timer_raw = timer_style.render(string::tformat("Timer\n%02d:%02d", mins, secs));
 	String spin_raw  = spin_style.render(string::tformat("Spinner\n%s Loading...", spin));

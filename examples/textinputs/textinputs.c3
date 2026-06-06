@@ -80,9 +80,9 @@ fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic
 }
 
 fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
-	glaze::Style title = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(0, 0, 1, 0);
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	out.append_string(title.render("Sign Up"));
@@ -113,13 +113,13 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 	out.append_char('\n');
 
 	if (self.focus == 2) {
-		glaze::Style btn = glaze::new_style().foreground(glaze::color_hex("#ffffff"))
+		glaze::Style btn = glaze::style().foreground(glaze::color_hex("#ffffff"))
 			.background(glaze::color_hex("#00d7ff"))
 			.padding(0, 2, 0, 2)
-			.set_bold(true);
+			.bold(true);
 		out.append_string(btn.render(" Submit "));
 	} else {
-		glaze::Style btn = glaze::new_style().foreground(glaze::color_hex("#888888")).padding(0, 2, 0, 2);
+		glaze::Style btn = glaze::style().foreground(glaze::color_hex("#888888")).padding(0, 2, 0, 2);
 		out.append_string(btn.render(" Submit "));
 	}
 	out.append_char('\n');

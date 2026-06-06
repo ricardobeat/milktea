@@ -156,26 +156,29 @@ fn int string_width(String s) {
 struct Style {
 	Color fg;
 	Color bg;
-	Color border_fg;
-	bool bold;
-	bool italic;
-	bool underline;
+	Color border_color;
+	bool is_bold;
+	bool is_italic;
+	bool is_underline;
 	int pad_top;
 	int pad_right;
 	int pad_bottom;
 	int pad_left;
-	int width; // 0 = auto (don't pad)
-	int height; // 0 = auto
+	int target_w; // 0 = auto (don't pad)
+	int target_h; // 0 = auto
 	Position h_align; // horizontal alignment within width
 	Position v_align; // vertical alignment within height
-	Border border; // zero value = no border
-	BorderAnimation border_anim; // NONE = static
-	int border_anim_speed; // ms per full cycle (default 1000)
+	Border border_style; // zero value = no border
+	BorderAnimation border_animation; // NONE = static
+	int anim_speed_ms; // ms per full cycle (default 1000)
 }
 
-fn Style new_style() {
+fn Style style() {
 	return { };
 }
+
+// new_style is an alias kept for compatibility.
+fn Style new_style() => style();
 
 fn Style Style.foreground(self, Color c) {
 	Style s = self;
@@ -189,23 +192,28 @@ fn Style Style.background(self, Color c) {
 	return s;
 }
 
-fn Style Style.set_bold(self, bool v) {
+fn Style Style.bold(self, bool v) {
 	Style s = self;
-	s.bold = v;
+	s.is_bold = v;
 	return s;
 }
 
-fn Style Style.set_italic(self, bool v) {
+fn Style Style.italic(self, bool v) {
 	Style s = self;
-	s.italic = v;
+	s.is_italic = v;
 	return s;
 }
 
-fn Style Style.set_underline(self, bool v) {
+fn Style Style.underline(self, bool v) {
 	Style s = self;
-	s.underline = v;
+	s.is_underline = v;
 	return s;
 }
+
+// Compatibility aliases.
+fn Style Style.set_bold(self, bool v) => self.bold(v);
+fn Style Style.set_italic(self, bool v) => self.italic(v);
+fn Style Style.set_underline(self, bool v) => self.underline(v);
 
 fn Style Style.padding(self, int top, int right, int bottom, int left) {
 	Style s = self;
@@ -216,42 +224,50 @@ fn Style Style.padding(self, int top, int right, int bottom, int left) {
 	return s;
 }
 
-fn Style Style.set_width(self, int w) {
+fn Style Style.width(self, int w) {
 	Style s = self;
-	s.width = w;
+	s.target_w = w;
 	return s;
 }
 
-fn Style Style.set_border(self, Border b) {
+fn Style Style.border(self, Border b) {
 	Style s = self;
-	s.border = b;
+	s.border_style = b;
 	return s;
 }
 
-fn Style Style.set_border_fg(self, Color c) {
+fn Style Style.border_fg(self, Color c) {
 	Style s = self;
-	s.border_fg = c;
+	s.border_color = c;
 	return s;
 }
 
-fn Style Style.set_border_anim(self, BorderAnimation anim) {
+fn Style Style.border_anim(self, BorderAnimation anim) {
 	Style s = self;
-	s.border_anim = anim;
-	if (s.border_anim_speed == 0) s.border_anim_speed = 1000;
+	s.border_animation = anim;
+	if (s.anim_speed_ms == 0) s.anim_speed_ms = 1000;
 	return s;
 }
 
-fn Style Style.set_border_anim_speed(self, int ms) {
+fn Style Style.border_anim_speed(self, int ms) {
 	Style s = self;
-	s.border_anim_speed = ms;
+	s.anim_speed_ms = ms;
 	return s;
 }
 
-fn Style Style.set_height(self, int h) {
+fn Style Style.height(self, int h) {
 	Style s = self;
-	s.height = h;
+	s.target_h = h;
 	return s;
 }
+
+// Compatibility aliases.
+fn Style Style.set_width(self, int w) => self.width(w);
+fn Style Style.set_border(self, Border b) => self.border(b);
+fn Style Style.set_border_fg(self, Color c) => self.border_fg(c);
+fn Style Style.set_border_anim(self, BorderAnimation anim) => self.border_anim(anim);
+fn Style Style.set_border_anim_speed(self, int ms) => self.border_anim_speed(ms);
+fn Style Style.set_height(self, int h) => self.height(h);
 
 fn Style Style.align(self, Position h, Position v) {
 	Style s = self;
@@ -272,9 +288,6 @@ fn Style Style.align_vertical(self, Position v) {
 	return s;
 }
 
-// Shorthand methods — shorter names for common operations.
-// These coexist with the longer names for backwards compatibility.
-
 fn Style Style.with_fg(self, String hex) {
 	return self.foreground(color_hex(hex));
 }
@@ -283,39 +296,11 @@ fn Style Style.with_bg(self, String hex) {
 	return self.background(color_hex(hex));
 }
 
-fn Style Style.with_bold(self, bool v) {
-	return self.set_bold(v);
-}
-
-fn Style Style.with_italic(self, bool v) {
-	return self.set_italic(v);
-}
-
-fn Style Style.with_underline(self, bool v) {
-	return self.set_underline(v);
-}
-
-fn Style Style.with_border(self, Border b) {
-	return self.set_border(b);
-}
-
-fn Style Style.with_border_anim(self, BorderAnimation anim) {
-	return self.set_border_anim(anim);
-}
-
-fn Style Style.with_border_anim_speed(self, int ms) {
-	return self.set_border_anim_speed(ms);
-}
-
-fn Style Style.with_width(self, int width) {
-	return self.set_width(width);
-}
-
 // measure_height renders content at the given outer width and counts the output lines.
 // Useful for auto-sizing a box before committing it to a layout rect.
 fn int Style.measure_height(self, String input, int outer_width) {
-	// set_width means total outer width (border+pad+content); render() subtracts border internally.
-	Style sized     = self.set_width(outer_width);
+	// width() means total outer width (border+pad+content); render() subtracts border internally.
+	Style sized     = self.width(outer_width);
 	String rendered = sized.render(input);
 	int lines       = 1;
 	for (sz i = 0; i < rendered.len; i++) {
@@ -356,17 +341,17 @@ fn String Style.render(self, String input) {
 	// So we subtract border and padding from the requested width to get the
 	// content area width.
 	int border_h = 0;
-	bool border_is_empty = self.border.top.len == 0 && self.border.bottom.len == 0 && self.border.left.len == 0
-		&& self.border.right.len == 0
-		&& self.border.top_left.len == 0
-		&& self.border.top_right.len == 0
-		&& self.border.bottom_left.len == 0
-		&& self.border.bottom_right.len == 0;
+	bool border_is_empty = self.border_style.top.len == 0 && self.border_style.bottom.len == 0 && self.border_style.left.len == 0
+		&& self.border_style.right.len == 0
+		&& self.border_style.top_left.len == 0
+		&& self.border_style.top_right.len == 0
+		&& self.border_style.bottom_left.len == 0
+		&& self.border_style.bottom_right.len == 0;
 	if (!border_is_empty) {
 		border_h = 2; // left + right border chars
 	}
 
-	int target_width = self.width;
+	int target_width = self.target_w;
 	if (target_width > 0) {
 		// Subtract border and padding to get content area
 		target_width = target_width - border_h - self.pad_left - self.pad_right;
@@ -380,8 +365,8 @@ fn String Style.render(self, String input) {
 		}
 	}
 
-	bool has_attrs = self.fg.kind != ColorKind.NONE || self.bg.kind != ColorKind.NONE || self.bold || self.italic
-		|| self.underline;
+	bool has_attrs = self.fg.kind != ColorKind.NONE || self.bg.kind != ColorKind.NONE || self.is_bold || self.is_italic
+		|| self.is_underline;
 	bool has_bg = self.bg.kind != ColorKind.NONE;
 
 	// Total line width = content + padding (border is applied after)
@@ -416,16 +401,16 @@ fn String Style.render(self, String input) {
 		if (has_attrs) {
 			body.append_string("\x1b[");
 			bool first = true;
-			if (self.bold) {
+			if (self.is_bold) {
 				body.append_string("1");
 				first = false;
 			}
-			if (self.italic) {
+			if (self.is_italic) {
 				if (!first) body.append_char(';');
 				body.append_string("3");
 				first = false;
 			}
-			if (self.underline) {
+			if (self.is_underline) {
 				if (!first) body.append_char(';');
 				body.append_string("4");
 				first = false;
@@ -456,7 +441,7 @@ fn String Style.render(self, String input) {
 					// If it was a reset (starts with \x1b[0), re-apply outer style
 					if (line[esc_start + 2] == '0') {
 						bool rf = true;
-						if (self.bold)      { body.append_string(rf ? "\x1b[1m" : ""); rf = false; }
+						if (self.is_bold)   { body.append_string(rf ? "\x1b[1m" : ""); rf = false; }
 						if (self.fg.kind != ColorKind.NONE) {
 							body.append_string("\x1b[");
 							self.fg.write_sgr_params(&body, true);
@@ -491,9 +476,9 @@ fn String Style.render(self, String input) {
 	}
 
 	// Height: add empty lines to reach target height, with vertical alignment.
-	// self.height means total outer height (like Go glaze v2), so subtract border.
+	// target_h means total outer height (like Go glaze v2), so subtract border.
 	int border_v      = !border_is_empty ? 2 : 0;
-	int height_target = self.height - border_v;
+	int height_target = self.target_h - border_v;
 	if (height_target < 0) height_target = 0;
 	int total_lines = (int)line_count + self.pad_top + self.pad_bottom;
 	if (height_target > 0 && total_lines < height_target) {
@@ -529,7 +514,7 @@ fn String Style.render(self, String input) {
 	}
 
 	if (!border_is_empty) {
-		return self.border.wrap_with_color(rendered, self.border_fg, self.bg);
+		return self.border_style.wrap_with_color(rendered, self.border_color, self.bg);
 	}
 	return rendered.tcopy();
 }
@@ -541,14 +526,14 @@ fn String Style.render_content_only(self, String input) {
 	// Temporarily clear the border, render, then restore.
 	Style saved = self;
 	Style s     = self;
-	s.border = { };
-	s.border_fg = { };
-	s.border_anim = BorderAnimation.NONE;
+	s.border_style = { };
+	s.border_color = { };
+	s.border_animation = BorderAnimation.NONE;
 	String result = s.render(input);
 	return result;
 }
 
 // render_in renders the style into the given rect, setting width and height automatically.
 fn String Style.render_in(self, xray::Rect rect, String content) {
-	return self.set_width(rect.w).set_height(rect.h).render(content);
+	return self.width(rect.w).height(rect.h).render(content);
 }

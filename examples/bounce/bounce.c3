@@ -101,8 +101,8 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 		if (y < arena_h - 1) content.append_char('\n');
 	}
 
-	glaze::Style border = glaze::new_style()
-		.set_border(
+	glaze::Style border = glaze::style()
+		.border(
 			{
 				.top = "═",
 				.bottom = "═",
@@ -119,7 +119,7 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 	out.append_string(border.render(content.str_view()));
 	out.append_char('\n');
 
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	out.append_string(hint.render("Bouncing ball  |  q/ESC quit"));
 
 	return milktea::new_alt_screen_view(out.str_view());

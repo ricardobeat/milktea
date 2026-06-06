@@ -68,7 +68,7 @@ fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 				int idx      = row * 4 + col;
 				String color = colors[idx];
 
-				glaze::Style block = glaze::new_style().background(glaze::color_hex(color));
+				glaze::Style block = glaze::style().background(glaze::color_hex(color));
 
 				DString filler = dstring::temp();
 				for (int i = 0; i < block_width; i++) {

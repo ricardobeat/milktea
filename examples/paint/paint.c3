@@ -263,7 +263,7 @@ fn String build_palette_column(Model* self) {
 		String cell_bg = PALETTE_HEX[color_idx];
 		String fg      = (color_idx == 7) ? "#000000" : "#ffffff";
 
-		glaze::Style s = glaze::new_style().foreground(glaze::color_hex(fg))
+		glaze::Style s = glaze::style().foreground(glaze::color_hex(fg))
 			.background(glaze::color_hex(cell_bg));
 
 		for (int row = 0; row < 3; row++) {
@@ -273,7 +273,7 @@ fn String build_palette_column(Model* self) {
 		}
 	}
 
-	glaze::Style s = glaze::new_style().foreground(glaze::color_hex("#888888"))
+	glaze::Style s = glaze::style().foreground(glaze::color_hex("#888888"))
 		.background(glaze::color_hex(bg_empty));
 	out.append_string(s.render(string::tformat("W:%d", self.stroke_width)));
 
@@ -287,7 +287,7 @@ fn String build_tools_toolbar(Model* self) {
 	out.append_string(" | ");
 	for (int w = 1; w <= 3; w++) {
 		bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
-		glaze::Style s = glaze::new_style().foreground(glaze::color_hex(active ? "#000000" : "#888888"))
+		glaze::Style s = glaze::style().foreground(glaze::color_hex(active ? "#000000" : "#888888"))
 			.background(glaze::color_hex(active ? "#55ffff" : "#222222"));
 		out.append_string(s.render(string::tformat("%d", w)));
 	}
@@ -316,7 +316,7 @@ fn String build_canvas_view(Canvas* c) {
 
 	// Two canvas pixel rows per terminal row via half-block characters.
 	for (int py = 0; py < c.height; py += 2) {
-		glaze::Style sep = glaze::new_style().foreground(glaze::color_hex("#444444"))
+		glaze::Style sep = glaze::style().foreground(glaze::color_hex("#444444"))
 			.background(glaze::color_hex(bg_empty));
 		out.append_string(sep.render("|"));
 
@@ -350,7 +350,7 @@ fn String build_canvas_view(Canvas* c) {
 				bg = bg_empty;
 			}
 
-			glaze::Style s = glaze::new_style().foreground(glaze::color_hex(fg))
+			glaze::Style s = glaze::style().foreground(glaze::color_hex(fg))
 				.background(glaze::color_hex(bg));
 			out.append_string(s.render(glyph));
 		}

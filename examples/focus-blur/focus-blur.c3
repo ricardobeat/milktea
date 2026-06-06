@@ -57,14 +57,14 @@ fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View FocusModel.view(FocusModel* self) @dynamic {
-	glaze::Style focused_style = glaze::new_style().foreground(glaze::color_hex("#00ff00")).set_bold(true)
+	glaze::Style focused_style = glaze::style().foreground(glaze::color_hex("#00ff00")).bold(true)
 		.padding(2, 4, 2, 4)
-		.set_border(glaze::rounded_border());
+		.border(glaze::rounded_border());
 
-	glaze::Style blurred_style = glaze::new_style().foreground(glaze::color_hex("#666666")).padding(2, 4, 2, 4)
-		.set_border(glaze::rounded_border());
+	glaze::Style blurred_style = glaze::style().foreground(glaze::color_hex("#666666")).padding(2, 4, 2, 4)
+		.border(glaze::rounded_border());
 
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#888888"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#888888"));
 
 	String label      = self.focused ? "FOCUSED" : "BLURRED";
 	String desc       = self.focused ? "Terminal window is active" : "Terminal window is inactive";
