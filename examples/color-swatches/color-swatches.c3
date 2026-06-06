@@ -6,6 +6,7 @@ module color_swatches;
 import milktea;
 import glaze;
 import xray;
+import xray::layout;
 import std::core::dstring;
 import std::io;
 
@@ -177,33 +178,81 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	xray::Rect area = xray::new_rect(0, 0, w, h);
 
-	milktea::LayoutNode[23] nodes = {
-		{ xray::constraint_len(1), title_s, "  COLOUR SPACE COMPARISON" },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl1.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad1.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl2.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad2.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl3.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad3.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl4.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad4.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl5.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad5.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl6.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad6.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-		{ xray::constraint_len(1), label_hi, lbl7.str_view() },
-		{ xray::constraint_len(2), glaze::new_style(), grad7.str_view() },
-		{ xray::constraint_len(1), glaze::new_style(), "" },
-	};
+	xray::Rect r00, r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11;
+	xray::Rect r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22;
+	layout::vstack(area, {
+		layout::slot(layout::len(1), &r00),
+		layout::slot(layout::len(1), &r01),
+		layout::slot(layout::len(1), &r02),
+		layout::slot(layout::len(2), &r03),
+		layout::slot(layout::len(1), &r04),
+		layout::slot(layout::len(1), &r05),
+		layout::slot(layout::len(2), &r06),
+		layout::slot(layout::len(1), &r07),
+		layout::slot(layout::len(1), &r08),
+		layout::slot(layout::len(2), &r09),
+		layout::slot(layout::len(1), &r10),
+		layout::slot(layout::len(1), &r11),
+		layout::slot(layout::len(2), &r12),
+		layout::slot(layout::len(1), &r13),
+		layout::slot(layout::len(1), &r14),
+		layout::slot(layout::len(2), &r15),
+		layout::slot(layout::len(1), &r16),
+		layout::slot(layout::len(1), &r17),
+		layout::slot(layout::len(2), &r18),
+		layout::slot(layout::len(1), &r19),
+		layout::slot(layout::len(1), &r20),
+		layout::slot(layout::len(2), &r21),
+		layout::slot(layout::len(1), &r22),
+	});
 
-	String content = milktea::vstack(area, nodes[..]);
+	String v00 = title_s.render_in(r00, "  COLOUR SPACE COMPARISON");
+	String v01 = glaze::new_style().render_in(r01, "");
+	String v02 = label_hi.render_in(r02, lbl1.str_view());
+	String v03 = glaze::new_style().render_in(r03, grad1.str_view());
+	String v04 = glaze::new_style().render_in(r04, "");
+	String v05 = label_hi.render_in(r05, lbl2.str_view());
+	String v06 = glaze::new_style().render_in(r06, grad2.str_view());
+	String v07 = glaze::new_style().render_in(r07, "");
+	String v08 = label_hi.render_in(r08, lbl3.str_view());
+	String v09 = glaze::new_style().render_in(r09, grad3.str_view());
+	String v10 = glaze::new_style().render_in(r10, "");
+	String v11 = label_hi.render_in(r11, lbl4.str_view());
+	String v12 = glaze::new_style().render_in(r12, grad4.str_view());
+	String v13 = glaze::new_style().render_in(r13, "");
+	String v14 = label_hi.render_in(r14, lbl5.str_view());
+	String v15 = glaze::new_style().render_in(r15, grad5.str_view());
+	String v16 = glaze::new_style().render_in(r16, "");
+	String v17 = label_hi.render_in(r17, lbl6.str_view());
+	String v18 = glaze::new_style().render_in(r18, grad6.str_view());
+	String v19 = glaze::new_style().render_in(r19, "");
+	String v20 = label_hi.render_in(r20, lbl7.str_view());
+	String v21 = glaze::new_style().render_in(r21, grad7.str_view());
+	String v22 = glaze::new_style().render_in(r22, "");
+
+	String content = v00;
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v01);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v02);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v03);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v04);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v05);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v06);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v07);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v08);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v09);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v10);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v11);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v12);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v13);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v14);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v15);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v16);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v17);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v18);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v19);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v20);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v21);
+	content = glaze::join_vertical(glaze::Position.LEFT, content, v22);
 
 	// ── render to screen buffer + glitter overlay ────────────────────────
 

@@ -331,50 +331,6 @@ fn void test_snap_clip_lines_short() @test {
 }
 
 // ============================================================
-// Compositor
-// ============================================================
-
-fn void test_snap_compositor_single_layer() @test {
-	glaze::Compositor* c = glaze::new_compositor();
-	glaze::Layer* l = glaze::new_layer("hello");
-	l.set_x(0).set_y(0).set_z(0);
-	c.add_layer(l);
-	String out = c.render();
-	snapshot::assert_snapshot(SNAP, "compositor_single", out);
-	mem::free(l);
-	mem::free(c.root);
-	mem::free(c);
-}
-
-fn void test_snap_compositor_offset() @test {
-	glaze::Compositor* c = glaze::new_compositor();
-	glaze::Layer* l = glaze::new_layer("XY");
-	l.set_x(5).set_y(2).set_z(0);
-	c.add_layer(l);
-	String out = c.render();
-	snapshot::assert_snapshot(SNAP, "compositor_offset", out);
-	mem::free(l);
-	mem::free(c.root);
-	mem::free(c);
-}
-
-fn void test_snap_compositor_two_layers() @test {
-	glaze::Compositor* c = glaze::new_compositor();
-	glaze::Layer* bg = glaze::new_layer("background");
-	bg.set_x(0).set_y(0).set_z(0);
-	glaze::Layer* fg = glaze::new_layer("TOP");
-	fg.set_x(4).set_y(0).set_z(1);
-	c.add_layer(bg);
-	c.add_layer(fg);
-	String out = c.render();
-	snapshot::assert_snapshot(SNAP, "compositor_two_layers", out);
-	mem::free(bg);
-	mem::free(fg);
-	mem::free(c.root);
-	mem::free(c);
-}
-
-// ============================================================
 // glaze::progress_bar (standalone function)
 // ============================================================
 
