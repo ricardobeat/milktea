@@ -106,15 +106,6 @@ fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
 
 fn int main() {
 	PaginationModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	int count = 0;
-	for (int i = 0; i < TOTAL_ITEMS; i++) {
-		if (m.selected[i]) count++;
-	}
-	io::printfn("\nSelected %d items.", count);
+	milktea::@run(&m);
 	return 0;
 }

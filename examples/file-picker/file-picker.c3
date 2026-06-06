@@ -79,11 +79,7 @@ fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
 
 fn int main() {
 	PickerModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
+	milktea::@run(&m);
 	if (m.fp.selected.len > 0) {
 		io::printfn("Selected: %s", m.fp.selected);
 	} else {

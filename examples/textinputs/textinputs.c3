@@ -134,19 +134,6 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 
 fn int main() {
 	InputsModel m = { };
-
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	if (m.submitted) {
-		io::printfn("Submitted!");
-		io::printfn("  Nickname: %s", m.inputs[0].text());
-		io::printfn("  Email: %s", m.inputs[1].text());
-		io::printfn("  Password: %s", m.inputs[2].text());
-	} else {
-		io::printn("Cancelled.");
-	}
+	milktea::@run(&m);
 	return 0;
 }

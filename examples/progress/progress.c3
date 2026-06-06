@@ -130,11 +130,5 @@ fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
 
 fn int main() {
 	ProgressModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Done!");
-	return 0;
+	return milktea::@run(&m);
 }

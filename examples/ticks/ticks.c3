@@ -108,11 +108,6 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Bye!");
+	milktea::@run(&m);
 	return 0;
 }

@@ -119,11 +119,6 @@ fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
 
 fn int main() {
 	ViewportModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Bye!");
+	milktea::@run(&m);
 	return 0;
 }

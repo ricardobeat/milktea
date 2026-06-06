@@ -76,9 +76,5 @@ fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
 
 fn int main() {
 	TabsModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-	return 0;
+	return milktea::@run(&m);
 }

@@ -172,11 +172,6 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 
 fn int main() {
 	ChatModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-
-	io::printn("Bye!");
+	milktea::@run(&m);
 	return 0;
 }

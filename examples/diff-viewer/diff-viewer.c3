@@ -207,9 +207,5 @@ fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 
 fn int main() {
 	DiffModel model = { };
-	if (catch err = milktea::@run_program(&model)) {
-		io::printfn("Error: %s", err);
-		return 1;
-	}
-	return 0;
+	return milktea::@run(&model);
 }

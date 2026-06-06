@@ -1,5 +1,7 @@
 module milktea;
 
+import std::io;
+
 // @program creates a Program from a model pointer, handling the
 // unsafe (Model) cast internally. This eliminates the most common
 // source of errors in milktea programs.
@@ -24,6 +26,23 @@ macro @program(#model) {
 macro @run_program(#model) {
 	Program p = { .model = (Model)#model };
 	return p.run();
+}
+
+// @run creates a Program, runs it, and handles errors by printing to stderr.
+// Returns 0 on success, 1 on error. Use this as the one-liner main body.
+//
+// Example:
+//   fn int main() {
+//       Counter c = {};
+//       return milktea::@run(&c);
+//   }
+macro @run(#model) {
+	Program p = { .model = (Model)#model };
+	if (catch err = p.run()) {
+		io::eprintfn("Error: %s", err);
+		return 1;
+	}
+	return 0;
 }
 
 // @test_program creates a Program in test mode with a capture buffer,
