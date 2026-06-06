@@ -31,11 +31,11 @@ struct List {
 fn List new_list() {
 	List l = { };
 	l.selected = -1;
-	l.cursor_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
-	l.selected_style = glaze::new_style().foreground(glaze::color_hex("#00ff00"));
-	l.item_style = glaze::new_style().foreground(glaze::color_hex("#cccccc"));
-	l.title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	l.dim_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	l.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	l.selected_style = glaze::style().foreground(glaze::color_hex("#00ff00"));
+	l.item_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
+	l.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	l.dim_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	return l;
 }
 

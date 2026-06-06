@@ -22,9 +22,9 @@ struct TextInput {
 fn TextInput new_text_input() {
 	TextInput t = { };
 	t.max_width = 512;
-	t.focused_style = glaze::new_style().foreground(glaze::color_hex("#ffffff"));
-	t.blurred_style = glaze::new_style().foreground(glaze::color_hex("#888888"));
-	t.placeholder_style = glaze::new_style().foreground(glaze::color_hex("#444444"));
+	t.focused_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
+	t.blurred_style = glaze::style().foreground(glaze::color_hex("#888888"));
+	t.placeholder_style = glaze::style().foreground(glaze::color_hex("#444444"));
 	return t;
 }
 

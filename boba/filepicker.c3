@@ -29,12 +29,12 @@ struct FilePicker {
 fn FilePicker new_file_picker(String start_dir) {
 	FilePicker fp = { };
 	fp.current_dir = start_dir;
-	fp.cursor_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
-	fp.dir_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff"));
-	fp.file_style = glaze::new_style().foreground(glaze::color_hex("#cccccc"));
-	fp.title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	fp.hint_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
-	fp.error_style = glaze::new_style().foreground(glaze::color_hex("#ff0000"));
+	fp.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	fp.dir_style = glaze::style().foreground(glaze::color_hex("#00d7ff"));
+	fp.file_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
+	fp.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	fp.hint_style = glaze::style().foreground(glaze::color_hex("#666666"));
+	fp.error_style = glaze::style().foreground(glaze::color_hex("#ff0000"));
 	return fp;
 }
 

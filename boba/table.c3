@@ -37,10 +37,10 @@ struct Table {
 fn Table new_table() {
 	Table t = { };
 	t.has_header = true;
-	t.header_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	t.cursor_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
-	t.row_style = glaze::new_style().foreground(glaze::color_hex("#cccccc"));
-	t.border_style = glaze::new_style().foreground(glaze::color_hex("#444444"));
+	t.header_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	t.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	t.row_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
+	t.border_style = glaze::style().foreground(glaze::color_hex("#444444"));
 	return t;
 }
 
