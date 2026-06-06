@@ -73,12 +73,12 @@ fn milktea::View Model.view(&self) @dynamic {
 		layout::slot(layout::len(1),    &hint_r),
 	});
 
-	String title_v  = glaze::new_style().foreground(glaze::color_hex("#00ffcc")).set_bold(true).render_in(title_r, "  INPUTBOX TEST");
-	String output_v = glaze::new_style().foreground(glaze::color_hex("#aaaaaa")).render_in(output_r, self.output.str_view());
-	String input_v  = glaze::new_style().foreground(glaze::color_hex("#ffff00"))
-		.set_border(glaze::rounded_border()).padding(0, 1, 0, 1)
+	String title_v  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true).render_in(title_r, "  INPUTBOX TEST");
+	String output_v = glaze::style().foreground(glaze::color_hex("#aaaaaa")).render_in(output_r, self.output.str_view());
+	String input_v  = glaze::style().foreground(glaze::color_hex("#ffff00"))
+		.border(glaze::rounded_border()).padding(0, 1, 0, 1)
 		.render_in(input_r, inp_content);
-	String hint_v   = glaze::new_style().foreground(glaze::color_hex("#555555")).render_in(hint_r, help_text);
+	String hint_v   = glaze::style().foreground(glaze::color_hex("#555555")).render_in(hint_r, help_text);
 
 	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);

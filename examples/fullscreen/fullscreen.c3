@@ -49,9 +49,9 @@ fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) 
 }
 
 fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
-	glaze::Style number = glaze::new_style().foreground(glaze::color_hex("#ff5555")).set_bold(true);
+	glaze::Style number = glaze::style().foreground(glaze::color_hex("#ff5555")).bold(true);
 
-	glaze::Style label = glaze::new_style().foreground(glaze::color_hex("#888888"));
+	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
 
 	DString out    = dstring::temp();
 	String num_str = string::tformat("%d", self.countdown);

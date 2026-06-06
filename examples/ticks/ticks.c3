@@ -79,19 +79,19 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
 	String spin      = frames[self.spin_frame % 8];
 
-	glaze::Style spin_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(glaze::rounded_border());
+		.border(glaze::rounded_border());
 
-	glaze::Style timer_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true)
+	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(glaze::rounded_border());
+		.border(glaze::rounded_border());
 
-	glaze::Style step_style = glaze::new_style().foreground(glaze::color_hex("#00ff88")).set_bold(true)
+	glaze::Style step_style = glaze::style().foreground(glaze::color_hex("#00ff88")).bold(true)
 		.padding(1, 2, 1, 2)
-		.set_border(glaze::rounded_border());
+		.border(glaze::rounded_border());
 
-	glaze::Style hint = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	String spin_view  = spin_style.render(string::tformat("%s Spinning...", spin));
 	String timer_view = timer_style.render(string::tformat("Timer (every 1s)\n%02d seconds", self.seconds));

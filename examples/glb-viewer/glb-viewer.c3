@@ -382,12 +382,12 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	DString out = dstring::temp();
-	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	glaze::Style cursor_style = glaze::new_style().foreground(glaze::color_hex("#ffffff")).set_bold(true)
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style cursor_style = glaze::style().foreground(glaze::color_hex("#ffffff")).bold(true)
 		.background(glaze::color_hex("#444444"));
-	glaze::Style normal_style = glaze::new_style().foreground(glaze::color_hex("#aaaaaa"));
-	glaze::Style error_style  = glaze::new_style().foreground(glaze::color_hex("#ff5555"));
-	glaze::Style hint_style   = glaze::new_style().foreground(glaze::color_hex("#555555"));
+	glaze::Style normal_style = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
+	glaze::Style error_style  = glaze::style().foreground(glaze::color_hex("#ff5555"));
+	glaze::Style hint_style   = glaze::style().foreground(glaze::color_hex("#555555"));
 
 	out.append_string(title_style.render("GLB Viewer — select a file"));
 	out.append_char('\n');

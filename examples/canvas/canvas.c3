@@ -46,11 +46,11 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	}
 
 	// Cards: Width(20) Height(10) with rounded border, centered content
-	glaze::Style card_style = glaze::new_style().set_width(20).set_height(10)
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#7c3aed"))
+	glaze::Style card_style = glaze::style().width(20).height(10)
+		.border(glaze::rounded_border())
+		.border_fg(glaze::color_hex("#7c3aed"))
 		.foreground(glaze::color_hex("#ffffff"))
-		.set_bold(true);
+		.bold(true);
 
 	String card_a_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Hello");
 	String card_b_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye");
@@ -59,7 +59,7 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	milktea::Layer* card_b = milktea::new_layer(card_style.render(card_b_content)).set_x(10).set_y(2).set_z(z_b);
 
 	// Footer
-	glaze::Style footer_style = glaze::new_style().set_height(3).foreground(glaze::color_hex("#a0a0a0"));
+	glaze::Style footer_style = glaze::style().height(3).foreground(glaze::color_hex("#a0a0a0"));
 	String footer_text           = "Press any key to swap the cards, or q to quit.";
 	milktea::Layer* footer      = milktea::new_layer(footer_style.render(footer_text));
 

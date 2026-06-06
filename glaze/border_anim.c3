@@ -86,7 +86,7 @@ fn Color _color_lerp(Color base, Color target, int t255) @local {
 // wrap_animated renders a border around content of the given dimensions,
 // applying the selected animation mode.  `time_ms` is the current wall-clock
 // time in milliseconds (e.g. from taro_now_ms()).  The base colour is taken
-// from `style.border_fg`; if NONE, white is used.
+// from `style.border_color`; if NONE, white is used.
 // 
 // Clockwise perimeter positions (0-based):
 //   0            : top_left corner
@@ -99,7 +99,7 @@ fn Color _color_lerp(Color base, Color target, int t255) @local {
 //   2W+4+H..total-1: left edge (bottom→top)
 //   total = 2*(W+H)+4
 fn String Border.wrap_animated(self, int content_w, int content_h, BorderAnimation anim, Style style, long time_ms) {
-	if (anim == BorderAnimation.NONE) return self.wrap_with_color("", style.border_fg);
+	if (anim == BorderAnimation.NONE) return self.wrap_with_color("", style.border_color);
 
 	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
 		&& self.top_left.len == 0
@@ -114,8 +114,8 @@ fn String Border.wrap_animated(self, int content_w, int content_h, BorderAnimati
 	int total_perim = 2 * (cw + ch) + 4;
 	if (total_perim <= 0) total_perim = 1;
 
-	Color base = style.border_fg.kind != ColorKind.NONE ? style.border_fg : color_hex("#ffffff");
-	int speed  = style.border_anim_speed > 0 ? style.border_anim_speed : 1000;
+	Color base = style.border_color.kind != ColorKind.NONE ? style.border_color : color_hex("#ffffff");
+	int speed  = style.anim_speed_ms > 0 ? style.anim_speed_ms : 1000;
 	int t      = (int)(time_ms % (long)speed);
 
 	DString out = dstring::temp();

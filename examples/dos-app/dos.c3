@@ -169,10 +169,10 @@ fn void add_shadowed(milktea::Compositor* comp, String panel_str, int x, int y, 
 		}
 	}
 
-	glaze::Style shadow_style = glaze::new_style()
+	glaze::Style shadow_style = glaze::style()
 		.background(glaze::color_hex(C_SHADOW))
-		.set_width(pw)
-		.set_height(ph);
+		.width(pw)
+		.height(ph);
 	String shadow_str = shadow_style.render("");
 
 	comp.add_layer(milktea::new_layer(shadow_str).set_x(x + 2).set_y(y + 1).set_z(z));
@@ -260,25 +260,25 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	milktea::Compositor* comp = milktea::new_compositor(w, h);
 
 	// ── Background ────────────────────────────────────────────────────────────
-	glaze::Style bg_style = glaze::new_style()
+	glaze::Style bg_style = glaze::style()
 		.background(glaze::color_hex(C_BLUE))
-		.set_width(w)
-		.set_height(h);
+		.width(w)
+		.height(h);
 	comp.add_layer(milktea::new_layer(bg_style.render("")).set_z(0));
 
 	// ── Menu bar ─────────────────────────────────────────────────────────────
-	glaze::Style menubar_style = glaze::new_style()
+	glaze::Style menubar_style = glaze::style()
 		.background(glaze::color_hex(C_CYAN))
 		.foreground(glaze::color_hex(C_BLACK))
-		.set_width(w)
-		.set_height(1);
+		.width(w)
+		.height(1);
 
-	glaze::Style menu_active_style = glaze::new_style()
+	glaze::Style menu_active_style = glaze::style()
 		.background(glaze::color_hex(C_BLACK))
 		.foreground(glaze::color_hex(C_WHITE))
-		.set_bold(true);
+		.bold(true);
 
-	glaze::Style menu_item_style = glaze::new_style()
+	glaze::Style menu_item_style = glaze::style()
 		.background(glaze::color_hex(C_CYAN))
 		.foreground(glaze::color_hex(C_BLACK));
 
@@ -299,13 +299,13 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	int content_w = w - 4;
 	int content_h = h - 5; // menubar(1) + gap(1) + statusbar(1) + 2 margin
 
-	glaze::Style content_style = glaze::new_style()
+	glaze::Style content_style = glaze::style()
 		.foreground(glaze::color_hex(C_WHITE))
 		.background(glaze::color_hex(C_BLUE))
-		.set_border(glaze::double_border())
-		.set_border_fg(glaze::color_hex(C_CYAN))
-		.set_width(content_w)
-		.set_height(content_h)
+		.border(glaze::double_border())
+		.border_fg(glaze::color_hex(C_CYAN))
+		.width(content_w)
+		.height(content_h)
 		.padding(1, 3, 1, 3)
 		.align(glaze::Position.LEFT, glaze::Position.TOP);
 
@@ -316,10 +316,10 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	glaze::Style title_style = glaze::new_style()
+	glaze::Style title_style = glaze::style()
 		.foreground(glaze::color_hex(C_YELLOW))
-		.set_bold(true);
-	glaze::Style body_style = glaze::new_style()
+		.bold(true);
+	glaze::Style body_style = glaze::style()
 		.foreground(glaze::color_hex(C_WHITE));
 
 	String tab_title = title_style.render(tab_titles[self.active_tab]);
@@ -328,14 +328,14 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	comp.add_layer(milktea::new_layer(content_style.render(inner)).set_x(content_x).set_y(content_y).set_z(10));
 
 	// ── Status bar ────────────────────────────────────────────────────────────
-	glaze::Style status_style = glaze::new_style()
+	glaze::Style status_style = glaze::style()
 		.background(glaze::color_hex(C_CYAN))
 		.foreground(glaze::color_hex(C_BLACK))
-		.set_width(w);
-	glaze::Style status_key_style = glaze::new_style()
+		.width(w);
+	glaze::Style status_key_style = glaze::style()
 		.background(glaze::color_hex(C_BLACK))
 		.foreground(glaze::color_hex(C_WHITE))
-		.set_bold(true);
+		.bold(true);
 
 	String size_info = string::tformat("%dx%d", w, h);
 	String hint_keys = string::tformat("  %s %s  menus    %s  tabs    %s  quit",
@@ -347,7 +347,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	String status_left  = status_style.render(hint_keys);
 	comp.add_layer(milktea::new_layer(status_left).set_x(0).set_y(h - 1).set_z(10));
 	// Right-side status info
-	glaze::Style status_r_style = glaze::new_style()
+	glaze::Style status_r_style = glaze::style()
 		.background(glaze::color_hex(C_DARK))
 		.foreground(glaze::color_hex(C_GRAY));
 	int srw = glaze::string_width(status_right) + 2;
@@ -355,24 +355,24 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 
 	// ── Dropdown ─────────────────────────────────────────────────────────────
 	if (self.dropdown_open) {
-		glaze::Style dd_style = glaze::new_style()
+		glaze::Style dd_style = glaze::style()
 			.background(glaze::color_hex(C_CYAN))
 			.foreground(glaze::color_hex(C_BLACK))
-			.set_border(glaze::normal_border())
-			.set_border_fg(glaze::color_hex(C_WHITE))
+			.border(glaze::normal_border())
+			.border_fg(glaze::color_hex(C_WHITE))
 			.padding(0, 1, 0, 1)
-			.set_width(22);
+			.width(22);
 
-		glaze::Style dd_sel_style = glaze::new_style()
+		glaze::Style dd_sel_style = glaze::style()
 			.background(glaze::color_hex(C_BLACK))
 			.foreground(glaze::color_hex(C_YELLOW))
-			.set_bold(true)
-			.set_width(20);
+			.bold(true)
+			.width(20);
 
-		glaze::Style dd_item_style = glaze::new_style()
+		glaze::Style dd_item_style = glaze::style()
 			.background(glaze::color_hex(C_CYAN))
 			.foreground(glaze::color_hex(C_BLACK))
-			.set_width(20);
+			.width(20);
 
 		String[4] rows;
 		for (int i = 0; i < 4; i++) {
@@ -396,19 +396,19 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		int modal_x  = (w - modal_rw) / 2;
 		int modal_y  = (h - modal_rh) / 2;
 
-		glaze::Style modal_style = glaze::new_style()
+		glaze::Style modal_style = glaze::style()
 			.background(glaze::color_hex(C_DARK))
 			.foreground(glaze::color_hex(C_WHITE))
-			.set_border(glaze::double_border())
-			.set_border_fg(glaze::color_hex(C_YELLOW))
-			.set_width(modal_w)
-			.set_height(modal_h)
+			.border(glaze::double_border())
+			.border_fg(glaze::color_hex(C_YELLOW))
+			.width(modal_w)
+			.height(modal_h)
 			.padding(1, 2, 1, 2)
 			.align(glaze::Position.CENTER, glaze::Position.CENTER);
 
-		glaze::Style modal_title_style = glaze::new_style()
+		glaze::Style modal_title_style = glaze::style()
 			.foreground(glaze::color_hex(C_YELLOW))
-			.set_bold(true);
+			.bold(true);
 
 		String btn_ok     = dos_button("  OK  ", self.modal_btn == 0);
 		String btn_cancel = dos_button("Cancel", self.modal_btn == 1);

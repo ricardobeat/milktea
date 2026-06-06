@@ -66,11 +66,11 @@ fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) 
 }
 
 fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
-	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(0, 0, 1, 0);
-	glaze::Style cursor_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
-	glaze::Style check_style  = glaze::new_style().foreground(glaze::color_hex("#00ff00"));
-	glaze::Style dim_style    = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	glaze::Style check_style  = glaze::style().foreground(glaze::color_hex("#00ff00"));
+	glaze::Style dim_style    = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	int tp      = self.pg.total_pages();

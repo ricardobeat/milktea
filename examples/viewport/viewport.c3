@@ -64,13 +64,13 @@ fn String lorem_line(int i) {
 }
 
 fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
-	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true)
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
 		.padding(0, 2, 0, 0);
-	glaze::Style line_style = glaze::new_style().foreground(glaze::color_hex("#cccccc"));
-	glaze::Style dim_style  = glaze::new_style().foreground(glaze::color_hex("#444444"));
-	glaze::Style highlight_style = glaze::new_style().background(glaze::color_hex("#333355"))
+	glaze::Style line_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
+	glaze::Style dim_style  = glaze::style().foreground(glaze::color_hex("#444444"));
+	glaze::Style highlight_style = glaze::style().background(glaze::color_hex("#333355"))
 		.foreground(glaze::color_hex("#ffffff"));
-	glaze::Style box_style = glaze::new_style().set_border(glaze::rounded_border()).padding(0, 1, 0, 1);
+	glaze::Style box_style = glaze::style().border(glaze::rounded_border()).padding(0, 1, 0, 1);
 
 	DString out = dstring::temp();
 	out.append_string(title_style.render("Scrollable Viewport"));

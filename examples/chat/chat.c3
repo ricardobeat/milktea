@@ -85,12 +85,12 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
-	glaze::Style you_style   = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	glaze::Style sys_style   = glaze::new_style().foreground(glaze::color_hex("#888888"));
-	glaze::Style input_style = glaze::new_style().foreground(glaze::color_hex("#ffffff"));
-	glaze::Style hint_style  = glaze::new_style().foreground(glaze::color_hex("#444444"));
-	glaze::Style border_style = glaze::new_style()
-		.set_border(
+	glaze::Style you_style   = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style sys_style   = glaze::style().foreground(glaze::color_hex("#888888"));
+	glaze::Style input_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
+	glaze::Style hint_style  = glaze::style().foreground(glaze::color_hex("#444444"));
+	glaze::Style border_style = glaze::style()
+		.border(
 			{
 				.top = "-",
 				.bottom = "-",
@@ -102,7 +102,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 				.bottom_right = "+"
 			}
 		);
-	glaze::Style title_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true);
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
 
 	int msg_area_h = self.height - 5;
 	if (msg_area_h < 3) msg_area_h = 3;

@@ -48,11 +48,11 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	glaze::Style box_style = glaze::new_style().foreground(glaze::color_hex("#ff00ff")).set_bold(true)
+	glaze::Style box_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
 		.padding(2, 4, 2, 4)
-		.set_border(glaze::rounded_border());
+		.border(glaze::rounded_border());
 
-	glaze::Style subtle = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out     = dstring::temp();
 	int minutes     = self.timer.remaining_seconds / 60;
@@ -62,12 +62,12 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 	out.append_char('\n');
 
 	if (self.timer.done) {
-		glaze::Style done_style = glaze::new_style().foreground(glaze::color_hex("#00ff00")).set_bold(true);
+		glaze::Style done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).bold(true);
 		out.append_string(done_style.render("Time's up!"));
 	} else if (self.timer.running) {
 		out.append_string(subtle.render("SPACE to pause"));
 	} else {
-		glaze::Style pause_style = glaze::new_style().foreground(glaze::color_hex("#ffff00"));
+		glaze::Style pause_style = glaze::style().foreground(glaze::color_hex("#ffff00"));
 		out.append_string(pause_style.render("PAUSED"));
 		out.append_string(subtle.render("  SPACE to resume"));
 	}

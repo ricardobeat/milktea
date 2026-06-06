@@ -52,9 +52,9 @@ fn milktea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
 	String[12] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙" };
 	String spin       = frames[self.frame % 12];
 
-	glaze::Style title = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
 
-	glaze::Style subtle = glaze::new_style().foreground(glaze::color_hex("#666666"));
+	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
 	out.append_string(title.render(string::tformat("%s  Loading...", spin)));
