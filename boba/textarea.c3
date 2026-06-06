@@ -32,11 +32,11 @@ fn Textarea new_textarea(int width, int height) {
 	t.width = width;
 	t.height = height;
 	t.show_line_numbers = true;
-	t.focused_style = glaze::new_style().foreground(glaze::color_hex("#ffffff"));
-	t.blurred_style = glaze::new_style().foreground(glaze::color_hex("#888888"));
-	t.cursor_style = glaze::new_style().background(glaze::color_hex("#ffffff")).foreground(glaze::color_hex("#000000"));
-	t.line_number_style = glaze::new_style().foreground(glaze::color_hex("#555555"));
-	t.prompt_style = glaze::new_style().foreground(glaze::color_hex("#555555"));
+	t.focused_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
+	t.blurred_style = glaze::style().foreground(glaze::color_hex("#888888"));
+	t.cursor_style = glaze::style().background(glaze::color_hex("#ffffff")).foreground(glaze::color_hex("#000000"));
+	t.line_number_style = glaze::style().foreground(glaze::color_hex("#555555"));
+	t.prompt_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	return t;
 }
 
@@ -314,7 +314,7 @@ fn String Textarea.view(&self) {
 
 		int content_w = self.width - (int)self.prompt.len;
 		if (content_w < 1) content_w = 1;
-		glaze::Style line_style = content_style.set_width(content_w);
+		glaze::Style line_style = content_style.width(content_w);
 
 		bool is_cursor_row = self.focused && self.show_cursor && (r == self.cursor_row);
 
@@ -349,7 +349,7 @@ fn String Textarea.view(&self) {
 					if (cur + 1 < line_len) {
 						int remaining_w = content_w - (int)cur - 1;
 						if (remaining_w < 1) remaining_w = 1;
-						out.append_string(content_style.set_width(remaining_w)
+						out.append_string(content_style.width(remaining_w)
 							.render(line_text[cur + 1:line_len - cur - 1]));
 					}
 				} else {

@@ -21,9 +21,9 @@ fn Progress new_progress(int width, double percent) {
 	p.percent = percent;
 	p.fill_char = "\xe2\x96\x88"; // █
 	p.empty_char = "\xe2\x96\x91"; // ░
-	p.fill_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff"));
-	p.empty_style = glaze::new_style().foreground(glaze::color_hex("#333333"));
-	p.percent_style = glaze::new_style().foreground(glaze::color_hex("#888888"));
+	p.fill_style = glaze::style().foreground(glaze::color_hex("#00d7ff"));
+	p.empty_style = glaze::style().foreground(glaze::color_hex("#333333"));
+	p.percent_style = glaze::style().foreground(glaze::color_hex("#888888"));
 	return p;
 }
 

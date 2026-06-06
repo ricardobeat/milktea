@@ -70,7 +70,7 @@ fn String Spinner.view(&self) {
 	SpinnerFrames fs = spinner_frames(self.kind);
 	String frame_str = fs.frames[self.frame % fs.count];
 	if (self.fg.kind == glaze::ColorKind.NONE) return frame_str;
-	glaze::Style s = glaze::new_style().foreground(self.fg);
+	glaze::Style s = glaze::style().foreground(self.fg);
 	return s.render(frame_str);
 }
 

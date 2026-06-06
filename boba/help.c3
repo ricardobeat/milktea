@@ -22,9 +22,9 @@ struct Help {
 // new_help creates an empty help component.
 fn Help new_help() {
 	Help h = { };
-	h.key_style = glaze::new_style().foreground(glaze::color_hex("#00d7ff")).set_bold(true);
-	h.desc_style = glaze::new_style().foreground(glaze::color_hex("#666666"));
-	h.separator_style = glaze::new_style().foreground(glaze::color_hex("#444444"));
+	h.key_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	h.desc_style = glaze::style().foreground(glaze::color_hex("#666666"));
+	h.separator_style = glaze::style().foreground(glaze::color_hex("#444444"));
 	h.separator = " | ";
 	return h;
 }

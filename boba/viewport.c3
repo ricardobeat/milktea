@@ -19,7 +19,7 @@ fn Viewport new_viewport(int width, int height) {
 	Viewport v = { };
 	v.width = width;
 	v.height = height;
-	v.scrollbar_style = glaze::new_style().foreground(glaze::color_hex("#555555"));
+	v.scrollbar_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	return v;
 }
 
