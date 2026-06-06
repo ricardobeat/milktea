@@ -6,6 +6,7 @@ module inputbox;
 import milktea;
 import glaze;
 import xray;
+import xray::layout;
 import std::io;
 import std::core::dstring;
 
@@ -64,31 +65,24 @@ fn milktea::View Model.view(&self) @dynamic {
 	String inp_content = string::tformat("> %s█", self.input.str_view());
 	String help_text   = string::tformat("  input len: %d chars", (int)self.input.len());
 
-	milktea::LayoutNode[4] nodes = {
-		{
-			xray::constraint_len(1),
-			glaze::new_style().foreground(glaze::color_hex("#00ffcc")).set_bold(true).set_width(w),
-			"  INPUTBOX TEST",
-		},
-		{
-			xray::constraint_fill(1),
-			glaze::new_style().foreground(glaze::color_hex("#aaaaaa")),
-			self.output.str_view(),
-		},
-		{
-			xray::constraint_len(3),
-			glaze::new_style().foreground(glaze::color_hex("#ffff00"))
-				.set_border(glaze::rounded_border()).padding(0, 1, 0, 1),
-			inp_content,
-		},
-		{
-			xray::constraint_len(1),
-			glaze::new_style().foreground(glaze::color_hex("#555555")).set_width(w),
-			help_text,
-		},
-	};
+	xray::Rect title_r, output_r, input_r, hint_r;
+	layout::vstack(layout::screen(w, h), {
+		layout::slot(layout::len(1),    &title_r),
+		layout::slot(layout::fill(1),   &output_r),
+		layout::slot(layout::len(3),    &input_r),
+		layout::slot(layout::len(1),    &hint_r),
+	});
 
-	String doc = milktea::vstack(full, nodes[..]);
+	String title_v  = glaze::new_style().foreground(glaze::color_hex("#00ffcc")).set_bold(true).render_in(title_r, "  INPUTBOX TEST");
+	String output_v = glaze::new_style().foreground(glaze::color_hex("#aaaaaa")).render_in(output_r, self.output.str_view());
+	String input_v  = glaze::new_style().foreground(glaze::color_hex("#ffff00"))
+		.set_border(glaze::rounded_border()).padding(0, 1, 0, 1)
+		.render_in(input_r, inp_content);
+	String hint_v   = glaze::new_style().foreground(glaze::color_hex("#555555")).render_in(hint_r, help_text);
+
+	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
+	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);
+	doc = glaze::join_vertical(glaze::Position.LEFT, doc, hint_v);
 	return milktea::new_alt_screen_view(doc);
 }
 

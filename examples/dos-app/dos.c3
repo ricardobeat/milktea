@@ -155,7 +155,7 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 // Build a shadowed panel: returns {panel_layer, shadow_layer} via compositor layers.
 // shadow is at z=0, panel at z=1. Both positioned at (x, y) — shadow auto-offset.
-fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, int z) {
+fn void add_shadowed(milktea::Compositor* comp, String panel_str, int x, int y, int z) {
 	// Measure panel width and height by splitting on newlines and using string_width per line.
 	int pw = 0;
 	int ph = 0;
@@ -175,8 +175,8 @@ fn void add_shadowed(glaze::Compositor* comp, String panel_str, int x, int y, in
 		.set_height(ph);
 	String shadow_str = shadow_style.render("");
 
-	comp.add_layer(glaze::new_layer(shadow_str).set_x(x + 2).set_y(y + 1).set_z(z));
-	comp.add_layer(glaze::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
+	comp.add_layer(milktea::new_layer(shadow_str).set_x(x + 2).set_y(y + 1).set_z(z));
+	comp.add_layer(milktea::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
 }
 
 // dos_button renders a classic DOS-style raised button with drop shadow.
@@ -257,14 +257,14 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	if (w < 40) w = 80;
 	if (h < 10) h = 24;
 
-	glaze::Compositor* comp = glaze::new_compositor();
+	milktea::Compositor* comp = milktea::new_compositor(w, h);
 
 	// ── Background ────────────────────────────────────────────────────────────
 	glaze::Style bg_style = glaze::new_style()
 		.background(glaze::color_hex(C_BLUE))
 		.set_width(w)
 		.set_height(h);
-	comp.add_layer(glaze::new_layer(bg_style.render("")).set_z(0));
+	comp.add_layer(milktea::new_layer(bg_style.render("")).set_z(0));
 
 	// ── Menu bar ─────────────────────────────────────────────────────────────
 	glaze::Style menubar_style = glaze::new_style()
@@ -291,7 +291,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 			: menu_item_style.render(MENU_NAMES[i]);
 	}
 	String menubar_content = glaze::join_horizontal_arr(glaze::Position.CENTER, rendered_items[..], 0);
-	comp.add_layer(glaze::new_layer(menubar_style.render(menubar_content)).set_z(10));
+	comp.add_layer(milktea::new_layer(menubar_style.render(menubar_content)).set_z(10));
 
 	// ── Content area ─────────────────────────────────────────────────────────
 	int content_x = 2;
@@ -325,7 +325,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	String tab_title = title_style.render(tab_titles[self.active_tab]);
 	String tab_body  = body_style.render(tab_bodies[self.active_tab]);
 	String inner     = glaze::join_vertical(glaze::Position.LEFT, tab_title, tab_body);
-	comp.add_layer(glaze::new_layer(content_style.render(inner)).set_x(content_x).set_y(content_y).set_z(10));
+	comp.add_layer(milktea::new_layer(content_style.render(inner)).set_x(content_x).set_y(content_y).set_z(10));
 
 	// ── Status bar ────────────────────────────────────────────────────────────
 	glaze::Style status_style = glaze::new_style()
@@ -345,13 +345,13 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		status_key_style.render("q"));
 	String status_right = string::tformat("  %s  │  %s ", self.status_msg, size_info);
 	String status_left  = status_style.render(hint_keys);
-	comp.add_layer(glaze::new_layer(status_left).set_x(0).set_y(h - 1).set_z(10));
+	comp.add_layer(milktea::new_layer(status_left).set_x(0).set_y(h - 1).set_z(10));
 	// Right-side status info
 	glaze::Style status_r_style = glaze::new_style()
 		.background(glaze::color_hex(C_DARK))
 		.foreground(glaze::color_hex(C_GRAY));
 	int srw = glaze::string_width(status_right) + 2;
-	comp.add_layer(glaze::new_layer(status_r_style.render(status_right)).set_x(w - srw).set_y(h - 1).set_z(11));
+	comp.add_layer(milktea::new_layer(status_r_style.render(status_right)).set_x(w - srw).set_y(h - 1).set_z(11));
 
 	// ── Dropdown ─────────────────────────────────────────────────────────────
 	if (self.dropdown_open) {
@@ -423,7 +423,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		add_shadowed(comp, modal_panel, modal_x, modal_y, 30);
 	}
 
-	return milktea::new_alt_screen_view(comp.render());
+	return comp.render();
 }
 
 fn int main() {

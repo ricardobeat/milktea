@@ -55,21 +55,21 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	String card_a_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Hello");
 	String card_b_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye");
 
-	glaze::Layer* card_a = glaze::new_layer(card_style.render(card_a_content)).set_z(z_a);
-	glaze::Layer* card_b = glaze::new_layer(card_style.render(card_b_content)).set_x(10).set_y(2).set_z(z_b);
+	milktea::Layer* card_a = milktea::new_layer(card_style.render(card_a_content)).set_z(z_a);
+	milktea::Layer* card_b = milktea::new_layer(card_style.render(card_b_content)).set_x(10).set_y(2).set_z(z_b);
 
 	// Footer
 	glaze::Style footer_style = glaze::new_style().set_height(3).foreground(glaze::color_hex("#a0a0a0"));
 	String footer_text           = "Press any key to swap the cards, or q to quit.";
-	glaze::Layer* footer      = glaze::new_layer(footer_style.render(footer_text));
+	milktea::Layer* footer      = milktea::new_layer(footer_style.render(footer_text));
 
 	// Compose
-	glaze::Compositor* comp = glaze::new_compositor();
+	milktea::Compositor* comp = milktea::new_compositor(self.width, self.height);
 	comp.add_layer(footer);
 	comp.add_layer(card_a);
 	comp.add_layer(card_b);
 
-	return milktea::new_alt_screen_view(comp.render());
+	return comp.render();
 }
 
 fn int main() {
