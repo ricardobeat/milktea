@@ -34,10 +34,12 @@ struct DosModel {
 const String[4] MENU_NAMES = { " File ", " Edit ", " View ", " Help " };
 const int[4]    MENU_X     = { 2, 8, 14, 20 };  // col offsets of menu titles in menubar
 
-const String[4] FILE_ITEMS = { "New       Ctrl+N", "Open...   Ctrl+O", "Save      Ctrl+S", "Exit      Alt+F4" };
-const String[4] EDIT_ITEMS = { "Undo      Ctrl+Z", "Cut       Ctrl+X", "Copy      Ctrl+C", "Paste     Ctrl+V" };
-const String[4] VIEW_ITEMS = { "Zoom In        +", "Zoom Out       -", "Full Screen  F11", "Refresh     F5 " };
-const String[4] HELP_ITEMS = { "Help Topics    F1", "About milktea...", "License       ",   "Diagnostics..."  };
+struct MenuItem { String label; String key; }
+
+const MenuItem[4] FILE_ITEMS = { {"New",         "Ctrl+N"}, {"Open...",    "Ctrl+O"}, {"Save",       "Ctrl+S"}, {"Exit",       "Alt+F4"} };
+const MenuItem[4] EDIT_ITEMS = { {"Undo",        "Ctrl+Z"}, {"Cut",        "Ctrl+X"}, {"Copy",       "Ctrl+C"}, {"Paste",      "Ctrl+V"} };
+const MenuItem[4] VIEW_ITEMS = { {"Zoom In",     "+"     }, {"Zoom Out",   "-"     }, {"Full Screen","F11"   }, {"Refresh",    "F5"    } };
+const MenuItem[4] HELP_ITEMS = { {"Help Topics", "F1"    }, {"About milktea...", ""}, {"License",    ""      }, {"Diagnostics...",""}    };
 
 fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 	self.status_msg = "Ready";
@@ -240,13 +242,20 @@ fn String dos_button(String label, bool focused) {
 	return out.copy_str(tmem);
 }
 
-fn String get_menu_item(int menu_sel, int item) {
+fn MenuItem get_menu_item(int menu_sel, int item) {
 	switch (menu_sel) {
 		case 0: return FILE_ITEMS[item];
 		case 1: return EDIT_ITEMS[item];
 		case 2: return VIEW_ITEMS[item];
 		default: return HELP_ITEMS[item];
 	}
+}
+
+fn String render_menu_item(MenuItem mi, glaze::Style base_style, int inner_w) {
+	String label = glaze::style().align_horizontal(glaze::Position.LEFT).render(mi.label);
+	String key   = glaze::style().align_horizontal(glaze::Position.RIGHT).width(inner_w - glaze::string_width(mi.label)).render(mi.key);
+	String row   = glaze::join_horizontal(label, key, 0);
+	return base_style.render(row);
 }
 
 // ─── View ────────────────────────────────────────────────────────────────────
@@ -376,9 +385,8 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 
 		String[4] rows;
 		for (int i = 0; i < 4; i++) {
-			rows[i] = i == self.dropdown_sel
-				? dd_sel_style.render(get_menu_item(self.menu_sel, i))
-				: dd_item_style.render(get_menu_item(self.menu_sel, i));
+			glaze::Style s = i == self.dropdown_sel ? dd_sel_style : dd_item_style;
+			rows[i] = render_menu_item(get_menu_item(self.menu_sel, i), s, 20);
 		}
 		String dd_content = glaze::join_vertical_arr(glaze::Position.LEFT, rows[..]);
 		String dd_panel   = dd_style.render(dd_content);
