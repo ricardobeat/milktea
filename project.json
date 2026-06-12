@@ -55,6 +55,21 @@
         "curl"
       ]
     },
+    "examples/component-viewer": {
+      "type": "executable",
+      "sources": [
+        "milktea/**",
+        "glaze/**",
+        "boba/**",
+        "xray/**",
+        "examples/component-viewer/**"
+      ],
+      "c-sources": [
+        "milktea/tty_winsize.c"
+      ],
+      "opt": "Os",
+      "strip-unused": true
+    },
     "examples/counter": {
       "type": "executable",
       "sources": [

@@ -11,12 +11,13 @@ struct ListItem {
 	int id;
 }
 
-// List is a scrollable list component with selection.
+// List is a scrollable list component with optional selection.
 struct List {
 	ListItem[64] items;
 	int item_count;
 	int cursor;
 	int selected; // index of selected item (-1 if none)
+	bool selectable; // if true, Enter sets selected; off by default
 	int width;
 	int height;
 	int scroll_offset;
@@ -80,6 +81,7 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 			if (self.cursor >= self.item_count) self.cursor = self.item_count - 1;
 			return true;
 		case milktea::KeyCode.ENTER:
+			if (!self.selectable) return false;
 			self.selected = self.cursor;
 			return true;
 		default:
@@ -105,7 +107,7 @@ fn String List.view(&self) {
 		ListItem item = self.items[i];
 		if (self.cursor == i) {
 			out.append_string(self.cursor_style.render(string::tformat("> %s", item.title)));
-		} else if (self.selected == i) {
+		} else if (self.selectable && self.selected == i) {
 			out.append_string(self.selected_style.render(string::tformat("  %s \xe2\x9c\x93", item.title)));
 		} else {
 			out.append_string(self.item_style.render(string::tformat("  %s", item.title)));
