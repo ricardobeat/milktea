@@ -45,8 +45,8 @@ int c3_list_dir(char *path, char *names, int *is_dirs, int max_entries) {
             continue;
         }
 
-        strncpy(names + count * 256, name, 255);
-        names[count * 256 + 255] = '\0';
+        strncpy(names + count * 64, name, 63);
+        names[count * 64 + 63] = '\0';
         is_dirs[count] = is_dir;
         count++;
     }
