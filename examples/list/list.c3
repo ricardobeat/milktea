@@ -13,6 +13,7 @@ struct ListModel {
 
 fn milktea::Cmd ListModel.init(ListModel* self) @dynamic {
 	self.lst = boba::new_list();
+	self.lst.selectable = true;
 	self.lst.add_item("Buy milk", "");
 	self.lst.add_item("Clean the house", "");
 	self.lst.add_item("Write C3 code", "");
