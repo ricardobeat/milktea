@@ -266,6 +266,8 @@ struct Model {
 	bool preview_focused;
 	int width;
 	int height;
+	int vp_screen_row;
+	int vp_screen_col;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -288,6 +290,19 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.preview.update(msg);
+		return null;
+	}
+
+	if (msg.kind == milktea::MsgKind.MOUSE) {
+		if (self.preview.kind == Component.VIEWPORT) {
+			milktea::MouseMsg m = msg.mouse;
+			m.row = m.row - 1 - self.vp_screen_row;
+			m.col = m.col - 1 - self.vp_screen_col;
+			if (m.row >= 0 && m.row < self.preview.vp.height &&
+				m.col >= 0 && m.col < self.preview.vp.width) {
+				self.preview.vp.handle_mouse_msg(m);
+			}
+		}
 		return null;
 	}
 
@@ -430,6 +445,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.preview.kind == Component.VIEWPORT) {
 		self.preview.vp.height = content_h / 2;
 		self.preview.vp.width = content_w;
+		self.vp_screen_row = preview_r.y + 4;
+		self.vp_screen_col = preview_r.x + 2;
 	}
 
 	String preview_content = glaze::style()
@@ -472,7 +489,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
 	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
 
-	return milktea::new_alt_screen_view(doc);
+	return milktea::new_alt_screen_view(doc)
+		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 }
 
 fn int main() {
