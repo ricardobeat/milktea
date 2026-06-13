@@ -134,9 +134,13 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 		} else {
 			cell.style.bg = existing.style.bg;
 		}
+	} else if (cell.style.bg.kind == ColorKind.TRUECOLOR && cell.style.bg.effective_alpha() < 255) {
+		cell.style.bg = cell.style.bg.blend_over(self.cells[idx].style.bg);
 	}
 	if (cell.style.fg.kind == ColorKind.TRANSPARENT) {
 		cell.style.fg = self.cells[idx].style.fg;
+	} else if (cell.style.fg.kind == ColorKind.TRUECOLOR && cell.style.fg.effective_alpha() < 255) {
+		cell.style.fg = cell.style.fg.blend_over(self.cells[idx].style.fg);
 	}
 	if (!self.cells[idx].eq(cell)) {
 		self.cells[idx] = cell;

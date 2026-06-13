@@ -21,6 +21,7 @@ struct Color {
 	char r; // truecolor red
 	char g; // truecolor green
 	char b; // truecolor blue
+	char a; // alpha: 0 = opaque (default, backwards compat), 1-254 = blended, 255 = opaque
 }
 
 // Constructors
@@ -43,6 +44,30 @@ fn Color color_256(char idx) {
 
 fn Color color_rgb(char r, char g, char b) {
 	return { .kind = ColorKind.TRUECOLOR, .r = r, .g = g, .b = b };
+}
+
+fn Color color_rgba(char r, char g, char b, char a) {
+	return { .kind = ColorKind.TRUECOLOR, .r = r, .g = g, .b = b, .a = a };
+}
+
+// effective_alpha returns the real alpha value (0 means opaque for backwards compat).
+fn char Color.effective_alpha(&self) {
+	return self.a == 0 ? (char)255 : self.a;
+}
+
+// blend returns this color alpha-blended over dst. Both must be truecolor.
+fn Color Color.blend_over(&self, Color dst) {
+	int a = (int)self.effective_alpha();
+	int inv_a = 255 - a;
+	// For non-truecolor destinations, assume black (terminal default)
+	char dr = dst.kind == ColorKind.TRUECOLOR ? dst.r : (char)0;
+	char dg = dst.kind == ColorKind.TRUECOLOR ? dst.g : (char)0;
+	char db = dst.kind == ColorKind.TRUECOLOR ? dst.b : (char)0;
+	return color_rgb(
+		(char)(((int)self.r * a + (int)dr * inv_a) / 255),
+		(char)(((int)self.g * a + (int)dg * inv_a) / 255),
+		(char)(((int)self.b * a + (int)db * inv_a) / 255)
+	);
 }
 
 fn Color color_hex(String hex) {
@@ -79,7 +104,7 @@ fn bool Color.eq(&self, Color other) {
 		case ColorKind.ANSI256:
 			return self.index == other.index;
 		case ColorKind.TRUECOLOR:
-			return self.r == other.r && self.g == other.g && self.b == other.b;
+			return self.r == other.r && self.g == other.g && self.b == other.b && self.a == other.a;
 		default: return true;
 	}
 }
