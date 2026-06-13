@@ -26,6 +26,9 @@ struct List {
 	glaze::Style item_style;
 	glaze::Style title_style;
 	glaze::Style dim_style;
+	String cursor_prefix;
+	String item_prefix;
+	String selected_suffix;
 }
 
 // new_list creates an empty list.
@@ -37,6 +40,9 @@ fn List new_list() {
 	l.item_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
 	l.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
 	l.dim_style = glaze::style().foreground(glaze::color_hex("#666666"));
+	l.cursor_prefix = "▌ ";
+	l.item_prefix = "  ";
+	l.selected_suffix = " ✓";
 	return l;
 }
 
@@ -106,11 +112,11 @@ fn String List.view(&self) {
 	for (int i = self.scroll_offset; i < end; i++) {
 		ListItem item = self.items[i];
 		if (self.cursor == i) {
-			out.append_string(self.cursor_style.render(string::tformat("> %s", item.title)));
+			out.append_string(self.cursor_style.render(string::tformat("%s%s", self.cursor_prefix, item.title)));
 		} else if (self.selectable && self.selected == i) {
-			out.append_string(self.selected_style.render(string::tformat("  %s \xe2\x9c\x93", item.title)));
+			out.append_string(self.selected_style.render(string::tformat("%s%s%s", self.item_prefix, item.title, self.selected_suffix)));
 		} else {
-			out.append_string(self.item_style.render(string::tformat("  %s", item.title)));
+			out.append_string(self.item_style.render(string::tformat("%s%s", self.item_prefix, item.title)));
 		}
 		out.append_char('\n');
 	}

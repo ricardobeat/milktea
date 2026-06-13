@@ -5,8 +5,10 @@ import glaze;
 
 // Stopwatch is a count-up timer component.
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
+const int STOPWATCH_INTERVAL_MS = 10;
+
 struct Stopwatch {
-	int elapsed_seconds;
+	long elapsed_ms;
 	bool running;
 	glaze::Style timer_style;
 	glaze::Style paused_style;
@@ -31,18 +33,17 @@ fn Stopwatch Stopwatch.with_styles(self, glaze::Style timer_s, glaze::Style paus
 	return s;
 }
 
-// tick handles a TICK message. Call from your update() when msg.kind == TICK.
-// Returns a Cmd to schedule the next tick, or null if stopped.
-fn milktea::Cmd Stopwatch.tick(&self) {
+fn milktea::Cmd Stopwatch.update(&self, milktea::Msg msg) {
+	if (msg.kind != milktea::MsgKind.TICK || msg.owner != self) return null;
 	if (self.running) {
-		self.elapsed_seconds++;
+		self.elapsed_ms += STOPWATCH_INTERVAL_MS;
 	}
-	return milktea::tick(1000);
+	milktea::every(STOPWATCH_INTERVAL_MS, owner: self);
+	return null;
 }
 
-// init_cmd returns the first Cmd to start the stopwatch.
 fn milktea::Cmd Stopwatch.init_cmd(&self) {
-	if (self.running) return milktea::tick(1000);
+	if (self.running) milktea::every(STOPWATCH_INTERVAL_MS, owner: self);
 	return null;
 }
 
@@ -53,7 +54,7 @@ fn void Stopwatch.toggle(&self) {
 
 // reset sets the elapsed time back to zero and starts.
 fn void Stopwatch.reset(&self) {
-	self.elapsed_seconds = 0;
+	self.elapsed_ms = 0;
 	self.running = true;
 }
 
@@ -69,15 +70,17 @@ fn void Stopwatch.resume(&self) {
 
 // view returns the rendered stopwatch string.
 fn String Stopwatch.view(&self) {
-	int hours   = self.elapsed_seconds / 3600;
-	int minutes = (self.elapsed_seconds % 3600) / 60;
-	int secs    = self.elapsed_seconds % 60;
+	long total_secs = self.elapsed_ms / 1000;
+	int hours   = (int)(total_secs / 3600);
+	int minutes = (int)((total_secs % 3600) / 60);
+	int secs    = (int)(total_secs % 60);
+	int cs      = (int)((self.elapsed_ms % 1000) / 10);
 
 	DString out = dstring::temp();
 	if (hours > 0) {
-		out.append_string(self.timer_style.render(string::tformat("%d:%02d:%02d", hours, minutes, secs)));
+		out.append_string(self.timer_style.render(string::tformat("%d:%02d:%02d.%02d", hours, minutes, secs, cs)));
 	} else {
-		out.append_string(self.timer_style.render(string::tformat("%02d:%02d", minutes, secs)));
+		out.append_string(self.timer_style.render(string::tformat("%02d:%02d.%02d", minutes, secs, cs)));
 	}
 	out.append_char('\n');
 

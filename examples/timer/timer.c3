@@ -25,9 +25,7 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
-		return self.timer.tick();
-	}
+	self.timer.update(msg);
 
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
@@ -55,8 +53,8 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out     = dstring::temp();
-	int minutes     = self.timer.remaining_seconds / 60;
-	int secs        = self.timer.remaining_seconds % 60;
+	int minutes     = self.timer.remaining() / 60;
+	int secs        = self.timer.remaining() % 60;
 	String time_str = string::tformat("%02d:%02d", minutes, secs);
 	out.append_string(box_style.render(time_str));
 	out.append_char('\n');

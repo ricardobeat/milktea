@@ -50,19 +50,18 @@ fn Spinner Spinner.with_color(self, glaze::Color fg) {
 	return s;
 }
 
-// tick advances the frame and returns the Cmd to schedule the next tick.
-// Call from your model's update() when the tick message arrives.
-fn milktea::Cmd Spinner.tick(&self) {
+fn milktea::Cmd Spinner.update(&self, milktea::Msg msg) {
+	if (msg.kind != milktea::MsgKind.TICK || msg.owner != self) return null;
 	SpinnerFrames fs = spinner_frames(self.kind);
 	self.frame = (self.frame + 1) % fs.count;
-	return milktea::tick((sz)fs.interval_ms, &milktea::tick_msg);
+	milktea::tick((sz)fs.interval_ms, owner: self);
+	return null;
 }
 
-// init_cmd returns the first Cmd to start the animation.
-// Return this from your model's init().
 fn milktea::Cmd Spinner.init_cmd(&self) {
 	SpinnerFrames fs = spinner_frames(self.kind);
-	return milktea::tick((sz)fs.interval_ms, &milktea::tick_msg);
+	milktea::tick((sz)fs.interval_ms, owner: self);
+	return null;
 }
 
 // view returns the current frame string, styled with the spinner's colour.
