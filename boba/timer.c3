@@ -7,7 +7,7 @@ import glaze;
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
 struct Timer {
 	int total_seconds;
-	int remaining_seconds;
+	int elapsed_seconds;
 	bool running;
 	bool done;
 	glaze::Style timer_style;
@@ -20,7 +20,6 @@ struct Timer {
 fn Timer new_timer(int seconds) {
 	Timer t = { };
 	t.total_seconds = seconds;
-	t.remaining_seconds = seconds;
 	t.running = true;
 	t.timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
 	t.paused_style = glaze::style().foreground(glaze::color_hex("#ffff00"));
@@ -38,24 +37,23 @@ fn Timer Timer.with_styles(self, glaze::Style timer_s, glaze::Style paused_s, gl
 	return t;
 }
 
-// tick handles a TICK message. Call from your update() when msg.kind == TICK.
-// Returns a Cmd to schedule the next tick, or null if stopped.
-fn milktea::Cmd Timer.tick(&self) {
+fn milktea::Cmd Timer.update(&self, milktea::Msg msg) {
+	if (msg.kind != milktea::MsgKind.TICK || msg.owner != self) return null;
 	if (self.running) {
-		self.remaining_seconds--;
-		if (self.remaining_seconds <= 0) {
-			self.remaining_seconds = 0;
+		self.elapsed_seconds++;
+		if (self.elapsed_seconds >= self.total_seconds) {
+			self.elapsed_seconds = self.total_seconds;
 			self.running = false;
 			self.done = true;
 			return null;
 		}
 	}
-	return milktea::tick(1000);
+	milktea::every(1000, owner: self);
+	return null;
 }
 
-// init_cmd returns the first Cmd to start the countdown.
 fn milktea::Cmd Timer.init_cmd(&self) {
-	if (self.running) return milktea::tick(1000);
+	if (self.running) milktea::every(1000, owner: self);
 	return null;
 }
 
@@ -66,7 +64,7 @@ fn void Timer.toggle(&self) {
 
 // reset restarts the countdown from the original duration.
 fn void Timer.reset(&self) {
-	self.remaining_seconds = self.total_seconds;
+	self.elapsed_seconds = 0;
 	self.running = true;
 	self.done = false;
 }
@@ -81,10 +79,17 @@ fn void Timer.resume(&self) {
 	if (!self.done) self.running = true;
 }
 
+// remaining returns the seconds left on the countdown.
+fn int Timer.remaining(&self) {
+	int r = self.total_seconds - self.elapsed_seconds;
+	return r > 0 ? r : 0;
+}
+
 // view returns the rendered timer string.
 fn String Timer.view(&self) {
-	int minutes     = self.remaining_seconds / 60;
-	int secs        = self.remaining_seconds % 60;
+	int rem = self.remaining();
+	int minutes     = rem / 60;
+	int secs        = rem % 60;
 	String time_str = string::tformat("%02d:%02d", minutes, secs);
 
 	DString out = dstring::temp();

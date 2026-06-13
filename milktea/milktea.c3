@@ -181,6 +181,7 @@ struct Msg {
 	MouseMsg mouse;
 	int tag;
 	void* user;
+	void* owner;
 }
 
 // Cmd: function pointer producing a Msg. A null Cmd means "no command".
@@ -204,6 +205,7 @@ struct TimerEntry {
 	bool active;
 	sz deadline_ms;
 	Cmd callback;
+	void* owner;
 }
 
 // Program holds all mutable runtime state for a running TUI.
@@ -447,7 +449,7 @@ fn void Program.emit_sgr(Program* self, String seq) {
 
 // tick registers a timer that fires after delay_ms.
 // Default: 16ms (~60fps) sending a TICK message.
-fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
+fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	sz deadline = time_ms() + delay_ms;
 	for (sz i = 0; i < MAX_TIMERS; i++) {
@@ -455,6 +457,7 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
 			g_program.timers[i].active = true;
 			g_program.timers[i].deadline_ms = deadline;
 			g_program.timers[i].callback = callback;
+			g_program.timers[i].owner = owner;
 			break;
 		}
 	}
@@ -466,7 +469,7 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg) {
 // so successive calls stay locked to absolute time regardless of drift.
 // Use for clock displays, countdowns, and periodic sync.
 // Default: 16ms (~60fps) sending a TICK message.
-fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg) {
+fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	sz now     = time_ms();
 	sz elapsed = now % interval_ms;
@@ -477,10 +480,20 @@ fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg) {
 			g_program.timers[i].active = true;
 			g_program.timers[i].deadline_ms = deadline;
 			g_program.timers[i].callback = callback;
+			g_program.timers[i].owner = owner;
 			break;
 		}
 	}
 	return null;
+}
+
+fn void cancel(void* owner) {
+	if (g_program == null || owner == null) return;
+	for (sz i = 0; i < MAX_TIMERS; i++) {
+		if (g_program.timers[i].active && g_program.timers[i].owner == owner) {
+			g_program.timers[i].active = false;
+		}
+	}
 }
 
 // run executes the event loop for the program.
@@ -591,8 +604,10 @@ fn void? Program.run(Program* self) {
 		for (sz i = 0; i < MAX_TIMERS; i++) {
 			if (self.timers[i].active && now >= self.timers[i].deadline_ms) {
 				Cmd cb = self.timers[i].callback;
+				void* owner = self.timers[i].owner;
 				self.timers[i].active = false;
 				Msg m = cb();
+				m.owner = owner;
 				if (m.kind != MsgKind.NONE && dispatch(self, self.model, m)) return;
 				dirty = true;
 				now = time_ms();

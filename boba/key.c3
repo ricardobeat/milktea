@@ -1,6 +1,9 @@
 module boba;
 
 import milktea;
+import glaze;
+import std::core::string;
+import std::core::dstring;
 
 // KeyBinding defines a mapping from key conditions to named actions.
 struct KeyBinding {
@@ -82,6 +85,19 @@ fn bool KeyMap.has_binding(&self, String action) {
 		if (self.bindings[i].action == action) return true;
 	}
 	return false;
+}
+
+// view returns the bindings as a two-column string.
+fn String KeyMap.view(&self) {
+	DString out = dstring::temp();
+	glaze::Style key_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style act_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
+	for (int i = 0; i < self.count; i++) {
+		out.append_string(string::tformat("  %-7s  ", key_style.render(self.bindings[i].key)));
+		out.append_string(act_style.render(self.bindings[i].action));
+		out.append_char('\n');
+	}
+	return out.str_view();
 }
 
 // default_help_keymap returns a common help key map.
