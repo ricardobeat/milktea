@@ -32,24 +32,31 @@ struct Cursor {
 	String color;
 }
 
-// View represents a terminal view with content, optional cursor, and settings.
-// This mirrors Go's tea.View struct.
+struct Overlay {
+	String content;
+	int x;
+	int y;
+	int w;
+	int h;
+	bool transparent;
+	char alpha; // 0 = opaque (default), 1-254 = blended
+	xray::LayerStyle layer_style;
+}
+
+const int MAX_OVERLAYS = 8;
+
 struct View {
 	String content;
 	Cursor cursor;
 	bool has_cursor;
 	bool alt_screen;
-	// Mouse mode — controls whether the terminal sends mouse events.
 	MouseMode mouse_mode;
-	// Optional direct cell grid — bypasses string parsing.
-	// When cells is non-null, the renderer writes cells directly into
-	// the screen buffer, skipping ANSI string → CSI parse → cells.
 	xray::Cell[] cells;
 	sz cells_width;
 	sz cells_height;
-	// OSC 22 mouse pointer shape. Empty = use terminal default.
-	// Examples: "crosshair", "text", "pointer", "default".
 	String mouse_cursor;
+	Overlay[MAX_OVERLAYS] overlays;
+	int overlay_count;
 }
 
 // new_view creates a View with the given content and default settings (no cursor, no alt screen).
@@ -110,6 +117,15 @@ fn View View.set_mouse_cursor(self, String name) {
 fn View View.set_mouse_mode(self, MouseMode mode) {
 	View v = self;
 	v.mouse_mode = mode;
+	return v;
+}
+
+fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0) {
+	View v = self;
+	if (v.overlay_count < MAX_OVERLAYS) {
+		v.overlays[v.overlay_count] = { .content = content, .x = x, .y = y, .w = w, .h = h, .alpha = alpha };
+		v.overlay_count++;
+	}
 	return v;
 }
 
@@ -773,6 +789,46 @@ fn void Program.render_current_view(Program* self) {
 						}
 					}
 					self.last_content_rows = cur_row;
+				}
+
+				// Render overlays
+				for (int oi = 0; oi < v.overlay_count; oi++) {
+					Overlay o = v.overlays[oi];
+
+					// Render shadow before content so it appears underneath
+					if (o.layer_style.shadow.enabled) {
+						r.screen.render_shadow(o.x, o.y, o.w, o.h, o.layer_style.shadow);
+					}
+
+					if (o.alpha != 0 && o.alpha < 255) {
+						// Alpha overlay: blend color over existing cells in-place,
+						// preserving underlying characters.
+						xray::ScreenBuffer* tmp = xray::new_screen_buffer((sz)o.w, (sz)o.h);
+						tmp.render_ansi_string(0, 0, o.content, xray::default_style());
+						for (sz cy = 0; cy < (sz)o.h; cy++) {
+							for (sz cx = 0; cx < (sz)o.w; cx++) {
+								sz dx = (sz)o.x + cx;
+								sz dy = (sz)o.y + cy;
+								if (dx >= r.screen.width || dy >= r.screen.height) continue;
+								xray::Cell src = tmp.cells[cy * tmp.width + cx];
+								src.style.bg.a = o.alpha;
+								src.style.fg.a = o.alpha;
+								xray::Cell* dst = &r.screen.cells[dy * r.screen.width + dx];
+								// Blend overlay color over existing cell colors, preserve content
+								if (src.style.bg.kind == xray::ColorKind.TRUECOLOR) {
+									dst.style.bg = src.style.bg.blend_over(dst.style.bg);
+								}
+								if (src.style.fg.kind == xray::ColorKind.TRUECOLOR) {
+									dst.style.fg = src.style.fg.blend_over(dst.style.fg);
+								}
+								r.screen.dirty_lines[dy] = true;
+							}
+						}
+						tmp.destroy();
+						mem::free(tmp);
+					} else {
+						r.screen.blit_ansi((sz)o.x, (sz)o.y, (sz)o.w, (sz)o.h, o.content, o.transparent);
+					}
 				}
 
 				// Handle cursor
