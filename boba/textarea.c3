@@ -17,11 +17,14 @@ struct Textarea {
 	String placeholder;
 	String prompt; // prefix shown before each line (e.g. "> ")
 	bool show_line_numbers;
-	bool show_cursor; // draw a fake block cursor in the content (option 2)
+	bool show_cursor;
+	bool cursor_blink;
+	bool cursor_visible;
 	bool focused;
 	glaze::Style focused_style;
 	glaze::Style blurred_style;
 	glaze::Style cursor_style;
+	glaze::Style placeholder_style;
 	glaze::Style line_number_style;
 	glaze::Style prompt_style;
 }
@@ -32,9 +35,13 @@ fn Textarea new_textarea(int width, int height) {
 	t.width = width;
 	t.height = height;
 	t.show_line_numbers = true;
+	t.show_cursor = true;
+	t.cursor_blink = true;
+	t.cursor_visible = true;
 	t.focused_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
 	t.blurred_style = glaze::style().foreground(glaze::color_hex("#888888"));
 	t.cursor_style = glaze::style().background(glaze::color_hex("#ffffff")).foreground(glaze::color_hex("#000000"));
+	t.placeholder_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	t.line_number_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	t.prompt_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	return t;
@@ -45,6 +52,30 @@ fn Textarea Textarea.with_placeholder(self, String ph) {
 	Textarea t = self;
 	t.placeholder = ph;
 	return t;
+}
+
+const int CURSOR_BLINK_MS = 530;
+
+fn milktea::Cmd Textarea.update(&self, milktea::Msg msg) {
+	if (msg.kind != milktea::MsgKind.TICK || msg.owner != self) return null;
+	if (self.focused && self.cursor_blink) {
+		self.cursor_visible = !self.cursor_visible;
+		milktea::tick(CURSOR_BLINK_MS, owner: self);
+	}
+	return null;
+}
+
+fn void Textarea.start_blink(&self) {
+	if (self.cursor_blink) {
+		self.cursor_visible = true;
+		milktea::cancel(self);
+		milktea::tick(CURSOR_BLINK_MS, owner: self);
+	}
+}
+
+fn void Textarea.stop_blink(&self) {
+	milktea::cancel(self);
+	self.cursor_visible = true;
 }
 
 // clear empties the textarea.
@@ -121,8 +152,8 @@ fn String Textarea.text(&self) {
 	return (String)self.buf[:self.len];
 }
 
-// handle_key processes a key message and returns true if consumed.
 fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
+	self.start_blink();
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
 			if (self.cursor > 0) {
@@ -274,6 +305,16 @@ fn String Textarea.view(&self) {
 		if (lc >= 100) gutter_width = 4;
 	}
 
+	// Gutter visual width: digits + one trailing space (e.g. " 1 " = gutter_width+1 chars).
+	int gutter_visual = self.show_line_numbers ? gutter_width + 1 : 0;
+
+	// Prompt visual width.
+	int prompt_visual = (int)self.prompt.len;
+
+	// Content width is the space available for actual text on each visual row.
+	int content_w = self.width - gutter_visual - prompt_visual;
+	if (content_w < 1) content_w = 1;
+
 	glaze::Style content_style = self.focused ? self.focused_style : self.blurred_style;
 
 	// Split content into lines and render visible ones
@@ -295,81 +336,134 @@ fn String Textarea.view(&self) {
 	}
 	if (row == start_row) line_start = pos;
 
+	// visual_row tracks how many visual rows we have rendered (for height clipping).
+	int visual_row = 0;
+
 	// Render visible lines
-	for (int r = start_row; r < end_row; r++) {
-		// Optional line number gutter
-		if (self.show_line_numbers) {
-			String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
-			out.append_string(self.line_number_style.render(num));
-		}
-
-		// Optional prompt prefix
-		if (self.prompt.len > 0) {
-			out.append_string(self.prompt_style.render(self.prompt));
-		}
-
-		// Line content — width constrained so the outer style doesn't expand
+	for (int r = start_row; r < end_row && visual_row < self.height; r++) {
+		// Find end of this logical line
 		sz line_end = line_start;
 		while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
 
-		int content_w = self.width - (int)self.prompt.len;
-		if (content_w < 1) content_w = 1;
-		glaze::Style line_style = content_style.width(content_w);
+		sz line_len  = line_end - line_start;
+		// Use correct slice: start at line_start, length = line_end - line_start
+		String line_text = (String)self.buf[line_start:line_len];
 
-		bool is_cursor_row = self.focused && self.show_cursor && (r == self.cursor_row);
+		bool is_cursor_row = self.focused && self.show_cursor && self.cursor_visible && (r == self.cursor_row);
 
-		if (line_start == self.len && self.len > 0 && self.buf[self.len - 1] == '\n') {
-			// Empty line after trailing newline
-			if (is_cursor_row) {
-				// Cursor on empty trailing line — render a single highlighted space
-				out.append_string(self.cursor_style.render(" "));
-				out.append_char('\n');
-			} else {
-				out.append_string(line_style.render(""));
-				out.append_char('\n');
+		// Handle empty line (either empty buffer, or trailing newline case)
+		if (line_len == 0) {
+			if (visual_row >= self.height) break;
+			// Render gutter
+			if (self.show_line_numbers) {
+				String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
+				out.append_string(self.line_number_style.render(num));
 			}
-		} else if (line_start < self.len) {
-			String line_text = (String)self.buf[line_start:line_end];
-			if (is_cursor_row) {
-				sz cur      = (sz)self.cursor_col;
-				sz line_len = line_end - line_start;
-				// before-cursor segment
-
-
-
-				if (cur > 0) {
-					sz blen = cur < line_len ? cur : line_len;
-					out.append_string(content_style.render(line_text[:blen]));
-				}
-				// cursor character (or space if at end)
-				if (cur < line_len) {
-					char[2] ch_buf = { line_text[cur], 0 };
-					out.append_string(self.cursor_style.render(((ZString)&ch_buf).str_view()));
-					// after-cursor segment
-					if (cur + 1 < line_len) {
-						int remaining_w = content_w - (int)cur - 1;
-						if (remaining_w < 1) remaining_w = 1;
-						out.append_string(content_style.width(remaining_w)
-							.render(line_text[cur + 1:line_len - cur - 1]));
+			// Render prompt
+			if (self.prompt.len > 0) {
+				out.append_string(self.prompt_style.render(self.prompt));
+			}
+			// Render content
+			if (r == 0 && self.len == 0 && self.placeholder.len > 0) {
+				if (is_cursor_row) {
+					out.append_string(self.cursor_style.render(self.placeholder[:1]));
+					if (self.placeholder.len > 1) {
+						out.append_string(self.placeholder_style.render(self.placeholder[1..]));
 					}
 				} else {
-					// Cursor past end of line — append highlighted space
+					out.append_string(self.placeholder_style.render(self.placeholder));
+				}
+			} else if (is_cursor_row) {
+				out.append_string(self.cursor_style.render(" "));
+			} else {
+				out.append_string(content_style.render(""));
+			}
+			out.append_char('\n');
+			visual_row++;
+			line_start = line_end + 1;
+			continue;
+		}
+
+		// Soft-wrap: split line_text into chunks of content_w columns each.
+		sz chunk_start = 0;
+		int chunk_idx  = 0;
+		while (chunk_start < line_len) {
+			if (visual_row >= self.height) break;
+
+			// Determine how many bytes fit in content_w columns.
+			sz chunk_end   = chunk_start;
+			int col_count  = 0;
+			while (chunk_end < line_len && col_count < content_w) {
+				// Simple 1-column-per-byte for ASCII; proper UTF-8 would need glaze::string_width
+				col_count++;
+				chunk_end++;
+			}
+
+			// If this is the last chunk and we've consumed all text, stop.
+			// (chunk_start == line_len means we went one past the end — only show if cursor is here)
+			bool is_last_chunk = (chunk_end == line_len);
+
+			// Render gutter: first chunk gets line number, continuations get blank space.
+			if (self.show_line_numbers) {
+				if (chunk_idx == 0) {
+					String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
+					out.append_string(self.line_number_style.render(num));
+				} else {
+					// Continuation line: blank gutter of same width
+					for (int g = 0; g < gutter_visual; g++) out.append_char(' ');
+				}
+			}
+
+			// Render prompt (only on first chunk)
+			if (chunk_idx == 0 && self.prompt.len > 0) {
+				out.append_string(self.prompt_style.render(self.prompt));
+			} else if (chunk_idx > 0 && self.prompt.len > 0) {
+				// Blank prompt space on continuation lines
+				for (int p = 0; p < prompt_visual; p++) out.append_char(' ');
+			}
+
+			String chunk_text = line_text[chunk_start:chunk_end - chunk_start];
+
+			// Determine cursor position within this chunk (if cursor is on this row)
+			bool cursor_in_chunk = false;
+			sz chunk_cursor_col  = 0;
+			if (is_cursor_row) {
+				sz cur = (sz)self.cursor_col;
+				if (cur >= chunk_start && (cur < chunk_end || (is_last_chunk && cur == line_len))) {
+					cursor_in_chunk  = true;
+					chunk_cursor_col = cur - chunk_start;
+				}
+			}
+
+			if (cursor_in_chunk) {
+				sz chunk_len = chunk_end - chunk_start;
+				// before-cursor segment
+				if (chunk_cursor_col > 0) {
+					sz blen = chunk_cursor_col < chunk_len ? chunk_cursor_col : chunk_len;
+					out.append_string(content_style.render(chunk_text[:blen]));
+				}
+				// cursor character or space if at end
+				if (chunk_cursor_col < chunk_len) {
+					char[2] ch_buf = { chunk_text[chunk_cursor_col], 0 };
+					out.append_string(self.cursor_style.render(((ZString)&ch_buf).str_view()));
+					// after-cursor segment
+					if (chunk_cursor_col + 1 < chunk_len) {
+						out.append_string(content_style.render(chunk_text[chunk_cursor_col + 1:chunk_len - chunk_cursor_col - 1]));
+					}
+				} else {
+					// Cursor past end of chunk text — highlighted space
 					out.append_string(self.cursor_style.render(" "));
 				}
-				out.append_char('\n');
 			} else {
-				out.append_string(line_style.render(line_text));
-				out.append_char('\n');
+				out.append_string(content_style.render(chunk_text));
 			}
-		} else if (r == 0 && self.len == 0) {
-			if (is_cursor_row) {
-				// Empty buffer with cursor — highlighted space then placeholder styling
-				out.append_string(self.cursor_style.render(" "));
-				out.append_char('\n');
-			} else {
-				out.append_string(line_style.render(self.placeholder));
-				out.append_char('\n');
-			}
+
+			out.append_char('\n');
+			visual_row++;
+			chunk_idx++;
+
+			if (is_last_chunk) break;
+			chunk_start = chunk_end;
 		}
 
 		line_start = line_end + 1;
@@ -377,9 +471,6 @@ fn String Textarea.view(&self) {
 
 	String s = out.str_view();
 	// Strip trailing newline — the outer glaze render() adds its own line breaks
-
-
-
 	if (s.len > 0 && s[s.len - 1] == '\n') s = s[:s.len - 1];
 	return s;
 }

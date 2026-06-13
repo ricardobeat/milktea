@@ -156,7 +156,7 @@ fn void Preview.mount(&self, Component c) {
 			self.table.add_row3("Bread",  "3",  "$2.50");
 			self.table.add_row3("Coffee", "1",  "$4.00");
 		case TEXTAREA:
-			self.ta = boba::new_textarea(40, 6)
+			self.ta = boba::new_textarea(40, 20)
 				.with_placeholder("Start typing...");
 		case TEXT_INPUT:
 			self.ti = boba::new_text_input()
@@ -166,7 +166,41 @@ fn void Preview.mount(&self, Component c) {
 			self.timer.init_cmd();
 		case VIEWPORT:
 			self.vp = boba::new_viewport(40, 10);
-			self.vp.set_content(30);
+			self.vp.show_scrollbar = true;
+			self.vp.thumb_style = glaze::style().foreground(glaze::color_hex("#874bfc"));
+			String[30] vp_lines = {
+				"The quick brown fox jumps over the lazy dog.",
+				"Pack my box with five dozen liquor jugs.",
+				"How vexingly quick daft zebras jump!",
+				"The five boxing wizards jump quickly.",
+				"",
+				"Sphinx of black quartz, judge my vow.",
+				"Two driven jocks help fax my big quiz.",
+				"The jay, pig, fox, zebra and wolves quack!",
+				"Sympathizing would fix Quaker objectives.",
+				"",
+				"A wizard's job is to vex chumps quickly.",
+				"Watch Jeopardy, Alex Trebek's fun TV quiz.",
+				"My quick study of lexicography won a prize.",
+				"Waxy and quivering, jocks fumble the pizza.",
+				"",
+				"Amazingly few discotheques provide jukeboxes.",
+				"My girl wove six dozen plaid jackets.",
+				"Sixty zippers were picked from the jute bag.",
+				"A quick movement will jeopardize six gunboats.",
+				"",
+				"All questions asked by experts amaze the judge.",
+				"Jack quietly moved up and seized the wax.",
+				"Few quips galvanized the mock jury box.",
+				"The quick brown fox jumps over the lazy dog.",
+				"",
+				"Scroll with arrow keys or PgUp/PgDn.",
+				"",
+				"",
+				"",
+				"End.",
+			};
+			for (int i = 0; i < 30; i++) self.vp.add_line(vp_lines[i]);
 	}
 }
 
@@ -175,11 +209,21 @@ fn void Preview.update(&self, milktea::Msg msg) {
 		case SPINNER:   self.spinner.update(msg);
 		case STOPWATCH: self.stopwatch.update(msg);
 		case TIMER:     self.timer.update(msg);
+		case TEXTAREA:  self.ta.update(msg);
 		default:
 	}
 }
 
-// handle_key delegates to the mounted component's handler.
+fn void Preview.set_focused(&self, bool focused) {
+	switch (self.kind) {
+		case TEXTAREA:
+			self.ta.focused = focused;
+			if (focused) { self.ta.start_blink(); } else { self.ta.stop_blink(); }
+		case TEXT_INPUT:  self.ti.focused = focused;
+		default:
+	}
+}
+
 fn bool Preview.handle_key(&self, milktea::KeyMsg k) {
 	switch (self.kind) {
 		case FILE_PICKER: return self.fp.handle_key(k);
@@ -193,7 +237,6 @@ fn bool Preview.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
-// render returns the mounted component's view string.
 fn String Preview.render(&self) {
 	switch (self.kind) {
 		case FILE_PICKER: return self.fp.view();
@@ -208,13 +251,7 @@ fn String Preview.render(&self) {
 		case TEXTAREA:    return self.ta.view();
 		case TEXT_INPUT:  return self.ti.view();
 		case TIMER:       return self.timer.view();
-		case VIEWPORT:
-			glaze::Style bar = glaze::style().foreground(glaze::color_hex("#555555"));
-			return string::tformat(
-				"scrollbar:\n%s\n\nline %d-%d",
-				bar.render(self.vp.scrollbar()),
-				self.vp.view_line_start() + 1,
-				self.vp.view_line_end());
+		case VIEWPORT:    return self.vp.view();
 		default: return "";
 	}
 }
@@ -261,6 +298,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	if (self.preview_focused) {
 		if (k.code == milktea::KeyCode.ESC) {
 			self.preview_focused = false;
+			self.preview.set_focused(false);
 			return null;
 		}
 		if (self.preview.handle_key(k)) return null;
@@ -278,6 +316,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 	if (k.code == milktea::KeyCode.ENTER && component_interactive(self.preview.kind)) {
 		self.preview_focused = true;
+		self.preview.set_focused(true);
 		return null;
 	}
 
@@ -378,6 +417,20 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.padding(1, 0, 1, 2)
 		.width(preview_r.w)
 		.render(string::tformat("%s%s%s", comp_name, comp_desc, focus_indicator));
+
+	// Size textarea/textinput to fill available preview space
+	int content_h = preview_r.h - 5; // header padding (3) + content top padding (1) + margin
+	int content_w = preview_r.w - 6; // content side padding (2+2) + margin
+	if (content_h < 4) content_h = 4;
+	if (content_w < 20) content_w = 20;
+	if (self.preview.kind == Component.TEXTAREA) {
+		self.preview.ta.height = content_h;
+		self.preview.ta.width = content_w;
+	}
+	if (self.preview.kind == Component.VIEWPORT) {
+		self.preview.vp.height = content_h / 2;
+		self.preview.vp.width = content_w;
+	}
 
 	String preview_content = glaze::style()
 		.foreground(text_light)
