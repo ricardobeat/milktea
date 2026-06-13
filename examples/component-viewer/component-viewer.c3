@@ -16,7 +16,7 @@ import std::core::string;
 
 // ─── Component catalogue ──────────────────────────────────────────────────────
 
-const int COMPONENT_COUNT = 13;
+const int COMPONENT_COUNT = 14;
 
 enum Component : char {
 	FILE_PICKER,
@@ -31,6 +31,7 @@ enum Component : char {
 	TEXTAREA,
 	TEXT_INPUT,
 	TIMER,
+	TOAST,
 	VIEWPORT,
 }
 
@@ -48,6 +49,7 @@ fn String component_name(Component c) {
 		case TEXTAREA:    return "Textarea";
 		case TEXT_INPUT:  return "TextInput";
 		case TIMER:       return "Timer";
+		case TOAST:       return "Toast";
 		case VIEWPORT:    return "Viewport";
 	}
 }
@@ -66,6 +68,7 @@ fn String component_desc(Component c) {
 		case TEXTAREA:    return "multi-line input";
 		case TEXT_INPUT:  return "single-line input";
 		case TIMER:       return "countdown";
+		case TOAST:       return "overlay notification";
 		case VIEWPORT:    return "scrollable region";
 	}
 }
@@ -85,6 +88,9 @@ fn bool component_interactive(Component c) {
 
 // ─── Preview — mount/unmount lifecycle ────────────────────────────────────────
 
+const int FLOAT_TICK_MS = 50;
+const int FLOAT_CYCLE = 60; // steps per full cycle (~3 seconds)
+
 struct Preview {
 	Component kind;
 	boba::FilePicker fp;
@@ -99,6 +105,9 @@ struct Preview {
 	boba::Textarea ta;
 	boba::TextInput ti;
 	boba::Timer timer;
+	boba::Toast toast_hard;
+	boba::Toast toast_blur;
+	int float_step;
 	boba::Viewport vp;
 }
 
@@ -106,6 +115,9 @@ fn void Preview.mount(&self, Component c) {
 	milktea::cancel(&self.spinner);
 	milktea::cancel(&self.stopwatch);
 	milktea::cancel(&self.timer);
+	milktea::cancel(&self.toast_hard);
+	milktea::cancel(&self.toast_blur);
+	milktea::cancel(&self.float_step);
 	self.kind = c;
 	switch (c) {
 		case FILE_PICKER:
@@ -164,6 +176,17 @@ fn void Preview.mount(&self, Component c) {
 		case TIMER:
 			self.timer = boba::new_timer(45);
 			self.timer.init_cmd();
+		case TOAST:
+			self.toast_hard = boba::new_toast();
+			self.toast_hard.message = "Hard shadow";
+			self.toast_hard.state = boba::ToastState.VISIBLE;
+			self.toast_hard.anim_step = boba::TOAST_ANIM_STEPS;
+			self.toast_blur = boba::new_toast();
+			self.toast_blur.message = "Blurred shadow";
+			self.toast_blur.state = boba::ToastState.VISIBLE;
+			self.toast_blur.anim_step = boba::TOAST_ANIM_STEPS;
+			self.float_step = 0;
+			milktea::every(FLOAT_TICK_MS, owner: &self.float_step);
 		case VIEWPORT:
 			self.vp = boba::new_viewport(40, 10);
 			self.vp.show_scrollbar = true;
@@ -251,6 +274,7 @@ fn String Preview.render(&self) {
 		case TEXTAREA:    return self.ta.view();
 		case TEXT_INPUT:  return self.ti.view();
 		case TIMER:       return self.timer.view();
+		case TOAST:       return "Two toasts with different shadow styles:";
 		case VIEWPORT:    return self.vp.view();
 		default: return "";
 	}
@@ -268,6 +292,7 @@ struct Model {
 	int height;
 	int vp_screen_row;
 	int vp_screen_col;
+	boba::Toast toast;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -278,6 +303,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 		self.lst.add_item(component_name(c), component_desc(c));
 	}
 	self.preview.mount(Component.FILE_PICKER);
+	self.toast = boba::new_toast();
 	return null;
 }
 
@@ -290,6 +316,11 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.preview.update(msg);
+		self.toast.update(msg);
+		if (msg.owner == &self.preview.float_step) {
+			self.preview.float_step = (self.preview.float_step + 1) % FLOAT_CYCLE;
+			milktea::tick(FLOAT_TICK_MS, owner: &self.preview.float_step);
+		}
 		return null;
 	}
 
@@ -300,7 +331,11 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			m.col = m.col - 1 - self.vp_screen_col;
 			if (m.row >= 0 && m.row < self.preview.vp.height &&
 				m.col >= 0 && m.col < self.preview.vp.width) {
+				bool was_dragging = self.preview.vp.sel_active;
 				self.preview.vp.handle_mouse_msg(m);
+				if (was_dragging && !self.preview.vp.sel_active && self.preview.vp.has_selection) {
+					self.toast.show("Copied to clipboard");
+				}
 			}
 		}
 		return null;
@@ -489,8 +524,55 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
 	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
 
-	return milktea::new_alt_screen_view(doc)
+	milktea::View view = milktea::new_alt_screen_view(doc)
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+
+	if (self.toast.visible()) {
+		self.toast.screen_width = w;
+		self.toast.screen_height = h;
+		view = self.toast.add_overlays(view);
+	}
+
+	// Toast preview: two floating toasts with different shadow styles
+	if (self.preview.kind == Component.TOAST) {
+		// Triangle wave: 0 → amplitude → 0 → -amplitude → 0
+		int quarter = FLOAT_CYCLE / 4;
+		int step = self.preview.float_step;
+		int float_offset;
+		if (step < quarter) {
+			float_offset = step * 3 / quarter;
+		} else if (step < quarter * 2) {
+			float_offset = 3 - (step - quarter) * 3 / quarter;
+		} else if (step < quarter * 3) {
+			float_offset = -(step - quarter * 2) * 3 / quarter;
+		} else {
+			float_offset = -3 + (step - quarter * 3) * 3 / quarter;
+		}
+
+		int center_x = preview_r.x + preview_r.w / 2;
+		int center_y = preview_r.y + preview_r.h / 2;
+
+		// Hard shadow toast (left)
+		int hard_w = self.preview.toast_hard.toast_width();
+		int hard_x = center_x - hard_w - 2;
+		int hard_y = center_y - 2 + float_offset;
+		String hard_rendered = self.preview.toast_hard.style.render(self.preview.toast_hard.message);
+		view = view.add_overlay(hard_x, hard_y, hard_w, boba::TOAST_H, hard_rendered);
+		// Add hard shadow manually
+		xray::Shadow hard_shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0);
+		view.overlays[view.overlay_count - 1].layer_style.shadow = hard_shadow;
+
+		// Blurred shadow toast (right)
+		int blur_w = self.preview.toast_blur.toast_width();
+		int blur_x = center_x + 2;
+		int blur_y = center_y - 2 - float_offset;
+		String blur_rendered = self.preview.toast_blur.style.render(self.preview.toast_blur.message);
+		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered);
+		xray::Shadow blur_shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2);
+		view.overlays[view.overlay_count - 1].layer_style.shadow = blur_shadow;
+	}
+
+	return view;
 }
 
 fn int main() {
