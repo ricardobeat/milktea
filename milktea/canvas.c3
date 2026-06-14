@@ -33,8 +33,8 @@ fn View new_cell_view(int w, int h) {
 // and dimensions given by rect.
 //
 // Steps:
-//   1. Calls style.render_in(rect, content) to obtain an ANSI-encoded string
-//      sized to rect.w x rect.h. (render_in is provided by glaze::Style.)
+//   1. Calls rect.render(style, content) to obtain an ANSI-encoded string
+//      sized to rect.w x rect.h.
 //   2. Allocates a temporary ScreenBuffer of exactly (rect.w, rect.h), parses
 //      the ANSI string into it, then copies each resulting cell into the view's
 //      backing grid at position (rect.x + col, rect.y + row).
@@ -57,7 +57,7 @@ fn View View.draw(self, xray::Rect rect, glaze::Style style, String content) {
 	if ((sz)rect.x >= v.cells_width || (sz)rect.y >= v.cells_height) return v;
 
 	// Render styled ANSI into a string sized to the rect.
-	String ansi = style.render_in(rect, content);
+	String ansi = rect.render(style, content);
 	if (ansi.len == 0) return v;
 
 	// Parse the ANSI string into a rect-sized scratch ScreenBuffer, then copy

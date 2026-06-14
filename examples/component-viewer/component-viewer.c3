@@ -442,10 +442,10 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String sidebar_inner = glaze::join_vertical(glaze::Position.LEFT,
 		sidebar_title,
 		glaze::style().padding(0, 1, 0, 2).render(self.lst.view()));
-	String sidebar = glaze::style()
+	glaze::Style sidebar_s = glaze::style()
 		.background(sidebar_bg)
-		.align(glaze::Position.LEFT, glaze::Position.TOP)
-		.render_in(sidebar_r, sidebar_inner);
+		.align(glaze::Position.LEFT, glaze::Position.TOP);
+	String sidebar = sidebar_r.render(sidebar_s, sidebar_inner);
 
 	// ── Preview panel ──
 	bool live = self.preview_focused && component_interactive(self.preview.kind);
@@ -491,10 +491,10 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	String preview_inner = glaze::join_vertical(glaze::Position.LEFT,
 		preview_header, preview_content);
-	String preview = glaze::style()
+	glaze::Style preview_s = glaze::style()
 		.background(content_bg)
-		.align(glaze::Position.LEFT, glaze::Position.TOP)
-		.render_in(preview_r, preview_inner);
+		.align(glaze::Position.LEFT, glaze::Position.TOP);
+	String preview = preview_r.render(preview_s, preview_inner);
 
 	// ── Footer ──
 	glaze::Style key_style = glaze::style()
@@ -526,6 +526,21 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	milktea::View view = milktea::new_alt_screen_view(doc)
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+
+	// Inner shadow on sidebar right edge
+	if (view.overlay_count < milktea::MAX_OVERLAYS) {
+		view.overlays[view.overlay_count] = {
+			.x = sidebar_r.x,
+			.y = sidebar_r.y,
+			.w = sidebar_r.w,
+			.h = sidebar_r.h,
+			.transparent = true,
+			.layer_style = {
+				.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
+			},
+		};
+		view.overlay_count++;
+	}
 
 	if (self.toast.visible()) {
 		self.toast.screen_width = w;

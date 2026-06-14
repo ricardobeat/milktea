@@ -5,7 +5,6 @@ module inputbox;
 
 import milktea;
 import glaze;
-import xray;
 import xray::layout;
 import std::io;
 import std::core::dstring;
@@ -60,8 +59,6 @@ fn milktea::View Model.view(&self) @dynamic {
 	int w = self.width > 0 ? self.width : 80;
 	int h = self.height > 0 ? self.height : 24;
 
-	xray::Rect full = xray::new_rect(0, 0, w, h);
-
 	String inp_content = string::tformat("> %s█", self.input.str_view());
 	String help_text   = string::tformat("  input len: %d chars", (int)self.input.len());
 
@@ -73,12 +70,16 @@ fn milktea::View Model.view(&self) @dynamic {
 		layout::slot(layout::len(1),    &hint_r),
 	});
 
-	String title_v  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true).render_in(title_r, "  INPUTBOX TEST");
-	String output_v = glaze::style().foreground(glaze::color_hex("#aaaaaa")).render_in(output_r, self.output.str_view());
-	String input_v  = glaze::style().foreground(glaze::color_hex("#ffff00"))
-		.border(glaze::rounded_border()).padding(0, 1, 0, 1)
-		.render_in(input_r, inp_content);
-	String hint_v   = glaze::style().foreground(glaze::color_hex("#555555")).render_in(hint_r, help_text);
+	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);
+	glaze::Style output_s = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
+	glaze::Style input_s  = glaze::style().foreground(glaze::color_hex("#ffff00"))
+		.border(glaze::rounded_border()).padding(0, 1, 0, 1);
+	glaze::Style hint_s   = glaze::style().foreground(glaze::color_hex("#555555"));
+
+	String title_v  = title_r.render(title_s,  "  INPUTBOX TEST");
+	String output_v = output_r.render(output_s, self.output.str_view());
+	String input_v  = input_r.render(input_s,   inp_content);
+	String hint_v   = hint_r.render(hint_s,     help_text);
 
 	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);
