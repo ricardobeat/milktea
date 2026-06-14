@@ -829,6 +829,10 @@ fn void Program.render_current_view(Program* self) {
 					} else {
 						r.screen.blit_ansi((sz)o.x, (sz)o.y, (sz)o.w, (sz)o.h, o.content, o.transparent);
 					}
+
+					if (o.layer_style.inner_shadow.enabled) {
+						r.screen.render_inner_shadow(o.x, o.y, o.w, o.h, o.layer_style.inner_shadow);
+					}
 				}
 
 				// Handle cursor

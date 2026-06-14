@@ -26,8 +26,37 @@ fn Shadow Shadow.with_color(self, Color c) {
 	return s;
 }
 
+struct InnerShadow {
+	int top;
+	int right;
+	int bottom;
+	int left;
+	char opacity;
+	Color color;
+	bool enabled;
+}
+
+fn InnerShadow inner_shadow(int top = 0, int right = 0, int bottom = 0, int left = 0, char opacity = 60) {
+	return {
+		.top = top,
+		.right = right,
+		.bottom = bottom,
+		.left = left,
+		.opacity = opacity,
+		.color = color_rgb(0, 0, 0),
+		.enabled = true,
+	};
+}
+
+fn InnerShadow InnerShadow.with_color(self, Color c) {
+	InnerShadow s = self;
+	s.color = c;
+	return s;
+}
+
 struct LayerStyle {
 	Shadow shadow;
+	InnerShadow inner_shadow;
 }
 
 // Distance from point (col, row) to the edge of rect (rx, ry, rw, rh).
@@ -42,6 +71,54 @@ fn int shadow_edge_dist(int col, int row, int rx, int ry, int rw, int rh) {
 	else if (row >= ry + rh) { dy = row - (ry + rh) + 1; }
 
 	return dx > dy ? dx : dy;
+}
+
+fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, InnerShadow s) {
+	if (!s.enabled || s.opacity == 0) return;
+
+	for (int row = y; row < y + h; row++) {
+		if (row < 0 || row >= (int)self.height) continue;
+		for (int col = x; col < x + w; col++) {
+			if (col < 0 || col >= (int)self.width) continue;
+
+			int min_dist = w > h ? w : h;
+
+			if (s.top > 0) {
+				int d = row - y;
+				if (d < s.top && d < min_dist) min_dist = d;
+			}
+			if (s.bottom > 0) {
+				int d = (y + h - 1) - row;
+				if (d < s.bottom && d < min_dist) min_dist = d;
+			}
+			if (s.left > 0) {
+				int d = col - x;
+				if (d < s.left && d < min_dist) min_dist = d;
+			}
+			if (s.right > 0) {
+				int d = (x + w - 1) - col;
+				if (d < s.right && d < min_dist) min_dist = d;
+			}
+
+			int max_edge = s.top;
+			if (s.right > max_edge) max_edge = s.right;
+			if (s.bottom > max_edge) max_edge = s.bottom;
+			if (s.left > max_edge) max_edge = s.left;
+
+			if (min_dist >= max_edge) continue;
+
+			int t = max_edge - min_dist;
+			int alpha = (int)s.opacity * t * t / (max_edge * max_edge);
+			if (alpha <= 0) continue;
+
+			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
+			Color c = s.color;
+			c.a = (char)alpha;
+			dst.style.bg = c.blend_over(dst.style.bg);
+			dst.style.fg = c.blend_over(dst.style.fg);
+			self.dirty_lines[(sz)row] = true;
+		}
+	}
 }
 
 fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) {
