@@ -1,7 +1,6 @@
 module glaze;
 
 import std::core::dstring;
-import xray;
 
 // BorderAnimation selects an animated border rendering mode.
 enum BorderAnimation : char {
@@ -533,7 +532,3 @@ fn String Style.render_content_only(self, String input) {
 	return result;
 }
 
-// render_in renders the style into the given rect, setting width and height automatically.
-fn String Style.render_in(self, xray::Rect rect, String content) {
-	return self.width(rect.w).height(rect.h).render(content);
-}

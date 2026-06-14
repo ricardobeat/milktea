@@ -206,27 +206,27 @@ fn milktea::View Model.view(&self) @dynamic {
 		layout::slot(layout::len(1), &r22),
 	});
 
-	String v00 = title_s.render_in(r00, "  COLOUR SPACE COMPARISON");
+	String v00 = r00.render(title_s,       "  COLOUR SPACE COMPARISON");
 	String v01 = glaze::style().render_in(r01, "");
-	String v02 = label_hi.render_in(r02, lbl1.str_view());
+	String v02 = r02.render(label_hi,     lbl1.str_view());
 	String v03 = glaze::style().render_in(r03, grad1.str_view());
 	String v04 = glaze::style().render_in(r04, "");
-	String v05 = label_hi.render_in(r05, lbl2.str_view());
+	String v05 = r05.render(label_hi,     lbl2.str_view());
 	String v06 = glaze::style().render_in(r06, grad2.str_view());
 	String v07 = glaze::style().render_in(r07, "");
-	String v08 = label_hi.render_in(r08, lbl3.str_view());
+	String v08 = r08.render(label_hi,     lbl3.str_view());
 	String v09 = glaze::style().render_in(r09, grad3.str_view());
 	String v10 = glaze::style().render_in(r10, "");
-	String v11 = label_hi.render_in(r11, lbl4.str_view());
+	String v11 = r11.render(label_hi,     lbl4.str_view());
 	String v12 = glaze::style().render_in(r12, grad4.str_view());
 	String v13 = glaze::style().render_in(r13, "");
-	String v14 = label_hi.render_in(r14, lbl5.str_view());
+	String v14 = r14.render(label_hi,     lbl5.str_view());
 	String v15 = glaze::style().render_in(r15, grad5.str_view());
 	String v16 = glaze::style().render_in(r16, "");
-	String v17 = label_hi.render_in(r17, lbl6.str_view());
+	String v17 = r17.render(label_hi,     lbl6.str_view());
 	String v18 = glaze::style().render_in(r18, grad6.str_view());
 	String v19 = glaze::style().render_in(r19, "");
-	String v20 = label_hi.render_in(r20, lbl7.str_view());
+	String v20 = r20.render(label_hi,     lbl7.str_view());
 	String v21 = glaze::style().render_in(r21, grad7.str_view());
 	String v22 = glaze::style().render_in(r22, "");
 

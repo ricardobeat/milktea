@@ -247,10 +247,10 @@ fn milktea::View Model.view(&self) @dynamic {
     glaze::Style body_s   = glaze::style().foreground(glaze::color_hex("#ffffff"));
     glaze::Style status_s = glaze::style().foreground(glaze::color_hex("#555555"));
 
-    String title   = title_s.render_in(title_r,   "  My App");
-    String sidebar = side_s.render_in(sidebar_r,   "  Navigation\n  ──────────\n  > Home\n  Files\n  Settings");
-    String content = body_s.render_in(content_r,   self.body);
-    String status  = status_s.render_in(status_r,  "  Ready");
+    String title   = title_r.render(title_s,   "  My App");
+    String sidebar = sidebar_r.render(side_s,   "  Navigation\n  ──────────\n  > Home\n  Files\n  Settings");
+    String content = content_r.render(body_s,   self.body);
+    String status  = status_r.render(status_s,  "  Ready");
 
     // Stack into a single string and return
     String doc = glaze::join_vertical(glaze::Position.LEFT, title, glaze::join_horizontal(sidebar, content, 0));
@@ -260,7 +260,21 @@ fn milktea::View Model.view(&self) @dynamic {
 }
 ```
 
-`style.render_in(rect, content)` is equivalent to `style.width(rect.w).height(rect.h).render(content)` — it sizes the rendered block to exactly fit the rect.
+### Rendering into rects
+
+When you have a layout rect, prefer `rect.render(style, content)` over `style.render_in(rect, content)`. Both do the same thing — size the rendered block to fit the rect — but the rect-as-receiver form reflects the mental model better: you have a slot, and you're filling it with styled content.
+
+```c3
+// preferred
+String title  = title_r.render(title_s,  "  My App");
+String body   = body_r.render(body_s,    self.body);
+String status = status_r.render(status_s, "  Ready");
+
+// also available, style-first
+String title  = title_s.render_in(title_r, "  My App");
+```
+
+Both methods are provided by `milktea` (not `glaze`), so they are only available when you `import milktea`. This keeps `glaze` and `xray` independent of each other — `glaze` handles styling, `xray` handles geometry, and `milktea` bridges them.
 
 ---
 
