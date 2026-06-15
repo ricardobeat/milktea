@@ -1,0 +1,12 @@
+{
+	"provides": "xray",
+	"sources": ["*.c3", "layout/*.c3"],
+	"targets": {
+		"macos-aarch64": {},
+		"macos-x64": {},
+		"linux-x64": {},
+		"linux-aarch64": {},
+		"windows-x64": {},
+		"freebsd-x64": {}
+	}
+}

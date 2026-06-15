@@ -1,0 +1,13 @@
+{
+	"provides": "milktea",
+	"sources": ["*.c3"],
+	"c-sources": ["tty_winsize.c"],
+	"dependencies": ["glaze", "xray"],
+	"targets": {
+		"macos-aarch64": {},
+		"macos-x64": {},
+		"linux-x64": {},
+		"linux-aarch64": {},
+		"freebsd-x64": {}
+	}
+}
