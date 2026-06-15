@@ -1,0 +1,12 @@
+{
+	"provides": "boba",
+	"sources": ["*.c3"],
+	"dependencies": ["milktea", "glaze", "xray"],
+	"targets": {
+		"macos-aarch64": {},
+		"macos-x64": {},
+		"linux-x64": {},
+		"linux-aarch64": {},
+		"freebsd-x64": {}
+	}
+}
