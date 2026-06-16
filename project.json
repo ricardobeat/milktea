@@ -401,6 +401,5 @@
       "opt": "Os",
       "linked-libraries":  [ "curl" ]
     }
-  },
-  "dependencies":  [ "glfw" ]
+  }
 }
