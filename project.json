@@ -65,6 +65,13 @@
       "opt": "Os",
       "strip-unused": true
     },
+    "examples/pomodoro": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "examples/pomodoro/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
     "examples/fullscreen": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "examples/fullscreen/**"],
