@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>milktea — a terminal UI library for C3</title>
+<style>
+  :root {
+    --bg:        #f4ecd8;  /* warm cream paper        */
+    --bg-soft:   #efe3cb;  /* slightly deeper cream   */
+    --ink:       #4a3f35;  /* warm brown ink          */
+    --ink-soft:  #7a6a58;  /* muted brown             */
+    --line:      #d8c6a6;  /* hairline borders        */
+    --peach:     #f3a26d;  /* warm peach accent       */
+    --rose:      #e98a8a;  /* dusty rose              */
+    --mint:      #8fcab0;  /* soft mint               */
+    --sky:       #8bb8d8;  /* powder blue             */
+    --lilac:     #b59cd0;  /* pastel violet           */
+    --gold:      #e7b24f;  /* mellow gold             */
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "SFMono-Regular", "SF Mono", "JetBrains Mono", "Menlo",
+                 "Consolas", "Courier New", monospace;
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        rgba(120,90,60,0.025) 0px,
+        rgba(120,90,60,0.025) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+  }
+
+  a { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--ink-soft); }
+  a:hover { color: var(--peach); border-bottom-color: var(--peach); }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── retro rainbow bar ─────────────────────────────── */
+  .stripe { height: 8px; display: flex; }
+  .stripe > span { flex: 1; }
+  .stripe .s1 { background: var(--rose);  }
+  .stripe .s2 { background: var(--peach); }
+  .stripe .s3 { background: var(--gold);  }
+  .stripe .s4 { background: var(--mint);  }
+  .stripe .s5 { background: var(--sky);   }
+  .stripe .s6 { background: var(--lilac); }
+
+  /* ── header ────────────────────────────────────────── */
+  header { padding: 56px 0 36px; }
+
+  .logo {
+    font-size: 13px;
+    line-height: 1.15;
+    color: var(--ink);
+    white-space: pre;
+    margin: 0 0 18px;
+    overflow-x: auto;
+  }
+  .logo .a1 { color: var(--peach); }
+  .logo .a2 { color: var(--rose); }
+  .logo .a3 { color: var(--mint); }
+
+  h1 {
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.5px;
+  }
+  h1 .blink {
+    color: var(--peach);
+    animation: blink 1.1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .tag { color: var(--ink-soft); font-size: 16px; margin: 0 0 26px; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .badge {
+    font-size: 12px;
+    padding: 3px 10px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--ink-soft);
+  }
+  .badge b { color: var(--ink); }
+
+  /* ── terminal card ─────────────────────────────────── */
+  .term {
+    background: #2a2018;
+    border-radius: 7px;
+    border: 1px solid #1c150f;
+    box-shadow: 4px 4px 0 rgba(120,90,60,0.18);
+    overflow: hidden;
+    margin: 30px 0;
+  }
+  .term .bar {
+    background: #38291c;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .term .bar i {
+    width: 11px; height: 11px; border-radius: 50%;
+    display: inline-block;
+  }
+  .term .bar .d1 { background: var(--rose);  }
+  .term .bar .d2 { background: var(--gold);  }
+  .term .bar .d3 { background: var(--mint);  }
+  .term .bar span { color: #9b8870; font-size: 12px; margin-left: 8px; }
+  .term pre {
+    margin: 0;
+    padding: 18px 20px;
+    color: #f0e4cf;
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .term .c-peach { color: var(--peach); }
+  .term .c-mint  { color: var(--mint);  }
+  .term .c-sky   { color: var(--sky);   }
+  .term .c-gold  { color: var(--gold);  }
+  .term .c-dim   { color: #9b8870;      }
+
+  /* ── sections ──────────────────────────────────────── */
+  section { padding: 30px 0; border-top: 1px solid var(--line); }
+
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--ink-soft);
+    margin: 0 0 18px;
+  }
+  h2::before { content: "▚ "; color: var(--peach); }
+
+  p { margin: 0 0 16px; }
+
+  /* ── the family grid ───────────────────────────────── */
+  .family { display: grid; gap: 14px; }
+  @media (min-width: 620px) { .family { grid-template-columns: 1fr 1fr; } }
+
+  .mod {
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 16px 18px;
+    background: var(--bg-soft);
+    position: relative;
+  }
+  .mod::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 5px 0 0 5px;
+  }
+  .mod.m1::before { background: var(--peach); }
+  .mod.m2::before { background: var(--mint);  }
+  .mod.m3::before { background: var(--sky);   }
+  .mod.m4::before { background: var(--lilac); }
+
+  .mod h3 { margin: 0 0 4px; font-size: 16px; }
+  .mod .role { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1px; }
+  .mod p { font-size: 14px; margin: 8px 0 0; color: var(--ink); }
+  .mod .glyphs { font-size: 13px; color: var(--ink-soft); margin-top: 8px; }
+
+  /* ── three little tenets ───────────────────────────── */
+  .tenets { display: grid; gap: 12px; }
+  @media (min-width: 620px) { .tenets { grid-template-columns: repeat(3, 1fr); } }
+  .tenet {
+    text-align: center;
+    padding: 18px 12px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+  }
+  .tenet .big { font-size: 26px; color: var(--peach); }
+  .tenet .t { font-weight: bold; margin: 6px 0 2px; }
+  .tenet .d { font-size: 13px; color: var(--ink-soft); }
+
+  /* ── feature list ──────────────────────────────────── */
+  ul.feat { list-style: none; padding: 0; margin: 0; }
+  ul.feat li { padding: 4px 0 4px 22px; position: relative; }
+  ul.feat li::before {
+    content: "█"; position: absolute; left: 0;
+    color: var(--mint); font-size: 12px;
+  }
+  ul.feat li:nth-child(2n)::before  { color: var(--peach); }
+  ul.feat li:nth-child(3n)::before  { color: var(--sky);   }
+
+  code.k {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 13px;
+  }
+
+  /* ── footer ────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 30px 0 60px;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  footer .heart { color: var(--rose); }
+</style>
+</head>
+<body>
+
+<div class="stripe">
+  <span class="s1"></span><span class="s2"></span><span class="s3"></span>
+  <span class="s4"></span><span class="s5"></span><span class="s6"></span>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <pre class="logo"><span class="a1"> _ __ ___  (_) | | _| | |_ ___  __ _ </span>
+<span class="a2">| '_ ` _ \ | | | |/ / __/ _ \/ _` |</span>
+<span class="a3">| | | | | || | |   <| ||  __/ (_| |</span>
+|_| |_| |_||_|_|_|\_\\__\___|\__,_|</pre>
+
+    <h1>milktea <span class="blink">▮</span></h1>
+    <p class="tag">A terminal UI library for C3. Build TUIs the calm way —
+       as a model, an update, and a view.</p>
+
+    <div class="badges">
+      <span class="badge"><b>lang</b> · C3</span>
+      <span class="badge"><b>style</b> · Elm Architecture</span>
+      <span class="badge"><b>deps</b> · zero, beyond C3</span>
+      <span class="badge"><b>vibe</b> · cozy ☕</span>
+    </div>
+  </header>
+
+  <!-- ── what it is ── -->
+  <p>milktea is a little framework for writing programs that live in your
+     terminal — text editors, dashboards, installers, games, whatever. You
+     describe your app as <b>plain data</b>, write a function that reacts to
+     events, and a function that draws the screen. milktea takes care of the
+     boring parts: the event loop, drawing, and wrangling the terminal.</p>
+
+  <p>No callbacks. No tangled state. No surprises. Just a struct and three
+     functions.</p>
+
+  <!-- ── code sample ── -->
+  <div class="term">
+    <div class="bar">
+      <i class="d1"></i><i class="d2"></i><i class="d3"></i>
+      <span>counter.c3</span>
+    </div>
+<pre><span class="c-sky">struct</span> Counter { <span class="c-peach">int</span> value; }
+
+<span class="c-dim">// react to events</span>
+<span class="c-sky">fn</span> Cmd Counter.<span class="c-gold">update</span>(&self, Msg msg) {
+    <span class="c-sky">switch</span> (msg.key.code) {
+        <span class="c-sky">case</span> UP:   self.value++;
+        <span class="c-sky">case</span> DOWN: self.value--;
+        <span class="c-sky">case</span> RUNE: <span class="c-sky">if</span> (msg.key.rune == <span class="c-mint">'q'</span>) <span class="c-sky">return</span> <span class="c-gold">quit</span>();
+    }
+    <span class="c-sky">return</span> null;
+}
+
+<span class="c-dim">// draw the screen</span>
+<span class="c-sky">fn</span> View Counter.<span class="c-gold">view</span>(&self) {
+    <span class="c-sky">return</span> <span class="c-gold">new_view</span>(<span class="c-mint">string::tformat</span>(
+        <span class="c-mint">"Counter: %d  (↑ ↓ to change, q to quit)"</span>, self.value));
+}</pre>
+  </div>
+
+  <!-- ── three tenets ── -->
+  <section>
+    <h2>How it feels</h2>
+    <div class="tenets">
+      <div class="tenet">
+        <div class="big">◢◣</div>
+        <div class="t">model</div>
+        <div class="d">your whole app is one flat, boring struct</div>
+      </div>
+      <div class="tenet">
+        <div class="big">↻</div>
+        <div class="t">update</div>
+        <div class="d">events come in, you mutate state, that's it</div>
+      </div>
+      <div class="tenet">
+        <div class="big">▦</div>
+        <div class="t">view</div>
+        <div class="d">turn the model into something on screen</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── the family ── -->
+  <section>
+    <h2>A small family of parts</h2>
+    <p>milktea is the runtime. Around it sit three friends, each with one job.
+       Import only what you need — a tiny app needs just the first two.</p>
+
+    <div class="family">
+      <div class="mod m1">
+        <span class="role">runtime</span>
+        <h3>milktea</h3>
+        <p>The event loop and the glue. Keys, mouse, window resizes, timers —
+           it pipes them to your <code class="k">update</code> and redraws after.</p>
+        <div class="glyphs">init · update · view · tick</div>
+      </div>
+
+      <div class="mod m2">
+        <span class="role">styling</span>
+        <h3>glaze</h3>
+        <p>Colors, borders, padding, gradients. Perceptual color blending and
+           animated borders for when you want to show off a little.</p>
+        <div class="glyphs">╭─╮ ┏━┓ ╔═╗ · hsl · blend_luv</div>
+      </div>
+
+      <div class="mod m3">
+        <span class="role">geometry</span>
+        <h3>xray</h3>
+        <p>The cell grid underneath it all. A diffing renderer that only
+           repaints what changed, plus a layout solver for splitting space.</p>
+        <div class="glyphs">vstack · hstack · fill · len · percent</div>
+      </div>
+
+      <div class="mod m4">
+        <span class="role">components</span>
+        <h3>boba</h3>
+        <p>Ready-made widgets so you don't start from zero: lists, tables, text
+           inputs, spinners, timers, file pickers, toasts, viewports.</p>
+        <div class="glyphs">list · table · textinput · spinner · timer</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── what you can build ── -->
+  <section>
+    <h2>What's in the box</h2>
+    <ul class="feat">
+      <li>Truecolor, 256-color, and palette colors — with perceptual blending</li>
+      <li>Rounded, double, thick, and animated borders</li>
+      <li>A constraint-based layout solver (<code class="k">vstack</code> / <code class="k">hstack</code>)</li>
+      <li>Smooth animations via frame-paced ticks and a flicker-free renderer</li>
+      <li>Full mouse support — clicks, motion, the works</li>
+      <li>Alternate-screen full-window apps, or inline one-shot tools</li>
+      <li>Drop-in components: tables, text areas, progress bars, file pickers</li>
+    </ul>
+  </section>
+
+  <!-- ── examples ── -->
+  <section>
+    <h2>See it run</h2>
+    <p>The <code class="k">examples/</code> folder is full of runnable demos —
+       from a 20-line counter all the way up to a raycasting 3D engine and a
+       fire effect, both running entirely in text cells.</p>
+<div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>~/milktea/examples/wolf3d</span></div>
+<pre><span class="c-dim">$</span> <span class="c-peach">cd</span> examples/wolf3d
+<span class="c-dim">$</span> <span class="c-peach">c3c</span> run
+<span class="c-mint">  ▲ a wolfenstein-style raycaster, in your terminal ▲</span></pre>
+    </div>
+    <p style="margin-top:16px">Other favorites: <code class="k">doom-fire</code>,
+       <code class="k">color-swatches</code>, <code class="k">split-editors</code>,
+       <code class="k">dos-app</code>, and a <code class="k">timer</code>.</p>
+  </section>
+
+  <!-- ── tutorial cta ── -->
+  <section>
+    <h2>Learn it by building</h2>
+    <p>Past the counter, the <a href="tutorial.html">step-by-step tutorial</a>
+       walks you through a real little app — a <b>Pomodoro focus timer</b> — and
+       meets most of milktea along the way: constraint layouts, timers, styling,
+       and a progress bar.</p>
+    <p style="margin-top:6px">
+      <a href="tutorial.html" style="display:inline-block;padding:8px 16px;background:var(--peach);color:#fff;border:none;border-radius:4px;box-shadow:3px 3px 0 rgba(120,90,60,0.18)">▸ Start the tutorial</a>
+    </p>
+  </section>
+
+</div>
+
+<div class="stripe">
+  <span class="s1"></span><span class="s2"></span><span class="s3"></span>
+  <span class="s4"></span><span class="s5"></span><span class="s6"></span>
+</div>
+
+<div class="wrap">
+  <footer>
+    <p>milktea · glaze · xray · boba — written in
+       <a href="https://c3-lang.org">C3</a>,
+       inspired by the <a href="https://guide.elm-lang.org/architecture/">Elm Architecture</a>
+       and the Bubble Tea family.</p>
+    <p>made with <span class="heart">♥</span> and too much tea ☕ ·
+       <span style="color:var(--peach)">█</span><span style="color:var(--gold)">█</span><span style="color:var(--mint)">█</span><span style="color:var(--sky)">█</span><span style="color:var(--lilac)">█</span></p>
+  </footer>
+</div>
+
+</body>
+</html>

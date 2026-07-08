@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>milktea — tutorial: a pomodoro timer</title>
+<style>
+  :root {
+    --bg:#f4ecd8; --bg-soft:#efe3cb; --ink:#4a3f35; --ink-soft:#7a6a58;
+    --line:#d8c6a6; --peach:#f3a26d; --rose:#e98a8a; --mint:#8fcab0;
+    --sky:#8bb8d8; --lilac:#b59cd0; --gold:#e7b24f;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"SFMono-Regular","SF Mono","JetBrains Mono","Menlo","Consolas","Courier New",monospace;
+    font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+    background-image:repeating-linear-gradient(0deg,
+      rgba(120,90,60,0.025) 0px, rgba(120,90,60,0.025) 1px,
+      transparent 1px, transparent 3px);
+  }
+  a { color:var(--ink); text-decoration:none; border-bottom:1px dotted var(--ink-soft); }
+  a:hover { color:var(--peach); border-bottom-color:var(--peach); }
+  .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
+
+  .stripe { height:8px; display:flex; }
+  .stripe > span { flex:1; }
+  .stripe .s1{background:var(--rose);}  .stripe .s2{background:var(--peach);}
+  .stripe .s3{background:var(--gold);}  .stripe .s4{background:var(--mint);}
+  .stripe .s5{background:var(--sky);}   .stripe .s6{background:var(--lilac);}
+
+  .nav { padding:18px 0; font-size:13px; display:flex; gap:18px; align-items:center; }
+  .nav .brand { font-weight:bold; border:none; color:var(--peach); }
+  .nav a { border:none; color:var(--ink-soft); }
+  .nav a:hover { color:var(--peach); }
+  .nav .sp { flex:1; }
+
+  header { padding:30px 0 24px; }
+  .kicker { font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--ink-soft); }
+  .kicker::before { content:"▚ "; color:var(--peach); }
+  h1 { font-size:28px; margin:8px 0 6px; letter-spacing:-0.5px; }
+  .tag { color:var(--ink-soft); font-size:16px; margin:0; }
+
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin:20px 0 0; }
+  .chip { font-size:12px; padding:3px 10px; background:var(--bg-soft);
+          border:1px solid var(--line); border-radius:3px; color:var(--ink-soft); }
+  .chip b { color:var(--ink); }
+
+  section { padding:26px 0; border-top:1px solid var(--line); }
+  h2 { font-size:18px; margin:0 0 4px; }
+  h2 .n { color:var(--peach); }
+  h2 + .sub { color:var(--ink-soft); font-size:13px; margin:0 0 16px; }
+  h3 { font-size:14px; text-transform:uppercase; letter-spacing:1px;
+       color:var(--ink-soft); margin:22px 0 10px; }
+  h3::before { content:"› "; color:var(--mint); }
+  p { margin:0 0 14px; }
+
+  code.k { background:var(--bg-soft); border:1px solid var(--line);
+           border-radius:3px; padding:1px 5px; font-size:13px; }
+
+  /* terminal / code card */
+  .term { background:#2a2018; border-radius:7px; border:1px solid #1c150f;
+          box-shadow:4px 4px 0 rgba(120,90,60,0.18); overflow:hidden; margin:18px 0; }
+  .term .bar { background:#38291c; padding:8px 12px; display:flex; align-items:center; gap:7px; }
+  .term .bar i { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .term .bar .d1{background:var(--rose);} .term .bar .d2{background:var(--gold);} .term .bar .d3{background:var(--mint);}
+  .term .bar span { color:#9b8870; font-size:12px; margin-left:8px; }
+  .term pre { margin:0; padding:16px 18px; color:#f0e4cf; font-size:12.5px;
+              line-height:1.55; overflow-x:auto; white-space:pre; }
+  .term .c-peach{color:var(--peach);} .term .c-mint{color:var(--mint);}
+  .term .c-sky{color:var(--sky);} .term .c-gold{color:var(--gold);}
+  .term .c-rose{color:var(--rose);} .term .c-dim{color:#9b8870;}
+
+  /* the screenshot mock */
+  .shot { background:#2a2018; color:#f0e4cf; border-radius:7px; border:1px solid #1c150f;
+          box-shadow:4px 4px 0 rgba(120,90,60,0.18); padding:16px 18px; margin:18px 0;
+          font-size:12px; line-height:1.35; white-space:pre; overflow-x:auto; }
+  .shot .acc { color:var(--peach); }
+  .shot .br  { color:#9b8870; }
+  .shot .dim { color:#9b8870; }
+
+  table.con { width:100%; border-collapse:collapse; margin:8px 0 16px; font-size:13px; }
+  table.con th, table.con td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+  table.con th { color:var(--ink-soft); text-transform:uppercase; font-size:11px; letter-spacing:1px; }
+  table.con td:first-child { color:var(--peach); white-space:nowrap; }
+
+  .note { background:var(--bg-soft); border-left:4px solid var(--mint);
+          border-radius:0 5px 5px 0; padding:12px 16px; margin:16px 0; font-size:14px; }
+  .note b { color:var(--ink); }
+
+  ul.feat { list-style:none; padding:0; margin:0; }
+  ul.feat li { padding:4px 0 4px 22px; position:relative; }
+  ul.feat li::before { content:"█"; position:absolute; left:0; color:var(--mint); font-size:12px; }
+  ul.feat li:nth-child(2n)::before { color:var(--peach); }
+  ul.feat li:nth-child(3n)::before { color:var(--sky); }
+
+  footer { border-top:1px solid var(--line); padding:30px 0 60px;
+           color:var(--ink-soft); font-size:13px; }
+  footer .heart { color:var(--rose); }
+</style>
+</head>
+<body>
+
+<div class="stripe">
+  <span class="s1"></span><span class="s2"></span><span class="s3"></span>
+  <span class="s4"></span><span class="s5"></span><span class="s6"></span>
+</div>
+
+<div class="wrap">
+  <nav class="nav">
+    <a class="brand" href="index.html">🍵 milktea</a>
+    <span class="sp"></span>
+    <a href="index.html">home</a>
+    <a href="index.html#examples">examples</a>
+    <a href="https://c3-lang.org">C3</a>
+  </nav>
+
+  <header>
+    <div class="kicker">Tutorial</div>
+    <h1>Build a Pomodoro timer</h1>
+    <p class="tag">The README gets you to a counter. Let's build something you'd
+       actually leave running — and meet most of milktea on the way.</p>
+    <div class="chips">
+      <span class="chip"><b>covers</b> · constraint layouts</span>
+      <span class="chip"><b>·</b> timers</span>
+      <span class="chip"><b>·</b> styling</span>
+      <span class="chip"><b>·</b> state & keys</span>
+    </div>
+  </header>
+
+  <!-- preview -->
+  <section style="border-top:none;padding-top:6px">
+    <p>Here's what we're making — a title bar, a stats sidebar, a centered timer
+       panel with a live progress bar, and a status line. Everything is laid out
+       with constraints, so it reflows when you resize the terminal.</p>
+
+<div class="shot"><span class="br">╭────────────────────────────────────────────────────╮</span>
+<span class="br">│</span> <span class="acc">🍵 milktea pomodoro</span>                                 <span class="br">│</span>
+<span class="br">├──────────────────────┬─────────────────────────────┤</span>
+<span class="br">│ ╭──────────────────╮ │ ╭─────────────────────────╮ │</span>
+<span class="br">│ │</span> <span class="dim">POMODORO</span>         <span class="br">│ │ │</span>        <span class="acc">◆ FOCUS ◆</span>        <span class="br">│ │</span>
+<span class="br">│ │</span> <span class="dim">────────</span>         <span class="br">│ │ │</span>                         <span class="br">│ │</span>
+<span class="br">│ │</span> <span class="dim">sessions: 2</span>      <span class="br">│ │ │</span>         <span class="acc">24:51</span>           <span class="br">│ │</span>
+<span class="br">│ │</span> <span class="dim">phase:    focus</span>  <span class="br">│ │ │</span>                         <span class="br">│ │</span>
+<span class="br">│ │</span> <span class="dim">state:    running</span><span class="br">│ │ │</span>  <span class="acc">[████████</span><span class="dim">░░░░░░░░░░░░</span><span class="acc">]</span>  <span class="br">│ │</span>
+<span class="br">│ ╰──────────────────╯ │ ╰─────────────────────────╯ │</span>
+<span class="br">├──────────────────────┴─────────────────────────────┤</span>
+<span class="br">│</span> <span class="dim">space pause · tab switch · r reset · q quit</span>         <span class="br">│</span>
+<span class="br">╰────────────────────────────────────────────────────╯</span></div>
+
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>build &amp; run</span></div>
+<pre><span class="c-dim">$</span> <span class="c-peach">c3c</span> run examples/pomodoro</pre>
+    </div>
+
+    <p>Every milktea program is the same three things: a <b>model</b> (your
+       state), an <b>update</b> function (react to events), and a <b>view</b>
+       function (draw). We'll build each in turn. The full source is in
+       <code class="k">examples/pomodoro/pomodoro.c3</code>, and the long-form
+       write-up lives in <code class="k">TUTORIAL.md</code>.</p>
+  </section>
+
+  <!-- 1. model -->
+  <section>
+    <h2><span class="n">1.</span> The model</h2>
+    <p class="sub">Your whole app, as one flat struct.</p>
+    <p>Keep state boring and explicit. Ours tracks the phase, seconds remaining,
+       whether it's running, sessions completed, and the terminal size.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-sky">enum</span> Phase : <span class="c-peach">int</span> { FOCUS, BREAK }
+
+<span class="c-sky">struct</span> Model {
+    Phase phase;
+    <span class="c-peach">int</span>   remaining;   <span class="c-dim">// seconds left in this phase</span>
+    <span class="c-peach">bool</span>  running;
+    <span class="c-peach">int</span>   completed;   <span class="c-dim">// focus sessions finished</span>
+    <span class="c-peach">int</span>   width;
+    <span class="c-peach">int</span>   height;
+}</pre>
+    </div>
+  </section>
+
+  <!-- 2. init -->
+  <section>
+    <h2><span class="n">2.</span> init — starting the clock</h2>
+    <p class="sub">Runs once. Set the opening state, return a Cmd to do work.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-sky">fn</span> Cmd Model.<span class="c-gold">init</span>(&self) {
+    self.phase     = Phase.FOCUS;
+    self.remaining = <span class="c-gold">phase_length</span>(self.phase);
+    self.running   = <span class="c-sky">true</span>;
+    <span class="c-sky">return</span> milktea::<span class="c-gold">every</span>(<span class="c-mint">1000</span>);  <span class="c-dim">// tick once a second</span>
+}</pre>
+    </div>
+    <p>milktea has two timer commands, and the difference matters:</p>
+    <table class="con">
+      <tr><th>command</th><th>fires</th><th>use for</th></tr>
+      <tr><td>tick(ms)</td><td><code class="k">ms</code> after you call it</td><td>animations — you care about the gap between frames</td></tr>
+      <tr><td>every(ms)</td><td>on the next wall-clock multiple of <code class="k">ms</code></td><td>clocks & countdowns — stays locked to real time</td></tr>
+    </table>
+    <div class="note"><b>Timers are one-shot.</b> They fire once; it's on you to
+       re-arm them from <code class="k">update</code>. That's what keeps the
+       countdown going.</div>
+  </section>
+
+  <!-- 3. update -->
+  <section>
+    <h2><span class="n">3.</span> update — reacting to the world</h2>
+    <p class="sub">Every event — resize, tick, keypress — arrives as a Msg.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-sky">fn</span> Cmd Model.<span class="c-gold">update</span>(&self, Msg msg) {
+    <span class="c-sky">switch</span> (msg.kind) {
+        <span class="c-sky">case</span> WINDOW_SIZE:
+            self.width  = msg.window_size.width;
+            self.height = msg.window_size.height;
+            <span class="c-sky">return</span> null;
+
+        <span class="c-sky">case</span> TICK:
+            <span class="c-sky">if</span> (self.running && self.remaining &gt; <span class="c-mint">0</span>) {
+                self.remaining--;
+                <span class="c-sky">if</span> (self.remaining == <span class="c-mint">0</span>) self.<span class="c-gold">advance_phase</span>();
+            }
+            <span class="c-sky">return</span> milktea::<span class="c-gold">every</span>(<span class="c-mint">1000</span>);  <span class="c-dim">// re-arm</span>
+
+        <span class="c-sky">case</span> KEY:
+            <span class="c-sky">return</span> self.<span class="c-gold">handle_key</span>(msg.key);
+
+        <span class="c-sky">default</span>:
+            <span class="c-sky">return</span> null;
+    }
+}</pre>
+    </div>
+    <ul class="feat">
+      <li><b>Window size</b> arrives on startup and every resize — stash it, the view uses it.</li>
+      <li><b>The tick re-arms itself</b> by returning <code class="k">every(1000)</code> again.</li>
+      <li><b>Returning <code class="k">null</code></b> means "done — wait for the next event."</li>
+    </ul>
+
+    <h3>Handling keys</h3>
+    <p>Printable characters come in as <code class="k">KeyCode.RUNE</code> with
+       the character in <code class="k">k.rune</code>; special keys have their
+       own codes. Quit by returning <code class="k">milktea::quit()</code>.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-sky">switch</span> (k.code) {
+    <span class="c-sky">case</span> CTRL_C:
+    <span class="c-sky">case</span> ESC:  <span class="c-sky">return</span> milktea::<span class="c-gold">quit</span>();
+    <span class="c-sky">case</span> TAB:  self.<span class="c-gold">toggle_phase</span>();
+    <span class="c-sky">case</span> RUNE:
+        <span class="c-sky">switch</span> (k.rune) {
+            <span class="c-sky">case</span> <span class="c-mint">'q'</span>: <span class="c-sky">return</span> milktea::<span class="c-gold">quit</span>();
+            <span class="c-sky">case</span> <span class="c-mint">' '</span>: self.running = !self.running;
+            <span class="c-sky">case</span> <span class="c-mint">'r'</span>: self.remaining = <span class="c-gold">phase_length</span>(self.phase);
+            <span class="c-sky">default</span>:
+        }
+    <span class="c-sky">default</span>:
+}</pre>
+    </div>
+  </section>
+
+  <!-- 4. view -->
+  <section>
+    <h2><span class="n">4.</span> view — drawing the screen</h2>
+    <p class="sub">Where layout and styling come together. Runs after every update.</p>
+
+    <h3>Solve the layout with constraints</h3>
+    <p>This is the heart of it. Instead of computing positions by hand, hand
+       <code class="k">xray::layout</code> a list of constraints and it fills in
+       a <code class="k">Rect</code> for each slot. First three horizontal bands:</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre>xray::Rect title_r, body_r, status_r;
+layout::<span class="c-gold">vstack</span>(layout::<span class="c-gold">screen</span>(w, h), {
+    layout::<span class="c-gold">slot</span>(layout::<span class="c-gold">len</span>(<span class="c-mint">1</span>),  &title_r),
+    layout::<span class="c-gold">slot</span>(layout::<span class="c-gold">fill</span>(<span class="c-mint">1</span>), &body_r),
+    layout::<span class="c-gold">slot</span>(layout::<span class="c-gold">len</span>(<span class="c-mint">1</span>),  &status_r),
+});
+
+<span class="c-dim">// then split the body into a sidebar + timer panel</span>
+xray::Rect side_r, timer_r;
+layout::<span class="c-gold">hstack</span>(body_r, {
+    layout::<span class="c-gold">slot</span>(layout::<span class="c-gold">len</span>(<span class="c-mint">22</span>), &side_r),
+    layout::<span class="c-gold">slot</span>(layout::<span class="c-gold">fill</span>(<span class="c-mint">1</span>), &timer_r),
+});</pre>
+    </div>
+    <table class="con">
+      <tr><th>constraint</th><th>meaning</th></tr>
+      <tr><td>len(n)</td><td>exactly n cells</td></tr>
+      <tr><td>fill(w)</td><td>share leftover space, weighted by w</td></tr>
+      <tr><td>percent(p)</td><td>p% of available space</td></tr>
+      <tr><td>min(n) / max(n)</td><td>clamp to a bound</td></tr>
+    </table>
+    <p>Because everything is solved against <code class="k">w</code> and
+       <code class="k">h</code>, the UI reflows on resize — no manual math.</p>
+
+    <h3>Style with values</h3>
+    <p>Styles are plain values you build, chain, and reuse. The accent color
+       follows the phase — <span style="color:#c97b48">peach</span> for focus,
+       <span style="color:#5fa384">mint</span> for breaks.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre>glaze::Style timer_s = glaze::<span class="c-gold">style</span>()
+    .<span class="c-gold">foreground</span>(accent).<span class="c-gold">bold</span>(<span class="c-sky">true</span>)
+    .<span class="c-gold">border</span>(glaze::<span class="c-gold">rounded_border</span>()).<span class="c-gold">border_fg</span>(accent)
+    .<span class="c-gold">padding</span>(<span class="c-mint">1</span>, <span class="c-mint">2</span>, <span class="c-mint">1</span>, <span class="c-mint">2</span>)
+    .<span class="c-gold">align</span>(glaze::Position.CENTER, glaze::Position.CENTER);</pre>
+    </div>
+
+    <h3>A free progress bar</h3>
+    <p>glaze ships a progress bar — feed it a width, a percentage, fill/empty
+       glyphs, and two colors:</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-peach">int</span> pct = <span class="c-mint">100</span> - (self.remaining * <span class="c-mint">100</span> / total);
+String bar = glaze::<span class="c-gold">progress_bar</span>(<span class="c-mint">28</span>, pct, <span class="c-mint">"█"</span>, <span class="c-mint">"░"</span>, accent, dim);</pre>
+    </div>
+
+    <h3>Render into rects, then stack</h3>
+    <p>The bridge between geometry and styling:
+       <code class="k">rect.render(style, content)</code> sizes a styled block to
+       fill its slot. Then glue everything with
+       <code class="k">join_horizontal</code> / <code class="k">join_vertical</code>,
+       which understand strings that already carry ANSI codes.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre>String title_v = title_r.<span class="c-gold">render</span>(title_s, <span class="c-mint">" 🍵 milktea pomodoro"</span>);
+String side_v  = side_r.<span class="c-gold">render</span>(side_s,   side);
+String timer_v = timer_r.<span class="c-gold">render</span>(timer_s, clock);
+
+String body = glaze::<span class="c-gold">join_horizontal</span>(side_v, timer_v, <span class="c-mint">0</span>);
+String doc  = glaze::<span class="c-gold">join_vertical</span>(LEFT, title_v, body);
+doc = glaze::<span class="c-gold">join_vertical</span>(LEFT, doc, status_v);
+
+<span class="c-sky">return</span> milktea::<span class="c-gold">new_alt_screen_view</span>(doc);</pre>
+    </div>
+    <div class="note"><b>new_alt_screen_view</b> uses the terminal's alternate
+       screen — the full-window mode <code class="k">vim</code> and
+       <code class="k">less</code> use — and hides the cursor. For a simple
+       scrolling tool, use <code class="k">new_view</code> instead.</div>
+  </section>
+
+  <!-- 5. main -->
+  <section>
+    <h2><span class="n">5.</span> main</h2>
+    <p class="sub">Wire it up and run.</p>
+    <div class="term">
+      <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>pomodoro.c3</span></div>
+<pre><span class="c-sky">fn</span> <span class="c-peach">int</span> <span class="c-gold">main</span>() {
+    Model m = { };
+    milktea::<span class="c-gold">@run</span>(&m);
+    <span class="c-sky">return</span> <span class="c-mint">0</span>;
+}</pre>
+    </div>
+    <p>That's the whole program — one struct and four functions.
+       <code class="k">@run</code> runs the loop and restores the terminal on
+       exit.</p>
+  </section>
+
+  <!-- next -->
+  <section>
+    <h2>Where to go next</h2>
+    <ul class="feat">
+      <li>Drop the phase lengths to a few seconds to watch the rollover and bar without waiting.</li>
+      <li>Swap hand-rolled pieces for <b>boba</b> components: <code class="k">progress</code>, <code class="k">list</code>, <code class="k">help</code>.</li>
+      <li>Add a soft animated border with glaze's <code class="k">border_anim</code> (PULSE / RAINBOW) driven by a <code class="k">tick(16)</code>.</li>
+      <li>Browse <a href="index.html#examples">examples/</a> — <code class="k">dos-app</code> for nested layouts & modals, <code class="k">wolf3d</code> for cell-level rendering.</li>
+    </ul>
+  </section>
+
+</div>
+
+<div class="stripe">
+  <span class="s1"></span><span class="s2"></span><span class="s3"></span>
+  <span class="s4"></span><span class="s5"></span><span class="s6"></span>
+</div>
+
+<div class="wrap">
+  <footer>
+    <p><a href="index.html">← back home</a> · milktea · glaze · xray · boba</p>
+    <p>made with <span class="heart">♥</span> and too much tea ☕</p>
+  </footer>
+</div>
+
+</body>
+</html>
