@@ -10,6 +10,46 @@ enum BorderAnimation : char {
 	RACE,    // a dash of bright color races around, leaving a dim trail
 }
 
+// codepoint_width returns the terminal display width of a single Unicode
+// codepoint. This mirrors xray::char_width exactly. It lives here because
+// glaze is compiled independently from xray in several build targets, so
+// we cannot import xray. Both copies must be kept in sync.
+fn int codepoint_width(uint cp) @local {
+	if (cp == 0) return 0;
+	// Combining / zero-width ranges
+	if (cp >= 0x0300 && cp <= 0x036F) return 0;
+	if (cp >= 0x1AB0 && cp <= 0x1AFF) return 0;
+	if (cp >= 0x1DC0 && cp <= 0x1DFF) return 0;
+	if (cp >= 0x20D0 && cp <= 0x20FF) return 0;
+	if (cp >= 0xFE00 && cp <= 0xFE0F) return 0;
+	if (cp >= 0xFE20 && cp <= 0xFE2F) return 0;
+	if (cp >= 0x200B && cp <= 0x200F) return 0;
+	if (cp == 0x2060) return 0;
+	if (cp == 0xFEFF) return 0;
+	// Fast path: plain ASCII
+	if (cp < 0x1100) return 1;
+	// Wide ranges
+	if (cp >= 0x1100 && cp <= 0x115F) return 2;
+	if (cp >= 0x2E80 && cp <= 0x303E) return 2;
+	if (cp >= 0x3041 && cp <= 0x33FF) return 2;
+	if (cp >= 0x3400 && cp <= 0x4DBF) return 2;
+	if (cp >= 0x4E00 && cp <= 0x9FFF) return 2;
+	if (cp >= 0xA000 && cp <= 0xA4CF) return 2;
+	if (cp >= 0xAC00 && cp <= 0xD7A3) return 2;
+	if (cp >= 0xF900 && cp <= 0xFAFF) return 2;
+	if (cp >= 0xFE30 && cp <= 0xFE4F) return 2;
+	if (cp >= 0xFF00 && cp <= 0xFF60) return 2;
+	if (cp >= 0xFFE0 && cp <= 0xFFE6) return 2;
+	if (cp >= 0x1F300 && cp <= 0x1F64F) return 2;
+	if (cp >= 0x1F680 && cp <= 0x1F6FF) return 2;
+	if (cp >= 0x1F900 && cp <= 0x1F9FF) return 2;
+	if (cp >= 0x1FA70 && cp <= 0x1FAFF) return 2;
+	if (cp >= 0x20000 && cp <= 0x3FFFD) return 2;
+	return 1;
+}
+
+// string_width returns the terminal display width of a string, skipping ANSI
+// escape sequences. Uses the same codepoint width rules as xray::char_width.
 fn int string_width(String s) {
 	int w        = 0;
 	bool in_ansi = false;
@@ -72,82 +112,7 @@ fn int string_width(String s) {
 			continue;
 		}
 
-		// Wide characters (CJK, emoji, box drawing, etc.)
-		if (cp >= 0x1100) {
-			// CJK Unified Ideographs
-			if (cp >= 0x4e00 && cp <= 0x9fff) {
-				w += 2;
-				continue;
-			}
-			// CJK Extension A
-			if (cp >= 0x3400 && cp <= 0x4dbf) {
-				w += 2;
-				continue;
-			}
-			// Hangul
-			if (cp >= 0xac00 && cp <= 0xd7a3) {
-				w += 2;
-				continue;
-			}
-			// Fullwidth Latin
-			if (cp >= 0xff01 && cp <= 0xff60) {
-				w += 2;
-				continue;
-			}
-			// CJK Compatibility
-			if (cp >= 0xf900 && cp <= 0xfaff) {
-				w += 2;
-				continue;
-			}
-			// Enclosed CJK
-			if (cp >= 0x3000 && cp <= 0x303f) {
-				w += 2;
-				continue;
-			}
-			// Narrow symbols (width 1 in most terminals)
-			if (cp >= 0x2000 && cp <= 0x20ff) {
-				w += 1;
-				continue;
-			} // General Punctuation (em dash, en dash, quotes, etc.)
-			if (cp >= 0x2100 && cp <= 0x21ff) {
-				w += 1;
-				continue;
-			} // Letterlike, Number Forms, Arrows
-			if (cp >= 0x2200 && cp <= 0x22ff) {
-				w += 1;
-				continue;
-			} // Mathematical Operators
-			if (cp >= 0x2300 && cp <= 0x23ff) {
-				w += 1;
-				continue;
-			} // Miscellaneous Technical
-			if (cp >= 0x25a0 && cp <= 0x25ff) {
-				w += 1;
-				continue;
-			} // Geometric Shapes
-			// Box drawing and block elements are narrow (width 1)
-			if (cp >= 0x2500 && cp <= 0x257f) {
-				w += 1;
-				continue;
-			}
-			if (cp >= 0x2580 && cp <= 0x259f) {
-				w += 1;
-				continue;
-			}
-			if (cp >= 0x2400 && cp <= 0x27ff) {
-				w += 1;
-				continue;
-			} // Enclosed Alphanumerics, Dingbats, misc symbols
-			// Braille
-			if (cp >= 0x2800 && cp <= 0x28ff) {
-				w += 1;
-				continue;
-			}
-			// Emoji and symbols — all width 2
-			w += 2;
-			continue;
-		}
-		w++;
+		w += codepoint_width(cp);
 	}
 	return w;
 }
