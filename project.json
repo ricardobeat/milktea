@@ -1,7 +1,7 @@
 {
   "langrev": "1",
   "warnings": ["no-unused-parameter", "no-unused-import"],
-  "macos-min-version": "26.0",
+  "macos-min-version": "27.0",
   "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "taro/**", "src/**", "test/**"],
   "targets": {
     "milktea": {
