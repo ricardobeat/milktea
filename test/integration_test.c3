@@ -269,3 +269,50 @@ fn void test_every_deadline_snaps() @test {
 	// (covered indirectly by test_every_fires via the event loop.)
 	assert(true);
 }
+
+// ============================================================
+// every(0) guard — division-by-zero regression
+// ============================================================
+
+// ZeroIntervalModel calls every(0) from init() so it executes while
+// g_program is live (inside run()). The program quits immediately on
+// the first key (ctrl+c injected via with_input). If the modulo guard
+// is absent, run() crashes with SIGFPE before delivering any message.
+struct ZeroIntervalModel {
+	bool updated;
+}
+
+fn milktea::Cmd ZeroIntervalModel.init(ZeroIntervalModel* self) @dynamic {
+	// every(0) must not divide-by-zero; guard clamps to 1ms.
+	milktea::every(0);
+	return null;
+}
+
+fn milktea::Cmd ZeroIntervalModel.update(ZeroIntervalModel* self, milktea::Msg msg) @dynamic {
+	self.updated = true;
+	if (msg.kind == milktea::MsgKind.KEY && msg.key.code == milktea::KeyCode.CTRL_C) {
+		return milktea::quit();
+	}
+	return null;
+}
+
+fn milktea::View ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
+	return milktea::new_view("ok");
+}
+
+fn void ZeroIntervalModel.on_mount(ZeroIntervalModel* self) @dynamic { }
+fn void ZeroIntervalModel.on_destroy(ZeroIntervalModel* self) @dynamic { }
+
+// test_every_zero_no_crash verifies that every(0) does not crash (SIGFPE).
+// The interval is clamped to 1ms internally; the test just needs run() to
+// return cleanly.
+fn void test_every_zero_no_crash() @test {
+	ZeroIntervalModel m = { };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x03 });
+
+	p.run()!!;
+
+	// If we reach this line the guard worked; no SIGFPE was raised.
+	assert(m.updated);
+}
