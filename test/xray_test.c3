@@ -981,3 +981,107 @@ fn void test_blit_ansi() @test {
 	assert(c.content[0] == 'i');
 	assert(c.style.fg.kind == ColorKind.ANSI);
 }
+
+// ============================================================
+// char_width unit tests
+// ============================================================
+
+fn void test_char_width_combining_acute() @test {
+	// U+0301 COMBINING ACUTE ACCENT — zero-width combining mark
+	assert(char_width(0x0301) == 0);
+}
+
+fn void test_char_width_e_acute() @test {
+	// U+00E9 é — ordinary precomposed Latin letter, width 1
+	assert(char_width(0x00E9) == 1);
+}
+
+fn void test_char_width_cjk_ideograph() @test {
+	// U+4E2D 中 — CJK Unified Ideograph, width 2
+	assert(char_width(0x4E2D) == 2);
+}
+
+fn void test_char_width_emoji_grinning() @test {
+	// U+1F600 😀 — wide emoji
+	assert(char_width(0x1F600) == 2);
+}
+
+fn void test_char_width_halfwidth_katakana() @test {
+	// U+FF66 ｦ — halfwidth Katakana, must be width 1 (not wide)
+	assert(char_width(0xFF66) == 1);
+}
+
+fn void test_char_width_hangul_syllable() @test {
+	// U+AC00 가 — first Hangul syllable block entry, width 2
+	assert(char_width(0xAC00) == 2);
+}
+
+fn void test_char_width_nul() @test {
+	// U+0000 NUL — zero-width by convention
+	assert(char_width(0) == 0);
+}
+
+fn void test_char_width_ascii() @test {
+	// Ordinary printable ASCII must all be width 1
+	assert(char_width('A') == 1);
+	assert(char_width('z') == 1);
+	assert(char_width('0') == 1);
+}
+
+fn void test_char_width_variation_selector() @test {
+	// U+FE0F VS16 — variation selector, zero-width
+	assert(char_width(0xFE0F) == 0);
+}
+
+fn void test_char_width_fullwidth_latin() @test {
+	// U+FF21 Ａ — fullwidth capital A, width 2
+	assert(char_width(0xFF21) == 2);
+}
+
+fn void test_char_width_halfwidth_currency_boundary() @test {
+	// U+FFE7 is not in FFE0–FFE6, so it must be width 1
+	assert(char_width(0xFFE7) == 1);
+	// U+FFE6 ￦ — fullwidth Won Sign, the last in the wide range, width 2
+	assert(char_width(0xFFE6) == 2);
+}
+
+fn void test_char_width_zwsp() @test {
+	// U+200B ZERO WIDTH SPACE — zero-width
+	assert(char_width(0x200B) == 0);
+}
+
+fn void test_char_width_word_joiner() @test {
+	// U+2060 WORD JOINER — zero-width
+	assert(char_width(0x2060) == 0);
+}
+
+// ============================================================
+// Combining mark in set_string — column placement test
+// ============================================================
+
+fn void test_set_string_combining_doesnt_advance_column() @test {
+	// "e" followed by U+0301 (combining acute) must occupy exactly one terminal
+	// column. The cell at col 0 should hold both bytes; col 1 should hold the
+	// next character, not a stale or empty cell shifted by the mark.
+	ScreenBuffer* sb = new_screen_buffer(10, 1);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+
+	// "e\xcc\x81X" = 'e' + combining acute (U+0301, UTF-8: 0xCC 0x81) + 'X'
+	sb.set_string(0, 0, "e\xcc\x81X", default_style());
+
+	// Col 0 must hold 'e' plus the combining bytes (3 bytes total)
+	Cell* c0 = sb.cell_at(0, 0);
+	assert(c0.content_len == 3);
+	assert(c0.content[0] == 'e');
+	assert(c0.content[1] == (char)0xcc);
+	assert(c0.content[2] == (char)0x81);
+	assert(c0.width == 1); // still single-column
+
+	// 'X' must land at col 1, not col 2
+	Cell* c1 = sb.cell_at(1, 0);
+	assert(c1.content_len == 1);
+	assert(c1.content[0] == 'X');
+}

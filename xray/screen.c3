@@ -214,11 +214,34 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 		uint cp;
 		sz char_len = utf8_decode(text[i..], &cp);
 
-		char w = 1;
-		if (cp >= 0x2E80) w = 2; // CJK / wide range heuristic
-		// Emoji (4-byte codepoints, U+1F300+) are also wide
-		if (cp >= 0x1F300u) w = 2;
+		int cw = char_width(cp);
 
+		// Zero-width codepoint (combining mark, variation selector, etc.):
+		// append its bytes to the previous cell so the terminal can render
+		// it as a composed glyph. Only append if there is a previous cell
+		// and the combined byte count still fits in CELL_MAX_BYTES.
+		// If there is no prior cell or no room, skip silently — dropping a
+		// combining mark is far less disruptive than shifting every following
+		// cell by one column.
+		if (cw == 0) {
+			if (c > col) {
+				Cell* prev_cell = &self.cells[row * self.width + (c - 1)];
+				sz available = CELL_MAX_BYTES - (sz)prev_cell.content_len;
+				if (char_len <= available) {
+					for (sz bi = 0; bi < char_len; bi++) {
+						prev_cell.content[(sz)prev_cell.content_len + bi] = text[i + bi];
+					}
+					prev_cell.content_len = (char)((sz)prev_cell.content_len + char_len);
+					self.dirty_lines[row] = true;
+				}
+				// else: no room — drop the combining mark silently
+			}
+			// else: no previous cell in this row — drop silently
+			i += char_len;
+			continue;
+		}
+
+		char w = (char)cw;
 		Cell cell = new_cell(text[i:char_len], w, style);
 		self.set_cell(c, row, cell);
 		// Wide cell: write a blank placeholder at c+1 so the renderer
@@ -560,10 +583,27 @@ fn void ScreenBuffer.render_ansi_string(
 		sz char_len = utf8_decode(text[i..], &cp);
 		if (char_len == 0) break;
 
-		char w = 1;
-		if (cp >= 0x2E80) w = 2; // CJK / wide range heuristic
-		if (cp >= 0x1F300u) w = 2; // emoji (4-byte, U+1F300+)
+		int cw = char_width(cp);
 
+		// Zero-width codepoint: append combining bytes to previous cell if room.
+		// See set_string for the full rationale.
+		if (cw == 0) {
+			if (c > (sz)col) {
+				Cell* prev_cell = &self.cells[r * self.width + (c - 1)];
+				sz available = CELL_MAX_BYTES - (sz)prev_cell.content_len;
+				if (char_len <= available) {
+					for (sz bi = 0; bi < char_len; bi++) {
+						prev_cell.content[(sz)prev_cell.content_len + bi] = text[i + bi];
+					}
+					prev_cell.content_len = (char)((sz)prev_cell.content_len + char_len);
+					self.dirty_lines[r] = true;
+				}
+			}
+			i += char_len;
+			continue;
+		}
+
+		char w = (char)cw;
 		if (c < max_col) {
 			Cell cell = new_cell(text[i:char_len], w, style);
 			self.set_cell(c, r, cell);
@@ -789,8 +829,30 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 		sz char_len = utf8_decode(text[i..], &cp);
 		if (char_len == 0) break;
 
-		char w = 1;
-		if (cp >= 0x2E80) w = 2;
+		char w = (char)char_width(cp);
+		// Zero-width marks don't advance; treat as width 1 for wrapping
+		// purposes (they'll be appended to the previous cell's bytes, or
+		// dropped if there's no room — same policy as set_string).
+		if (w == 0) {
+			if (col > 0) {
+				// Append combining bytes to the cell we just wrote, if room.
+				sz abs_col = (sz)r.x + col - 1;
+				sz abs_row = (sz)r.y + row;
+				if (abs_col < self.width && abs_row < self.height) {
+					Cell* prev_cell = &self.cells[abs_row * self.width + abs_col];
+					sz available = CELL_MAX_BYTES - (sz)prev_cell.content_len;
+					if (char_len <= available) {
+						for (sz bi = 0; bi < char_len; bi++) {
+							prev_cell.content[(sz)prev_cell.content_len + bi] = text[i + bi];
+						}
+						prev_cell.content_len = (char)((sz)prev_cell.content_len + char_len);
+						self.dirty_lines[abs_row] = true;
+					}
+				}
+			}
+			i += char_len;
+			continue;
+		}
 
 		if (col + (sz)w > (sz)r.w) {
 			row++;
