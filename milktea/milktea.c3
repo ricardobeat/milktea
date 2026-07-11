@@ -1022,13 +1022,7 @@ fn void Program.render_current_view(Program* self) {
 					}
 				}
 
-				// Handle cursor
-				if (v.has_cursor) {
-					// Cursor position is set via CUP after render,
-					// so we mark the cursor cell in the screen buffer
-					// (the renderer will emit CUP at end_frame)
-				}
-
+				// Cursor positioning (CUP) is emitted after end_frame, below.
 				r.end_frame();
 
 				// Emit OSC 22 mouse cursor shape when it changes.
