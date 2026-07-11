@@ -182,7 +182,10 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 					return milktea::quit();
 				case milktea::KeyCode.RUNE:
 					if (k.rune == 'q') return milktea::quit();
-					self.entries[self.focused].insert(k.rune);
+					// rune is a codepoint — encode as UTF-8 before inserting byte-wise
+					char[4] enc;
+					sz n = milktea::utf8_encode(k.rune, enc[..]);
+					for (sz i = 0; i < n; i++) self.entries[self.focused].insert(enc[i]);
 				case milktea::KeyCode.BACKSPACE:
 					self.entries[self.focused].backspace();
 				case milktea::KeyCode.LEFT:
