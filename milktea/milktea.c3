@@ -511,6 +511,10 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 }
 
 // dispatch processes a message through the model, returning true if QUIT was seen.
+// Command chains are capped at MAX_BATCH (16) iterations. A model whose update()
+// continuously returns a non-NONE Cmd will be truncated at that limit; the
+// truncation is surfaced via debug_warn() so it is visible in debug mode without
+// ever crashing or blocking the event loop.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
 	Cmd c     = model.update(m);
@@ -521,6 +525,10 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 		if (next.kind == MsgKind.NONE) break;
 		c = model.update(next);
 		chain++;
+	}
+	// Warn when the chain was cut off — the model may have intended more work.
+	if (chain >= MAX_BATCH && c != null) {
+		debug_warn("command chain exceeded MAX_BATCH; truncated");
 	}
 	return false;
 }
@@ -566,6 +574,10 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // enable Program.debug to surface this in milktea-debug.log.
 fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
+	// A zero interval would divide-by-zero on the modulo below; clamp to 1ms.
+	// Semantically, 0 means "as fast as possible" — 1ms is the smallest
+	// meaningful interval and avoids crashing inside the framework.
+	if (interval_ms == 0) interval_ms = 1;
 	sz now     = time_ms();
 	sz elapsed = now % interval_ms;
 	sz delay   = elapsed == 0 ? interval_ms : interval_ms - elapsed;
