@@ -153,19 +153,29 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 // touched — wide chars occupy one slot visually without shifting anything.
 fn void ScreenBuffer.overlay_char(&self, sz col, sz row, String text, Style base_style) {
 	if (col >= self.width || row >= self.height || text.len == 0) return;
-	// Parse through a 1-wide scratch buffer so ANSI sequences are handled.
+	// Parse through a stack-allocated 2x1 scratch buffer so ANSI sequences
+	// are handled without any heap allocation. render_ansi_string only reads
+	// width/height and writes into cells[]/dirty_lines[] — it never resizes,
+	// frees, or escapes the buffer pointer, so a stack instance is safe.
 	// We only care about the cell at (0,0) of the scratch.
-	ScreenBuffer* tmp = new_screen_buffer(2, 1);
-	defer {
-		tmp.destroy();
-		mem::free(tmp);
-	}
+	Cell[2] scratch_cells;
+	Cell[2] scratch_prev;
+	bool[1] scratch_dirty;
+	scratch_cells[0] = empty_cell();
+	scratch_cells[1] = empty_cell();
+	scratch_prev[0]  = empty_cell();
+	scratch_prev[1]  = empty_cell();
+	scratch_dirty[0] = true;
+	ScreenBuffer tmp = {
+		.cells       = scratch_cells[..],
+		.prev_cells  = scratch_prev[..],
+		.dirty_lines = scratch_dirty[..],
+		.width       = 2,
+		.height      = 1,
+	};
 	tmp.render_ansi_string(0, 0, text, base_style, 1, 2);
 	Cell c = tmp.cells[0];
 	// If nothing was written (e.g. empty/null string), bail out.
-
-
-
 	if (c.content_len == 0 || (c.content_len == 1 && c.content[0] == ' ' && c.style.is_empty())) return;
 	self.set_cell(col, row, c);
 }
