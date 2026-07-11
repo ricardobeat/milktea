@@ -197,8 +197,7 @@ stderr, which belong to the rendering surface).
 - **Unit tests** (`fn void test_x() @test`) live in the `test/` directory
   (`integration_test.c3`, `keyprobe_test.c3`, `utf8_input_test.c3`,
   `test_render.c3`, `xray_test.c3`, snapshot drivers per module, and the
-  shared `snapshot.c3` infrastructure). 219 test functions at time of
-  writing.
+  shared `snapshot.c3` infrastructure). Run them with `just test`.
 - **Test-mode injection** (`Program.test_mode`): `with_test_mode(&output)`
   routes rendered output into a `DString` and skips raw-mode/signal/TTY
   setup, making `run()` deterministic and TTY-free.
