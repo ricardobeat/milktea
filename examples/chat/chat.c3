@@ -71,13 +71,16 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 			if (self.input_cursor < self.input_len) self.input_cursor++;
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q' && self.input_len == 0) return milktea::quit();
-			if (self.input_len < BUF_SIZE - 1) {
+			// rune is a codepoint — encode as UTF-8 before inserting into the byte buffer
+			char[4] enc;
+			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			if (self.input_len + n < BUF_SIZE) {
 				for (sz i = self.input_len; i > self.input_cursor; i--) {
-					self.input_buf[i] = self.input_buf[i - 1];
+					self.input_buf[i + n - 1] = self.input_buf[i - 1];
 				}
-				self.input_buf[self.input_cursor] = k.rune;
-				self.input_len++;
-				self.input_cursor++;
+				for (sz i = 0; i < n; i++) self.input_buf[self.input_cursor + i] = enc[i];
+				self.input_len += n;
+				self.input_cursor += n;
 			}
 		default:
 	}

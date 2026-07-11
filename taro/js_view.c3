@@ -175,7 +175,7 @@ fn void textarea_handle_key_ptr(void* ta_ptr, int code, int rune, bool ctrl, boo
 	boba::Textarea* ta = (boba::Textarea*)ta_ptr;
 	milktea::KeyMsg k        = { };
 	k.code = (milktea::KeyCode)code;
-	k.rune = (char)rune;
+	k.rune = (uint)rune;
 	k.ctrl = ctrl;
 	k.alt = alt;
 	k.shift = shift;

@@ -112,6 +112,15 @@ fn void Textarea.insert(&self, char c) {
 	self.cursor_col++;
 }
 
+// insert_rune encodes a Unicode codepoint as UTF-8 and inserts it at the cursor.
+// Checked up front so a full buffer can't truncate a sequence mid-way.
+fn void Textarea.insert_rune(&self, uint cp) {
+	char[4] enc;
+	sz n = milktea::utf8_encode(cp, enc[..]);
+	if (self.len + n >= self.buf.len) return;
+	for (sz i = 0; i < n; i++) self.insert(enc[i]);
+}
+
 // backspace deletes the character before the cursor.
 fn void Textarea.backspace(&self) {
 	if (self.cursor == 0) return;
@@ -276,7 +285,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 			for (int i = 0; i < 4; i++) self.insert(' ');
 			return true;
 		case milktea::KeyCode.RUNE:
-			self.insert(k.rune);
+			self.insert_rune(k.rune);
 			return true;
 		default:
 			return false;

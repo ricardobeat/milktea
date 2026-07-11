@@ -1,5 +1,7 @@
 module milktea;
 
+import xray;
+
 enum KeyCode : int {
 	NONE,
 	RUNE,
@@ -34,7 +36,7 @@ enum KeyCode : int {
 
 struct KeyMsg {
 	KeyCode code;
-	char rune;
+	uint rune; // Unicode codepoint, not a byte — ASCII literals still compare directly
 	bool ctrl;
 	bool alt;
 	bool shift;
@@ -153,7 +155,7 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
 	return default_val;
 }
 
-fn ParseResult make_key(KeyCode code, char rune, bool ctrl, bool alt, bool shift, sz consumed) {
+fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift },
@@ -439,6 +441,62 @@ fn ParseResult parse_key(char[] buf) {
 		return make_key(RUNE, rune_char, true, false, false, 1);
 	}
 
+	// UTF-8 lead byte: decode a multi-byte codepoint into a RUNE key.
+	// Expected length is checked here because xray::utf8_decode maps
+	// truncated sequences to '?' instead of reporting "need more data".
+	if (b >= 0x80) {
+		sz need;
+		if ((b & 0xE0) == 0xC0) {
+			need = 2;
+		} else if ((b & 0xF0) == 0xE0) {
+			need = 3;
+		} else if ((b & 0xF8) == 0xF0) {
+			need = 4;
+		} else {
+			// Invalid lead (stray continuation or 0xF8+) — consume to make progress
+			return make_key(NONE, 0, false, false, false, 1);
+		}
+		if (buf.len < need) {
+			// Incomplete sequence — need more data
+			return make_key(NONE, 0, false, false, false, 0);
+		}
+		for (sz i = 1; i < need; i++) {
+			// Invalid continuation byte — consume the lead only
+			if ((buf[i] & 0xC0) != 0x80) {
+				return make_key(NONE, 0, false, false, false, 1);
+			}
+		}
+		uint cp;
+		xray::utf8_decode((String)buf[:need], &cp);
+		return make_key(RUNE, cp, false, false, false, need);
+	}
+
 	// Anything else: consume to make progress
 	return make_key(NONE, 0, false, false, false, 1);
+}
+
+// utf8_encode writes a codepoint as UTF-8 into out (room for 4 bytes required).
+// Returns the number of bytes written (1-4). Counterpart to xray::utf8_decode,
+// for consumers that store KeyMsg.rune into byte-oriented text buffers.
+fn sz utf8_encode(uint cp, char[] out) {
+	if (cp < 0x80) {
+		out[0] = (char)cp;
+		return 1;
+	}
+	if (cp < 0x800) {
+		out[0] = (char)(0xC0 | (cp >> 6));
+		out[1] = (char)(0x80 | (cp & 0x3F));
+		return 2;
+	}
+	if (cp < 0x10000) {
+		out[0] = (char)(0xE0 | (cp >> 12));
+		out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+		out[2] = (char)(0x80 | (cp & 0x3F));
+		return 3;
+	}
+	out[0] = (char)(0xF0 | (cp >> 18));
+	out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+	out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+	out[3] = (char)(0x80 | (cp & 0x3F));
+	return 4;
 }

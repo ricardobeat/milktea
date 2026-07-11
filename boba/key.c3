@@ -74,7 +74,10 @@ fn String key_match_string(milktea::KeyMsg k) {
 		case milktea::KeyCode.DELETE: return "delete";
 		case milktea::KeyCode.RUNE:
 			if (k.rune == ' ') return "space";
-			return string::tformat("%c", k.rune);
+			// rune is a codepoint — encode as UTF-8 rather than %c on a single byte
+			char[4] enc;
+			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			return string::tformat("%s", (String)enc[:n]);
 		default: return "";
 	}
 }
