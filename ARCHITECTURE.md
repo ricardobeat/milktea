@@ -36,6 +36,12 @@ carries either a plain string (parsed by xray's ANSI parser) or a direct
 - `Msg` — tagged union (`MsgKind`: NONE, KEY, WINDOW_SIZE, FOCUS, BLUR,
   MOUSE, QUIT, TICK, USER) carrying a `KeyMsg`, `WindowSizeMsg`, or
   `MouseMsg` payload plus a free `tag`/`user` pointer for app messages.
+  `KeyMsg.rune` is a `uint` Unicode codepoint, not a byte: `parse_key()`
+  decodes multi-byte UTF-8 input (validating lead/continuation bytes,
+  waiting for the full sequence) into a single RUNE key, and
+  `milktea::utf8_encode()` converts a codepoint back into 1-4 bytes for
+  byte-oriented text buffers. Mouse input arrives via SGR (mode 1006) or
+  legacy X10 encoding, both handled in `parse_key()` (`input.c3`).
 - `Cmd` — `alias Cmd = fn Msg()`. `null` means "no command." There is no
   batch-command buffer in the current code: `update()` returns one `Cmd`,
   which `dispatch()` calls and chains through `update()` again.
@@ -47,8 +53,10 @@ carries either a plain string (parsed by xray's ANSI parser) or a direct
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`
-  (`Msg[MAX_BATCH=16]` ring buffer for `Program.send()`), the reader
-  thread handle, and a pointer to the `xray::Renderer`. A single
+  (`Msg[MAX_BATCH=16]` ring buffer for `Program.send()`, guarded by the
+  `send_mu` mutex — initialized in `run()`, with `send_mu_init` gating
+  calls made before the program starts), the reader thread handle, and a
+  pointer to the `xray::Renderer`. A single
   `Program* g_program` global is set for the duration of `run()` (cleared
   via `defer`) so free functions like `tick()`, `every()`, `cancel()` can
   reach the active program. Safe because only one `Program` runs at a
@@ -74,13 +82,22 @@ carries either a plain string (parsed by xray's ANSI parser) or a direct
    dispatch `WINDOW_SIZE`); append new bytes to `self.pending` and loop
    `parse_key()` over it, dispatching `KEY`/`MOUSE`/`FOCUS`/`BLUR` as
    parsed; re-render if anything changed. When idle, block on
-   `input_queue_wait()` up to the soonest timer deadline (capped at
-   1000ms, or 100ms if input parsing is stuck on an incomplete sequence)
-   to avoid busy-waiting.
+   `input_queue_wait()` up to the soonest timer or ESC-hold deadline
+   (capped at 1000ms, or 100ms if input parsing is stuck on an incomplete
+   sequence) to avoid busy-waiting.
 6. **Shutdown** (via `defer`, LIFO): exit alt screen if active, call
-   `on_destroy()`, then (non-test mode) destroy the renderer, tear down
-   the input queue, disable mouse/focus reporting, show the cursor, reset
-   OSC cursor-color/mouse-cursor sequences, restore the original termios.
+   `on_destroy()`, then (non-test mode) destroy the renderer, stop and
+   join the reader thread, destroy the input queue, disable mouse/focus
+   reporting, show the cursor, reset OSC cursor-color/mouse-cursor
+   sequences, restore the original termios.
+
+**ESC-hold**: a lone `0x1b` at the front of `pending` is ambiguous — it
+could be the ESC key or the start of a split escape sequence. The loop
+holds it for `ESC_HOLD_MS` (50ms, tracked in `Program.esc_deadline_ms`);
+if more bytes arrive they restart the timer and are parsed as a sequence,
+otherwise on timeout the byte is flushed as a real ESC key and the rest
+of `pending` is re-parsed. In test mode, exhausted injected input flushes
+immediately so tests stay deterministic.
 
 `dispatch()` is the single message-processing primitive: calls
 `model.update(m)`, and if the returned `Cmd` is non-null, calls it and
@@ -135,19 +152,28 @@ Two threads exist during a real run:
   guarded by a `Mutex` + `ConditionVariable`, so a blocking `read()` never
   stalls rendering or timers.
 
-The only cross-thread shared state is `InputQueue`; all access goes
-through `input_queue_push`/`drain`/`wait`, each taking the mutex.
-`g_program` and `g_win_resized` are touched from the main thread and from
-signal handlers (main thread's signal-delivery context), never from the
-reader thread.
+Cross-thread shared state: `InputQueue` (all access via
+`input_queue_push`/`drain`/`wait`, each taking the mutex; the reader
+counts bytes it had to drop in `InputQueue.dropped`, surfaced by the main
+loop), the `send_queue` (guarded by `Program.send_mu` so `Program.send()`
+is callable from any thread once `run()` has initialized it), and
+`g_win_resized`, an `Atomic{bool}` (`std::atomic`, relaxed ordering) set
+by the `SIGWINCH` handler and consumed by the event loop.
 
-Shutdown: `run()`'s `defer` blocks close alt-screen state and call
-`on_destroy()` first, then `input_queue_destroy()` sets `closed = true`
-and broadcasts the condition variable so the reader thread's loop exits;
-the `Thread` handle is not explicitly joined. `SIGINT`/`SIGTERM` are
-handled directly in `fatal_signal_handler` (`tty.c3`), which restores
-termios and alt-screen state synchronously before re-raising the signal —
-this bypasses the normal `defer` unwind since it can fire mid-render.
+Shutdown is two-phase: `input_queue_close()` sets `closed = true` and
+broadcasts the condition variable, then `run()` joins the reader thread
+(`self.reader_thread.join()`), and only then calls
+`input_queue_destroy()` — the mutex is never destroyed while the reader
+might still hold it. `SIGINT`/`SIGTERM` are handled directly in
+`fatal_signal_handler` (`tty.c3`), which restores termios and alt-screen
+state synchronously before re-raising the signal — this bypasses the
+normal `defer` unwind since it can fire mid-render.
+
+**Capacity-drop diagnostics**: every fixed buffer that silently drops on
+overflow — the timer table, the send queue, the pending buffer, the input
+ring — reports the drop via `debug_warn()`, which appends a timestamped
+line to `milktea-debug.log` when `Program.debug` is set (never stdout or
+stderr, which belong to the rendering surface).
 
 ## Memory conventions
 
@@ -168,11 +194,11 @@ this bypasses the normal `defer` unwind since it can fire mid-render.
 
 ## Testing strategy
 
-- **Unit tests** (`fn void test_x() @test`) live alongside the code they
-  test (`milktea/integration_test.c3`, `keyprobe_test.c3`,
-  `test_render.c3`, `xray/xray_test.c3`, etc.), plus `test/snapshot.c3` for
-  shared snapshot infrastructure. Over 200 `@test`-annotated functions
-  exist across the codebase.
+- **Unit tests** (`fn void test_x() @test`) live in the `test/` directory
+  (`integration_test.c3`, `keyprobe_test.c3`, `utf8_input_test.c3`,
+  `test_render.c3`, `xray_test.c3`, snapshot drivers per module, and the
+  shared `snapshot.c3` infrastructure). 219 test functions at time of
+  writing.
 - **Test-mode injection** (`Program.test_mode`): `with_test_mode(&output)`
   routes rendered output into a `DString` and skips raw-mode/signal/TTY
   setup, making `run()` deterministic and TTY-free.
