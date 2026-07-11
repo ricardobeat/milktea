@@ -121,6 +121,10 @@ fn View View.set_mouse_mode(self, MouseMode mode) {
 	return v;
 }
 
+// add_overlay attaches a floating overlay to the view.
+// Overlays are rendered in insertion order, up to MAX_OVERLAYS (8) total.
+// Any call beyond MAX_OVERLAYS is silently ignored — callers that need more
+// overlays must merge content before adding.
 fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0) {
 	View v = self;
 	if (v.overlay_count < MAX_OVERLAYS) {
@@ -291,6 +295,9 @@ struct InputQueue {
 	thread::Mutex mu;
 	thread::ConditionVariable cond;
 	bool closed;
+	// Bytes silently dropped because the ring was full; accumulated under mu.
+	// Drained by the main loop via input_queue_take_dropped().
+	sz dropped;
 }
 
 fn void? input_queue_init(InputQueue* q) {
@@ -323,12 +330,27 @@ fn void input_queue_push(InputQueue* q, char[] data) {
 	q.mu.lock();
 	for (sz i = 0; i < data.len; i++) {
 		sz next = (q.head + 1) % INPUT_BUF_SIZE;
-		if (next == q.tail) break; // full, drop remaining
+		if (next == q.tail) {
+			// Ring is full — count remaining bytes as dropped so the main
+			// loop can surface them via debug_warn without a racy g_program access here.
+			q.dropped += data.len - i;
+			break;
+		}
 		q.buf[q.head] = data[i];
 		q.head = next;
 	}
 	q.cond.signal();
 	q.mu.unlock();
+}
+
+// input_queue_take_dropped reads and resets the dropped-byte counter under
+// the queue mutex. Returns 0 when nothing was dropped.
+fn sz input_queue_take_dropped(InputQueue* q) {
+	q.mu.lock();
+	sz n = q.dropped;
+	q.dropped = 0;
+	q.mu.unlock();
+	return n;
 }
 
 fn sz input_queue_drain(InputQueue* q, char[] out) {
@@ -392,6 +414,20 @@ fn int input_reader_fn(void* arg) {
 // Safe because only one program can run at a time (one terminal).
 Program* g_program = null;
 
+// debug_warn appends a timestamped line to milktea-debug.log.
+// Only writes when the running program has debug=true; silently swallows all
+// I/O errors so a logging failure never disrupts the TUI surface.
+// Never touches stdout/stderr — those are the terminal rendering surface.
+fn void debug_warn(String msg) @local {
+	if (g_program == null || !g_program.debug) return;
+	// Open in append mode so successive calls accumulate in one file.
+	File? f = io::file::open("milktea-debug.log", "a");
+	if (catch f) return;
+	(void)f.write((char[])msg);
+	(void)f.write((char[])"\n");
+	(void)f.close();
+}
+
 fn Msg make_quit_msg() @local {
 	return { .kind = MsgKind.QUIT };
 }
@@ -444,15 +480,20 @@ fn void with_input(Program* self, char[] data) {
 // Calls before run() (send_mu_init == false) are silently dropped — the
 // program isn't running yet so there is no consumer to wake.
 // In test mode, the message is placed in a ring buffer consumed by run().
+// When the ring is full the message is dropped; enable Program.debug to
+// surface this in milktea-debug.log.
 fn void Program.send(Program* self, Msg msg) {
 	if (!self.send_mu_init) return; // program not running; no consumer
 	self.send_mu.lock();
 	int next = (self.send_head + 1) % (int)MAX_BATCH;
-	if (next != self.send_tail) {
+	bool dropped = next == self.send_tail;
+	if (!dropped) {
 		self.send_queue[self.send_head] = msg;
 		self.send_head = next;
 	}
 	self.send_mu.unlock();
+	// Warn outside the locked region — debug_warn does file I/O.
+	if (dropped) debug_warn("send queue full; message dropped");
 }
 
 // send_recv dequeues a previously sent message. Returns true if a message
@@ -497,6 +538,8 @@ fn void Program.emit_sgr(Program* self, String seq) {
 
 // tick registers a timer that fires after delay_ms.
 // Default: 16ms (~60fps) sending a TICK message.
+// When all MAX_TIMERS slots are occupied the timer is silently dropped;
+// enable Program.debug to surface this in milktea-debug.log.
 fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	sz deadline = time_ms() + delay_ms;
@@ -506,9 +549,11 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 			g_program.timers[i].deadline_ms = deadline;
 			g_program.timers[i].callback = callback;
 			g_program.timers[i].owner = owner;
-			break;
+			return null;
 		}
 	}
+	// No free slot found — all MAX_TIMERS entries are active.
+	debug_warn("timer table full; tick dropped");
 	return null;
 }
 
@@ -517,6 +562,8 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // so successive calls stay locked to absolute time regardless of drift.
 // Use for clock displays, countdowns, and periodic sync.
 // Default: 16ms (~60fps) sending a TICK message.
+// When all MAX_TIMERS slots are occupied the timer is silently dropped;
+// enable Program.debug to surface this in milktea-debug.log.
 fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	sz now     = time_ms();
@@ -529,9 +576,11 @@ fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) 
 			g_program.timers[i].deadline_ms = deadline;
 			g_program.timers[i].callback = callback;
 			g_program.timers[i].owner = owner;
-			break;
+			return null;
 		}
 	}
+	// No free slot found — all MAX_TIMERS entries are active.
+	debug_warn("timer table full; every dropped");
 	return null;
 }
 
@@ -684,6 +733,16 @@ fn void? Program.run(Program* self) {
 			n = self.drain_inject_input(tmp[..]);
 		} else {
 			n = input_queue_drain(&g_input_queue, tmp[..]);
+			// Check for bytes the reader thread dropped due to a full ring buffer.
+			// We read and reset the counter here (main thread only) to avoid touching
+			// g_program from the reader thread where it would be racy.
+			sz idropped = input_queue_take_dropped(&g_input_queue);
+			if (idropped > 0) {
+				@pool() {
+					debug_warn(string::tformat(
+						"input ring full; %d byte(s) dropped by reader thread", idropped));
+				};
+			}
 		}
 
 		// Drain Send()-injected messages
@@ -705,8 +764,19 @@ fn void? Program.run(Program* self) {
 		}
 
 		if (n > 0) {
+			sz copied = 0;
 			for (sz i = 0; i < n && self.pending_len < self.pending.len; i++) {
 				self.pending[self.pending_len++] = tmp[(sz)i];
+				copied++;
+			}
+			// Warn when the pending buffer filled up before all bytes were copied.
+			// This normally means a very long escape sequence or burst of input
+			// arrived faster than the parser can consume it.
+			if (copied < n) {
+				@pool() {
+					debug_warn(string::tformat(
+						"pending buffer full; %d input byte(s) dropped", n - copied));
+				};
 			}
 		}
 
