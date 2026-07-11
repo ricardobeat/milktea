@@ -28,11 +28,17 @@ fn ScreenBuffer* new_screen_buffer(sz width, sz height) {
 	sb.dirty_lines = mem::new_array(bool, height);
 	sb.full_redraw = true;
 
+	// Fill first row, then copy-double into remaining rows (empty_cell is not all-zero).
 	Cell empty = empty_cell();
-	for (sz i = 0; i < total; i++) {
-		sb.cells[i] = empty;
-		sb.prev_cells[i] = empty;
+	sz row_bytes = width * Cell::size;
+	Cell* row0 = sb.cells.ptr;
+	for (sz i = 0; i < width; i++) {
+		row0[i] = empty;
 	}
+	for (sz row = 1; row < height; row++) {
+		mem::copy(sb.cells.ptr + row * width, row0, row_bytes);
+	}
+	mem::copy(sb.prev_cells.ptr, sb.cells.ptr, total * Cell::size);
 	for (sz i = 0; i < height; i++) {
 		sb.dirty_lines[i] = true;
 	}
@@ -55,11 +61,17 @@ fn void ScreenBuffer.resize(&self, sz width, sz height) {
 	Cell[] new_prev  = mem::new_array(Cell, new_total);
 	bool[] new_dirty = mem::new_array(bool, height);
 
+	// Fill first row, then copy-double into remaining rows (empty_cell is not all-zero).
 	Cell empty = empty_cell();
-	for (sz i = 0; i < new_total; i++) {
-		new_cells[i] = empty;
-		new_prev[i] = empty;
+	sz row_bytes = width * Cell::size;
+	Cell* row0 = new_cells.ptr;
+	for (sz i = 0; i < width; i++) {
+		row0[i] = empty;
 	}
+	for (sz row = 1; row < height; row++) {
+		mem::copy(new_cells.ptr + row * width, row0, row_bytes);
+	}
+	mem::copy(new_prev.ptr, new_cells.ptr, new_total * Cell::size);
 	for (sz i = 0; i < height; i++) {
 		new_dirty[i] = true;
 	}
@@ -78,11 +90,19 @@ fn void ScreenBuffer.resize(&self, sz width, sz height) {
 
 // clear sets all cells to empty and marks every line dirty.
 fn void ScreenBuffer.clear(&self) {
+	// empty_cell() is NOT all-zero bytes (content[0]=' ', content_len=1, width=1),
+	// so mem::set(0) would corrupt cells. Instead: fill the first row cell-by-cell,
+	// then copy-double that row across the remaining rows.
 	Cell empty = empty_cell();
-	sz total   = self.width * self.height;
-	for (sz i = 0; i < total; i++) {
-		self.cells[i] = empty;
+	sz row_bytes = self.width * Cell::size;
+	Cell* row0 = self.cells.ptr;
+	for (sz i = 0; i < self.width; i++) {
+		row0[i] = empty;
 	}
+	for (sz row = 1; row < self.height; row++) {
+		mem::copy(self.cells.ptr + row * self.width, row0, row_bytes);
+	}
+	// bool true != 0 in general; keep explicit loop to be safe.
 	for (sz i = 0; i < self.height; i++) {
 		self.dirty_lines[i] = true;
 	}
@@ -216,12 +236,10 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 // Call this after rendering is complete.
 fn void ScreenBuffer.swap(&self) {
 	sz total = self.width * self.height;
-	for (sz i = 0; i < total; i++) {
-		self.prev_cells[i] = self.cells[i];
-	}
-	for (sz i = 0; i < self.height; i++) {
-		self.dirty_lines[i] = false;
-	}
+	// Bulk copy the entire cell grid in one operation.
+	mem::copy(self.prev_cells.ptr, self.cells.ptr, total * Cell::size);
+	// bool false == 0, so memset is safe here.
+	mem::set(self.dirty_lines.ptr, 0, self.height * bool::size);
 	self.full_redraw = false;
 }
 
