@@ -990,7 +990,28 @@ fn void Program.render_current_view(Program* self) {
 					if (o.alpha != 0 && o.alpha < 255) {
 						// Alpha overlay: blend color over existing cells in-place,
 						// preserving underlying characters.
-						xray::ScreenBuffer* tmp = xray::new_screen_buffer((sz)o.w, (sz)o.h);
+						//
+						// Reuse r.overlay_scratch to avoid a heap alloc+free per frame.
+						// Lazily allocate on first use; grow (resize) when a larger overlay
+						// arrives. The scratch may be wider/taller than this overlay — that
+						// is fine because the blend loop indexes cells[cy * tmp.width + cx],
+						// which uses the scratch's own stride, so rows stay correctly aligned.
+						xray::ScreenBuffer* tmp = r.overlay_scratch;
+						if (tmp == null) {
+							// First alpha overlay ever seen — allocate the scratch.
+							tmp = xray::new_screen_buffer((sz)o.w, (sz)o.h);
+							r.overlay_scratch = tmp;
+						} else if (tmp.width < (sz)o.w || tmp.height < (sz)o.h) {
+							// Current scratch is too small in at least one dimension; grow it.
+							// Use the larger of old and new for each axis so one resize
+							// accommodates the largest overlay seen so far.
+							sz new_w = tmp.width  < (sz)o.w ? (sz)o.w : tmp.width;
+							sz new_h = tmp.height < (sz)o.h ? (sz)o.h : tmp.height;
+							tmp.resize(new_w, new_h);
+						}
+						// Clear before each use so content from a previous frame's overlay
+						// does not bleed into this overlay's cell region.
+						tmp.clear();
 						tmp.render_ansi_string(0, 0, o.content, xray::default_style());
 						for (sz cy = 0; cy < (sz)o.h; cy++) {
 							for (sz cx = 0; cx < (sz)o.w; cx++) {
@@ -1011,8 +1032,7 @@ fn void Program.render_current_view(Program* self) {
 								r.screen.dirty_lines[dy] = true;
 							}
 						}
-						tmp.destroy();
-						mem::free(tmp);
+						// tmp is owned by r.overlay_scratch; do NOT free it here.
 					} else {
 						r.screen.blit_ansi((sz)o.x, (sz)o.y, (sz)o.w, (sz)o.h, o.content, o.transparent);
 					}
