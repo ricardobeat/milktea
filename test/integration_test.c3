@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import xray;
 
 // contains is defined in test_render.c3
 
@@ -315,4 +316,66 @@ fn void test_every_zero_no_crash() @test {
 
 	// If we reach this line the guard worked; no SIGFPE was raised.
 	assert(m.updated);
+}
+
+// ============================================================
+// add_overlay field round-trip tests
+// ============================================================
+
+// test_add_overlay_defaults verifies that add_overlay with only positional
+// args leaves transparent=false and layer_style zero-initialised, preserving
+// backward-compatible behaviour for all existing call sites.
+fn void test_add_overlay_defaults() @test {
+	milktea::View v = milktea::new_view("bg");
+	v = v.add_overlay(1, 2, 10, 5, "hello");
+
+	assert(v.overlay_count == 1);
+	milktea::Overlay o = v.overlays[0];
+	assert(o.x == 1);
+	assert(o.y == 2);
+	assert(o.w == 10);
+	assert(o.h == 5);
+	assert(o.alpha == 0);
+	// Defaults must be false / zero — behaviour preserved for existing callers.
+	assert(!o.transparent);
+	assert(!o.layer_style.shadow.enabled);
+	assert(!o.layer_style.inner_shadow.enabled);
+}
+
+// test_add_overlay_transparent_and_shadow verifies that the transparent and
+// layer_style params are stored in the Overlay entry when supplied.
+fn void test_add_overlay_transparent_and_shadow() @test {
+	xray::LayerStyle ls = {
+		.shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2),
+	};
+
+	milktea::View v = milktea::new_view("bg");
+	v = v.add_overlay(0, 0, 20, 8, "popup", transparent: true, layer_style: ls);
+
+	assert(v.overlay_count == 1);
+	milktea::Overlay o = v.overlays[0];
+	assert(o.transparent);
+	assert(o.layer_style.shadow.enabled);
+	assert(o.layer_style.shadow.offset_x == 1);
+	assert(o.layer_style.shadow.offset_y == 1);
+	assert(o.layer_style.shadow.opacity == 128);
+	assert(o.layer_style.shadow.blur == 2);
+	// Inner shadow untouched when only shadow was set.
+	assert(!o.layer_style.inner_shadow.enabled);
+}
+
+// test_add_overlay_inner_shadow verifies inner_shadow round-trips correctly.
+fn void test_add_overlay_inner_shadow() @test {
+	xray::LayerStyle ls = {
+		.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
+	};
+
+	milktea::View v = milktea::new_view("bg");
+	v = v.add_overlay(0, 0, 30, 10, "panel", layer_style: ls);
+
+	assert(v.overlay_count == 1);
+	milktea::Overlay o = v.overlays[0];
+	assert(!o.transparent); // transparent defaults to false
+	assert(!o.layer_style.shadow.enabled);
+	assert(o.layer_style.inner_shadow.enabled);
 }
