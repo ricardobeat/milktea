@@ -260,6 +260,46 @@ fn void test_x10_mouse_motion_left_held() @test {
 	assert(pr.mouse.row == 4);
 }
 
+// ============================================================
+// Test 5: Home/End modifier decoding
+// ============================================================
+
+fn void test_parse_key_home_no_modifiers() @test {
+	// ESC [ H — bare Home, no modifier param
+	char[] input        = "\x1b[H";
+	milktea::ParseResult pr = milktea::parse_key(input);
+	assert(pr.consumed == 3);
+	assert(pr.kind == milktea::MsgKind.KEY);
+	assert(pr.key.code == milktea::KeyCode.HOME);
+	assert(!pr.key.ctrl);
+	assert(!pr.key.alt);
+	assert(!pr.key.shift);
+}
+
+fn void test_parse_key_home_ctrl() @test {
+	// ESC [ 1 ; 5 H — Home + Ctrl (mod=5)
+	char[] input        = "\x1b[1;5H";
+	milktea::ParseResult pr = milktea::parse_key(input);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.KEY);
+	assert(pr.key.code == milktea::KeyCode.HOME);
+	assert(pr.key.ctrl);
+	assert(!pr.key.alt);
+	assert(!pr.key.shift);
+}
+
+fn void test_parse_key_end_shift() @test {
+	// ESC [ 1 ; 2 F — End + Shift (mod=2)
+	char[] input        = "\x1b[1;2F";
+	milktea::ParseResult pr = milktea::parse_key(input);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.KEY);
+	assert(pr.key.code == milktea::KeyCode.END);
+	assert(!pr.key.ctrl);
+	assert(!pr.key.alt);
+	assert(pr.key.shift);
+}
+
 fn void test_dispatch_delivers_key_message() @test {
 	DispatchProbeModel m = { };
 	DString out          = dstring::temp();
