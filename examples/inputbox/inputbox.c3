@@ -49,7 +49,10 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			if (l > 0) self.input.chop(l - 1);
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q' && self.input.len() == 0) return milktea::quit();
-			self.input.append_char(k.rune);
+			// rune is a codepoint — encode as UTF-8 before appending
+			char[4] enc;
+			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			self.input.append_string((String)enc[:n]);
 		default:
 	}
 	return null;

@@ -67,6 +67,15 @@ fn void TextInput.insert(&self, char c) {
 	self.cursor++;
 }
 
+// insert_rune encodes a Unicode codepoint as UTF-8 and inserts it at the cursor.
+// Checked up front so a full buffer can't truncate a sequence mid-way.
+fn void TextInput.insert_rune(&self, uint cp) {
+	char[4] enc;
+	sz n = milktea::utf8_encode(cp, enc[..]);
+	if (self.len + n >= self.buf.len) return;
+	for (sz i = 0; i < n; i++) self.insert(enc[i]);
+}
+
 // insert_string inserts a string at the cursor position.
 fn void TextInput.insert_string(&self, String s) {
 	for (sz i = 0; i < s.len; i++) {
@@ -139,7 +148,7 @@ fn bool TextInput.handle_key(&self, milktea::KeyMsg k) {
 			self.delete_char();
 			return true;
 		case milktea::KeyCode.RUNE:
-			self.insert(k.rune);
+			self.insert_rune(k.rune);
 			return true;
 		default:
 			return false;

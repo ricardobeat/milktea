@@ -408,3 +408,19 @@ Build and run any example:
 cd examples/counter
 c3c run
 ```
+
+---
+
+## Testing
+
+All tests live in `test/` — unit and integration tests plus snapshot tests for each module. Run them with:
+
+```sh
+just test        # or: c3c test
+```
+
+Snapshot tests render components and compare the output against the `.snap` files in `snapshots/`. When you intentionally change rendering, re-record them and review the diff:
+
+```sh
+just update-snapshots    # or: UPDATE_SNAPSHOTS=1 c3c test
+```

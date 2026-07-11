@@ -1,5 +1,7 @@
 module milktea;
 
+import xray;
+
 enum KeyCode : int {
 	NONE,
 	RUNE,
@@ -34,7 +36,7 @@ enum KeyCode : int {
 
 struct KeyMsg {
 	KeyCode code;
-	char rune;
+	uint rune; // Unicode codepoint, not a byte — ASCII literals still compare directly
 	bool ctrl;
 	bool alt;
 	bool shift;
@@ -153,7 +155,7 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
 	return default_val;
 }
 
-fn ParseResult make_key(KeyCode code, char rune, bool ctrl, bool alt, bool shift, sz consumed) {
+fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift },
@@ -214,7 +216,11 @@ fn ParseResult parse_key(char[] buf) {
 	// 0x1b: ESC or escape sequence
 	if (b == 0x1b) {
 		if (buf.len == 1) {
-			return make_key(ESC, 0, false, false, false, 1);
+			// A lone ESC is ambiguous: it may be a bare keypress or the
+			// first byte of a split escape sequence (common over SSH).
+			// Ask for more data; the event loop flushes it as ESC after
+			// a short hold if nothing else arrives.
+			return make_key(NONE, 0, false, false, false, 0);
 		}
 
 		char second = buf[1];
@@ -233,31 +239,32 @@ fn ParseResult parse_key(char[] buf) {
 				int cx = (int)(buf[4]) - 32;
 				int cy = (int)(buf[5]) - 32;
 
-				MouseButton button = MOUSE_NONE;
-				// Wheel buttons (4-5) must be checked before the low-2-bits mask
+				MouseButton button;
+				MouseAction action;
 
-
-
-				if (cb == 4) {
-					button = MOUSE_WHEEL_UP;
-				} else if (cb == 5) {
-					button = MOUSE_WHEEL_DOWN;
-				} else {
-					if ((cb & 3) == 0) {
-						button = MOUSE_LEFT;
-					} else if ((cb & 3) == 1) {
-						button = MOUSE_MIDDLE;
-					} else if ((cb & 3) == 2) {
-						button = MOUSE_RIGHT;
-					} else {
-						button = MOUSE_NONE;
+				// Bit 64: wheel event. Low 2 bits give direction (0=up, 1=down).
+				// Bit 32: motion event (button-event tracking, mode 1002).
+				// Low 2 bits == 3: release (X10 doesn't report which button).
+				if ((cb & 64) != 0) {
+					switch (cb & 3) {
+						case 0: button = MOUSE_WHEEL_UP;
+						case 1: button = MOUSE_WHEEL_DOWN;
+						default: button = MOUSE_NONE;
 					}
+					action = MOUSE_PRESS;
+				} else if ((cb & 3) == 3) {
+					// Release or motion-with-no-button: distinguish by motion bit.
+					button = MOUSE_NONE;
+					action = ((cb & 32) != 0) ? MOUSE_MOTION : MOUSE_RELEASE;
+				} else {
+					switch (cb & 3) {
+						case 0: button = MOUSE_LEFT;
+						case 1: button = MOUSE_MIDDLE;
+						case 2: button = MOUSE_RIGHT;
+						default: button = MOUSE_NONE;
+					}
+					action = ((cb & 32) != 0) ? MOUSE_MOTION : MOUSE_PRESS;
 				}
-
-				MouseAction action = MOUSE_PRESS;
-				if ((cb & 64) != 0) action = MOUSE_MOTION; // motion event
-				// Wheel events are always press
-				if (cb == 4 || cb == 5) action = MOUSE_PRESS;
 
 				bool shift = (cb & 4) != 0;
 				bool alt   = (cb & 8) != 0;
@@ -434,6 +441,62 @@ fn ParseResult parse_key(char[] buf) {
 		return make_key(RUNE, rune_char, true, false, false, 1);
 	}
 
+	// UTF-8 lead byte: decode a multi-byte codepoint into a RUNE key.
+	// Expected length is checked here because xray::utf8_decode maps
+	// truncated sequences to '?' instead of reporting "need more data".
+	if (b >= 0x80) {
+		sz need;
+		if ((b & 0xE0) == 0xC0) {
+			need = 2;
+		} else if ((b & 0xF0) == 0xE0) {
+			need = 3;
+		} else if ((b & 0xF8) == 0xF0) {
+			need = 4;
+		} else {
+			// Invalid lead (stray continuation or 0xF8+) — consume to make progress
+			return make_key(NONE, 0, false, false, false, 1);
+		}
+		if (buf.len < need) {
+			// Incomplete sequence — need more data
+			return make_key(NONE, 0, false, false, false, 0);
+		}
+		for (sz i = 1; i < need; i++) {
+			// Invalid continuation byte — consume the lead only
+			if ((buf[i] & 0xC0) != 0x80) {
+				return make_key(NONE, 0, false, false, false, 1);
+			}
+		}
+		uint cp;
+		xray::utf8_decode((String)buf[:need], &cp);
+		return make_key(RUNE, cp, false, false, false, need);
+	}
+
 	// Anything else: consume to make progress
 	return make_key(NONE, 0, false, false, false, 1);
+}
+
+// utf8_encode writes a codepoint as UTF-8 into out (room for 4 bytes required).
+// Returns the number of bytes written (1-4). Counterpart to xray::utf8_decode,
+// for consumers that store KeyMsg.rune into byte-oriented text buffers.
+fn sz utf8_encode(uint cp, char[] out) {
+	if (cp < 0x80) {
+		out[0] = (char)cp;
+		return 1;
+	}
+	if (cp < 0x800) {
+		out[0] = (char)(0xC0 | (cp >> 6));
+		out[1] = (char)(0x80 | (cp & 0x3F));
+		return 2;
+	}
+	if (cp < 0x10000) {
+		out[0] = (char)(0xE0 | (cp >> 12));
+		out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+		out[2] = (char)(0x80 | (cp & 0x3F));
+		return 3;
+	}
+	out[0] = (char)(0xF0 | (cp >> 18));
+	out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+	out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+	out[3] = (char)(0x80 | (cp & 0x3F));
+	return 4;
 }

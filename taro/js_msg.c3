@@ -98,10 +98,13 @@ fn milktea::Cmd js_value_to_cmd(Runtime* rt, void* val) {
 // Helper functions
 // ============================================================
 
-fn String keycode_to_string(milktea::KeyCode code, char rune) {
+fn String keycode_to_string(milktea::KeyCode code, uint rune) {
 	switch (code) {
 		case milktea::KeyCode.RUNE:
-			return string::tformat("%c", rune);
+			// rune is a codepoint — encode as UTF-8 rather than %c on a single byte
+			char[4] enc;
+			sz n = milktea::utf8_encode(rune, enc[..]);
+			return string::tformat("%s", (String)enc[:n]);
 
 		case milktea::KeyCode.ENTER:
 			return "enter";

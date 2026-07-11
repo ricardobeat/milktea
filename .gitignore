@@ -1,3 +1,10 @@
 out/
+build/
 tags.db*
 *.glb
+*.fbx
+*.log
+*.bak
+*.dSYM/
+.DS_Store
+.crush/

@@ -237,8 +237,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 				io::printfn("Player joined: %s", &self.name_buf[0]);
 			}
 			if (k.code == milktea::KeyCode.RUNE) {
-				if (self.name_len < 31) {
-					self.name_buf[self.name_len++] = k.rune;
+				// rune is a codepoint — encode as UTF-8 before appending
+				char[4] enc;
+				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				if (self.name_len + n <= 31) {
+					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
 			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
 				self.name_len--;
@@ -247,8 +250,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 		}
 		if (self.mode == ENTERING_NAME) {
 			if (k.code == milktea::KeyCode.RUNE) {
-				if (self.name_len < 31) {
-					self.name_buf[self.name_len++] = k.rune;
+				// rune is a codepoint — encode as UTF-8 before appending
+				char[4] enc;
+				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				if (self.name_len + n <= 31) {
+					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
 			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
 				self.name_len--;
@@ -278,8 +284,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 			return null;
 		} else if (self.mode == TAG_INPUT) {
 			if (k.code == milktea::KeyCode.RUNE) {
-				if (self.tag_len < 79) {
-					self.tag_buf[self.tag_len++] = k.rune;
+				// rune is a codepoint — encode as UTF-8 before appending
+				char[4] enc;
+				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				if (self.tag_len + n <= 79) {
+					for (sz i = 0; i < n; i++) self.tag_buf[self.tag_len++] = enc[i];
 				}
 			} else if (k.code == milktea::KeyCode.BACKSPACE && self.tag_len > 0) {
 				self.tag_len--;

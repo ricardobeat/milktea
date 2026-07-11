@@ -2,6 +2,14 @@
 build:
     c3c build milktea
 
+# Run the test suite (unit + snapshot tests in test/)
+test:
+    c3c test
+
+# Re-record snapshot tests (writes snapshots/*/*.snap)
+update-snapshots:
+    UPDATE_SNAPSHOTS=1 c3c test
+
 # Build all example programs
 examples:
     #!/usr/bin/env sh

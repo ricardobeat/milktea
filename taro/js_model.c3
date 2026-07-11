@@ -30,7 +30,7 @@ struct DebugEvent {
 	milktea::MsgKind kind;
 	// Key fields
 	milktea::KeyCode key_code;
-	char key_rune;
+	uint key_rune;
 	bool key_ctrl;
 	bool key_alt;
 	bool key_shift;
@@ -191,7 +191,10 @@ fn String debug_event_str(DebugEvent* e) {
 				if (e.key_rune == ' ') {
 					ds.append_string("SPACE");
 				} else {
-					ds.append_char(e.key_rune);
+					// rune is a codepoint — encode as UTF-8 for display
+					char[4] enc;
+					sz n = milktea::utf8_encode(e.key_rune, enc[..]);
+					ds.append_string((String)enc[:n]);
 				}
 			default: ds.append_string("??");
 		}
