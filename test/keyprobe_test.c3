@@ -148,6 +148,96 @@ fn milktea::View DispatchProbeModel.view(DispatchProbeModel* self) @dynamic {
 	return milktea::new_view("dispatch-probe");
 }
 
+// ============================================================
+// Test 4: X10 mouse decoding (ESC [ M <b+32> <x+32> <y+32>)
+// ============================================================
+
+// Helper: build a 6-byte X10 mouse sequence.
+// cb is the raw button byte BEFORE adding 32 (i.e. the decoded value).
+// cx/cy are 1-based column/row.
+fn char[6] x10_mouse_buf(int cb, int cx, int cy) {
+	char[6] buf;
+	buf[0] = 0x1b;
+	buf[1] = '[';
+	buf[2] = 'M';
+	buf[3] = (char)(cb + 32);
+	buf[4] = (char)(cx + 32);
+	buf[5] = (char)(cy + 32);
+	return buf;
+}
+
+// Plain left-button press: cb=0, col=5, row=10.
+fn void test_x10_mouse_left_press() @test {
+	char[6] buf             = x10_mouse_buf(0, 5, 10);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_LEFT);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_PRESS);
+	assert(pr.mouse.col == 5);
+	assert(pr.mouse.row == 10);
+	assert(!pr.mouse.shift);
+	assert(!pr.mouse.alt);
+	assert(!pr.mouse.ctrl);
+}
+
+// Shift + left press: cb=4 (bit 2 set = Shift, low 2 bits = 0 = LEFT).
+// The old code wrongly treated cb=4 as WHEEL_UP.
+fn void test_x10_mouse_shift_left_press() @test {
+	char[6] buf             = x10_mouse_buf(4, 3, 7);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_LEFT);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_PRESS);
+	assert(pr.mouse.shift);
+	assert(!pr.mouse.alt);
+	assert(!pr.mouse.ctrl);
+}
+
+// Wheel up: cb=64 (bit 64 set, low 2 bits = 0).
+fn void test_x10_mouse_wheel_up() @test {
+	char[6] buf             = x10_mouse_buf(64, 1, 1);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_WHEEL_UP);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_PRESS);
+}
+
+// Wheel down: cb=65 (bit 64 set, low 2 bits = 1).
+fn void test_x10_mouse_wheel_down() @test {
+	char[6] buf             = x10_mouse_buf(65, 1, 1);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_WHEEL_DOWN);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_PRESS);
+}
+
+// Button release: cb=3 (low 2 bits == 3 means release in X10 encoding).
+fn void test_x10_mouse_release() @test {
+	char[6] buf             = x10_mouse_buf(3, 5, 10);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_NONE);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_RELEASE);
+}
+
+// Motion with left button held: cb=32 (bit 32 = motion, low 2 bits = 0 = LEFT).
+// The old code would have treated bit 64 as the motion flag — wrong.
+fn void test_x10_mouse_motion_left_held() @test {
+	char[6] buf             = x10_mouse_buf(32, 8, 4);
+	milktea::ParseResult pr = milktea::parse_key(buf[..]);
+	assert(pr.consumed == 6);
+	assert(pr.kind == milktea::MsgKind.MOUSE);
+	assert(pr.mouse.button == milktea::MouseButton.MOUSE_LEFT);
+	assert(pr.mouse.action == milktea::MouseAction.MOUSE_MOTION);
+	assert(pr.mouse.col == 8);
+	assert(pr.mouse.row == 4);
+}
+
 fn void test_dispatch_delivers_key_message() @test {
 	DispatchProbeModel m = { };
 	DString out          = dstring::temp();

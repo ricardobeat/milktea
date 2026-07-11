@@ -233,31 +233,32 @@ fn ParseResult parse_key(char[] buf) {
 				int cx = (int)(buf[4]) - 32;
 				int cy = (int)(buf[5]) - 32;
 
-				MouseButton button = MOUSE_NONE;
-				// Wheel buttons (4-5) must be checked before the low-2-bits mask
+				MouseButton button;
+				MouseAction action;
 
-
-
-				if (cb == 4) {
-					button = MOUSE_WHEEL_UP;
-				} else if (cb == 5) {
-					button = MOUSE_WHEEL_DOWN;
-				} else {
-					if ((cb & 3) == 0) {
-						button = MOUSE_LEFT;
-					} else if ((cb & 3) == 1) {
-						button = MOUSE_MIDDLE;
-					} else if ((cb & 3) == 2) {
-						button = MOUSE_RIGHT;
-					} else {
-						button = MOUSE_NONE;
+				// Bit 64: wheel event. Low 2 bits give direction (0=up, 1=down).
+				// Bit 32: motion event (button-event tracking, mode 1002).
+				// Low 2 bits == 3: release (X10 doesn't report which button).
+				if ((cb & 64) != 0) {
+					switch (cb & 3) {
+						case 0: button = MOUSE_WHEEL_UP;
+						case 1: button = MOUSE_WHEEL_DOWN;
+						default: button = MOUSE_NONE;
 					}
+					action = MOUSE_PRESS;
+				} else if ((cb & 3) == 3) {
+					// Release or motion-with-no-button: distinguish by motion bit.
+					button = MOUSE_NONE;
+					action = ((cb & 32) != 0) ? MOUSE_MOTION : MOUSE_RELEASE;
+				} else {
+					switch (cb & 3) {
+						case 0: button = MOUSE_LEFT;
+						case 1: button = MOUSE_MIDDLE;
+						case 2: button = MOUSE_RIGHT;
+						default: button = MOUSE_NONE;
+					}
+					action = ((cb & 32) != 0) ? MOUSE_MOTION : MOUSE_PRESS;
 				}
-
-				MouseAction action = MOUSE_PRESS;
-				if ((cb & 64) != 0) action = MOUSE_MOTION; // motion event
-				// Wheel events are always press
-				if (cb == 4 || cb == 5) action = MOUSE_PRESS;
 
 				bool shift = (cb & 4) != 0;
 				bool alt   = (cb & 8) != 0;
