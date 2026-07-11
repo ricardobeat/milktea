@@ -3,6 +3,7 @@ module milktea;
 import std::core::dstring;
 import std::core::mem;
 import std::thread;
+import std::atomic;
 import std::time;
 import std::io;
 import xray;
@@ -252,6 +253,11 @@ struct Program {
 	Msg[MAX_BATCH] send_queue;
 	int send_head;
 	int send_tail;
+	// Mutex protecting send_queue / send_head / send_tail.
+	// Initialized lazily inside run() so send() is safe to call before
+	// the program is started (send_mu_init guards against that path).
+	thread::Mutex send_mu;
+	bool send_mu_init;
 
 	// Threaded input reader
 	thread::Thread reader_thread;
@@ -295,11 +301,20 @@ fn void? input_queue_init(InputQueue* q) {
 	q.cond.init()!;
 }
 
-fn void input_queue_destroy(InputQueue* q) {
+// input_queue_close signals the reader thread to stop.
+// It is safe to call while the reader is still running — it locks the mutex,
+// sets closed, and broadcasts so the reader wakes from its cond wait.
+// After this call, join the reader thread before calling input_queue_destroy.
+fn void input_queue_close(InputQueue* q) {
 	q.mu.lock();
 	q.closed = true;
 	q.cond.broadcast();
 	q.mu.unlock();
+}
+
+fn void input_queue_destroy(InputQueue* q) {
+	// At this point the reader thread must have already been joined.
+	// Destroying the condvar and mutex while the reader is alive is UB.
 	q.cond.destroy();
 	q.mu.destroy();
 }
@@ -425,21 +440,32 @@ fn void with_input(Program* self, char[] data) {
 // ============================================================
 
 // send enqueues a message for the event loop to process.
-// Thread-safe for the single-producer case (call from any goroutine).
+// Thread-safe: protected by send_mu, which is initialized in run().
+// Calls before run() (send_mu_init == false) are silently dropped — the
+// program isn't running yet so there is no consumer to wake.
 // In test mode, the message is placed in a ring buffer consumed by run().
 fn void Program.send(Program* self, Msg msg) {
+	if (!self.send_mu_init) return; // program not running; no consumer
+	self.send_mu.lock();
 	int next = (self.send_head + 1) % (int)MAX_BATCH;
-	if (next == self.send_tail) return; // full, drop
-	self.send_queue[self.send_head] = msg;
-	self.send_head = next;
+	if (next != self.send_tail) {
+		self.send_queue[self.send_head] = msg;
+		self.send_head = next;
+	}
+	self.send_mu.unlock();
 }
 
 // send_recv dequeues a previously sent message. Returns true if a message
 // was available, false if the queue is empty.
 fn bool Program.send_recv(Program* self, Msg* out) {
-	if (self.send_tail == self.send_head) return false;
+	self.send_mu.lock();
+	if (self.send_tail == self.send_head) {
+		self.send_mu.unlock();
+		return false;
+	}
 	*out = self.send_queue[self.send_tail];
 	self.send_tail = (self.send_tail + 1) % (int)MAX_BATCH;
+	self.send_mu.unlock();
 	return true;
 }
 
@@ -528,7 +554,16 @@ fn void? Program.run(Program* self) {
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		self.timers[i] = { };
 	}
+	// Initialize send_mu before marking it ready so that any concurrent
+	// send() call after this point sees a valid mutex.
+	self.send_mu.init()!;
+	self.send_mu_init = true;
 	defer {
+		// Disable send() before destroying the mutex so late callers
+		// see send_mu_init == false and return early rather than
+		// locking a destroyed mutex.
+		self.send_mu_init = false;
+		self.send_mu.destroy();
 		g_program = null;
 	}
 
@@ -552,6 +587,13 @@ fn void? Program.run(Program* self) {
 				self.renderer.destroy();
 				mem::free(self.renderer);
 			}
+			// Two-phase shutdown: first signal the reader to stop, then join
+			// it so we never call input_queue_destroy while the reader thread
+			// may still be executing input_queue_push / input_queue_is_closed
+			// (which lock the mutex — destroying a locked mutex is UB on most
+			// POSIX implementations and all ARM memory models).
+			input_queue_close(&g_input_queue);
+			self.reader_thread.join();
 			input_queue_destroy(&g_input_queue);
 			disable_mouse();
 			disable_focus();
@@ -651,8 +693,8 @@ fn void? Program.run(Program* self) {
 			dirty = true;
 		}
 
-		if (!self.test_mode && g_win_resized) {
-			g_win_resized = false;
+		if (!self.test_mode && g_win_resized.load(RELAXED)) {
+			g_win_resized.store(false, RELAXED);
 			WinSize ws = get_window_size();
 			if (self.renderer != null) {
 				self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
