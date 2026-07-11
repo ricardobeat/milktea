@@ -352,9 +352,15 @@ fn ParseResult parse_key(char[] buf) {
 				return make_key(code, 0, ctrl, alt, shift, total);
 			}
 
-			// Home / End
-			if (fb == 'H') return make_key(HOME, 0, false, false, false, total);
-			if (fb == 'F') return make_key(END, 0, false, false, false, total);
+			// Home / End — xterm sends ESC [ 1 ; <mod> H/F, same modifier layout as arrows
+			if (fb == 'H' || fb == 'F') {
+				KeyCode code   = (fb == 'H') ? HOME : END;
+				int mod        = csi_param(csi, 1, 1);
+				bool shift     = (mod == 2) || (mod == 4) || (mod == 6) || (mod == 8);
+				bool alt       = (mod == 3) || (mod == 4) || (mod == 7) || (mod == 8);
+				bool ctrl      = (mod == 5) || (mod == 6) || (mod == 7) || (mod == 8);
+				return make_key(code, 0, ctrl, alt, shift, total);
+			}
 
 			// Focus in / Focus out (xterm focus reporting: ESC [ I / ESC [ O)
 			if (fb == 'I' && csi.param_count == 0 && csi.private_prefix == 0) {
