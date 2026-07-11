@@ -59,12 +59,13 @@ fn void test_parse_key_ctrl_c() @test {
 	assert(pr.key.code == milktea::KeyCode.CTRL_C);
 }
 
-fn void test_parse_key_escape() @test {
+fn void test_parse_key_lone_escape_needs_more() @test {
+	// A lone ESC may be the start of a split escape sequence, so
+	// parse_key asks for more data; the event loop resolves it.
 	char[] input        = { 0x1b };
 	milktea::ParseResult pr = milktea::parse_key(input);
-	assert(pr.consumed == 1);
-	assert(pr.kind == milktea::MsgKind.KEY);
-	assert(pr.key.code == milktea::KeyCode.ESC);
+	assert(pr.consumed == 0);
+	assert(pr.key.code == milktea::KeyCode.NONE);
 }
 
 fn void test_parse_key_space() @test {
@@ -115,6 +116,27 @@ fn void test_multiple_keys_then_quit() @test {
 	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, "xyz");
 	p.run()!!;
 	assert(m.key_count == 1); // should quit on first key
+}
+
+fn void test_lone_esc_delivers_esc_key() @test {
+	// Injected input is exactly ESC — with input exhausted, the event
+	// loop must flush the held ESC as a real keypress without waiting.
+	KeyProbeModel m = { };
+	DString out     = dstring::temp();
+	milktea::Program p  = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x1b });
+	p.run()!!;
+	assert(m.key_count == 1);
+	assert(m.last_keycode == (int)milktea::KeyCode.ESC);
+}
+
+fn void test_esc_bracket_a_delivers_single_up() @test {
+	// A full arrow sequence must parse as one UP key, never ESC + runes.
+	KeyProbeModel m = { };
+	DString out     = dstring::temp();
+	milktea::Program p  = milktea::@test_program_input(&m, &out, 80, 24, "\x1b[A");
+	p.run()!!;
+	assert(m.key_count == 1);
+	assert(m.last_keycode == (int)milktea::KeyCode.UP);
 }
 
 // ============================================================

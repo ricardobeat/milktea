@@ -216,6 +216,9 @@ interface Model {
 // Constants
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
+// How long to hold a lone leading ESC before flushing it as a keypress,
+// giving the rest of a split escape sequence time to arrive.
+const sz ESC_HOLD_MS = 50;
 
 struct TimerEntry {
 	bool active;
@@ -234,6 +237,9 @@ struct Program {
 	bool debug;
 	char[512] pending;
 	sz pending_len;
+	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
+	// which the lone ESC is flushed as a real keypress. 0 = no hold active.
+	sz esc_deadline_ms;
 
 	// Test / injection support
 	bool test_mode;
@@ -662,37 +668,72 @@ fn void? Program.run(Program* self) {
 			}
 		}
 
-		bool stuck = false;
-		while (self.pending_len > 0) {
-			ParseResult pr = parse_key(self.pending[:self.pending_len]);
-			if (pr.consumed == 0) {
-				stuck = true;
-				break;
+		// New bytes resolve (or restart) the lone-ESC ambiguity, so the
+		// hold timer must start over.
+		if (n > 0) self.esc_deadline_ms = 0;
+
+		bool stuck   = false;
+		bool reparse = true;
+		while (reparse) {
+			reparse = false;
+			stuck   = false;
+			while (self.pending_len > 0) {
+				ParseResult pr = parse_key(self.pending[:self.pending_len]);
+				if (pr.consumed == 0) {
+					stuck = true;
+					break;
+				}
+
+				for (sz i = pr.consumed; i < self.pending_len; i++) {
+					self.pending[i - pr.consumed] = self.pending[i];
+				}
+				self.pending_len -= pr.consumed;
+
+				if (pr.key.code == KeyCode.NONE && pr.kind == MsgKind.KEY) continue;
+
+				Msg m;
+				if (pr.kind == MsgKind.FOCUS) {
+					m.kind = MsgKind.FOCUS;
+					if (&self.model.on_focus) self.model.on_focus();
+				} else if (pr.kind == MsgKind.BLUR) {
+					m.kind = MsgKind.BLUR;
+					if (&self.model.on_blur) self.model.on_blur();
+				} else if (pr.kind == MsgKind.MOUSE) {
+					m.kind = MsgKind.MOUSE;
+					m.mouse = pr.mouse;
+				} else {
+					m.kind = MsgKind.KEY;
+					m.key = pr.key;
+				}
+				if (dispatch(self, self.model, m)) return;
+				dirty = true;
 			}
 
-			for (sz i = pr.consumed; i < self.pending_len; i++) {
-				self.pending[i - pr.consumed] = self.pending[i];
-			}
-			self.pending_len -= pr.consumed;
-
-			if (pr.key.code == KeyCode.NONE && pr.kind == MsgKind.KEY) continue;
-
-			Msg m;
-			if (pr.kind == MsgKind.FOCUS) {
-				m.kind = MsgKind.FOCUS;
-				if (&self.model.on_focus) self.model.on_focus();
-			} else if (pr.kind == MsgKind.BLUR) {
-				m.kind = MsgKind.BLUR;
-				if (&self.model.on_blur) self.model.on_blur();
-			} else if (pr.kind == MsgKind.MOUSE) {
-				m.kind = MsgKind.MOUSE;
-				m.mouse = pr.mouse;
+			// ESC-hold: pending starts with an ambiguous lone ESC. Hold it
+			// briefly so the rest of a split escape sequence can arrive;
+			// on timeout, flush it as a real ESC key and re-parse the rest.
+			if (stuck && self.pending[0] == 0x1b) {
+				now = time_ms();
+				if (self.esc_deadline_ms == 0) self.esc_deadline_ms = now + ESC_HOLD_MS;
+				// In test mode, exhausted injected input means nothing more
+				// is ever coming — flush immediately to stay deterministic.
+				bool flush = self.test_mode
+					? self.inject_input_pos >= self.inject_input.len
+					: now >= self.esc_deadline_ms;
+				if (flush) {
+					self.esc_deadline_ms = 0;
+					for (sz i = 1; i < self.pending_len; i++) {
+						self.pending[i - 1] = self.pending[i];
+					}
+					self.pending_len--;
+					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false } };
+					if (dispatch(self, self.model, em)) return;
+					dirty   = true;
+					reparse = true;
+				}
 			} else {
-				m.kind = MsgKind.KEY;
-				m.key = pr.key;
+				self.esc_deadline_ms = 0;
 			}
-			if (dispatch(self, self.model, m)) return;
-			dirty = true;
 		}
 
 		if (dirty) {
@@ -709,6 +750,11 @@ fn void? Program.run(Program* self) {
 					sz remaining = self.timers[i].deadline_ms > now ? self.timers[i].deadline_ms - now : 0;
 					if (remaining < wait_ms) wait_ms = remaining;
 				}
+			}
+			// Wake in time to flush a held lone ESC at its deadline
+			if (self.esc_deadline_ms != 0) {
+				sz remaining = self.esc_deadline_ms > now ? self.esc_deadline_ms - now : 0;
+				if (remaining < wait_ms) wait_ms = remaining;
 			}
 			// When stuck on incomplete data, cap wait to avoid long hangs
 			if (stuck && wait_ms > 100) wait_ms = 100;

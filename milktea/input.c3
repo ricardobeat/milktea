@@ -214,7 +214,11 @@ fn ParseResult parse_key(char[] buf) {
 	// 0x1b: ESC or escape sequence
 	if (b == 0x1b) {
 		if (buf.len == 1) {
-			return make_key(ESC, 0, false, false, false, 1);
+			// A lone ESC is ambiguous: it may be a bare keypress or the
+			// first byte of a split escape sequence (common over SSH).
+			// Ask for more data; the event loop flushes it as ESC after
+			// a short hold if nothing else arrives.
+			return make_key(NONE, 0, false, false, false, 0);
 		}
 
 		char second = buf[1];
