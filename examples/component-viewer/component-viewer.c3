@@ -572,19 +572,16 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		int hard_x = center_x - hard_w - 2;
 		int hard_y = center_y - 2 + float_offset;
 		String hard_rendered = self.preview.toast_hard.style.render(self.preview.toast_hard.message);
-		view = view.add_overlay(hard_x, hard_y, hard_w, boba::TOAST_H, hard_rendered);
-		// Add hard shadow manually
-		xray::Shadow hard_shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0);
-		view.overlays[view.overlay_count - 1].layer_style.shadow = hard_shadow;
+		view = view.add_overlay(hard_x, hard_y, hard_w, boba::TOAST_H, hard_rendered,
+			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0) });
 
 		// Blurred shadow toast (right)
 		int blur_w = self.preview.toast_blur.toast_width();
 		int blur_x = center_x + 2;
 		int blur_y = center_y - 2 - float_offset;
 		String blur_rendered = self.preview.toast_blur.style.render(self.preview.toast_blur.message);
-		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered);
-		xray::Shadow blur_shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2);
-		view.overlays[view.overlay_count - 1].layer_style.shadow = blur_shadow;
+		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered,
+			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2) });
 	}
 
 	return view;

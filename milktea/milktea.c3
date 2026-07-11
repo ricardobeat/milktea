@@ -125,10 +125,27 @@ fn View View.set_mouse_mode(self, MouseMode mode) {
 // Overlays are rendered in insertion order, up to MAX_OVERLAYS (8) total.
 // Any call beyond MAX_OVERLAYS is silently ignored — callers that need more
 // overlays must merge content before adding.
-fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0) {
+//
+// transparent: when true, blit_ansi skips cells whose content is a space with
+//   default style, letting the background show through instead of overwriting it.
+//   Use for overlays whose content is sparse or irregularly shaped.
+//
+// layer_style: configures drop-shadow and inner-shadow effects rendered around
+//   the overlay. The drop-shadow is composited under the overlay content;
+//   the inner-shadow is composited on top (inside the overlay bounds).
+//   Both fields default to disabled (zero-value LayerStyle).
+fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0,
+	bool transparent = false, xray::LayerStyle layer_style = {})
+{
 	View v = self;
 	if (v.overlay_count < MAX_OVERLAYS) {
-		v.overlays[v.overlay_count] = { .content = content, .x = x, .y = y, .w = w, .h = h, .alpha = alpha };
+		v.overlays[v.overlay_count] = {
+			.content = content,
+			.x = x, .y = y, .w = w, .h = h,
+			.alpha = alpha,
+			.transparent = transparent,
+			.layer_style = layer_style,
+		};
 		v.overlay_count++;
 	}
 	return v;
