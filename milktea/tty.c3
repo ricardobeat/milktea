@@ -1,4 +1,5 @@
 module milktea;
+import std::atomic;
 
 faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED;
 
@@ -60,7 +61,11 @@ fn WinSize get_window_size() {
 	return ws;
 }
 
-bool g_win_resized = false;
+// Atomic flag so the SIGWINCH handler (async signal context) and the event
+// loop (main thread) can race without the optimizer caching a stale value.
+// Relaxed ordering is sufficient: no other memory needs to be ordered around
+// this flag, only the flag itself must be visible across threads/signals.
+Atomic{bool} g_win_resized;
 
 // g_saved_tty stores the pre-raw-mode terminal state so signal handlers can restore it.
 TtyState g_saved_tty;
@@ -75,7 +80,7 @@ const int SIGINT  = 2;
 const int SIGTERM = 15;
 
 fn void sigwinch_handler(int sig) {
-	g_win_resized = true;
+	g_win_resized.store(true, RELAXED);
 }
 
 // fatal_signal_handler restores the terminal and re-raises the signal with default action.
