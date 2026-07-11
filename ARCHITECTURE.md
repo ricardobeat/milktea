@@ -1,158 +1,218 @@
-# C3 Bubbletea Architecture Improvements
+# Architecture
 
-## Overview
+Internals of milktea: how the modules fit together, how a frame gets from a
+model's `view()` to the terminal, and the conventions the code relies on.
+For usage, see `README.md`. For a quick API map, see `AGENTS.md`.
 
-All C3 code updated from 0.7.x to 0.8.0 (`usz`/`isz` → `sz`), plus nine architectural improvements making the framework more idiomatic, type-safe, and ergonomic.
+## Module map
 
-## 1. Program Struct (replaces globals)
+Five modules, one-way dependency chain:
 
-All mutable runtime state (`batch_cmds`, `batch_count`, `timers`, `pending` buffer) moved from globals into a `Program` struct. Enables sequential multi-instance use and proper testability.
-
-```c3
-struct Program {
-    Model model;
-    Cmd[MAX_BATCH] batch_cmds;
-    int batch_count;
-    TimerEntry[MAX_TIMERS] timers;
-    bool in_alt_screen;
-    char[256] pending;
-    sz pending_len;
-}
+```
+xray    — cell grid, diff renderer, layout solver, color        (no internal deps)
+glaze   — styles, borders, gradients → ANSI strings              (no internal deps)
+milktea — event loop, input parsing, TTY control, View/Cmd       (depends on xray)
+boba    — widget collection (list, textinput, viewport, ...)     (depends on milktea, glaze, xray)
+taro    — QuickJS bridge (JS models drive milktea from taro.js)  (depends on milktea, glaze, xray, boba)
 ```
 
-A global `Program* g_program` pointer is set during `run()` and cleared on exit. Safe because only one program can run at a time (one terminal). The `batch()` and `tick()` functions use this pointer to store state.
+`xray` and `glaze` don't depend on each other or on milktea and are usable
+standalone. `glaze` produces ANSI-styled strings; `xray` owns the persistent
+cell grid and the diffing renderer. `milktea` composites the two: a `View`
+carries either a plain string (parsed by xray's ANSI parser) or a direct
+`Cell[]` grid. Package manifests (`*/manifest.json`) encode this same order.
 
-## 2. Cross-Platform `$if`
+`taro/taro.c` and `vendor/quickjs/*.c` are C sources pulled in via
+`c-sources`; `taro/taro.c3` declares `extern fn` bindings into that C layer.
+`milktea/tty_winsize.c` is the only other C dependency, providing
+`ioctl(TIOCGWINSZ)` portably.
 
-Removed hardcoded macOS `TIOCGWINSZ` constant (was dead code — the C interop layer in `tty_winsize.c` handles it via `<sys/ioctl.h>`). `SIGWINCH` is 28 on both macOS and Linux. The C interop layer already supports both platforms.
+## Core types (milktea/milktea.c3)
 
-## 3. Component Lifecycle Interface
+- `Model` — interface apps implement: `init() -> Cmd`, `update(Msg) -> Cmd`,
+  `view() -> View`, plus optional lifecycle hooks `on_mount`, `on_destroy`,
+  `on_focus`, `on_blur` (`@optional`, checked with `&self.model.on_x` before
+  calling).
+- `Msg` — tagged union (`MsgKind`: NONE, KEY, WINDOW_SIZE, FOCUS, BLUR,
+  MOUSE, QUIT, TICK, USER) carrying a `KeyMsg`, `WindowSizeMsg`, or
+  `MouseMsg` payload plus a free `tag`/`user` pointer for app messages.
+  `KeyMsg.rune` is a `uint` Unicode codepoint, not a byte: `parse_key()`
+  decodes multi-byte UTF-8 input (validating lead/continuation bytes,
+  waiting for the full sequence) into a single RUNE key, and
+  `milktea::utf8_encode()` converts a codepoint back into 1-4 bytes for
+  byte-oriented text buffers. Mouse input arrives via SGR (mode 1006) or
+  legacy X10 encoding, both handled in `parse_key()` (`input.c3`).
+- `Cmd` — `alias Cmd = fn Msg()`. `null` means "no command." There is no
+  batch-command buffer in the current code: `update()` returns one `Cmd`,
+  which `dispatch()` calls and chains through `update()` again.
+- `View` — either `content: String` (parsed by xray's ANSI parser) or a
+  direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus cursor
+  state, alt-screen flag, mouse mode, and up to `MAX_OVERLAYS` (8)
+  `Overlay` entries for floating content (menus, shadows) over the base
+  view. Built fluently: `new_view(s).set_cursor(x, y).set_alt_screen(true)`.
+- `Program` — all mutable state for one run: the `Model`, a fixed
+  `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
+  pending input byte buffer (`char[512]`), a `send_queue`
+  (`Msg[MAX_BATCH=16]` ring buffer for `Program.send()`, guarded by the
+  `send_mu` mutex — initialized in `run()`, with `send_mu_init` gating
+  calls made before the program starts), the reader thread handle, and a
+  pointer to the `xray::Renderer`. A single
+  `Program* g_program` global is set for the duration of `run()` (cleared
+  via `defer`) so free functions like `tick()`, `every()`, `cancel()` can
+  reach the active program. Safe because only one `Program` runs at a
+  time — `run()` is not reentrant.
 
-Extended the `Model` interface with optional lifecycle hooks:
+## Event-loop lifecycle (`Program.run`)
 
-```c3
-interface Model {
-    fn Cmd init();
-    fn Cmd update(Msg msg);
-    fn View view();
-    fn void on_mount() @optional;    // called after init + first render
-    fn void on_destroy() @optional;  // called on program exit
-    fn void on_focus() @optional;    // terminal gained focus
-    fn void on_blur() @optional;     // terminal lost focus
-}
-```
+1. **Setup** (skipped in test mode): enter raw mode, hide the cursor,
+   enable focus reporting, install `SIGWINCH`/`SIGINT`/`SIGTERM` handlers,
+   spawn the input reader thread (`thread::Thread.create`).
+2. **Model init**: call `model.init()`; if it returns a `Cmd`, invoke it
+   and dispatch the resulting `Msg` (can already quit). Call `on_mount()`.
+3. **Initial size**: from `with_window_size()` injection, a real
+   `get_window_size()` query, or `80x24` in test mode. `WINDOW_SIZE` is
+   dispatched before the first render. The `xray::Renderer` is created
+   here (non-test mode), with `set_sync_supported()` enabled when
+   `should_support_sync_output()` heuristically detects a capable terminal
+   (`SSH_TTY`, `WT_SESSION`, `TERM_PROGRAM`, `TMUX`, `STY`).
+4. **First render**: `render_current_view()`.
+5. **Main loop**, each iteration: fire expired timers; drain input (from
+   `inject_input` in test mode, or `g_input_queue` fed by the reader
+   thread); drain `send_queue`; handle `SIGWINCH` (resize renderer,
+   dispatch `WINDOW_SIZE`); append new bytes to `self.pending` and loop
+   `parse_key()` over it, dispatching `KEY`/`MOUSE`/`FOCUS`/`BLUR` as
+   parsed; re-render if anything changed. When idle, block on
+   `input_queue_wait()` up to the soonest timer or ESC-hold deadline
+   (capped at 1000ms, or 100ms if input parsing is stuck on an incomplete
+   sequence) to avoid busy-waiting.
+6. **Shutdown** (via `defer`, LIFO): exit alt screen if active, call
+   `on_destroy()`, then (non-test mode) destroy the renderer, stop and
+   join the reader thread, destroy the input queue, disable mouse/focus
+   reporting, show the cursor, reset OSC cursor-color/mouse-cursor
+   sequences, restore the original termios.
 
-Hooks are called by the framework at the appropriate times. Existing models don't need to implement them (`@optional`).
+**ESC-hold**: a lone `0x1b` at the front of `pending` is ambiguous — it
+could be the ESC key or the start of a split escape sequence. The loop
+holds it for `ESC_HOLD_MS` (50ms, tracked in `Program.esc_deadline_ms`);
+if more bytes arrive they restart the timer and are parsed as a sequence,
+otherwise on timeout the byte is flushed as a real ESC key and the rest
+of `pending` is re-parsed. In test mode, exhausted injected input flushes
+immediately so tests stay deterministic.
 
-## 4. View Builder Methods
+`dispatch()` is the single message-processing primitive: calls
+`model.update(m)`, and if the returned `Cmd` is non-null, calls it and
+feeds the resulting `Msg` back into `update()`, chaining up to `MAX_BATCH`
+(16) times or until a `Cmd` returns `NONE`/`QUIT`. `QUIT` anywhere in the
+chain makes `dispatch()` return `true`, which `run()` treats as "stop."
 
-Fluent methods on `View` for declarative construction:
+## Render pipeline
 
-```c3
-// Before:
-View v = new_alt_screen_view(content);
-v.has_cursor = true;
-v.cursor = new_cursor(5, 3);
-return v;
+`render_current_view()` wraps `model.view()` in `@pool()` (temp allocator
+freed at block exit):
 
-// After:
-return new_view(content).set_cursor(5, 3).set_alt_screen(true);
-```
+1. Toggles alt-screen SGR sequences on transition, and mouse-reporting
+   sequences when `View.mouse_mode` changes.
+2. In test mode, renders the `View` into a `DString` capture buffer
+   instead of stdout.
+3. In real mode, drives the `xray::Renderer`:
+   - **Direct-cell path**: if `View.cells.ptr != null`, cells are copied
+     straight into `r.screen` via `set_cell()`, clamped to the smaller of
+     the view's and renderer's dimensions — no string building or ANSI
+     parsing.
+   - **String path**: otherwise `View.content` is split on `\n`, each line
+     parsed via `screen.render_ansi_string()` (understands SGR and CUP,
+     skips other CSI).
+   - Overlays are composited: shadow → content (alpha-blended via
+     `Color.blend_over` for `0 < alpha < 255`, or `blit_ansi` when opaque)
+     → inner shadow.
+   - `r.end_frame()`: diffs `cells` against `prev_cells`
+     (`ScreenBuffer.render_diff`), wraps the diff in synchronized-output
+     markers (`ESC[?2026h`/`l`, mode 2026) when supported, hides the
+     cursor for the duration, writes via the injected `WriteFn`, then
+     `screen.swap()`.
+   - Cursor position/shape/color/blink and OSC 22 mouse-cursor shape are
+     emitted once, after `end_frame()`.
 
-Added: `set_cursor(x, y)`, `set_cursor_shape(x, y, shape, blink)`, `set_alt_screen(bool)`.
+`render_diff` has two modes: a full redraw (first frame or after
+`resize()`) and a differential mode that, per dirty line, finds the
+contiguous span of changed cells and emits only that span with one cursor
+move. `Style.diff_sgr()` further limits output to SGR codes that changed
+since the last cell painted. `ColorKind.TRANSPARENT` is a compositing
+primitive: `set_cell()` resolves it by inheriting the existing cell's
+channel, letting overlays paint partial cells.
 
-Also added `viewf(fmt, ...)` and `view_alto(fmt, ...)` for formatted content.
+## Threading model
 
-## 5. ViewBuf — Chained String Builder
+Two threads exist during a real run:
 
-New `ViewBuf` type wrapping `DString` with chaining methods:
+- **Main thread** — the event loop: timers, dispatch, rendering,
+  signal-flag polling (`g_win_resized`).
+- **Reader thread** (`input_reader_fn`) — polls stdin with a 50ms timeout
+  and pushes raw bytes into `g_input_queue`, a `char[4096]` ring buffer
+  guarded by a `Mutex` + `ConditionVariable`, so a blocking `read()` never
+  stalls rendering or timers.
 
-```c3
-ViewBuf buf = new_view_buf();
-buf.write(title.render("Hello")).writeln("").write(content);
-return milktea::new_view(buf.str());
-```
+Cross-thread shared state: `InputQueue` (all access via
+`input_queue_push`/`drain`/`wait`, each taking the mutex; the reader
+counts bytes it had to drop in `InputQueue.dropped`, surfaced by the main
+loop), the `send_queue` (guarded by `Program.send_mu` so `Program.send()`
+is callable from any thread once `run()` has initialized it), and
+`g_win_resized`, an `Atomic{bool}` (`std::atomic`, relaxed ordering) set
+by the `SIGWINCH` handler and consumed by the event loop.
 
-Methods: `write(s)`, `writeln(s)`, `writec(c)`, `writef(fmt, ...)`, `str()`.
+Shutdown is two-phase: `input_queue_close()` sets `closed = true` and
+broadcasts the condition variable, then `run()` joins the reader thread
+(`self.reader_thread.join()`), and only then calls
+`input_queue_destroy()` — the mutex is never destroyed while the reader
+might still hold it. `SIGINT`/`SIGTERM` are handled directly in
+`fatal_signal_handler` (`tty.c3`), which restores termios and alt-screen
+state synchronously before re-raising the signal — this bypasses the
+normal `defer` unwind since it can fire mid-render.
 
-## 6. Layout Helper
+**Capacity-drop diagnostics**: every fixed buffer that silently drops on
+overflow — the timer table, the send queue, the pending buffer, the input
+ring — reports the drop via `debug_warn()`, which appends a timestamped
+line to `milktea-debug.log` when `Program.debug` is set (never stdout or
+stderr, which belong to the rendering surface).
 
-New `Layout` type that tracks rows and auto-computes cursor position:
+## Memory conventions
 
-```c3
-Layout l = new_alt_layout();
-l.write_line(title.render("Sign Up"));
-l.write_line("");
-l.write_input_line("Nickname:", input.view(), focused, input.cursor_x(), 10);
-l.write_line("");
-l.write_line(hint.render("TAB to switch"));
-return l.view();  // cursor position computed automatically
-```
+- **Per-frame temp allocation**: the whole render runs inside `@pool()`.
+  Anything from the temp allocator (`dstring::temp()`, `string::tformat()`)
+  is freed at block exit — models must not stash temp-allocated strings
+  across frames.
+- **Heap ownership**: `xray::new_screen_buffer`, `xray::new_renderer`, and
+  `xray::new_layer` return heap pointers the caller owns.
+  `Program.run()` frees the renderer in its shutdown `defer`. Temporary
+  `ScreenBuffer`s created mid-render for overlay blending always pair
+  their allocation with `defer { tmp.destroy(); mem::free(tmp); }`.
+- **Fixed-capacity buffers over dynamic allocation**: `Program.timers`
+  (32), `Program.send_queue` (16), `Program.pending` (512 bytes),
+  `InputQueue.buf` (4096 bytes), and `View.overlays` (8) are fixed-size
+  arrays scanned linearly or treated as ring buffers — no heap churn per
+  event/frame on the hot path.
 
-Eliminates manual row counting — the #1 source of bugs in TUI code.
+## Testing strategy
 
-## 7. Style Shorthand Methods
-
-Shorter names for common style operations (coexist with longer names):
-
-| Long | Short |
-|------|-------|
-| `foreground(color_hex("#00d7ff"))` | `with_fg("#00d7ff")` |
-| `background(color_hex("#ff0000"))` | `with_bg("#ff0000")` |
-| `set_bold(true)` | `with_bold(true)` |
-| `set_italic(true)` | `with_italic(true)` |
-| `set_underline(true)` | `with_underline(true)` |
-| `set_border(b)` | `with_border(b)` |
-| `set_width(w)` | `with_width(w)` |
-
-Note: `with_` prefix required because C3 doesn't allow methods with the same name as struct fields.
-
-## 8. `@program` / `@run_program` Macros
-
-Eliminates the unsafe `(milktea::Model)&` cast in every example:
-
-```c3
-// Before:
-Counter c = {};
-Program p = { .model = (milktea::Model)&c };
-if (catch err = p.run()) { ... }
-
-// After:
-Counter c = {};
-if (catch err = milktea::@run_program(&c)) { ... }
-```
-
-The macro handles the cast internally. `@program(&c)` creates a `Program`; `@run_program(&c)` creates and runs it.
-
-## 9. Contracts
-
-Added `@require`/`@ensure` contracts to core functions:
-
-- `batch()` — `@require cmds.len > 0, cmds.len <= MAX_BATCH`
-- `dispatch()` — `@ensure return == true || m.kind == MsgKind.QUIT`
-- `tick()` — `@require delay_ms > 0, callback != null`
-- `parse_key()` — `@ensure return.consumed <= buf.len`
-
-In release mode these become optimizer hints. In safe mode they're runtime assertions.
-
-## Files Changed
-
-### New files
-- `milktea/viewbuf.c3` — ViewBuf string builder
-- `milktea/layout.c3` — Layout with auto cursor tracking
-- `milktea/macros.c3` — `@program` / `@run_program` macros
-
-### Modified files
-- `milktea/milktea.c3` — Program struct, lifecycle hooks, view builders, contracts
-- `milktea/input.c3` — Contract on `parse_key()`
-- `milktea/tty.c3` — Removed dead constant, cleaned up
-- `glaze/style.c3` — `with_*` shorthand methods
-
-### Unchanged (0.8.0 migration only)
-- All 13 files with `usz`/`isz` → `sz` replacements
-
-## Build Status
-
-- Library: builds clean
-- 24 example targets: all link
-- 21 tests: all pass
+- **Unit tests** (`fn void test_x() @test`) live in the `test/` directory
+  (`integration_test.c3`, `keyprobe_test.c3`, `utf8_input_test.c3`,
+  `test_render.c3`, `xray_test.c3`, snapshot drivers per module, and the
+  shared `snapshot.c3` infrastructure). 219 test functions at time of
+  writing.
+- **Test-mode injection** (`Program.test_mode`): `with_test_mode(&output)`
+  routes rendered output into a `DString` and skips raw-mode/signal/TTY
+  setup, making `run()` deterministic and TTY-free.
+  `with_window_size(w, h)` fixes the reported terminal size;
+  `with_input(bytes)` feeds a fixed byte sequence through
+  `drain_inject_input()` instead of the reader thread. The
+  `@test_program`/`@test_program_input` macros (`milktea/macros.c3`) wire
+  these together for test bodies.
+- **Snapshot tests**: `snapshot::assert_snapshot(subdir, name, actual)`
+  compares output against `snapshots/{subdir}/{name}.snap`. Setting
+  `UPDATE_SNAPSHOTS=1` regenerates the golden file instead of asserting.
+  Golden files live under `snapshots/milktea/`, `snapshots/xray/`,
+  `snapshots/glaze/`, `snapshots/boba/` — one directory per module.
+- **Render-frame assertions**: `ScreenBuffer.render_frame()`/
+  `render_frame_row()` dump the cell grid as plain text, and
+  `render_diff_str()` exposes the raw diff — letting tests assert on
+  rendering without a real terminal.
