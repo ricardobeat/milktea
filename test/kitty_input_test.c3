@@ -160,3 +160,25 @@ fn void test_kitty_truncated_needs_more() @test {
 	assert(pr.consumed == 0);
 	assert(pr.key.code == milktea::KeyCode.NONE);
 }
+
+// ============================================================
+// Ctrl+C equivalence — kitty sends CSI 99;5u, not legacy 0x03
+// ============================================================
+
+fn void test_kitty_ctrl_c_maps_to_ctrl_c_keycode() @test {
+	// Under the disambiguate flag the terminal sends ctrl+c as codepoint
+	// 'c' (99) with the ctrl modifier. Apps quit on KeyCode.CTRL_C, so this
+	// must map to the same keycode the legacy 0x03 path produces.
+	char[] input            = "\x1b[99;5u";
+	milktea::ParseResult pr = milktea::parse_key(input);
+	assert(pr.consumed == 7);
+	assert(pr.key.code == milktea::KeyCode.CTRL_C);
+	assert(pr.key.ctrl);
+
+	// ctrl+shift+c stays a RUNE so copy-shortcuts remain distinguishable.
+	char[] input2            = "\x1b[99;6u";
+	milktea::ParseResult pr2 = milktea::parse_key(input2);
+	assert(pr2.key.code == milktea::KeyCode.RUNE);
+	assert(pr2.key.rune == 'c');
+	assert(pr2.key.ctrl && pr2.key.shift);
+}

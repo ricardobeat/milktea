@@ -456,8 +456,16 @@ fn ParseResult parse_key(char[] buf) {
 				if (cp == 9)   return make_key(TAB,       0,  ctrl,  alt,   shift, total);
 				if (cp == 127) return make_key(BACKSPACE, 0,  false, false, false, total);
 
-				// 0x03 as a codepoint (Ctrl+C via kitty): preserve the CTRL_C keycode.
+				// Ctrl+C equivalence: under the disambiguate flag, kitty-protocol
+				// terminals send ctrl+c as CSI 99;5u (codepoint 'c' + ctrl bit),
+				// NOT as legacy 0x03. Map it to KeyCode.CTRL_C so apps that quit
+				// on CTRL_C behave identically on both paths. Kept narrow: extra
+				// modifiers (ctrl+shift+c etc.) stay RUNE so copy-shortcuts remain
+				// distinguishable. cp==3 is also mapped defensively.
 				if (cp == 3)   return make_key(CTRL_C, 0, true, false, false, total);
+				if (cp == 'c' && ctrl && !alt && !shift) {
+					return make_key(CTRL_C, 0, true, false, false, total);
+				}
 
 				// Ctrl+letter: kitty sends the lowercase letter codepoint with ctrl bit set.
 				// Match the legacy control-char path (0x01..0x1a) which also produces
