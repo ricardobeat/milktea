@@ -157,3 +157,7 @@ return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
 ## Tests
 
 All tests live in `test/` (kept out of the library dirs so `milktea/**` etc. stay test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare against `snapshots/*/*.snap`; re-record with `just update-snapshots` (= `UPDATE_SNAPSHOTS=1 c3c test`) and review the diff.
+
+## Build
+
+The `examples/*` targets in project.json are generated — do not hand-edit them. Change the OVERRIDES table in `scripts/gen_targets.py`, then run `just gen-targets`.
