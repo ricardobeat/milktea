@@ -425,6 +425,47 @@ fn ParseResult parse_key(char[] buf) {
 			// Shift+Tab: ESC [ Z
 			if (fb == 'Z') return make_key(TAB, 0, false, false, true, total);
 
+			// Kitty keyboard protocol: CSI <codepoint> [;<mods>] u
+			//
+			// Final byte 'u', no private prefix. Param 0 = Unicode codepoint;
+			// param 1 (optional, default 1) = 1 + modifier bitfield:
+			//   bit 0 (+1) = shift, bit 1 (+2) = alt, bit 2 (+4) = ctrl.
+			// A bare CSI u with no params is unusual but not something we emit,
+			// so treat param_count==0 conservatively as an unknown sequence.
+			//
+			// Private prefix '?' with final 'u' is a query-response form that
+			// some terminals send back when probed; consume and ignore it.
+			if (fb == 'u' && csi.private_prefix == '?') {
+				// Terminal query response — consume, produce no key event.
+				return make_key(NONE, 0, false, false, false, total);
+			}
+			if (fb == 'u' && csi.private_prefix == 0 && csi.param_count >= 1) {
+				uint cp  = (uint)csi.params[0];
+				int mods = csi_param(csi, 1, 1); // default modifier value = 1 (no mods)
+				// Modifier value is 1 + bitfield: subtract 1 to get the bits.
+				int mod_bits = mods > 0 ? mods - 1 : 0;
+				bool shift   = (mod_bits & 1) != 0;
+				bool alt     = (mod_bits & 2) != 0;
+				bool ctrl    = (mod_bits & 4) != 0;
+
+				// Functional-key codepoints: map to their KeyCode.
+				// ESC (27) is the main win — it arrives unambiguous under kitty protocol,
+				// so we skip the 50ms ESC-hold entirely.
+				if (cp == 27)  return make_key(ESC,       0,  false, false, false, total);
+				if (cp == 13)  return make_key(ENTER,     0,  false, false, false, total);
+				if (cp == 9)   return make_key(TAB,       0,  ctrl,  alt,   shift, total);
+				if (cp == 127) return make_key(BACKSPACE, 0,  false, false, false, total);
+
+				// 0x03 as a codepoint (Ctrl+C via kitty): preserve the CTRL_C keycode.
+				if (cp == 3)   return make_key(CTRL_C, 0, true, false, false, total);
+
+				// Ctrl+letter: kitty sends the lowercase letter codepoint with ctrl bit set.
+				// Match the legacy control-char path (0x01..0x1a) which also produces
+				// RUNE <lowercase> with ctrl=true, so models see identical messages from
+				// both code paths.
+				return make_key(RUNE, cp, ctrl, alt, shift, total);
+			}
+
 			// Unknown CSI — consume ESC only, let next call re-parse
 			return make_key(ESC, 0, false, false, false, 1);
 		}

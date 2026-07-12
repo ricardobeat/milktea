@@ -675,6 +675,9 @@ fn void? Program.run(Program* self) {
 		hide_cursor();
 		enable_focus();
 		enable_bracketed_paste();
+		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
+		// Terminals that don't support it ignore the sequence — safe to push always.
+		enable_kitty_keyboard();
 		setup_signals(saved, &self.in_alt_screen);
 
 		// Start the reader thread so stdin reads never block the event loop.
@@ -703,6 +706,8 @@ fn void? Program.run(Program* self) {
 			input_queue_destroy(&g_input_queue);
 			disable_mouse();
 			disable_bracketed_paste();
+			// Pop kitty keyboard protocol — restores previous mode for the terminal.
+			disable_kitty_keyboard();
 			disable_focus();
 			show_cursor();
 			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
