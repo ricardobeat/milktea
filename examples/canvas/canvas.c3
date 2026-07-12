@@ -10,6 +10,12 @@ struct CanvasModel {
 	bool flip;
 	int width;
 	int height;
+	// Compositor and layers are created once and reused every frame —
+	// creating them inside view() would leak heap memory on every render.
+	milktea::Compositor* comp;
+	milktea::Layer* card_a;
+	milktea::Layer* card_b;
+	milktea::Layer* footer;
 }
 
 fn milktea::Cmd CanvasModel.init(CanvasModel* self) @dynamic {
@@ -30,6 +36,9 @@ fn milktea::Cmd CanvasModel.update(CanvasModel* self, milktea::Msg msg) @dynamic
 			return milktea::quit();
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
+			// Any other letter swaps too — C3 switches don't fall through,
+			// so the flip must happen here as well as in default.
+			self.flip = !self.flip;
 		default:
 			self.flip = !self.flip;
 	}
@@ -45,6 +54,17 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 		z_b = 0;
 	}
 
+	// Lazily build the layer tree on the first frame; reuse it afterwards.
+	if (self.comp == null) {
+		self.card_a = milktea::new_layer("");
+		self.card_b = milktea::new_layer("").set_x(10).set_y(2);
+		self.footer = milktea::new_layer("");
+		self.comp = milktea::new_compositor(self.width, self.height);
+		self.comp.add_layer(self.footer);
+		self.comp.add_layer(self.card_a);
+		self.comp.add_layer(self.card_b);
+	}
+
 	// Cards: Width(20) Height(10) with rounded border, centered content
 	glaze::Style card_style = glaze::style().width(20).height(10)
 		.border(glaze::rounded_border())
@@ -55,21 +75,24 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	String card_a_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Hello");
 	String card_b_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye");
 
-	milktea::Layer* card_a = milktea::new_layer(card_style.render(card_a_content)).set_z(z_a);
-	milktea::Layer* card_b = milktea::new_layer(card_style.render(card_b_content)).set_x(10).set_y(2).set_z(z_b);
+	// Content strings are temp-allocated per frame; reassign them each time.
+	self.card_a.content = card_style.render(card_a_content);
+	self.card_a.z = z_a;
+	self.card_b.content = card_style.render(card_b_content);
+	self.card_b.z = z_b;
 
-	// Footer
-	glaze::Style footer_style = glaze::style().height(3).foreground(glaze::color_hex("#a0a0a0"));
-	String footer_text           = "Press any key to swap the cards, or q to quit.";
-	milktea::Layer* footer      = milktea::new_layer(footer_style.render(footer_text));
+	// Footer sits on the bottom row, below both cards.
+	glaze::Style footer_style = glaze::style().foreground(glaze::color_hex("#a0a0a0"));
+	self.footer.content = footer_style.render("Press any key to swap the cards, or q to quit.");
+	self.footer.y = self.height > 1 ? self.height - 1 : 0;
+	self.footer.z = 2;
 
-	// Compose
-	milktea::Compositor* comp = milktea::new_compositor(self.width, self.height);
-	comp.add_layer(footer);
-	comp.add_layer(card_a);
-	comp.add_layer(card_b);
+	// Track terminal size and re-sort layers after the z changes.
+	self.comp.width = self.width;
+	self.comp.height = self.height;
+	self.comp.refresh();
 
-	return comp.render();
+	return self.comp.render();
 }
 
 fn int main() {
