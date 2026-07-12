@@ -22,10 +22,20 @@ fn float Vec3.dist_sq(Vec3 a, Vec3 b) {
 	return dx * dx + dy * dy + dz * dz;
 }
 
+// Block type determines visual appearance via procedural textures.
+enum BlockType : char {
+	GRASS,
+	DIRT,
+	WOOD,
+	LEAF,
+	STONE,
+}
+
 struct Block {
 	int x, y, z;
 	char r, g, b;
 	bool active;
+	BlockType btype;
 }
 
 struct Pixel {
@@ -41,6 +51,11 @@ struct BlockFace {
 	Vec3 tan_u;
 	Vec3 tan_v;
 	char r, g, b;
+	// Block world position for texel hashing
+	int bx, by, bz;
+	// Face normal index 0-5 (+x,-x,+y,-y,+z,-z) for hash variation
+	int face_idx;
+	BlockType btype;
 }
 
 struct Minecraft {
@@ -53,6 +68,15 @@ struct Minecraft {
 	// Camera
 	float cam_x, cam_y, cam_z;
 	float yaw, pitch;
+
+	// Velocity-based movement: impulse on keypress, damped each tick.
+	// Top speed tuned so it matches the old 0.25/tick feel at steady state:
+	// impulse 0.35, damping 0.80 → steady state ≈ 0.35/(1-0.80) = 1.75/tick
+	// which is too fast, so we scale impulse down to reach ~0.25/tick:
+	// 0.05/(1-0.80) = 0.25 — use impulse=0.05, damp=0.80.
+	float vel_x, vel_z;
+	// Angular velocity for arrow-key yaw (optional smooth turning).
+	float vel_yaw;
 
 	// Viewport
 	int width, height;
@@ -71,9 +95,6 @@ struct Minecraft {
 	int mouse_x, mouse_y;
 	bool mouse_init;
 
-	// Input state
-	int key_w, key_s, key_a, key_d, key_left, key_right;
-
 	// Dirty flag: rebuild faces only when world changes
 	bool world_dirty;
 }
@@ -82,34 +103,75 @@ struct Minecraft {
 
 fn void Minecraft.generate_island(Minecraft* self) {
 	self.block_count = 0;
-	// Ground (Sand/Grass)
+	// Ground (Grass top layer, Dirt below)
 	for (int x = -5; x <= 5; x++) {
 		for (int z = -5; z <= 5; z++) {
 			float d = (float)math::sqrt((float)(x * x + z * z));
 			if (d > 5.5f) continue;
 
 			// Grass top
-			self.add_block(x, 0, z, 100, 180, 50);
+			self.add_block_typed(x, 0, z, BlockType.GRASS);
 			// Dirt below
-			self.add_block(x, -1, z, 100, 70, 30);
+			self.add_block_typed(x, -1, z, BlockType.DIRT);
 		}
 	}
-	// A tree
-	for (int y = 1; y <= 3; y++) self.add_block(0, y, 0, 120, 90, 60); // Trunk
+	// A tree: wood trunk, leaf canopy
+	for (int y = 1; y <= 3; y++) self.add_block_typed(0, y, 0, BlockType.WOOD);
 	for (int ox = -2; ox <= 2; ox++) {
 		for (int oz = -2; oz <= 2; oz++) {
 			for (int oy = 4; oy <= 5; oy++) {
 				float d = (float)math::sqrt((float)(ox * ox + oz * oz));
 				if (d > 2.2f) continue;
-				self.add_block(ox, oy, oz, 40, 150, 40); // Leaves
+				self.add_block_typed(ox, oy, oz, BlockType.LEAF);
 			}
 		}
 	}
 }
 
+// base_color_for_face returns the RGB triple for a block type given its face
+// normal index (0=+x,1=-x,2=+y,3=-y,4=+z,5=-z).
+macro void base_color_for_face(BlockType btype, int face_idx, char* r, char* g, char* b) {
+	switch (btype) {
+		case BlockType.GRASS:
+			// Top (+y) is grass green; bottom is dirt; sides are dirt with a
+			// thin green strip handled per-pixel via v coordinate.
+			if (face_idx == 2) {
+				// +y: grass top
+				*r = 80; *g = 160; *b = 50;
+			} else if (face_idx == 3) {
+				// -y: dirt bottom
+				*r = 110; *g = 75; *b = 30;
+			} else {
+				// sides: base dirt color; green strip added per-pixel
+				*r = 110; *g = 75; *b = 30;
+			}
+		case BlockType.DIRT:
+			*r = 110; *g = 75; *b = 30;
+		case BlockType.WOOD:
+			if (face_idx == 2 || face_idx == 3) {
+				// Top/bottom: wood rings (yellowish)
+				*r = 180; *g = 140; *b = 80;
+			} else {
+				// Sides: bark brown
+				*r = 120; *g = 80; *b = 45;
+			}
+		case BlockType.LEAF:
+			*r = 40; *g = 140; *b = 40;
+		case BlockType.STONE:
+			*r = 128; *g = 128; *b = 128;
+	}
+}
+
+fn void Minecraft.add_block_typed(Minecraft* self, int x, int y, int z, BlockType btype) {
+	if (self.block_count >= MAX_BLOCKS) return;
+	char r, g, b;
+	base_color_for_face(btype, 0, &r, &g, &b); // placeholder, not used for render
+	self.blocks[self.block_count++] = { x, y, z, r, g, b, true, btype };
+}
+
 fn void Minecraft.add_block(Minecraft* self, int x, int y, int z, char r, char g, char b) {
 	if (self.block_count >= MAX_BLOCKS) return;
-	self.blocks[self.block_count++] = { x, y, z, r, g, b, true };
+	self.blocks[self.block_count++] = { x, y, z, r, g, b, true, BlockType.STONE };
 }
 
 // ── Tea Methods ──────────────────────────────────────────────────────────────
@@ -122,6 +184,9 @@ fn milktea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.cam_z = -12;
 	self.yaw = 0;
 	self.pitch = 0;
+	self.vel_x = 0;
+	self.vel_z = 0;
+	self.vel_yaw = 0;
 	self.mouse_init = false;
 	self.world_dirty = true;
 	self.generate_island();
@@ -152,12 +217,27 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		milktea::KeyMsg k = msg.key;
 		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
 
+		// Movement: add impulse to velocity each keypress/repeat.
+		// Convention: forward F = (sin yaw, 0, cos yaw), right R = (cos yaw, 0, -sin yaw).
+		// Impulse tuned so steady-state speed (impulse / (1 - damp)) ≈ 0.25/tick.
+		// impulse=0.05, damp=0.80 → 0.05/0.20 = 0.25/tick. ✓
+		float impulse = 0.05f;
 		if (k.code == milktea::KeyCode.RUNE) {
 			switch (k.rune) {
-				case 'w': self.key_w = self.tick_count;
-				case 's': self.key_s = self.tick_count;
-				case 'a': self.key_a = self.tick_count;
-				case 'd': self.key_d = self.tick_count;
+				case 'w':
+					self.vel_x += (float)math::sin(self.yaw) * impulse;
+					self.vel_z += (float)math::cos(self.yaw) * impulse;
+				case 's':
+					self.vel_x -= (float)math::sin(self.yaw) * impulse;
+					self.vel_z -= (float)math::cos(self.yaw) * impulse;
+				case 'a':
+					// Strafe left: -R = (-cos yaw, 0, +sin yaw)
+					self.vel_x -= (float)math::cos(self.yaw) * impulse;
+					self.vel_z += (float)math::sin(self.yaw) * impulse;
+				case 'd':
+					// Strafe right: +R = (+cos yaw, 0, -sin yaw)
+					self.vel_x += (float)math::cos(self.yaw) * impulse;
+					self.vel_z -= (float)math::sin(self.yaw) * impulse;
 				case ' ':
 					self.swing_frame = 10;
 					self.mine_block();
@@ -166,8 +246,10 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 					self.place_block();
 			}
 		}
-		if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
-		if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
+		// Arrow keys: angular velocity for smooth rotation.
+		// damp=0.75 → steady state = 0.015/0.25 = 0.06 rad/tick.
+		if (k.code == milktea::KeyCode.LEFT)  self.vel_yaw -= 0.015f;
+		if (k.code == milktea::KeyCode.RIGHT) self.vel_yaw += 0.015f;
 	}
 
 	if (msg.kind == milktea::MsgKind.MOUSE) {
@@ -179,6 +261,8 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 			if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
 				int dx = msg.mouse.col - self.mouse_x;
 				int dy = msg.mouse.row - self.mouse_y;
+				// yaw += dx*sens: mouse-right (dx>0) increases yaw, turning right
+				// because with F=(sin,cos), dF/dyaw = (cos,-sin) = R — consistent. ✓
 				self.yaw += (float)dx * 0.05f;
 				self.pitch -= (float)dy * 0.05f;
 				if (self.pitch > 1.4f) self.pitch = 1.4f;
@@ -201,28 +285,17 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		self.frame++;
 		if (self.swing_frame > 0) self.swing_frame--;
 
-		float speed     = 0.25f;
-		float rot_speed = 0.08f;
-		int thresh      = self.tick_count - 2;
+		// Integrate velocity and apply damping each tick so motion smoothly
+		// accelerates on key-hold (via OS key-repeat) and decelerates on release.
+		float damp = 0.80f;
+		self.cam_x += self.vel_x;
+		self.cam_z += self.vel_z;
+		self.vel_x *= damp;
+		self.vel_z *= damp;
 
-		if (self.key_w >= thresh) {
-			self.cam_x += (float)math::sin(self.yaw) * speed;
-			self.cam_z += (float)math::cos(self.yaw) * speed;
-		}
-		if (self.key_s >= thresh) {
-			self.cam_x -= (float)math::sin(self.yaw) * speed;
-			self.cam_z -= (float)math::cos(self.yaw) * speed;
-		}
-		if (self.key_a >= thresh) {
-			self.cam_x -= (float)math::cos(self.yaw) * speed;
-			self.cam_z += (float)math::sin(self.yaw) * speed;
-		}
-		if (self.key_d >= thresh) {
-			self.cam_x += (float)math::cos(self.yaw) * speed;
-			self.cam_z -= (float)math::sin(self.yaw) * speed;
-		}
-		if (self.key_left >= thresh) self.yaw -= rot_speed;
-		if (self.key_right >= thresh) self.yaw += rot_speed;
+		// Angular velocity for arrow-key turning, damped a bit tighter.
+		self.yaw += self.vel_yaw;
+		self.vel_yaw *= 0.75f;
 
 		return milktea::tick();
 	}
@@ -233,8 +306,10 @@ fn void Minecraft.mine_block(Minecraft* self) {
 	float best_dist = 4.5f;
 	int target      = -1;
 	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
+	// Forward ray: F = (sin yaw, 0, cos yaw) in horizontal plane, pitched up/down.
+	// fwd_y = +sin(pitch): positive pitch means looking up, fwd_y > 0. ✓
 	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
-	float fwd_y     = -(float)math::sin(self.pitch);
+	float fwd_y     = (float)math::sin(self.pitch);
 	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
 
 	for (int i = 0; i < self.block_count; i++) {
@@ -271,7 +346,7 @@ fn void Minecraft.place_block(Minecraft* self) {
 	int target      = -1;
 	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
 	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
-	float fwd_y     = -(float)math::sin(self.pitch);
+	float fwd_y     = (float)math::sin(self.pitch);
 	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
 
 	for (int i = 0; i < self.block_count; i++) {
@@ -328,8 +403,8 @@ fn void Minecraft.place_block(Minecraft* self) {
 		if (self.blocks[i].x == px && self.blocks[i].y == py && self.blocks[i].z == pz) return;
 	}
 
-	// Stone color
-	self.add_block(px, py, pz, 128, 128, 128);
+	// Placed blocks are always stone
+	self.add_block_typed(px, py, pz, BlockType.STONE);
 	self.world_dirty = true;
 }
 
@@ -359,26 +434,43 @@ fn void Minecraft.collect_faces(Minecraft* self) {
 		}
 
 		float h = 0.5f;
-		if (!has_px) self.push_face(b, vec3(0.5, 0, 0), vec3(1, 0, 0), vec3(0, 0, h), vec3(0, h, 0));
-		if (!has_nx) self.push_face(b, vec3(-0.5, 0, 0), vec3(-1, 0, 0), vec3(0, 0, h), vec3(0, h, 0));
-		if (!has_py) self.push_face(b, vec3(0, 0.5, 0), vec3(0, 1, 0), vec3(h, 0, 0), vec3(0, 0, h));
-		if (!has_ny) self.push_face(b, vec3(0, -0.5, 0), vec3(0, -1, 0), vec3(h, 0, 0), vec3(0, 0, h));
-		if (!has_pz) self.push_face(b, vec3(0, 0, 0.5), vec3(0, 0, 1), vec3(h, 0, 0), vec3(0, h, 0));
-		if (!has_nz) self.push_face(b, vec3(0, 0, -0.5), vec3(0, 0, -1), vec3(h, 0, 0), vec3(0, h, 0));
+		if (!has_px) self.push_face(b, vec3(0.5, 0, 0),  vec3(1, 0, 0),  vec3(0, 0, h), vec3(0, h, 0), 0);
+		if (!has_nx) self.push_face(b, vec3(-0.5, 0, 0), vec3(-1, 0, 0), vec3(0, 0, h), vec3(0, h, 0), 1);
+		if (!has_py) self.push_face(b, vec3(0, 0.5, 0),  vec3(0, 1, 0),  vec3(h, 0, 0), vec3(0, 0, h), 2);
+		if (!has_ny) self.push_face(b, vec3(0, -0.5, 0), vec3(0, -1, 0), vec3(h, 0, 0), vec3(0, 0, h), 3);
+		if (!has_pz) self.push_face(b, vec3(0, 0, 0.5),  vec3(0, 0, 1),  vec3(h, 0, 0), vec3(0, h, 0), 4);
+		if (!has_nz) self.push_face(b, vec3(0, 0, -0.5), vec3(0, 0, -1), vec3(h, 0, 0), vec3(0, h, 0), 5);
 	}
 }
 
-fn void Minecraft.push_face(Minecraft* self, Block* b, Vec3 rel_pos, Vec3 normal, Vec3 tu, Vec3 tv) {
+fn void Minecraft.push_face(Minecraft* self, Block* b, Vec3 rel_pos, Vec3 normal, Vec3 tu, Vec3 tv, int face_idx) {
 	if (self.face_count >= MAX_BLOCKS * 6) return;
+	char r, g, b_col;
+	base_color_for_face(b.btype, face_idx, &r, &g, &b_col);
 	self.faces[self.face_count++] = {
 		.pos = vec3((float)b.x + rel_pos.x, (float)b.y + rel_pos.y, (float)b.z + rel_pos.z),
 		.normal = normal,
 		.tan_u = tu,
 		.tan_v = tv,
-		.r = b.r,
-		.g = b.g,
-		.b = b.b
+		.r = r,
+		.g = g,
+		.b = b_col,
+		.bx = b.x,
+		.by = b.y,
+		.bz = b.z,
+		.face_idx = face_idx,
+		.btype = b.btype,
 	};
+}
+
+// tex_hash returns a cheap 0-255 integer hash of the given inputs for texel
+// brightness variation. Uses a Knuth-style multiplicative mix.
+macro int tex_hash(int a, int b, int c, int d, int e, int f) {
+	int h = a * 1664525 + b * 22695477 + c * 1013904223
+	      + d * 214013  + e * 6364136  + f * 1664525;
+	h ^= (h >> 16);
+	h &= 0xFF;
+	return h;
 }
 
 fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
@@ -416,14 +508,30 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		}
 	}
 
-	float cos_yaw   = (float)math::cos(-self.yaw);
-	float sin_yaw   = (float)math::sin(-self.yaw);
-	float cos_pitch = (float)math::cos(-self.pitch);
-	float sin_pitch = (float)math::sin(-self.pitch);
+	// Camera rotation matrices.
+	// Convention: forward F = (sin yaw, 0, cos yaw), right R = (cos yaw, 0, -sin yaw).
+	// With cos_yaw=cos(yaw), sin_yaw=sin(yaw):
+	//   rx = cos_yaw*vx - sin_yaw*vz  = dot(v, R.xz component)
+	//   rz = sin_yaw*vx + cos_yaw*vz  = dot(v, F.xz component)
+	// Verified: block straight ahead (along F) maps to rx≈0, rz≈dist. ✓
+	// Verified: block to the right (along R) maps to rx>0. ✓
+	float cos_yaw   = (float)math::cos(self.yaw);
+	float sin_yaw   = (float)math::sin(self.yaw);
+
+	// Pitch rotation: standard right-hand rotation around X axis.
+	// ry = cos_pitch*vy - sin_pitch*rz1;  rz = sin_pitch*vy + cos_pitch*rz1
+	// (equivalent to the old double-negated form, made explicit to avoid confusion)
+	float cos_pitch = (float)math::cos(self.pitch);
+	float sin_pitch = (float)math::sin(self.pitch);
 
 	float light_x =  0.577f;
 	float light_y =  0.577f;
 	float light_z = -0.577f;
+
+	// Sky/horizon color for distance fog blending
+	float sky_r = 175.0f;
+	float sky_g = 210.0f;
+	float sky_b = 255.0f;
 
 	for (int i = 0; i < self.face_count; i++) {
 		BlockFace* f = &self.faces[i];
@@ -435,36 +543,35 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 
 		float rx1 =  cos_yaw * vx - sin_yaw * vz;
 		float rz1 =  sin_yaw * vx + cos_yaw * vz;
-		float ry  =  cos_pitch * vy + sin_pitch * rz1;
-		float rz  = -sin_pitch * vy + cos_pitch * rz1;
-		// rx1 is the camera-space X of the face center (used below as p0x)
+		float ry  =  cos_pitch * vy - sin_pitch * rz1;
+		float rz  =  sin_pitch * vy + cos_pitch * rz1;
 
 		// Rotate normal into camera space for back-face culling
 		float nx1 = cos_yaw * f.normal.x - sin_yaw * f.normal.z;
 		float ny1 = f.normal.y;
 		float nz1 = sin_yaw * f.normal.x + cos_yaw * f.normal.z;
 
-		float n_ry =  cos_pitch * ny1 + sin_pitch * nz1;
-		float n_rz = -sin_pitch * ny1 + cos_pitch * nz1;
+		float n_ry =  cos_pitch * ny1 - sin_pitch * nz1;
+		float n_rz =  sin_pitch * ny1 + cos_pitch * nz1;
 
 		// Cull faces pointing away from the camera in camera space
 		if (n_rz > 0.0f) continue;
 
-		// Rotate half-tangent vectors into camera space
+		// Rotate half-tangent vectors into camera space (same rotation as above)
 		Vec3 tu     =  f.tan_u;
 		float tux1  =  cos_yaw * tu.x - sin_yaw * tu.z;
 		float tuz1  =  sin_yaw * tu.x + cos_yaw * tu.z;
 		float tu_rx =  tux1;
-		float tu_ry =  cos_pitch * tu.y + sin_pitch * tuz1;
-		float tu_rz = -sin_pitch * tu.y + cos_pitch * tuz1;
+		float tu_ry =  cos_pitch * tu.y - sin_pitch * tuz1;
+		float tu_rz =  sin_pitch * tu.y + cos_pitch * tuz1;
 		tu = { tu_rx, tu_ry, tu_rz };
 
 		Vec3 tv     =  f.tan_v;
 		float tvx1  =  cos_yaw * tv.x - sin_yaw * tv.z;
 		float tvz1  =  sin_yaw * tv.x + cos_yaw * tv.z;
 		float tv_rx =  tvx1;
-		float tv_ry =  cos_pitch * tv.y + sin_pitch * tvz1;
-		float tv_rz = -sin_pitch * tv.y + cos_pitch * tvz1;
+		float tv_ry =  cos_pitch * tv.y - sin_pitch * tvz1;
+		float tv_rz =  sin_pitch * tv.y + cos_pitch * tvz1;
 		tv = { tv_rx, tv_ry, tv_rz };
 
 		// Project all four corners to screen space to find bbox.
@@ -513,15 +620,10 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 			y1 = (int)max_sy;
 		}
 
-		// Lighting in world space (before camera rotation)
+		// Lighting in world space (before camera rotation): diffuse + ambient.
 		float diff = f.normal.x * light_x + f.normal.y * light_y + f.normal.z * light_z;
 		if (diff < 0.0f) diff = 0.0f;
 		float brightness = 0.25f + 0.75f * diff;
-		Pixel col = {
-			(char)((float)f.r * brightness),
-			(char)((float)f.g * brightness),
-			(char)((float)f.b * brightness)
-		};
 
 		// Precompute dot(TU,TU) and dot(TV,TV) for the tangent normalisation
 		// done inside the per-pixel loop — they are constant across the face.
@@ -531,9 +633,6 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		// Rotated normal (camera-space) components used for the plane equation
 		// dot(P0, N) where P0 = (rx1, ry, rz) is the face center in cam space.
 		float nx_r = nx1; // already computed above (yaw-rotated only)
-		// We need the fully pitch-rotated normal for the plane equation.
-		// n_ry and n_rz are the pitch-rotated Y/Z; nx1 is pitch-invariant for
-		// the yaw-rotated x component (pitch rotates Y and Z, not X).
 		// Full camera-space normal: (nx1, n_ry, n_rz)
 		float dot_p0n = rx1 * nx_r + ry * n_ry + rz * n_rz;
 
@@ -577,10 +676,78 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 
 				// Per-pixel depth test with H.z (actual intersection depth)
 				sz idx = (sz)(py * w + px);
-				if (hz < self.depth[idx]) {
-					self.depth[idx] = hz;
-					self.pixels[idx] = col;
+				if (hz >= self.depth[idx]) continue;
+				self.depth[idx] = hz;
+
+				// ── Procedural texture ────────────────────────────────────────
+				// Quantize u,v into a 4x4 texel grid per face (texels 0-3 each axis).
+				int tu_cell = (int)((u + 1.0f) * 2.0f); // 0..3
+				int tv_cell = (int)((v + 1.0f) * 2.0f);
+				if (tu_cell > 3) tu_cell = 3;
+				if (tv_cell > 3) tv_cell = 3;
+
+				int hash = tex_hash(f.bx, f.by, f.bz, f.face_idx, tu_cell, tv_cell);
+				// jitter in range [-12%, +12%] relative to base: hash 0-255 → -0.12..+0.12
+				float jitter = ((float)hash / 255.0f - 0.5f) * 0.24f;
+
+				// Base color for this face type; may be overridden per-pixel below.
+				char base_r = f.r;
+				char base_g = f.g;
+				char base_b = f.b;
+
+				// Per-block-type texture details at pixel level:
+				switch (f.btype) {
+					case BlockType.GRASS:
+						// Side faces: green strip on the top edge (v near 1.0 = top of face)
+						if (f.face_idx != 2 && f.face_idx != 3) {
+							// v ranges -1 (bottom) to +1 (top); green strip above 0.6
+							if (v > 0.6f) {
+								base_r = 80; base_g = 160; base_b = 50;
+							}
+						}
+					case BlockType.WOOD:
+						// Side faces: vertical stripe variation — hash on u cell only
+						if (f.face_idx != 2 && f.face_idx != 3) {
+							int stripe_hash = tex_hash(f.bx, f.by, f.bz, f.face_idx, tu_cell, 0);
+							float stripe_jitter = ((float)stripe_hash / 255.0f - 0.5f) * 0.18f;
+							// Override jitter for stripe effect; r/g/b unchanged
+							jitter = stripe_jitter;
+						}
+					case BlockType.LEAF:
+						// Punch occasional darker holes (transparency effect via darkening)
+						if (hash < 30) {
+							// Dark hole — strongly reduce brightness
+							jitter = -0.5f;
+						}
+					default: break;
 				}
+
+				// Apply brightness (diffuse) and texel jitter
+				float lit_r = (float)base_r * brightness * (1.0f + jitter);
+				float lit_g = (float)base_g * brightness * (1.0f + jitter);
+				float lit_b = (float)base_b * brightness * (1.0f + jitter);
+
+				// ── Distance fog ─────────────────────────────────────────────
+				// Blend toward sky color starting at t=8, fully fogged at t=38.
+				float fog_t = hz;
+				float fog = (fog_t - 8.0f) / 30.0f;
+				if (fog < 0.0f) fog = 0.0f;
+				if (fog > 0.85f) fog = 0.85f;
+
+				float final_r = lit_r * (1.0f - fog) + sky_r * fog;
+				float final_g = lit_g * (1.0f - fog) + sky_g * fog;
+				float final_b = lit_b * (1.0f - fog) + sky_b * fog;
+
+				// Clamp to [0,255]
+				if (final_r < 0.0f) final_r = 0.0f; if (final_r > 255.0f) final_r = 255.0f;
+				if (final_g < 0.0f) final_g = 0.0f; if (final_g > 255.0f) final_g = 255.0f;
+				if (final_b < 0.0f) final_b = 0.0f; if (final_b > 255.0f) final_b = 255.0f;
+
+				self.pixels[idx] = (Pixel) {
+					(char)(int)final_r,
+					(char)(int)final_g,
+					(char)(int)final_b
+				};
 			}
 		}
 	}
