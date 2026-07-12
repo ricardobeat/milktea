@@ -165,13 +165,7 @@
     },
     "examples/doom-fire-donut": {
       "type": "executable",
-      "sources": [
-        "milktea/**",
-        "glaze/**",
-        "examples/lib/glb.c3",
-        "examples/doom-fire-donut/**",
-        "examples/lib/stb_json.c3"
-      ],
+      "sources": ["milktea/**", "glaze/**", "examples/lib/glb.c3", "examples/doom-fire-donut/**", "examples/lib/stb_json.c3"],
       "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
       "strip-unused": true
@@ -290,13 +284,7 @@
     },
     "examples/glb-viewer": {
       "type": "executable",
-      "sources": [
-        "milktea/**",
-        "glaze/**",
-        "examples/lib/glb.c3",
-        "examples/lib/stb_json.c3",
-        "examples/glb-viewer/**"
-      ],
+      "sources": ["milktea/**", "glaze/**", "examples/lib/glb.c3", "examples/lib/stb_json.c3", "examples/glb-viewer/**"],
       "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
       "strip-unused": true
@@ -345,13 +333,7 @@
     },
     "examples/oiia-player": {
       "type": "executable",
-      "sources": [
-        "milktea/**",
-        "glaze/**",
-        "examples/oiia-player/**",
-        "examples/lib/stb_image.c3",
-        "examples/lib/stb_json.c3"
-      ],
+      "sources": ["milktea/**", "glaze/**", "examples/oiia-player/**", "examples/lib/stb_image.c3", "examples/lib/stb_json.c3"],
       "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_image_impl.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
       "strip-unused": true
@@ -359,15 +341,7 @@
     "examples/taro": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "xray/**", "boba/**", "taro/**", "examples/taro/**"],
-      "c-sources": [
-        "milktea/tty_winsize.c",
-        "taro/taro.c",
-        "vendor/quickjs/quickjs.c",
-        "vendor/quickjs/cutils.c",
-        "vendor/quickjs/libregexp.c",
-        "vendor/quickjs/libunicode.c",
-        "vendor/quickjs/dtoa.c"
-      ],
+      "c-sources": ["milktea/tty_winsize.c", "taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
       "opt": "Os",
       "linked-libraries": ["curl"]
     }

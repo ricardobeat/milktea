@@ -22,3 +22,7 @@ examples:
 
 format:
     c3fmt --in-place .
+
+# Regenerate examples/* targets in project.json (edit scripts/gen_targets.py OVERRIDES first)
+gen-targets:
+    python3 scripts/gen_targets.py
