@@ -25,6 +25,10 @@ const String SHOW_CURSOR_SEQ = "\x1b[?25h";
 
 struct Renderer {
 	ScreenBuffer* screen;
+	// Scratch buffer reused across frames for alpha-overlay blending.
+	// Lazily allocated on first alpha overlay; resized when a larger overlay
+	// arrives; freed in destroy(). Never allocated for opaque-only frames.
+	ScreenBuffer* overlay_scratch;
 	WriteFn write_fn; // function to write bytes to terminal
 	Style pen_style; // current terminal SGR state
 	bool sync_supported; // terminal supports mode 2026
@@ -48,6 +52,12 @@ fn Renderer* new_renderer(sz width, sz height, WriteFn write_fn) {
 fn void Renderer.destroy(&self) {
 	self.screen.destroy();
 	mem::free(self.screen);
+	// Free the alpha-overlay scratch buffer only if it was ever allocated.
+	if (self.overlay_scratch != null) {
+		self.overlay_scratch.destroy();
+		mem::free(self.overlay_scratch);
+		self.overlay_scratch = null;
+	}
 }
 
 // resize changes the renderer dimensions.
