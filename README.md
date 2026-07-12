@@ -362,6 +362,30 @@ if (msg.kind == milktea::MsgKind.MOUSE) {
 
 ---
 
+## Paste support
+
+Bracketed paste mode (terminal mode 2004) is enabled automatically when your program starts. When the user pastes text, the terminal wraps it in `ESC[200~` … `ESC[201~` markers. milktea accumulates the raw bytes and delivers them as a single `MsgKind.PASTE` message — no matter how many characters, and regardless of embedded escape sequences.
+
+```c3
+if (msg.kind == milktea::MsgKind.PASTE) {
+    // msg.paste is a String valid only during this update() call.
+    // Copy it if you need it later.
+    self.text.insert_string(msg.paste);
+}
+```
+
+boba widgets accept paste via `handle_paste(String s)`:
+
+- `TextInput.handle_paste(s)` — inserts up to the first newline (single-line semantics).
+- `Textarea.handle_paste(s)` — inserts the text as-is, preserving newlines.
+
+```c3
+case milktea::MsgKind.PASTE:
+    self.input.handle_paste(msg.paste);
+```
+
+---
+
 ## View types
 
 | Function | When to use |

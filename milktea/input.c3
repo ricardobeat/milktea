@@ -380,7 +380,7 @@ fn ParseResult parse_key(char[] buf) {
 				return pr;
 			}
 
-			// Tilde sequences: PgUp, PgDn, Ins, Del, F-keys
+			// Tilde sequences: PgUp, PgDn, Ins, Del, F-keys, and bracketed paste markers.
 			if (fb == '~') {
 				int p1 = csi_param(csi, 0, 0);
 				switch (p1) {
@@ -400,6 +400,24 @@ fn ParseResult parse_key(char[] buf) {
 					case 21: return make_key(F10, 0, false, false, false, total);
 					case 23: return make_key(F11, 0, false, false, false, total);
 					case 24: return make_key(F12, 0, false, false, false, total);
+					// Bracketed paste markers — returned as internal sentinels consumed
+					// by Program.run(); never forwarded to model.update().
+					case 200: {
+						ParseResult pr;
+						pr.kind     = MsgKind.PASTE_START;
+						pr.key      = { NONE, 0, false, false, false };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+						pr.consumed = total;
+						return pr;
+					}
+					case 201: {
+						ParseResult pr;
+						pr.kind     = MsgKind.PASTE_END;
+						pr.key      = { NONE, 0, false, false, false };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+						pr.consumed = total;
+						return pr;
+					}
 					default: return make_key(NONE, 0, false, false, false, total);
 				}
 			}

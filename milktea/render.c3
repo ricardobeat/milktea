@@ -9,6 +9,10 @@ const String SGR_ALT_OFF          = "\x1b[?1049l";
 const String SGR_CLEAR_HOME       = "\x1b[H\x1b[2J";
 const String SGR_FOCUS_ON         = "\x1b[?1004h";
 const String SGR_FOCUS_OFF        = "\x1b[?1004l";
+// Bracketed paste mode (XTerm mode 2004): wraps pasted text in ESC[200~ ... ESC[201~
+// so pasted ESC sequences are never misinterpreted as key sequences.
+const String SGR_PASTE_ON         = "\x1b[?2004h";
+const String SGR_PASTE_OFF        = "\x1b[?2004l";
 const String SGR_MOUSE_SGR_ON     = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
 const String SGR_MOUSE_SGR_OFF    = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
 const String SGR_MOUSE_ALL_ON     = "\x1b[?1003h\x1b[?1006h";
@@ -110,6 +114,12 @@ fn void enable_focus() {
 }
 fn void disable_focus() {
 	write_stdout((char[])SGR_FOCUS_OFF);
+}
+fn void enable_bracketed_paste() {
+	write_stdout((char[])SGR_PASTE_ON);
+}
+fn void disable_bracketed_paste() {
+	write_stdout((char[])SGR_PASTE_OFF);
 }
 
 fn void enable_mouse(bool all_motion = false) {
