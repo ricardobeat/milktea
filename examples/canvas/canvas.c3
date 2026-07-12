@@ -56,8 +56,10 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 
 	// Lazily build the layer tree on the first frame; reuse it afterwards.
 	if (self.comp == null) {
-		self.card_a = milktea::new_layer("");
-		self.card_b = milktea::new_layer("").set_x(10).set_y(2);
+		// Opaque: the cards keep the terminal's default background but
+		// still fully occlude whatever is underneath them.
+		self.card_a = milktea::new_layer("").set_opaque();
+		self.card_b = milktea::new_layer("").set_x(10).set_y(2).set_opaque();
 		self.footer = milktea::new_layer("");
 		self.comp = milktea::new_compositor(self.width, self.height);
 		self.comp.add_layer(self.footer);
@@ -66,14 +68,9 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	}
 
 	// Cards: Width(20) Height(10) with rounded border, centered content
-	// The background fill matters: the compositor treats unstyled space
-	// cells as transparent, so without an explicit background the lower
-	// card would show through this card's interior.
 	glaze::Style card_style = glaze::style().width(20).height(10)
 		.border(glaze::rounded_border())
 		.border_fg(glaze::color_hex("#7c3aed"))
-		.border_bg(glaze::color_hex("#1e1e2e"))
-		.background(glaze::color_hex("#1e1e2e"))
 		.foreground(glaze::color_hex("#ffffff"))
 		.bold(true);
 

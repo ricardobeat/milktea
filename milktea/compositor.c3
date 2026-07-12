@@ -15,6 +15,11 @@ struct Layer {
 	int x;
 	int y;
 	int z;
+	// opaque: when true, every cell in this layer's bounds overwrites what's
+	// below — including unstyled space cells, which are otherwise treated as
+	// transparent. Use for panels that should show the terminal's default
+	// background while still occluding lower layers.
+	bool opaque;
 	Layer*[MAX_CHILDREN] children;
 	sz child_count;
 }
@@ -47,6 +52,11 @@ fn Layer* Layer.set_z(Layer* self, int z) {
 
 fn Layer* Layer.set_id(Layer* self, String id) {
 	self.id = id;
+	return self;
+}
+
+fn Layer* Layer.set_opaque(Layer* self, bool on = true) {
+	self.opaque = on;
 	return self;
 }
 
@@ -209,17 +219,39 @@ fn void compositor_draw_layer(xray::Cell* grid, int canvas_w, int canvas_h, Comp
 	}
 	tmp.render_ansi_string(0, 0, content, xray::default_style());
 
+	// For opaque layers, overwrite the full bounding box of the rendered
+	// content (so interior default-background cells occlude lower layers)
+	// — but never the untouched scratch area beyond it, which extends to
+	// the canvas edge. Find the content extents first.
+	int content_h = avail_h;
+	int content_w = avail_w;
+	if (e.layer.opaque) {
+		content_h = 0;
+		content_w = 0;
+		for (int r = 0; r < avail_h; r++) {
+			for (int c = 0; c < avail_w; c++) {
+				xray::Cell* cell = &tmp.cells[(sz)r * (sz)avail_w + (sz)c];
+				if (cell.content_len == 1 && cell.content[0] == ' ' && cell.style.is_empty()) continue;
+				if (r + 1 > content_h) content_h = r + 1;
+				if (c + 1 > content_w) content_w = c + 1;
+			}
+		}
+	}
+
 	// Copy written cells into the output grid.
-	for (int r = 0; r < avail_h; r++) {
+	for (int r = 0; r < content_h; r++) {
 		int dst_row = abs_y + r;
 		if (dst_row < 0 || dst_row >= canvas_h) continue;
-		for (int c = 0; c < avail_w; c++) {
+		for (int c = 0; c < content_w; c++) {
 			int dst_col = abs_x + c;
 			if (dst_col < 0 || dst_col >= canvas_w) continue;
 			xray::Cell src = tmp.cells[(sz)r * (sz)avail_w + (sz)c];
 			// Skip unwritten cells (empty space with no style) so lower
-			// layers show through transparent regions.
-			if (src.content_len == 1 && src.content[0] == ' ' && src.style.is_empty()) continue;
+			// layers show through transparent regions — unless the layer is
+			// opaque, in which case default-background cells inside the
+			// content bounding box overwrite too.
+			if (!e.layer.opaque
+				&& src.content_len == 1 && src.content[0] == ' ' && src.style.is_empty()) continue;
 			grid[(sz)dst_row * (sz)canvas_w + (sz)dst_col] = src;
 		}
 	}
