@@ -384,6 +384,10 @@ case milktea::MsgKind.PASTE:
     self.input.handle_paste(msg.paste);
 ```
 
+## Keyboard protocol
+
+milktea automatically pushes the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) (progressive enhancement flag 1, "disambiguate escape codes") when your program starts, and pops it on exit. On supporting terminals (kitty, ghostty, WezTerm, and others) this disambiguates previously-ambiguous key sequences — most notably, a bare `ESC` keypress arrives instantly as a distinct event instead of being held for 50ms to rule out an escape sequence. All other terminals silently ignore the push/pop sequences, so the protocol degrades gracefully with no capability query needed.
+
 ---
 
 ## View types

@@ -122,6 +122,24 @@ fn void disable_bracketed_paste() {
 	write_stdout((char[])SGR_PASTE_OFF);
 }
 
+// Kitty keyboard protocol (https://sw.kovidgoyal.net/kitty/keyboard-protocol/).
+// Flag 1 = "disambiguate escape codes": functional keys that would otherwise be
+// ambiguous are sent as CSI u sequences. Plain printable keys without modifiers
+// still arrive as regular bytes, so this is safe to push unconditionally — terminals
+// that do not support the protocol silently ignore the push/pop sequences.
+//
+// CSI > 1 u  — push progressive enhancement, flag 1
+// CSI < u    — pop (restore the previous flags layer)
+const String SGR_KITTY_KBD_ON  = "\x1b[>1u";
+const String SGR_KITTY_KBD_OFF = "\x1b[<u";
+
+fn void enable_kitty_keyboard() {
+	write_stdout((char[])SGR_KITTY_KBD_ON);
+}
+fn void disable_kitty_keyboard() {
+	write_stdout((char[])SGR_KITTY_KBD_OFF);
+}
+
 fn void enable_mouse(bool all_motion = false) {
 	write_stdout((char[])(all_motion ? SGR_MOUSE_ALL_ON : SGR_MOUSE_SGR_ON));
 }
