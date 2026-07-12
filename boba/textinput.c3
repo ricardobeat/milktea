@@ -155,6 +155,25 @@ fn bool TextInput.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
+// handle_paste inserts pasted text at the cursor.
+// TextInput is a single-line widget: paste is truncated at the first newline
+// character (\n or \r) so that multi-line pastes never corrupt the buffer.
+// The caller is responsible for holding the paste String alive during this call
+// (no copy is made here beyond what insert_string stores byte-by-byte).
+fn void TextInput.handle_paste(&self, String s) {
+	// Find end of first line; single-line semantics — stop before any newline.
+	sz end = s.len;
+	for (sz i = 0; i < s.len; i++) {
+		if (s[i] == '\n' || s[i] == '\r') {
+			end = i;
+			break;
+		}
+	}
+	if (end > 0) {
+		self.insert_string(s[:end]);
+	}
+}
+
 // view returns the rendered text input string.
 fn String TextInput.view(&self) {
 	String display = self.display_text();

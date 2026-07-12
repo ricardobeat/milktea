@@ -292,6 +292,25 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
+// handle_paste inserts pasted text at the cursor, including newlines.
+// Each character (including \n) is fed through the existing insert() path
+// so cursor_row and cursor_col stay correctly updated.
+// \r\n sequences are normalised to a single \n (common from some terminals).
+fn void Textarea.handle_paste(&self, String s) {
+	sz i = 0;
+	while (i < s.len) {
+		char c = s[i];
+		if (c == '\r') {
+			// Convert \r\n → \n; lone \r → \n for consistency.
+			self.insert('\n');
+			if (i + 1 < s.len && s[i + 1] == '\n') i++; // skip the paired \n
+		} else {
+			self.insert(c);
+		}
+		i++;
+	}
+}
+
 // line_count returns the number of lines in the content.
 fn int Textarea.line_count(&self) {
 	if (self.len == 0) return 1;

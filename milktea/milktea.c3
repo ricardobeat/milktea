@@ -2,6 +2,7 @@ module milktea;
 
 import std::core::dstring;
 import std::core::mem;
+import std::core::mem::allocators;
 import std::thread;
 import std::atomic;
 import std::time;
@@ -205,6 +206,14 @@ enum MsgKind : char {
 	QUIT,
 	TICK,
 	USER,
+	// PASTE carries the complete text of one bracketed paste (mode 2004).
+	// Ordinal 9 — appended after USER so existing ordinals are unchanged.
+	PASTE,
+	// PASTE_START / PASTE_END are internal-only sentinels produced by parse_key
+	// when it recognises the ESC[200~ / ESC[201~ bracketed-paste markers.
+	// They are consumed in Program.run() and never forwarded to model.update().
+	PASTE_START,
+	PASTE_END,
 }
 
 struct WindowSizeMsg {
@@ -220,6 +229,11 @@ struct Msg {
 	int tag;
 	void* user;
 	void* owner;
+	// paste holds the raw pasted text for MsgKind.PASTE messages.
+	// Lifetime: valid only during the dispatch() call that delivers it —
+	// the string is a view into paste_buf which is cleared immediately after
+	// dispatch returns. Do not store it; copy if the model needs it later.
+	String paste;
 }
 
 // Cmd: function pointer producing a Msg. A null Cmd means "no command".
@@ -292,7 +306,13 @@ struct Program {
 	// Last rendered content height (rows), for clean exit in inline (non-alt-screen) mode.
 	sz last_content_rows;
 
-	
+	// Bracketed paste accumulation state.
+	// in_paste is true while ESC[200~ has been seen but ESC[201~ has not yet arrived.
+	// paste_buf accumulates raw paste bytes across multiple read() calls.
+	// Heap-allocated and persistent (the temp allocator doesn't survive loop iterations).
+	// Initialised inside run(); freed in the cleanup defer.
+	bool in_paste;
+	DString paste_buf;
 }
 
 // File-scope input queue — not inside Program to avoid copies.
@@ -646,10 +666,15 @@ fn void? Program.run(Program* self) {
 	}
 
 	TtyState saved;
+	// Initialise paste accumulation buffer; freed in the cleanup defer.
+	self.in_paste = false;
+	self.paste_buf.init(&allocators::LIBC_ALLOCATOR, 256);
+
 	if (!self.test_mode) {
 		saved = raw_mode_enter()!;
 		hide_cursor();
 		enable_focus();
+		enable_bracketed_paste();
 		setup_signals(saved, &self.in_alt_screen);
 
 		// Start the reader thread so stdin reads never block the event loop.
@@ -660,6 +685,9 @@ fn void? Program.run(Program* self) {
 	// Defers live at function scope so they run after the event loop exits,
 	// not when the if-block above closes (C3 defer is block-scoped).
 	defer {
+		// Free the paste accumulation buffer regardless of test mode.
+		self.paste_buf.free();
+
 		if (!self.test_mode) {
 			if (self.renderer != null) {
 				self.renderer.destroy();
@@ -674,6 +702,7 @@ fn void? Program.run(Program* self) {
 			self.reader_thread.join();
 			input_queue_destroy(&g_input_queue);
 			disable_mouse();
+			disable_bracketed_paste();
 			disable_focus();
 			show_cursor();
 			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
@@ -818,7 +847,119 @@ fn void? Program.run(Program* self) {
 		while (reparse) {
 			reparse = false;
 			stuck   = false;
-			while (self.pending_len > 0) {
+
+			// ---- Paste accumulation ----
+			// While inside a bracketed paste, scan the pending buffer for the
+			// terminator ESC[201~ rather than running parse_key byte-by-byte.
+			// This ensures raw pasted bytes (including ESC sequences) are never
+			// misinterpreted as key events.
+			//
+			// The terminator is 6 bytes: \x1b [ 2 0 1 ~
+			// We may need to withhold the last 5 bytes (len-1 of the terminator)
+			// when a read ends mid-terminator so we can recognise it on the next read.
+			while (self.in_paste && self.pending_len > 0) {
+				// Safety cap: discard bytes beyond 1 MB of paste content.
+				// (1 MB = 1 048 576 bytes)
+				const sz PASTE_MAX = 1048576;
+				const char[] PASTE_TERM = "\x1b[201~";
+				const sz PASTE_TERM_LEN = 6; // \x1b [ 2 0 1 ~
+
+				// Scan for the terminator in pending.
+				// found = true and term_pos = byte offset when the terminator is present.
+				bool found = false;
+				sz term_pos = 0;
+				for (sz i = 0; i + PASTE_TERM_LEN <= self.pending_len; i++) {
+					bool match = true;
+					for (sz j = 0; j < PASTE_TERM_LEN; j++) {
+						if (self.pending[i + j] != PASTE_TERM[j]) {
+							match = false;
+							break;
+						}
+					}
+					if (match) {
+						term_pos = i;
+						found = true;
+						break;
+					}
+				}
+
+				if (found) {
+					// Found the terminator: append everything before it.
+					if (term_pos > 0) {
+						if (self.paste_buf.len() + term_pos <= PASTE_MAX) {
+							self.paste_buf.append_bytes(self.pending[:term_pos]);
+						} else {
+							debug_warn("bracketed paste exceeded 1 MB; bytes dropped");
+						}
+					}
+					// Consume bytes before + the terminator itself.
+					sz consume = term_pos + PASTE_TERM_LEN;
+					for (sz i = consume; i < self.pending_len; i++) {
+						self.pending[i - consume] = self.pending[i];
+					}
+					self.pending_len -= consume;
+
+					// Emit ONE PASTE message; str_view is valid during dispatch
+					// because paste_buf is not touched again until after return.
+					Msg pm;
+					pm.kind  = MsgKind.PASTE;
+					pm.paste = self.paste_buf.str_view();
+					if (dispatch(self, self.model, pm)) return;
+					dirty = true;
+
+					// Reset paste state.
+					self.paste_buf.clear();
+					self.in_paste = false;
+				} else {
+					// Terminator not (fully) in pending. Withhold the last
+					// (PASTE_TERM_LEN - 1) bytes in case they are a partial
+					// terminator prefix split across reads. But only withhold
+					// bytes that actually are a prefix of the terminator.
+					//
+					// Strategy: find the longest suffix of pending that is a
+					// prefix of the terminator, withhold exactly that many bytes.
+					sz safe = self.pending_len; // how many bytes we can safely consume
+					for (sz prefix_len = PASTE_TERM_LEN - 1; prefix_len >= 1; prefix_len--) {
+						// Check if the last prefix_len bytes of pending match
+						// the first prefix_len bytes of the terminator.
+						if (prefix_len > self.pending_len) continue;
+						sz start = self.pending_len - prefix_len;
+						bool match = true;
+						for (sz j = 0; j < prefix_len; j++) {
+							if (self.pending[start + j] != PASTE_TERM[j]) {
+								match = false;
+								break;
+							}
+						}
+						if (match) {
+							safe = start;
+							break;
+						}
+					}
+
+					// Append the safe portion to paste_buf.
+					if (safe > 0) {
+						if (self.paste_buf.len() + safe <= PASTE_MAX) {
+							self.paste_buf.append_bytes(self.pending[:safe]);
+						} else {
+							debug_warn("bracketed paste exceeded 1 MB; bytes dropped");
+							safe = self.pending_len; // consume all to make progress
+						}
+						for (sz i = safe; i < self.pending_len; i++) {
+							self.pending[i - safe] = self.pending[i];
+						}
+						self.pending_len -= safe;
+					} else {
+						// The entire pending buffer is a potential terminator prefix;
+						// leave it in place and wait for more input.
+						stuck = true;
+					}
+					break; // wait for more input in either case
+				}
+			}
+
+			// ---- Normal key parsing (only when not in paste mode) ----
+			while (!self.in_paste && self.pending_len > 0) {
 				ParseResult pr = parse_key(self.pending[:self.pending_len]);
 				if (pr.consumed == 0) {
 					stuck = true;
@@ -829,6 +970,22 @@ fn void? Program.run(Program* self) {
 					self.pending[i - pr.consumed] = self.pending[i];
 				}
 				self.pending_len -= pr.consumed;
+
+				if (pr.kind == MsgKind.PASTE_START) {
+					// Enter paste accumulation mode; inner loop above handles the rest.
+					if (self.in_paste) {
+						// Nested PASTE_START while already in paste — ignore gracefully.
+						debug_warn("bracketed paste: PASTE_START while already in paste mode; ignored");
+					} else {
+						self.in_paste = true;
+					}
+					reparse = true;
+					break; // switch to paste loop on next iteration
+				} else if (pr.kind == MsgKind.PASTE_END) {
+					// PASTE_END outside of paste — spurious, ignore.
+					debug_warn("bracketed paste: PASTE_END received outside of paste mode; ignored");
+					continue;
+				}
 
 				if (pr.key.code == KeyCode.NONE && pr.kind == MsgKind.KEY) continue;
 
@@ -853,7 +1010,8 @@ fn void? Program.run(Program* self) {
 			// ESC-hold: pending starts with an ambiguous lone ESC. Hold it
 			// briefly so the rest of a split escape sequence can arrive;
 			// on timeout, flush it as a real ESC key and re-parse the rest.
-			if (stuck && self.pending[0] == 0x1b) {
+			// Only applies when not in paste mode (in paste mode, bytes are raw).
+			if (!self.in_paste && stuck && self.pending_len > 0 && self.pending[0] == 0x1b) {
 				now = time_ms();
 				if (self.esc_deadline_ms == 0) self.esc_deadline_ms = now + ESC_HOLD_MS;
 				// In test mode, exhausted injected input means nothing more
@@ -872,7 +1030,7 @@ fn void? Program.run(Program* self) {
 					dirty   = true;
 					reparse = true;
 				}
-			} else {
+			} else if (!self.in_paste) {
 				self.esc_deadline_ms = 0;
 			}
 		}
