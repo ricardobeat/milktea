@@ -344,6 +344,13 @@
       "c-sources": ["milktea/tty_winsize.c", "taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
       "opt": "Os",
       "linked-libraries": ["curl"]
+    },
+    "examples/paste": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "examples/paste/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }

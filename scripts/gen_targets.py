@@ -47,6 +47,7 @@ QUICKJS_C_SOURCES = [
 #   linker_search_paths  - value for "linker-search-paths"
 OVERRIDES = {
     "component-viewer": {"extra_dirs": ["boba", "xray"]},
+    "paste": {"extra_dirs": ["boba", "xray"]},
     "split-editors": {"extra_dirs": ["xray"]},
     "clock": {"extra_dirs": ["xray"]},
     "paint": {"extra_dirs": ["xray"]},
