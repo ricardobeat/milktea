@@ -66,9 +66,14 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	}
 
 	// Cards: Width(20) Height(10) with rounded border, centered content
+	// The background fill matters: the compositor treats unstyled space
+	// cells as transparent, so without an explicit background the lower
+	// card would show through this card's interior.
 	glaze::Style card_style = glaze::style().width(20).height(10)
 		.border(glaze::rounded_border())
 		.border_fg(glaze::color_hex("#7c3aed"))
+		.border_bg(glaze::color_hex("#1e1e2e"))
+		.background(glaze::color_hex("#1e1e2e"))
 		.foreground(glaze::color_hex("#ffffff"))
 		.bold(true);
 
