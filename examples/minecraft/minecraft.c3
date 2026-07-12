@@ -33,7 +33,7 @@ struct Pixel {
 }
 
 const int MAX_BLOCKS = 1024;
-const int MAX_VOXELS = 32768; // Increased from 16384
+const int MAX_VOXELS = 32768;
 
 struct BlockFace {
 	Vec3 pos;
@@ -62,7 +62,6 @@ struct Minecraft {
 	xray::Cell[] cells;
 	Pixel[] pixels;
 	float[] depth;
-	Pixel[] prev_pixels;
 
 	// Game state
 	int tick_count;
@@ -74,6 +73,9 @@ struct Minecraft {
 
 	// Input state
 	int key_w, key_s, key_a, key_d, key_left, key_right;
+
+	// Dirty flag: rebuild faces only when world changes
+	bool world_dirty;
 }
 
 // ── World Generation ─────────────────────────────────────────────────────────
@@ -121,6 +123,7 @@ fn milktea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.yaw = 0;
 	self.pitch = 0;
 	self.mouse_init = false;
+	self.world_dirty = true;
 	self.generate_island();
 	self.allocate_buffers();
 	return milktea::tick();
@@ -130,7 +133,6 @@ fn void Minecraft.allocate_buffers(Minecraft* self) {
 	sz ptotal = (sz)(self.width * self.height * 2);
 	self.cells = mem::new_array(xray::Cell, (sz)(self.width * self.height));
 	self.pixels = mem::new_array(Pixel, ptotal);
-	self.prev_pixels = mem::new_array(Pixel, ptotal);
 	self.depth = mem::new_array(float, ptotal);
 }
 
@@ -141,7 +143,6 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
 		mem::free(self.pixels.ptr);
-		mem::free(self.prev_pixels.ptr);
 		mem::free(self.depth.ptr);
 		self.allocate_buffers();
 		return null;
@@ -160,6 +161,9 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 				case ' ':
 					self.swing_frame = 10;
 					self.mine_block();
+				case 'e':
+					// Place a stone block at the face adjacent to the targeted block
+					self.place_block();
 			}
 		}
 		if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
@@ -186,6 +190,9 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
 			self.swing_frame = 10;
 			self.mine_block();
+		}
+		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_RIGHT) {
+			self.place_block();
 		}
 	}
 
@@ -223,12 +230,12 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 }
 
 fn void Minecraft.mine_block(Minecraft* self) {
-	float best_dist =  4.5f;
+	float best_dist = 4.5f;
 	int target      = -1;
-	Vec3 cam_pos    =  { self.cam_x, self.cam_y, self.cam_z };
-	float fwd_x     =  (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
+	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
+	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
 	float fwd_y     = -(float)math::sin(self.pitch);
-	float fwd_z     =  (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
+	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
 
 	for (int i = 0; i < self.block_count; i++) {
 		if (!self.blocks[i].active) continue;
@@ -246,7 +253,84 @@ fn void Minecraft.mine_block(Minecraft* self) {
 			target = i;
 		}
 	}
-	if (target != -1) self.blocks[target].active = false;
+	if (target != -1) {
+		self.blocks[target].active = false;
+		self.world_dirty = true;
+	}
+}
+
+// place_block finds the block nearest to the targeting ray and places a new
+// block on the face closest to the approach direction. The approach axis is
+// determined by the largest component of (block_center - camera): whichever
+// axis dominates tells us which face was hit, and we step one unit outward
+// along that axis to get the placement cell.
+fn void Minecraft.place_block(Minecraft* self) {
+	if (self.block_count >= MAX_BLOCKS) return;
+
+	float best_dist = 4.5f;
+	int target      = -1;
+	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
+	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
+	float fwd_y     = -(float)math::sin(self.pitch);
+	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
+
+	for (int i = 0; i < self.block_count; i++) {
+		if (!self.blocks[i].active) continue;
+		Vec3 bp = { (float)self.blocks[i].x, (float)self.blocks[i].y, (float)self.blocks[i].z };
+
+		float dx  = bp.x - cam_pos.x;
+		float dy  = bp.y - cam_pos.y;
+		float dz  = bp.z - cam_pos.z;
+		float dot = dx * fwd_x + dy * fwd_y + dz * fwd_z;
+		if (dot < 0) continue;
+
+		float d = (float)math::sqrt(Vec3.dist_sq(cam_pos, bp));
+		if (d < best_dist) {
+			best_dist = d;
+			target = i;
+		}
+	}
+
+	if (target == -1) return;
+
+	// Determine the dominant approach axis by looking at which component of
+	// (block_center - camera) is largest in magnitude. The placement cell is
+	// one unit outward from that face (opposite approach direction).
+	Block* tb = &self.blocks[target];
+	float ax = (float)tb.x - cam_pos.x;
+	float ay = (float)tb.y - cam_pos.y;
+	float az = (float)tb.z - cam_pos.z;
+
+	float abs_ax = ax < 0 ? -ax : ax;
+	float abs_ay = ay < 0 ? -ay : ay;
+	float abs_az = az < 0 ? -az : az;
+
+	int nx = 0;
+	int ny = 0;
+	int nz = 0;
+	// Step outward: approach came from the dominant axis direction,
+	// so we place on the face that the camera is on — step toward the camera.
+	if (abs_ax >= abs_ay && abs_ax >= abs_az) {
+		nx = (ax > 0) ? -1 : 1;
+	} else if (abs_ay >= abs_ax && abs_ay >= abs_az) {
+		ny = (ay > 0) ? -1 : 1;
+	} else {
+		nz = (az > 0) ? -1 : 1;
+	}
+
+	int px = tb.x + nx;
+	int py = tb.y + ny;
+	int pz = tb.z + nz;
+
+	// Only place if the target cell is unoccupied
+	for (int i = 0; i < self.block_count; i++) {
+		if (!self.blocks[i].active) continue;
+		if (self.blocks[i].x == px && self.blocks[i].y == py && self.blocks[i].z == pz) return;
+	}
+
+	// Stone color
+	self.add_block(px, py, pz, 128, 128, 128);
+	self.world_dirty = true;
 }
 
 fn void Minecraft.collect_faces(Minecraft* self) {
@@ -275,16 +359,10 @@ fn void Minecraft.collect_faces(Minecraft* self) {
 		}
 
 		float h = 0.5f;
-		// ±X faces
-
-
-
 		if (!has_px) self.push_face(b, vec3(0.5, 0, 0), vec3(1, 0, 0), vec3(0, 0, h), vec3(0, h, 0));
 		if (!has_nx) self.push_face(b, vec3(-0.5, 0, 0), vec3(-1, 0, 0), vec3(0, 0, h), vec3(0, h, 0));
-		// ±Y faces
 		if (!has_py) self.push_face(b, vec3(0, 0.5, 0), vec3(0, 1, 0), vec3(h, 0, 0), vec3(0, 0, h));
 		if (!has_ny) self.push_face(b, vec3(0, -0.5, 0), vec3(0, -1, 0), vec3(h, 0, 0), vec3(0, 0, h));
-		// ±Z faces
 		if (!has_pz) self.push_face(b, vec3(0, 0, 0.5), vec3(0, 0, 1), vec3(h, 0, 0), vec3(0, h, 0));
 		if (!has_nz) self.push_face(b, vec3(0, 0, -0.5), vec3(0, 0, -1), vec3(h, 0, 0), vec3(0, h, 0));
 	}
@@ -304,7 +382,13 @@ fn void Minecraft.push_face(Minecraft* self, Block* b, Vec3 rel_pos, Vec3 normal
 }
 
 fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
-	self.collect_faces();
+	// Only rebuild the face list when the world has changed — the O(n²)
+	// neighbor scan is cheap enough for ~260 blocks, but there is no point
+	// doing it 30× per second when nothing moved.
+	if (self.world_dirty) {
+		self.collect_faces();
+		self.world_dirty = false;
+	}
 
 	int w     = self.width;
 	int h     = self.height;
@@ -317,22 +401,16 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 
 	for (int ty = 0; ty < ph; ty++) {
 		float sky_factor = (float)ty / (float)ph;
-		// Simple horizon line: above mid is sky, below is water/ground
-
-
-
-		// Adjust based on pitch to keep horizon stable
-
 		float horizon = cy + (float)math::sin(self.pitch) * fov * 2.0f;
 
 		for (int tx = 0; tx < w; tx++) {
 			sz idx = (sz)(ty * w + tx);
 			self.depth[idx] = 1000.0f;
 			if ((float)ty < horizon) {
-				// Sky gradient: Light blue to slightly darker blue
+				// Sky gradient: light blue fading slightly toward the horizon
 				self.pixels[idx] = (Pixel) { (char)(100 + 50 * sky_factor), (char)(150 + 50 * sky_factor), (char)255 };
 			} else {
-				// Water/Dark ground
+				// Water/dark ground below the horizon
 				self.pixels[idx] = (Pixel) { 20, 40, 80 };
 			}
 		}
@@ -350,7 +428,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 	for (int i = 0; i < self.face_count; i++) {
 		BlockFace* f = &self.faces[i];
 
-		// Transform center
+		// Transform face center into camera space
 		float vx = f.pos.x - self.cam_x;
 		float vy = f.pos.y - self.cam_y;
 		float vz = f.pos.z - self.cam_z;
@@ -359,8 +437,9 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		float rz1 =  sin_yaw * vx + cos_yaw * vz;
 		float ry  =  cos_pitch * vy + sin_pitch * rz1;
 		float rz  = -sin_pitch * vy + cos_pitch * rz1;
+		// rx1 is the camera-space X of the face center (used below as p0x)
 
-		// Normal rotation (Corrected: Yaw around Y, then Pitch around X)
+		// Rotate normal into camera space for back-face culling
 		float nx1 = cos_yaw * f.normal.x - sin_yaw * f.normal.z;
 		float ny1 = f.normal.y;
 		float nz1 = sin_yaw * f.normal.x + cos_yaw * f.normal.z;
@@ -368,10 +447,10 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		float n_ry =  cos_pitch * ny1 + sin_pitch * nz1;
 		float n_rz = -sin_pitch * ny1 + cos_pitch * nz1;
 
-		// Cull back-faces (faces pointing away from camera in camera-space)
+		// Cull faces pointing away from the camera in camera space
 		if (n_rz > 0.0f) continue;
 
-		// Tangent rotations
+		// Rotate half-tangent vectors into camera space
 		Vec3 tu     =  f.tan_u;
 		float tux1  =  cos_yaw * tu.x - sin_yaw * tu.z;
 		float tuz1  =  sin_yaw * tu.x + cos_yaw * tu.z;
@@ -388,19 +467,23 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		float tv_rz = -sin_pitch * tv.y + cos_pitch * tvz1;
 		tv = { tv_rx, tv_ry, tv_rz };
 
-		// Project corners to find bounds
+		// Project all four corners to screen space to find bbox.
+		// cu/cv are ±1 in tangent coordinates — each corner is center ± tan_u ± tan_v.
+		float[4] cu  = { -1, -1, 1, 1 };
+		float[4] cv  = { -1,  1,-1, 1 };
 		float min_sx =  1e9f;
 		float max_sx = -1e9f;
 		float min_sy =  1e9f;
 		float max_sy = -1e9f;
-		float[4] cu  =  { -1, -1, 1, 1 };
-		float[4] cv  =  { -1, 1, -1, 1 };
+		int valid_corners = 0;
+
 		for (int j = 0; j < 4; j++) {
 			float px3 = rx1 + cu[j] * tu.x + cv[j] * tv.x;
-			float py3 = ry + cu[j] * tu.y + cv[j] * tv.y;
-			float pz3 = rz + cu[j] * tu.z + cv[j] * tv.z;
+			float py3 = ry  + cu[j] * tu.y + cv[j] * tv.y;
+			float pz3 = rz  + cu[j] * tu.z + cv[j] * tv.z;
 			if (pz3 < 0.1f) continue;
-			float sc  =  fov / pz3;
+			valid_corners++;
+			float sc  = fov / pz3;
 			float csx =  px3 * sc * 2.0f + cx;
 			float csy = -py3 * sc * 2.0f + cy;
 			if (csx < min_sx) min_sx = csx;
@@ -409,12 +492,28 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 			if (csy > max_sy) max_sy = csy;
 		}
 
-		int x0 = (int)min_sx;
-		int x1 = (int)max_sx;
-		int y0 = (int)min_sy;
-		int y1 = (int)max_sy;
+		// If no corners are in front of the near plane, skip the face entirely.
+		// If some were behind, use the full screen as bbox so the visible part
+		// still rasterizes (the intersection test will handle the rest).
+		if (valid_corners == 0) continue;
+		int x0;
+		int x1;
+		int y0;
+		int y1;
+		if (valid_corners < 4) {
+			// Partially behind the near plane — clamp to full screen.
+			x0 = 0;
+			x1 = w - 1;
+			y0 = 0;
+			y1 = ph - 1;
+		} else {
+			x0 = (int)min_sx;
+			x1 = (int)max_sx;
+			y0 = (int)min_sy;
+			y1 = (int)max_sy;
+		}
 
-		// Correct Shading: Lighting in world space before camera rotation
+		// Lighting in world space (before camera rotation)
 		float diff = f.normal.x * light_x + f.normal.y * light_y + f.normal.z * light_z;
 		if (diff < 0.0f) diff = 0.0f;
 		float brightness = 0.25f + 0.75f * diff;
@@ -424,13 +523,62 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 			(char)((float)f.b * brightness)
 		};
 
+		// Precompute dot(TU,TU) and dot(TV,TV) for the tangent normalisation
+		// done inside the per-pixel loop — they are constant across the face.
+		float dot_tu_tu = tu.x*tu.x + tu.y*tu.y + tu.z*tu.z;
+		float dot_tv_tv = tv.x*tv.x + tv.y*tv.y + tv.z*tv.z;
+
+		// Rotated normal (camera-space) components used for the plane equation
+		// dot(P0, N) where P0 = (rx1, ry, rz) is the face center in cam space.
+		float nx_r = nx1; // already computed above (yaw-rotated only)
+		// We need the fully pitch-rotated normal for the plane equation.
+		// n_ry and n_rz are the pitch-rotated Y/Z; nx1 is pitch-invariant for
+		// the yaw-rotated x component (pitch rotates Y and Z, not X).
+		// Full camera-space normal: (nx1, n_ry, n_rz)
+		float dot_p0n = rx1 * nx_r + ry * n_ry + rz * n_rz;
+
+		// Per-pixel ray-plane intersection inside the bbox.
+		// Ray direction in camera space for pixel (px,py):
+		//   D = ((px-cx)/(2*fov),  -(py-cy)/(2*fov),  1)
+		// This inverts the projection formula: csx = px3*fov/pz3*2 + cx
 		for (int py = y0; py <= y1; py++) {
 			if (py < 0 || py >= ph) continue;
+			float dy = -(float)(py - (int)cy) / (2.0f * fov);
 			for (int px = x0; px <= x1; px++) {
 				if (px < 0 || px >= w) continue;
+				float dx = (float)(px - (int)cx) / (2.0f * fov);
+				// dz = 1.0 (implicit)
+
+				// dot(D, N) with dz=1
+				float dot_dn = dx * nx_r + dy * n_ry + n_rz;
+				// Skip rays nearly parallel to the plane (|dot| < epsilon)
+				if (dot_dn > -0.0001f && dot_dn < 0.0001f) continue;
+
+				// t = dot(P0,N) / dot(D,N)
+				float t = dot_p0n / dot_dn;
+				if (t < 0.1f) continue; // behind near plane
+
+				// Hit point H = t * D
+				float hx = t * dx;
+				float hy = t * dy;
+				float hz = t; // hz = t * 1.0
+
+				// Local coordinates relative to face center
+				float lx = hx - rx1;
+				float ly = hy - ry;
+				float lz = hz - rz;
+
+				// Tangent-space coordinates: u,v in [-1,1] for inside the face
+				float u = (lx*tu.x + ly*tu.y + lz*tu.z) / dot_tu_tu;
+				float v = (lx*tv.x + ly*tv.y + lz*tv.z) / dot_tv_tv;
+
+				// Face spans [-1,1] in both tangent directions
+				if (u < -1.0f || u > 1.0f || v < -1.0f || v > 1.0f) continue;
+
+				// Per-pixel depth test with H.z (actual intersection depth)
 				sz idx = (sz)(py * w + px);
-				if (rz < self.depth[idx]) {
-					self.depth[idx] = rz;
+				if (hz < self.depth[idx]) {
+					self.depth[idx] = hz;
 					self.pixels[idx] = col;
 				}
 			}
@@ -449,7 +597,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		}
 	}
 
-	// Crosshair
+	// Crosshair at center
 	self.cells[(h / 2) * w + (w / 2)] = xray::new_cell("+", 1, xray::default_style()
 		.set_fg(xray::color_rgb(255, 255, 255)));
 
@@ -466,17 +614,69 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 			.set_fg(xray::color_rgb(150, 150, 150)));
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	// HUD status line — rendered directly into the cell grid, bottom-left
+	// Kept subtle (gray) so it doesn't compete with the 3D view
+	xray::Style hud_style = xray::default_style().set_fg(xray::color_rgb(160, 160, 160));
+	String hud_label = "blocks:";
+	for (usz ci = 0; ci < hud_label.len && (int)ci < w; ci++) {
+		char ch = hud_label[ci];
+		char[2] buf;
+		buf[0] = ch;
+		buf[1] = 0;
+		self.cells[(h - 1) * w + (int)ci] = xray::new_cell((String)buf[:1], 1, hud_style);
+	}
+	// Block count as digits
+	int bcount = 0;
+	for (int bi = 0; bi < self.block_count; bi++) {
+		if (self.blocks[bi].active) bcount++;
+	}
+	int digit_x = 8;
+	int tmp = bcount;
+	if (tmp == 0) {
+		if (digit_x < w) {
+			self.cells[(h - 1) * w + digit_x] = xray::new_cell("0", 1, hud_style);
+		}
+		digit_x++;
+	} else {
+		// print digits left-to-right: find number of digits first
+		int digits = 0;
+		int ttmp = tmp;
+		while (ttmp > 0) { ttmp /= 10; digits++; }
+		int start_x = digit_x;
+		digit_x += digits - 1;
+		while (tmp > 0 && digit_x < w) {
+			int d = tmp % 10;
+			tmp /= 10;
+			char[2] dbuf;
+			dbuf[0] = (char)('0' + d);
+			dbuf[1] = 0;
+			self.cells[(h - 1) * w + digit_x] = xray::new_cell((String)dbuf[:1], 1, hud_style);
+			digit_x--;
+		}
+		digit_x = start_x + digits;
+	}
+	// Rest of hint text
+	String hint = "  wasd move  mouse look  space/click mine  e place  q quit";
+	int hint_x = digit_x + 1;
+	for (usz ci = 0; ci < hint.len && hint_x + (int)ci < w; ci++) {
+		char ch = hint[ci];
+		char[2] buf;
+		buf[0] = ch;
+		buf[1] = 0;
+		self.cells[(h - 1) * w + hint_x + (int)ci] = xray::new_cell((String)buf[:1], 1, hud_style);
+	}
+
+	// set_mouse_mode(ALL_MOTION) lets the runtime manage mouse tracking, so
+	// free-look works by moving the mouse without holding any button.
+	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h)
+		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 }
 
 fn int main(String[] args) {
 	Minecraft* app = mem::new(Minecraft);
-	milktea::enable_mouse();
 	if (catch err = milktea::@run_program(app)) {
-		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;
 	}
-	milktea::disable_mouse();
 	return 0;
 }
