@@ -42,7 +42,7 @@ struct Pixel {
 	char r, g, b;
 }
 
-const int MAX_BLOCKS = 1024;
+const int MAX_BLOCKS = 4096;
 const int MAX_VOXELS = 32768;
 
 struct BlockFace {
@@ -75,8 +75,18 @@ struct Minecraft {
 	// which is too fast, so we scale impulse down to reach ~0.25/tick:
 	// 0.05/(1-0.80) = 0.25 — use impulse=0.05, damp=0.80.
 	float vel_x, vel_z;
+	// Vertical velocity: gravity pulls down each tick, jump sets positive.
+	float vel_y;
+	bool grounded;
 	// Angular velocity for arrow-key yaw (optional smooth turning).
 	float vel_yaw;
+
+	// Held-key movement state: set on KEY_PRESS/KEY_REPEAT, cleared on
+	// KEY_RELEASE. On terminals without kitty key-release reporting, only
+	// KEY_PRESS ever arrives, so a held key is also expired in TICK if not
+	// refreshed for a few ticks (OS key-repeat keeps refreshing it while held).
+	bool held_w, held_a, held_s, held_d, held_space;
+	int held_w_tick, held_a_tick, held_s_tick, held_d_tick, held_space_tick;
 
 	// Viewport
 	int width, height;
@@ -93,38 +103,140 @@ struct Minecraft {
 
 	// Mouse state
 	int mouse_x, mouse_y;
+	int mouse_px, mouse_py;
 	bool mouse_init;
+	// Terminal width in pixels (0 if the terminal doesn't report it), used to
+	// scale look sensitivity so a full-window swipe turns a fixed angle
+	// regardless of font size or window size.
+	int win_px_w;
 
 	// Dirty flag: rebuild faces only when world changes
 	bool world_dirty;
+
+	// Sliding-window world generation: (world_cx, world_cz) is the integer
+	// column the world was last generated around. regen_world() is called
+	// from TICK whenever the player strays more than 4 cells from this
+	// center (hysteresis keeps it from firing every tick).
+	int world_cx, world_cz;
+
+	// Player edits must survive window regeneration. mined_cells records
+	// cells the player has dug out (so regen_world skips re-emitting the
+	// procedural block there); placed_blocks records player-placed blocks
+	// (so regen_world re-adds them when they fall back inside the window).
+	int[3][512] mined_cells;
+	int mined_count;
+	int[4][512] placed_blocks; // x, y, z, btype
+	int placed_count;
 }
 
 // ── World Generation ─────────────────────────────────────────────────────────
 
-fn void Minecraft.generate_island(Minecraft* self) {
-	self.block_count = 0;
-	// Ground (Grass top layer, Dirt below)
-	for (int x = -5; x <= 5; x++) {
-		for (int z = -5; z <= 5; z++) {
-			float d = (float)math::sqrt((float)(x * x + z * z));
-			if (d > 5.5f) continue;
+// terrain_height returns a clamped [0,4] height for a given (x,z) column
+// using a combination of two sine/cosine waves plus an integer hash jitter.
+fn int terrain_height(int x, int z) {
+	// Cheap integer hash for a small jitter term
+	uint h_hash = (uint)x * 374761393u + (uint)z * 668265263u;
+	h_hash ^= (h_hash >> 13);
+	h_hash *= 1274126177u;
+	h_hash ^= (h_hash >> 16);
+	float jitter = (float)(h_hash & 0xFFu) / 255.0f - 0.5f; // [-0.5, 0.5)
 
-			// Grass top
-			self.add_block_typed(x, 0, z, BlockType.GRASS);
-			// Dirt below
-			self.add_block_typed(x, -1, z, BlockType.DIRT);
-		}
+	float hf = 1.5f
+		+ 1.2f * (float)math::sin((float)x * 0.35f)
+		+ 1.2f * (float)math::cos((float)z * 0.3f)
+		+ 0.4f * jitter;
+	int h = 1 + (int)hf;
+	if (h < 0) h = 0;
+	if (h > 4) h = 4;
+	return h;
+}
+
+// tree_hash returns a small integer 0-15 for (x,z) used to decide tree placement.
+fn int tree_hash(int x, int z) {
+	uint h = (uint)x * 2246822519u + (uint)z * 3266489917u;
+	h ^= (h >> 17);
+	h *= 2246822519u;
+	h ^= (h >> 13);
+	return (int)(h & 0xFu); // 0..15
+}
+
+fn void Minecraft.place_tree(Minecraft* self, int tx, int tz, int base_y) {
+	// Trunk: 3 WOOD blocks above the grass surface
+	for (int y = base_y + 1; y <= base_y + 3; y++) {
+		self.add_block_typed(tx, y, tz, BlockType.WOOD);
 	}
-	// A tree: wood trunk, leaf canopy
-	for (int y = 1; y <= 3; y++) self.add_block_typed(0, y, 0, BlockType.WOOD);
+	// Canopy: two leaf layers at y = base_y+4 and base_y+5, radius ~2.2
 	for (int ox = -2; ox <= 2; ox++) {
 		for (int oz = -2; oz <= 2; oz++) {
-			for (int oy = 4; oy <= 5; oy++) {
-				float d = (float)math::sqrt((float)(ox * ox + oz * oz));
-				if (d > 2.2f) continue;
-				self.add_block_typed(ox, oy, oz, BlockType.LEAF);
+			float d = (float)math::sqrt((float)(ox * ox + oz * oz));
+			if (d > 2.2f) continue;
+			self.add_block_typed(tx + ox, base_y + 4, tz + oz, BlockType.LEAF);
+			self.add_block_typed(tx + ox, base_y + 5, tz + oz, BlockType.LEAF);
+		}
+	}
+}
+
+// is_mined returns true if (x, y, z) is a cell the player has previously dug
+// out — regen_world skips re-emitting procedural terrain there.
+fn bool Minecraft.is_mined(Minecraft* self, int x, int y, int z) {
+	for (int i = 0; i < self.mined_count; i++) {
+		if (self.mined_cells[i][0] == x && self.mined_cells[i][1] == y && self.mined_cells[i][2] == z) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// World window radius around the player. 29x29 columns * ~2-3 blocks/column
+// stays comfortably within MAX_BLOCKS, and chosen so pop-in at the edge
+// happens mostly inside the distance-fog band (fully fogged at ~38 units).
+const int WORLD_RADIUS = 14;
+
+// regen_world regenerates the sliding terrain window centered on the
+// player's current column (round(cam_x), round(cam_z)). Procedural terrain
+// and trees are pure functions of (x, z), so the same columns regenerate
+// identically each time the window recenters. Player edits are reapplied:
+// mined cells are skipped during generation, and placed blocks inside the
+// new window are re-added.
+fn void Minecraft.regen_world(Minecraft* self) {
+	self.block_count = 0;
+
+	int cx = (int)math::round(self.cam_x);
+	int cz = (int)math::round(self.cam_z);
+	self.world_cx = cx;
+	self.world_cz = cz;
+
+	for (int x = cx - WORLD_RADIUS; x <= cx + WORLD_RADIUS; x++) {
+		for (int z = cz - WORLD_RADIUS; z <= cz + WORLD_RADIUS; z++) {
+			int h = terrain_height(x, z);
+
+			// Top layer: grass
+			if (!self.is_mined(x, h, z)) self.add_block_typed(x, h, z, BlockType.GRASS);
+			// Below grass: dirt
+			if (!self.is_mined(x, h - 1, z)) self.add_block_typed(x, h - 1, z, BlockType.DIRT);
+			// Stone one more down, only if column is tall enough (saves blocks)
+			if (h >= 2 && !self.is_mined(x, h - 2, z)) {
+				self.add_block_typed(x, h - 2, z, BlockType.STONE);
+			}
+
+			// Deterministic sparse tree placement: only on a coarse 5x5 grid
+			// of columns, and only when tree_hash lands on 0 (1-in-16 chance)
+			// — roughly 1 tree per 125-400 columns, canopy radius 2.2 so a
+			// 5-cell grid spacing never overlaps neighboring canopies.
+			if (x % 5 == 0 && z % 5 == 0 && tree_hash(x, z) == 0) {
+				self.place_tree(x, z, h);
 			}
 		}
+	}
+
+	// Re-add player-placed blocks that fall inside the new window.
+	for (int i = 0; i < self.placed_count; i++) {
+		int px = self.placed_blocks[i][0];
+		int py = self.placed_blocks[i][1];
+		int pz = self.placed_blocks[i][2];
+		if (px < cx - WORLD_RADIUS || px > cx + WORLD_RADIUS) continue;
+		if (pz < cz - WORLD_RADIUS || pz > cz + WORLD_RADIUS) continue;
+		self.add_block_typed(px, py, pz, (BlockType)self.placed_blocks[i][3]);
 	}
 }
 
@@ -180,16 +292,24 @@ fn milktea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
 	self.cam_x = 0;
-	self.cam_y = 2.5f;
+	// Eye is 1.6 above feet; feet start at terrain surface top + 0.5,
+	// then spawn slightly higher so gravity settles the player naturally.
+	// Use (0, -12) to match the actual spawn column (cam_x=0, cam_z=-12).
+	self.cam_y = (float)(terrain_height(0, -12)) + 0.5f + 1.6f + 0.5f;
 	self.cam_z = -12;
 	self.yaw = 0;
 	self.pitch = 0;
 	self.vel_x = 0;
 	self.vel_z = 0;
+	self.vel_y = 0;
+	self.grounded = false;
 	self.vel_yaw = 0;
 	self.mouse_init = false;
+	self.win_px_w = (int)milktea::get_window_size().ws_xpixel;
 	self.world_dirty = true;
-	self.generate_island();
+	self.mined_count = 0;
+	self.placed_count = 0;
+	self.regen_world();
 	self.allocate_buffers();
 	return milktea::tick();
 }
@@ -201,11 +321,39 @@ fn void Minecraft.allocate_buffers(Minecraft* self) {
 	self.depth = mem::new_array(float, ptotal);
 }
 
+// Returns true if an active block occupies the feet or head cell of the
+// player's body at horizontal position (x, z) with eye height y_eye.
+// The body is treated as a small square (radius 0.3) rather than a point,
+// so corners are checked too — this makes side collisions feel solid
+// instead of letting the player clip past block edges.
+fn bool Minecraft.body_collides(Minecraft* self, float x, float y_eye, float z) {
+	// The ±0.1 keeps the feet cell from including the block being stood on
+	// and the head cell from grazing a ceiling block just above.
+	int feet_cell_y = (int)math::round(y_eye - 1.6f + 0.1f);
+	int head_cell_y = (int)math::round(y_eye - 0.1f);
+	float radius = 0.3f;
+	for (int ci = 0; ci < self.block_count; ci++) {
+		if (!self.blocks[ci].active) continue;
+		if (self.blocks[ci].y != feet_cell_y && self.blocks[ci].y != head_cell_y) continue;
+		foreach (float cx : { x - radius, x + radius }) {
+			int col_x = (int)math::round(cx);
+			if (self.blocks[ci].x != col_x) continue;
+			foreach (float cz : { z - radius, z + radius }) {
+				int col_z = (int)math::round(cz);
+				if (self.blocks[ci].z != col_z) continue;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
+		self.win_px_w = (int)milktea::get_window_size().ws_xpixel;
 		mem::free(self.cells.ptr);
 		mem::free(self.pixels.ptr);
 		mem::free(self.depth.ptr);
@@ -217,58 +365,94 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		milktea::KeyMsg k = msg.key;
 		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
 
-		// Movement: add impulse to velocity each keypress/repeat.
-		// Convention: forward F = (sin yaw, 0, cos yaw), right R = (cos yaw, 0, -sin yaw).
-		// Impulse tuned so steady-state speed (impulse / (1 - damp)) ≈ 0.25/tick.
-		// impulse=0.05, damp=0.80 → 0.05/0.20 = 0.25/tick. ✓
-		float impulse = 0.05f;
+		bool is_release = k.action == milktea::KeyAction.KEY_RELEASE;
+
+		// Held-key state for w/a/s/d/space: PRESS/REPEAT mark the key held
+		// and stamp the current tick; RELEASE clears it immediately. On
+		// terminals that never send releases, a safety expiry in TICK
+		// clears keys that haven't been refreshed in a few ticks.
 		if (k.code == milktea::KeyCode.RUNE) {
 			switch (k.rune) {
 				case 'w':
-					self.vel_x += (float)math::sin(self.yaw) * impulse;
-					self.vel_z += (float)math::cos(self.yaw) * impulse;
-				case 's':
-					self.vel_x -= (float)math::sin(self.yaw) * impulse;
-					self.vel_z -= (float)math::cos(self.yaw) * impulse;
+					self.held_w = !is_release;
+					self.held_w_tick = self.tick_count;
 				case 'a':
-					// Strafe left: -R = (-cos yaw, 0, +sin yaw)
-					self.vel_x -= (float)math::cos(self.yaw) * impulse;
-					self.vel_z += (float)math::sin(self.yaw) * impulse;
+					self.held_a = !is_release;
+					self.held_a_tick = self.tick_count;
+				case 's':
+					self.held_s = !is_release;
+					self.held_s_tick = self.tick_count;
 				case 'd':
-					// Strafe right: +R = (+cos yaw, 0, -sin yaw)
-					self.vel_x += (float)math::cos(self.yaw) * impulse;
-					self.vel_z -= (float)math::sin(self.yaw) * impulse;
+					self.held_d = !is_release;
+					self.held_d_tick = self.tick_count;
 				case ' ':
-					self.swing_frame = 10;
-					self.mine_block();
-				case 'e':
-					// Place a stone block at the face adjacent to the targeted block
-					self.place_block();
+					self.held_space = !is_release;
+					self.held_space_tick = self.tick_count;
+				default: break;
 			}
 		}
-		// Arrow keys: angular velocity for smooth rotation.
-		// damp=0.75 → steady state = 0.015/0.25 = 0.06 rad/tick.
-		if (k.code == milktea::KeyCode.LEFT)  self.vel_yaw -= 0.015f;
-		if (k.code == milktea::KeyCode.RIGHT) self.vel_yaw += 0.015f;
+
+		// Non-movement actions only fire on PRESS/REPEAT, never on RELEASE
+		// (a release of 'f' must not mine a second block).
+		if (!is_release) {
+			if (k.code == milktea::KeyCode.RUNE) {
+				switch (k.rune) {
+					case 'f':
+						self.swing_frame = 10;
+						self.mine_block();
+					case 'e':
+						// Place a stone block at the face adjacent to the targeted block
+						self.place_block();
+					default: break;
+				}
+			}
+			// Arrow keys: angular velocity for smooth rotation.
+			// damp=0.75 -> steady state = 0.015/0.25 = 0.06 rad/tick.
+			if (k.code == milktea::KeyCode.LEFT)  self.vel_yaw -= 0.015f;
+			if (k.code == milktea::KeyCode.RIGHT) self.vel_yaw += 0.015f;
+		}
 	}
 
 	if (msg.kind == milktea::MsgKind.MOUSE) {
 		if (!self.mouse_init) {
 			self.mouse_x = msg.mouse.col;
 			self.mouse_y = msg.mouse.row;
+			self.mouse_px = msg.mouse.px;
+			self.mouse_py = msg.mouse.py;
 			self.mouse_init = true;
 		} else {
 			if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
-				int dx = msg.mouse.col - self.mouse_x;
-				int dy = msg.mouse.row - self.mouse_y;
-				// yaw += dx*sens: mouse-right (dx>0) increases yaw, turning right
-				// because with F=(sin,cos), dF/dyaw = (cos,-sin) = R — consistent. ✓
-				self.yaw += (float)dx * 0.05f;
-				self.pitch -= (float)dy * 0.05f;
+				// Prefer pixel-resolution deltas when the terminal reports them
+				// (SGR-Pixels, DEC mode 1016); pixels are square so no aspect
+				// correction is needed and both axes share one sensitivity.
+				// Fall back to cell deltas otherwise.
+				//
+				// Sensitivity is proportional to window size: a swipe across
+				// the full window width always turns TURN_PER_WIDTH radians
+				// (~275°, matching the old 0.06 rad/cell feel at 80 cols),
+				// independent of font size or window dimensions.
+				float turn_per_width = 4.8f;
+				if (msg.mouse.px != 0 || msg.mouse.py != 0) {
+					int dpx = msg.mouse.px - self.mouse_px;
+					int dpy = msg.mouse.py - self.mouse_py;
+					float sens = self.win_px_w > 0 ? turn_per_width / (float)self.win_px_w : 0.006f;
+					self.yaw += (float)dpx * sens;
+					self.pitch -= (float)dpy * sens;
+				} else {
+					int dx = msg.mouse.col - self.mouse_x;
+					int dy = msg.mouse.row - self.mouse_y;
+					// yaw += dx*sens: mouse-right (dx>0) increases yaw, turning right
+					// because with F=(sin,cos), dF/dyaw = (cos,-sin) = R — consistent. ✓
+					float sens = self.width > 0 ? turn_per_width / (float)self.width : 0.06f;
+					self.yaw += (float)dx * sens;
+					self.pitch -= (float)dy * sens;
+				}
 				if (self.pitch > 1.4f) self.pitch = 1.4f;
 				if (self.pitch < -1.4f) self.pitch = -1.4f;
 				self.mouse_x = msg.mouse.col;
 				self.mouse_y = msg.mouse.row;
+				self.mouse_px = msg.mouse.px;
+				self.mouse_py = msg.mouse.py;
 			}
 		}
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
@@ -285,126 +469,285 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		self.frame++;
 		if (self.swing_frame > 0) self.swing_frame--;
 
-		// Integrate velocity and apply damping each tick so motion smoothly
-		// accelerates on key-hold (via OS key-repeat) and decelerates on release.
-		float damp = 0.80f;
-		self.cam_x += self.vel_x;
-		self.cam_z += self.vel_z;
+		// Safety expiry: on terminals that never send KEY_RELEASE, a held key
+		// is cleared if it hasn't been refreshed (by a fresh PRESS/REPEAT) in
+		// more than 8 ticks. Kitty terminals send releases immediately, so
+		// this only matters as a fallback for legacy key reporting.
+		int expiry = 8;
+		if (self.held_w && self.tick_count - self.held_w_tick > expiry) self.held_w = false;
+		if (self.held_a && self.tick_count - self.held_a_tick > expiry) self.held_a = false;
+		if (self.held_s && self.tick_count - self.held_s_tick > expiry) self.held_s = false;
+		if (self.held_d && self.tick_count - self.held_d_tick > expiry) self.held_d = false;
+		if (self.held_space && self.tick_count - self.held_space_tick > expiry) self.held_space = false;
+
+		// Apply a movement impulse every tick a key is held, instead of only
+		// on sparse OS key-repeat events. Convention: forward F = (sin yaw, 0,
+		// cos yaw), right R = (cos yaw, 0, -sin yaw). Steady-state speed while
+		// grounded ≈ impulse / (1 - damp) = 0.0525 / 0.20 ≈ 0.26/tick.
+		float impulse = 0.0525f;
+		bool moving = self.held_w || self.held_a || self.held_s || self.held_d;
+		if (self.held_w) {
+			self.vel_x += (float)math::sin(self.yaw) * impulse;
+			self.vel_z += (float)math::cos(self.yaw) * impulse;
+		}
+		if (self.held_s) {
+			self.vel_x -= (float)math::sin(self.yaw) * impulse;
+			self.vel_z -= (float)math::cos(self.yaw) * impulse;
+		}
+		if (self.held_a) {
+			// Strafe left: -R = (-cos yaw, 0, +sin yaw)
+			self.vel_x -= (float)math::cos(self.yaw) * impulse;
+			self.vel_z += (float)math::sin(self.yaw) * impulse;
+		}
+		if (self.held_d) {
+			// Strafe right: +R = (+cos yaw, 0, -sin yaw)
+			self.vel_x += (float)math::cos(self.yaw) * impulse;
+			self.vel_z -= (float)math::sin(self.yaw) * impulse;
+		}
+		if (self.held_space && self.grounded) {
+			self.vel_y = 0.28f;
+			self.grounded = false;
+		}
+
+		// Damping: with impulses now arriving every tick (not just on sparse
+		// OS key-repeat), applying the airborne damp (0.98) while a movement
+		// key is held would let speed run away (0.075/0.02 ≈ 3.75/tick). So
+		// use the tight ground damp (0.80) whenever a movement key is held,
+		// regardless of grounded state (this also gives Minecraft-style air
+		// control). Only fall back to the loose airborne damp (0.98) when no
+		// movement key is held, to preserve jump momentum through a jump.
+		float damp = moving ? 0.80f : (self.grounded ? 0.80f : 0.98f);
+
+		// ── Horizontal collision ─────────────────────────────────────────
+		// Move each axis independently against body_collides so the player
+		// slides along walls instead of stopping dead on diagonal contact.
+		// On collision keep the velocity (just don't move): pressing into a
+		// wall while jumping then carries the player onto the block once the
+		// body rises above it — matching the hold-forward-and-jump feel.
+		if (!self.body_collides(self.cam_x + self.vel_x, self.cam_y, self.cam_z)) {
+			self.cam_x += self.vel_x;
+		}
+		if (!self.body_collides(self.cam_x, self.cam_y, self.cam_z + self.vel_z)) {
+			self.cam_z += self.vel_z;
+		}
 		self.vel_x *= damp;
 		self.vel_z *= damp;
+
+		// ── Gravity & vertical collision ─────────────────────────────────
+		// Record feet position BEFORE moving so the candidate filter uses
+		// pre-move height; this prevents tunneling when vel_y exceeds 0.02.
+		float feet_prev = self.cam_y - 1.6f;
+
+		// Apply gravity each tick, clamp terminal fall velocity, then move.
+		self.vel_y -= 0.03f;
+		if (self.vel_y < -0.5f) self.vel_y = -0.5f;
+		self.cam_y += self.vel_y;
+
+		// Ground collision: scan blocks array for the highest active block
+		// whose (x, z) matches the player column (rounded).  A block at
+		// integer (bx, by, bz) occupies [bx-0.5, bx+0.5] in x/z and its
+		// top surface is at by + 0.5.  Feet are at cam_y - 1.6.
+		// Candidate surfaces must be at or below the PRE-MOVE feet position
+		// (with a small tolerance) so a surface the player passed through this
+		// tick is still detected even when vel_y is large.
+		int col_x = (int)math::round(self.cam_x);
+		int col_z = (int)math::round(self.cam_z);
+		float feet_y = self.cam_y - 1.6f;
+		float best_surface = -1000.0f;
+		bool found_ground = false;
+		for (int gi = 0; gi < self.block_count; gi++) {
+			if (!self.blocks[gi].active) continue;
+			if (self.blocks[gi].x != col_x) continue;
+			if (self.blocks[gi].z != col_z) continue;
+			float surface = (float)self.blocks[gi].y + 0.5f;
+			// Reject surfaces the player was already below before this tick
+			// (avoids snapping up through ceilings).
+			if (surface > feet_prev + 0.02f) continue;
+			if (surface > best_surface) {
+				best_surface = surface;
+				found_ground = true;
+			}
+		}
+		// Only snap to ground when falling or standing (not while jumping up).
+		if (found_ground && self.vel_y <= 0.0f && feet_y <= best_surface + 0.001f) {
+			// Snap feet to surface, zero vertical velocity, mark grounded.
+			self.cam_y = best_surface + 1.6f;
+			self.vel_y = 0.0f;
+			self.grounded = true;
+		} else {
+			self.grounded = false;
+			// Death plane: falling below the world respawns the player at the
+			// fixed spawn point (full position reset, not just height).
+			if (self.cam_y < -20.0f) {
+				self.cam_x = 0;
+				self.cam_z = -12;
+				self.cam_y = (float)(terrain_height(0, -12)) + 0.5f + 1.6f + 0.5f;
+				self.vel_x = 0.0f;
+				self.vel_y = 0.0f;
+				self.vel_z = 0.0f;
+				self.yaw   = 0;
+				self.pitch = 0;
+			}
+		}
 
 		// Angular velocity for arrow-key turning, damped a bit tighter.
 		self.yaw += self.vel_yaw;
 		self.vel_yaw *= 0.75f;
+
+		// Sliding-window world regen: recenter only once the player has
+		// strayed more than 4 cells from the last generation center, so
+		// this doesn't fire (and re-run the O(n) generation + O(n²) face
+		// collection) every single tick while walking.
+		int cur_cx = (int)math::round(self.cam_x);
+		int cur_cz = (int)math::round(self.cam_z);
+		int dcx = cur_cx - self.world_cx;
+		int dcz = cur_cz - self.world_cz;
+		if (dcx > 4 || dcx < -4 || dcz > 4 || dcz < -4) {
+			self.regen_world();
+			self.world_dirty = true;
+		}
 
 		return milktea::tick();
 	}
 	return null;
 }
 
-fn void Minecraft.mine_block(Minecraft* self) {
-	float best_dist = 4.5f;
-	int target      = -1;
-	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
-	// Forward ray: F = (sin yaw, 0, cos yaw) in horizontal plane, pitched up/down.
-	// fwd_y = +sin(pitch): positive pitch means looking up, fwd_y > 0. ✓
-	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
-	float fwd_y     = (float)math::sin(self.pitch);
-	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
+// raycast_block marches a ray from the camera eye along the look direction,
+// stepping in increments of 0.05 up to 4.5 units. At each step it checks which
+// integer cell the ray point occupies and, on encountering an active block,
+// returns the block index. The last empty cell visited before the hit is written
+// through prev_x/prev_y/prev_z (for block placement). Returns -1 on no hit.
+//
+// Ray direction: fwd = (sin(yaw)*cos(pitch), sin(pitch), cos(yaw)*cos(pitch)),
+// matching the convention used throughout rendering and the old mine_block. ✓
+fn int Minecraft.raycast_block(Minecraft* self, int* prev_x, int* prev_y, int* prev_z) {
+	float fwd_x = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
+	float fwd_y = (float)math::sin(self.pitch);
+	float fwd_z = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
 
-	for (int i = 0; i < self.block_count; i++) {
-		if (!self.blocks[i].active) continue;
-		Vec3 bp = { (float)self.blocks[i].x, (float)self.blocks[i].y, (float)self.blocks[i].z };
+	// Track the last empty cell visited — placement goes here on a hit.
+	int last_cx = (int)math::round(self.cam_x);
+	int last_cy = (int)math::round(self.cam_y);
+	int last_cz = (int)math::round(self.cam_z);
 
-		float dx  = bp.x - cam_pos.x;
-		float dy  = bp.y - cam_pos.y;
-		float dz  = bp.z - cam_pos.z;
-		float dot = dx * fwd_x + dy * fwd_y + dz * fwd_z;
-		if (dot < 0) continue;
+	// Track the previous step's cell so we skip duplicate lookups when the ray
+	// hasn't crossed a cell boundary yet. Initialised to a cell that differs from
+	// the start so step 0 always runs.
+	int cur_cx = last_cx - 1;
+	int cur_cy = last_cy;
+	int cur_cz = last_cz;
 
-		float d = (float)math::sqrt(Vec3.dist_sq(cam_pos, bp));
-		if (d < best_dist) {
-			best_dist = d;
-			target = i;
+	for (int step = 0; step <= 90; step++) {
+		float t = (float)step * 0.05f;
+		float px = self.cam_x + fwd_x * t;
+		float py = self.cam_y + fwd_y * t;
+		float pz = self.cam_z + fwd_z * t;
+
+		int cx = (int)math::round(px);
+		int cy = (int)math::round(py);
+		int cz = (int)math::round(pz);
+
+		// Only act when the ray crosses into a new cell.
+		if (cx == cur_cx && cy == cur_cy && cz == cur_cz) continue;
+		cur_cx = cx;
+		cur_cy = cy;
+		cur_cz = cz;
+
+		// Scan blocks for an active occupant of this cell.
+		for (int i = 0; i < self.block_count; i++) {
+			if (!self.blocks[i].active) continue;
+			if (self.blocks[i].x == cx && self.blocks[i].y == cy && self.blocks[i].z == cz) {
+				// Report the last empty cell and the hit block index.
+				*prev_x = last_cx;
+				*prev_y = last_cy;
+				*prev_z = last_cz;
+				return i;
+			}
 		}
+
+		// Cell is empty — record it as the candidate placement position.
+		last_cx = cx;
+		last_cy = cy;
+		last_cz = cz;
 	}
+	return -1;
+}
+
+// mine_block fires a precise ray from the camera eye along the look direction
+// and deactivates the first block it hits within 4.5 units.
+fn void Minecraft.mine_block(Minecraft* self) {
+	int prev_x, prev_y, prev_z;
+	int target = self.raycast_block(&prev_x, &prev_y, &prev_z);
 	if (target != -1) {
+		int bx = self.blocks[target].x;
+		int by = self.blocks[target].y;
+		int bz = self.blocks[target].z;
 		self.blocks[target].active = false;
 		self.world_dirty = true;
+
+		// If the mined block was itself player-placed, just drop it from the
+		// placed list — it never needs to be recorded as "mined" since
+		// regen_world only re-adds it if it's still in placed_blocks.
+		bool was_placed = false;
+		for (int i = 0; i < self.placed_count; i++) {
+			if (self.placed_blocks[i][0] == bx && self.placed_blocks[i][1] == by && self.placed_blocks[i][2] == bz) {
+				// Swap-remove
+				self.placed_blocks[i] = self.placed_blocks[self.placed_count - 1];
+				self.placed_count--;
+				was_placed = true;
+				break;
+			}
+		}
+
+		if (!was_placed && self.mined_count < 512) {
+			self.mined_cells[self.mined_count][0] = bx;
+			self.mined_cells[self.mined_count][1] = by;
+			self.mined_cells[self.mined_count][2] = bz;
+			self.mined_count++;
+		}
 	}
 }
 
-// place_block finds the block nearest to the targeting ray and places a new
-// block on the face closest to the approach direction. The approach axis is
-// determined by the largest component of (block_center - camera): whichever
-// axis dominates tells us which face was hit, and we step one unit outward
-// along that axis to get the placement cell.
+// place_block fires a precise ray from the camera eye and places a STONE block
+// in the last empty cell the ray passed through before hitting a block, i.e. on
+// the face of the targeted block that faces the camera. Refuses to place if the
+// cell is already occupied or if it overlaps the player's body.
 fn void Minecraft.place_block(Minecraft* self) {
 	if (self.block_count >= MAX_BLOCKS) return;
 
-	float best_dist = 4.5f;
-	int target      = -1;
-	Vec3 cam_pos    = { self.cam_x, self.cam_y, self.cam_z };
-	float fwd_x     = (float)math::sin(self.yaw) * (float)math::cos(self.pitch);
-	float fwd_y     = (float)math::sin(self.pitch);
-	float fwd_z     = (float)math::cos(self.yaw) * (float)math::cos(self.pitch);
-
-	for (int i = 0; i < self.block_count; i++) {
-		if (!self.blocks[i].active) continue;
-		Vec3 bp = { (float)self.blocks[i].x, (float)self.blocks[i].y, (float)self.blocks[i].z };
-
-		float dx  = bp.x - cam_pos.x;
-		float dy  = bp.y - cam_pos.y;
-		float dz  = bp.z - cam_pos.z;
-		float dot = dx * fwd_x + dy * fwd_y + dz * fwd_z;
-		if (dot < 0) continue;
-
-		float d = (float)math::sqrt(Vec3.dist_sq(cam_pos, bp));
-		if (d < best_dist) {
-			best_dist = d;
-			target = i;
-		}
-	}
-
+	int prev_x, prev_y, prev_z;
+	int target = self.raycast_block(&prev_x, &prev_y, &prev_z);
 	if (target == -1) return;
 
-	// Determine the dominant approach axis by looking at which component of
-	// (block_center - camera) is largest in magnitude. The placement cell is
-	// one unit outward from that face (opposite approach direction).
-	Block* tb = &self.blocks[target];
-	float ax = (float)tb.x - cam_pos.x;
-	float ay = (float)tb.y - cam_pos.y;
-	float az = (float)tb.z - cam_pos.z;
+	int px = prev_x;
+	int py = prev_y;
+	int pz = prev_z;
 
-	float abs_ax = ax < 0 ? -ax : ax;
-	float abs_ay = ay < 0 ? -ay : ay;
-	float abs_az = az < 0 ? -az : az;
-
-	int nx = 0;
-	int ny = 0;
-	int nz = 0;
-	// Step outward: approach came from the dominant axis direction,
-	// so we place on the face that the camera is on — step toward the camera.
-	if (abs_ax >= abs_ay && abs_ax >= abs_az) {
-		nx = (ax > 0) ? -1 : 1;
-	} else if (abs_ay >= abs_ax && abs_ay >= abs_az) {
-		ny = (ay > 0) ? -1 : 1;
-	} else {
-		nz = (az > 0) ? -1 : 1;
-	}
-
-	int px = tb.x + nx;
-	int py = tb.y + ny;
-	int pz = tb.z + nz;
-
-	// Only place if the target cell is unoccupied
+	// Don't place into an already-occupied cell.
 	for (int i = 0; i < self.block_count; i++) {
 		if (!self.blocks[i].active) continue;
 		if (self.blocks[i].x == px && self.blocks[i].y == py && self.blocks[i].z == pz) return;
 	}
 
-	// Placed blocks are always stone
+	// Don't place a block inside the player's body.
+	// Feet are at cam_y - 1.6; the body occupies the two cells round(feet) and
+	// round(head ≈ cam_y), at the player's (x,z) column.
+	int col_x  = (int)math::round(self.cam_x);
+	int col_z  = (int)math::round(self.cam_z);
+	int feet_y = (int)math::round(self.cam_y - 1.6f);
+	int head_y = (int)math::round(self.cam_y);
+	if (px == col_x && pz == col_z && (py == feet_y || py == head_y)) return;
+
+	// Refuse placement if the persistence list is full.
+	if (self.placed_count >= 512) return;
+
+	// Placed blocks are always stone.
 	self.add_block_typed(px, py, pz, BlockType.STONE);
+	self.placed_blocks[self.placed_count][0] = px;
+	self.placed_blocks[self.placed_count][1] = py;
+	self.placed_blocks[self.placed_count][2] = pz;
+	self.placed_blocks[self.placed_count][3] = (int)BlockType.STONE;
+	self.placed_count++;
 	self.world_dirty = true;
 }
 
@@ -823,7 +1166,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		digit_x = start_x + digits;
 	}
 	// Rest of hint text
-	String hint = "  wasd move  mouse look  space/click mine  e place  q quit";
+	String hint = "  wasd move  space jump  f/click mine  e place  q quit";
 	int hint_x = digit_x + 1;
 	for (usz ci = 0; ci < hint.len && hint_x + (int)ci < w; ci++) {
 		char ch = hint[ci];
@@ -836,7 +1179,9 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 	// set_mouse_mode(ALL_MOTION) lets the runtime manage mouse tracking, so
 	// free-look works by moving the mouse without holding any button.
 	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h)
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION)
+		.set_report_key_events(true)
+		.set_mouse_pixels(true);
 }
 
 fn int main(String[] args) {
