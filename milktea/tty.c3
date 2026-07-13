@@ -19,6 +19,7 @@ extern fn int poll(void* fds, ulong nfds, int timeout);
 extern fn sz read(int fd, void* buf, sz nbytes);
 extern fn sz write(int fd, void* buf, sz nbytes);
 extern fn int c3_get_winsize(int fd, ushort* row, ushort* col);
+extern fn int c3_get_winsize_px(int fd, ushort* xpx, ushort* ypx);
 extern fn sz c3_time_ms();
 extern fn double c3_sin(double x);
 extern fn double c3_cos(double x);
@@ -52,11 +53,11 @@ struct WinSize {
 fn WinSize get_window_size() {
 	WinSize ws;
 	// Try stdout first, then stdin
-
-
-
 	if (c3_get_winsize(STDOUT_FILENO, &ws.ws_row, &ws.ws_col) != 0) {
 		c3_get_winsize(STDIN_FILENO, &ws.ws_row, &ws.ws_col);
+	}
+	if (c3_get_winsize_px(STDOUT_FILENO, &ws.ws_xpixel, &ws.ws_ypixel) != 0) {
+		c3_get_winsize_px(STDIN_FILENO, &ws.ws_xpixel, &ws.ws_ypixel);
 	}
 	return ws;
 }

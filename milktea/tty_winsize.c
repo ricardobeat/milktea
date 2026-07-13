@@ -15,6 +15,16 @@ int c3_get_winsize(int fd, unsigned short *row, unsigned short *col) {
     return result;
 }
 
+int c3_get_winsize_px(int fd, unsigned short *xpx, unsigned short *ypx) {
+    struct winsize ws;
+    int result = ioctl(fd, TIOCGWINSZ, &ws);
+    if (result == 0) {
+        *xpx = ws.ws_xpixel;
+        *ypx = ws.ws_ypixel;
+    }
+    return result;
+}
+
 long long c3_time_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, ((void *)0));

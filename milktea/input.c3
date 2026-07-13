@@ -34,12 +34,22 @@ enum KeyCode : int {
 	CTRL_C,
 }
 
+// KeyAction distinguishes press/repeat/release events. Only kitty-keyboard-protocol
+// terminals with the report_key_events opt-in enabled ever send REPEAT or RELEASE;
+// otherwise every KeyMsg carries KEY_PRESS, matching legacy behavior.
+enum KeyAction : int {
+	KEY_PRESS,
+	KEY_REPEAT,
+	KEY_RELEASE,
+}
+
 struct KeyMsg {
 	KeyCode code;
 	uint rune; // Unicode codepoint, not a byte — ASCII literals still compare directly
 	bool ctrl;
 	bool alt;
 	bool shift;
+	KeyAction action;
 }
 
 enum MouseAction : int {
@@ -65,6 +75,11 @@ struct MouseMsg {
 	bool shift;
 	bool alt;
 	bool ctrl;
+	// px, py: raw 0-based pixel coordinates from DEC mode 1016 (SGR-Pixels).
+	// Both are 0 unless the app opted in via View.set_mouse_pixels and the
+	// terminal actually reported pixel coordinates for this event.
+	int px;
+	int py;
 }
 
 struct ParseResult {
@@ -78,6 +93,7 @@ const int CSI_MAX_PARAMS = 8;
 
 struct CSIParse {
 	int[CSI_MAX_PARAMS] params;
+	int[CSI_MAX_PARAMS] subparams; // ':'-separated subparameter of each param; 0 = absent
 	int param_count;
 	char final_byte;
 	char private_prefix; // '<', '?', '>', '=' or 0 if none
@@ -105,27 +121,51 @@ fn CSIParse parse_csi(char[] buf) {
 	}
 
 	int current_param = -1; // -1 means no param yet (implicit default)
+	int current_subparam = -1; // -1 means no subparam seen for current_param
+	bool in_subparam = false; // true once ':' has been seen for the current param
+	bool subparam_seen_second_colon = false; // second ':' in a param — ignore extra levels
 
 	while (pos < buf.len) {
 		char ch = buf[pos];
 
 		if (ch >= '0' && ch <= '9') {
-			if (current_param < 0) current_param = 0;
-			current_param = current_param * 10 + (ch - '0');
+			if (in_subparam) {
+				if (!subparam_seen_second_colon) {
+					if (current_subparam < 0) current_subparam = 0;
+					current_subparam = current_subparam * 10 + (ch - '0');
+				}
+			} else {
+				if (current_param < 0) current_param = 0;
+				current_param = current_param * 10 + (ch - '0');
+			}
+			pos++;
+		} else if (ch == ':') {
+			if (!in_subparam) {
+				in_subparam = true;
+			} else {
+				// Second (or later) ':' in this param — we only keep one
+				// subparam level; ignore digits belonging to deeper levels.
+				subparam_seen_second_colon = true;
+			}
 			pos++;
 		} else if (ch == ';') {
 			if (csi.param_count < CSI_MAX_PARAMS) {
 				csi.params[csi.param_count] = current_param < 0 ? 0 : current_param;
+				csi.subparams[csi.param_count] = current_subparam < 0 ? 0 : current_subparam;
 				csi.param_count++;
 			}
 			current_param = -1;
+			current_subparam = -1;
+			in_subparam = false;
+			subparam_seen_second_colon = false;
 			pos++;
 		} else if (ch >= 0x40 && ch <= 0x7e) {
 			// Final byte
 			csi.final_byte = ch;
-			if (current_param >= 0 || csi.param_count > 0) {
+			if (current_param >= 0 || csi.param_count > 0 || current_subparam >= 0) {
 				if (csi.param_count < CSI_MAX_PARAMS) {
 					csi.params[csi.param_count] = current_param < 0 ? 0 : current_param;
+					csi.subparams[csi.param_count] = current_subparam < 0 ? 0 : current_subparam;
 					csi.param_count++;
 				}
 			}
@@ -155,11 +195,31 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
 	return default_val;
 }
 
+// csi_subparam returns the ':'-separated subparameter of params[idx] (e.g. the
+// kitty keyboard protocol event type in "mods:event"), or default_val if the
+// param is out of range or has no subparameter (0 means "absent").
+fn int csi_subparam(CSIParse csi, int idx, int default_val) {
+	if (idx < csi.param_count && csi.subparams[idx] != 0) return csi.subparams[idx];
+	return default_val;
+}
+
 fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
 	return {
 		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift },
-		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false },
+		{ code, rune, ctrl, alt, shift, KEY_PRESS },
+		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
+		consumed
+	};
+}
+
+// make_key_action is like make_key but sets a KeyAction other than the default
+// press. Used exclusively by the kitty keyboard protocol 'u' path when the app
+// has opted in to key-release/repeat reporting.
+fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, KeyAction action, sz consumed) {
+	return {
+		MsgKind.KEY,
+		{ code, rune, ctrl, alt, shift, action },
+		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
 		consumed
 	};
 }
@@ -176,8 +236,8 @@ fn ParseResult make_mouse(
 ) {
 	return {
 		MsgKind.MOUSE,
-		{ NONE, 0, false, false, false },
-		{ button, action, row, col, shift, alt, ctrl },
+		{ NONE, 0, false, false, false, KEY_PRESS },
+		{ button, action, row, col, shift, alt, ctrl, 0, 0 },
 		consumed
 	};
 }
@@ -366,16 +426,16 @@ fn ParseResult parse_key(char[] buf) {
 			if (fb == 'I' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = FOCUS;
-				pr.key = { NONE, 0, false, false, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
 			}
 			if (fb == 'O' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = BLUR;
-				pr.key = { NONE, 0, false, false, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
 			}
@@ -405,16 +465,16 @@ fn ParseResult parse_key(char[] buf) {
 					case 200: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_START;
-						pr.key      = { NONE, 0, false, false, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;
 					}
 					case 201: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_END;
-						pr.key      = { NONE, 0, false, false, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;
 					}
@@ -448,13 +508,26 @@ fn ParseResult parse_key(char[] buf) {
 				bool alt     = (mod_bits & 2) != 0;
 				bool ctrl    = (mod_bits & 4) != 0;
 
+				// Event type is the subparameter on the modifier param
+				// (CSI cp;mods:event u). 1=press, 2=repeat, 3=release; absent
+				// defaults to press. This subparam is only ever present when
+				// the app opted in via report_key_events (flag 2), so apps
+				// that didn't opt in always see KEY_PRESS here.
+				int event = csi_subparam(csi, 1, 1);
+				KeyAction action;
+				switch (event) {
+					case 2: action = KEY_REPEAT;
+					case 3: action = KEY_RELEASE;
+					default: action = KEY_PRESS;
+				}
+
 				// Functional-key codepoints: map to their KeyCode.
 				// ESC (27) is the main win — it arrives unambiguous under kitty protocol,
 				// so we skip the 50ms ESC-hold entirely.
-				if (cp == 27)  return make_key(ESC,       0,  false, false, false, total);
-				if (cp == 13)  return make_key(ENTER,     0,  false, false, false, total);
-				if (cp == 9)   return make_key(TAB,       0,  ctrl,  alt,   shift, total);
-				if (cp == 127) return make_key(BACKSPACE, 0,  false, false, false, total);
+				if (cp == 27)  return make_key_action(ESC,       0,  false, false, false, action, total);
+				if (cp == 13)  return make_key_action(ENTER,     0,  false, false, false, action, total);
+				if (cp == 9)   return make_key_action(TAB,       0,  ctrl,  alt,   shift, action, total);
+				if (cp == 127) return make_key_action(BACKSPACE, 0,  false, false, false, action, total);
 
 				// Ctrl+C equivalence: under the disambiguate flag, kitty-protocol
 				// terminals send ctrl+c as CSI 99;5u (codepoint 'c' + ctrl bit),
@@ -462,16 +535,16 @@ fn ParseResult parse_key(char[] buf) {
 				// on CTRL_C behave identically on both paths. Kept narrow: extra
 				// modifiers (ctrl+shift+c etc.) stay RUNE so copy-shortcuts remain
 				// distinguishable. cp==3 is also mapped defensively.
-				if (cp == 3)   return make_key(CTRL_C, 0, true, false, false, total);
+				if (cp == 3)   return make_key_action(CTRL_C, 0, true, false, false, action, total);
 				if (cp == 'c' && ctrl && !alt && !shift) {
-					return make_key(CTRL_C, 0, true, false, false, total);
+					return make_key_action(CTRL_C, 0, true, false, false, action, total);
 				}
 
 				// Ctrl+letter: kitty sends the lowercase letter codepoint with ctrl bit set.
 				// Match the legacy control-char path (0x01..0x1a) which also produces
 				// RUNE <lowercase> with ctrl=true, so models see identical messages from
 				// both code paths.
-				return make_key(RUNE, cp, ctrl, alt, shift, total);
+				return make_key_action(RUNE, cp, ctrl, alt, shift, action, total);
 			}
 
 			// Unknown CSI — consume ESC only, let next call re-parse

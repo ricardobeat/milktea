@@ -59,6 +59,8 @@ struct View {
 	String mouse_cursor;
 	Overlay[MAX_OVERLAYS] overlays;
 	int overlay_count;
+	bool report_key_events;
+	bool mouse_pixels;
 }
 
 // new_view creates a View with the given content and default settings (no cursor, no alt screen).
@@ -119,6 +121,33 @@ fn View View.set_mouse_cursor(self, String name) {
 fn View View.set_mouse_mode(self, MouseMode mode) {
 	View v = self;
 	v.mouse_mode = mode;
+	return v;
+}
+
+// set_report_key_events opts in to the kitty keyboard protocol's key-release
+// and key-repeat reporting (progressive enhancement flag 2). When enabled,
+// KeyMsg.action carries KEY_PRESS / KEY_REPEAT / KEY_RELEASE; terminals that
+// don't support the kitty protocol are unaffected (the extra push/pop is
+// silently ignored, same as the base kitty keyboard layer). Apps that never
+// call this see byte-identical KeyMsg.action == KEY_PRESS behavior to before
+// this option existed.
+fn View View.set_report_key_events(self, bool on) {
+	View v = self;
+	v.report_key_events = on;
+	return v;
+}
+
+// set_mouse_pixels opts in to DEC mode 1016 (SGR-Pixels mouse reporting).
+// When enabled (and mouse_mode is not MOUSE_MODE_NONE), the terminal reports
+// mouse coordinates in pixels relative to the terminal window in addition to
+// cell coordinates; MouseMsg.px/py carry the raw 0-based pixel values while
+// row/col continue to carry the cell position (converted from pixels using
+// the terminal's reported window/cell size). Terminals that don't support
+// mode 1016 simply ignore it and continue sending cell coordinates — in that
+// case px/py stay 0 and row/col behave exactly as before this option existed.
+fn View View.set_mouse_pixels(self, bool on) {
+	View v = self;
+	v.mouse_pixels = on;
 	return v;
 }
 
@@ -269,7 +298,13 @@ struct Program {
 	Model model;
 	TimerEntry[MAX_TIMERS] timers;
 	bool in_alt_screen;
+	// Cached window size (including pixel dimensions) used to convert
+	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
+	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
+	WinSize cached_ws;
 	MouseMode mouse_mode;
+	bool report_key_events;
+	bool mouse_pixels;
 	bool debug;
 	char[512] pending;
 	sz pending_len;
@@ -581,6 +616,54 @@ fn void Program.emit_sgr(Program* self, String seq) {
 	}
 }
 
+// apply_mouse_pixels converts a parsed MouseMsg's row/col — which the SGR
+// parser always treats as raw coordinates from the terminal — into proper
+// pixel (px/py) and cell (row/col) values when DEC mode 1016 (SGR-Pixels) is
+// active.
+//
+// The wire format for mode 1006 and 1016 is identical; only the terminal's
+// interpretation of the reported x/y differs. To tell them apart without a
+// side channel, this uses two signals:
+//   1. If the cached window size has no pixel dimensions (ws_xpixel/ws_ypixel
+//      == 0, e.g. tmux or terminals that don't populate TIOCGWINSZ pixel
+//      fields), the terminal cannot be sending pixel coordinates usefully —
+//      fall back to treating row/col as cell coordinates untouched.
+//   2. Otherwise, if the raw coordinates already fall within the current
+//      cell grid, the terminal likely ignored mode 1016 and is still sending
+//      cell coordinates — again fall back untouched (px/py stay 0).
+//   3. Otherwise, treat row/col as 0-based pixel coordinates: store them in
+//      px/py and derive cell row/col by dividing by the per-cell pixel size.
+fn void Program.apply_mouse_pixels(Program* self, MouseMsg* mouse) {
+	WinSize ws = self.cached_ws;
+	if (ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0) {
+		return;
+	}
+	if (mouse.col < (int)ws.ws_col && mouse.row < (int)ws.ws_row) {
+		// Coordinates already fit inside the cell grid — terminal is still
+		// sending cell coordinates (mode 1016 unsupported/ignored).
+		return;
+	}
+
+	int raw_x = mouse.col;
+	int raw_y = mouse.row;
+
+	double cell_w = (double)ws.ws_xpixel / (double)ws.ws_col;
+	double cell_h = (double)ws.ws_ypixel / (double)ws.ws_row;
+
+	int cell_col = (int)((double)raw_x / cell_w);
+	int cell_row = (int)((double)raw_y / cell_h);
+
+	if (cell_col < 0) cell_col = 0;
+	if (cell_col >= (int)ws.ws_col) cell_col = (int)ws.ws_col - 1;
+	if (cell_row < 0) cell_row = 0;
+	if (cell_row >= (int)ws.ws_row) cell_row = (int)ws.ws_row - 1;
+
+	mouse.px = raw_x;
+	mouse.py = raw_y;
+	mouse.col = cell_col;
+	mouse.row = cell_row;
+}
+
 // tick registers a timer that fires after delay_ms.
 // Default: 16ms (~60fps) sending a TICK message.
 // When all MAX_TIMERS slots are occupied the timer is silently dropped;
@@ -704,9 +787,19 @@ fn void? Program.run(Program* self) {
 			input_queue_close(&g_input_queue);
 			self.reader_thread.join();
 			input_queue_destroy(&g_input_queue);
+			if (self.mouse_pixels) {
+				disable_mouse_pixels();
+				self.mouse_pixels = false;
+			}
 			disable_mouse();
 			disable_bracketed_paste();
-			// Pop kitty keyboard protocol — restores previous mode for the terminal.
+			// Pop the key-events enhancement layer first (if it was pushed on top
+			// of the base layer), then pop the base kitty keyboard layer — restores
+			// the terminal's previous mode.
+			if (self.report_key_events) {
+				disable_kitty_key_events();
+				self.report_key_events = false;
+			}
 			disable_kitty_keyboard();
 			disable_focus();
 			show_cursor();
@@ -756,6 +849,7 @@ fn void? Program.run(Program* self) {
 		initial_ws.ws_col = 80;
 		initial_ws.ws_row = 24;
 	}
+	self.cached_ws = initial_ws;
 
 	// Create xray renderer for differential rendering (non-test mode only)
 	if (!self.test_mode) {
@@ -818,6 +912,7 @@ fn void? Program.run(Program* self) {
 		if (!self.test_mode && g_win_resized.load(RELAXED)) {
 			g_win_resized.store(false, RELAXED);
 			WinSize ws = get_window_size();
+			self.cached_ws = ws;
 			if (self.renderer != null) {
 				self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
 			}
@@ -1004,6 +1099,9 @@ fn void? Program.run(Program* self) {
 				} else if (pr.kind == MsgKind.MOUSE) {
 					m.kind = MsgKind.MOUSE;
 					m.mouse = pr.mouse;
+					if (self.mouse_pixels) {
+						self.apply_mouse_pixels(&m.mouse);
+					}
 				} else {
 					m.kind = MsgKind.KEY;
 					m.key = pr.key;
@@ -1030,7 +1128,7 @@ fn void? Program.run(Program* self) {
 						self.pending[i - 1] = self.pending[i];
 					}
 					self.pending_len--;
-					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false } };
+					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS } };
 					if (dispatch(self, self.model, em)) return;
 					dirty   = true;
 					reparse = true;
@@ -1086,10 +1184,49 @@ fn void Program.render_current_view(Program* self) {
 		if (v.mouse_mode != self.mouse_mode) {
 			if (v.mouse_mode == MOUSE_MODE_NONE) {
 				disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
+				// Mouse reporting itself was just turned off — 1016 no longer
+				// applies. Reset it so re-enabling mouse_mode later re-asserts
+				// it explicitly rather than relying on terminal state.
+				if (self.mouse_pixels) {
+					disable_mouse_pixels();
+				}
 			} else {
 				enable_mouse(v.mouse_mode == MOUSE_MODE_ALL_MOTION);
+				// Re-assert pixel reporting: some terminals reset SGR-Pixels
+				// mode (1016) when the base mouse tracking mode changes, so
+				// if the view has pixel mode on, turn it back on here too.
+				if (self.mouse_pixels) {
+					enable_mouse_pixels();
+				}
 			}
 			self.mouse_mode = v.mouse_mode;
+		}
+		// Enable/disable SGR-Pixels mouse reporting (DEC mode 1016) when
+		// mouse_pixels changes. Only meaningful while mouse_mode is active;
+		// still track the flag even if mouse_mode is currently NONE so it
+		// gets asserted the moment mouse_mode turns on (handled above).
+		if (v.mouse_pixels != self.mouse_pixels) {
+			if (v.mouse_pixels) {
+				if (v.mouse_mode != MOUSE_MODE_NONE) {
+					enable_mouse_pixels();
+				}
+			} else {
+				if (self.mouse_mode != MOUSE_MODE_NONE) {
+					disable_mouse_pixels();
+				}
+			}
+			self.mouse_pixels = v.mouse_pixels;
+		}
+		// Enable/disable kitty key event reporting (press/repeat/release) when
+		// report_key_events changes. Pushed/popped as an extra enhancement layer
+		// on top of the base disambiguate layer pushed at startup.
+		if (v.report_key_events != self.report_key_events) {
+			if (v.report_key_events) {
+				enable_kitty_key_events();
+			} else {
+				disable_kitty_key_events();
+			}
+			self.report_key_events = v.report_key_events;
 		}
 		if (self.test_mode) {
 			if (self.output_buf != null) {
