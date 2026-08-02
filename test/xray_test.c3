@@ -622,6 +622,79 @@ fn void test_layout_h_min() @test {
 	assert(out[1].w <= 12);
 }
 
+// ------------------------------------------------------------
+// Layout solver — constraint invariants
+//
+// The contract every layout must satisfy: no child may exceed its own
+// constraint, and no child may extend past the parent area. These cases all
+// regressed at some point because the remainder-distribution pass ignored
+// both rules.
+// ------------------------------------------------------------
+
+fn void test_layout_max_alone_respects_cap() @test {
+	// A lone CMAX child used to swallow the entire axis: pass 2 clamped it to
+	// the cap, then the remainder loop handed the slack straight back.
+	Rect[1] out;
+	Constraint[1] constraints = { constraint_max(5) };
+	layout_h(new_rect(0, 0, 80, 5), constraints[..], out[..]);
+
+	assert(out[0].w == 5);
+}
+
+fn void test_layout_all_max_respect_caps() @test {
+	// With every child capped, the last one absorbed all the leftover space.
+	Rect[3] out;
+	Constraint[3] constraints = { constraint_max(2), constraint_max(2), constraint_max(2) };
+	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
+
+	assert(out[0].w == 2);
+	assert(out[1].w == 2);
+	assert(out[2].w == 2);
+}
+
+fn void test_layout_max_then_len_respects_cap() @test {
+	// A zero-length trailing child must not let the CMAX child grow past its cap.
+	Rect[2] out;
+	Constraint[2] constraints = { constraint_max(20), constraint_len(0) };
+	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
+
+	assert(out[0].w == 20);
+}
+
+fn void test_layout_min_stays_inside_area() @test {
+	// Oversubscribed CMIN children used to be emitted at their full requested
+	// size, putting the second rect's right edge at 80 in a 30-wide area.
+	Rect[2] out;
+	Constraint[2] constraints = { constraint_min(40), constraint_min(40) };
+	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
+
+	assert(out[0].w + out[1].w <= 30);
+	assert(out[1].x + out[1].w <= 30);
+}
+
+fn void test_layout_fill_consumes_full_axis() @test {
+	// Integer division leaves a remainder; it must land on a fill child so the
+	// children exactly tile the axis.
+	Rect[3] out;
+	Constraint[3] constraints = { constraint_len(10), constraint_fill(1), constraint_fill(2) };
+	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
+
+	assert(out[0].w + out[1].w + out[2].w == 100);
+}
+
+fn void test_layout_vertical_stays_inside_area() @test {
+	// Same invariant on the vertical axis, including the gap accounting.
+	Rect[3] out;
+	Constraint[3] constraints = { constraint_max(4), constraint_fill(1), constraint_min(50) };
+	layout_v_gap(new_rect(0, 0, 20, 24), constraints[..], 1, out[..]);
+
+	assert(out[0].h <= 4);
+	foreach (r : out[..2]) {
+		assert(r.y >= 0);
+		assert(r.y + r.h <= 24);
+	}
+}
+
 // ============================================================
 // ScreenBuffer draw helper tests
 // ============================================================
@@ -1084,4 +1157,119 @@ fn void test_set_string_combining_doesnt_advance_column() @test {
 	Cell* c1 = sb.cell_at(1, 0);
 	assert(c1.content_len == 1);
 	assert(c1.content[0] == 'X');
+}
+
+// ============================================================
+// Wide-glyph pairing
+//
+// A wide (width-2) glyph owns two columns: the leading cell plus a blank
+// placeholder. The renderer skips the column after a width-2 cell, so a
+// half-overwritten pair silently swallows writes or addresses the cursor
+// mid-glyph. These cases pin down the repair behaviour.
+// ============================================================
+
+fn void test_wide_overwriting_trailing_half_demotes_leader() @test {
+	// Writing into a wide glyph's second column used to leave the leader at
+	// width 2, so the renderer skipped the new cell and never emitted it.
+	ScreenBuffer* sb = new_screen_buffer(6, 1);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.set_string(0, 0, "漢", default_style());
+	sb.set_string(1, 0, "X", default_style());
+
+	Cell* leader = sb.cell_at(0, 0);
+	assert(leader.width == 1); // demoted — no longer claims two columns
+	Cell* written = sb.cell_at(1, 0);
+	assert(written.content[0] == 'X');
+
+	// The X must actually reach the output.
+	String row = sb.render_frame_row(0);
+	assert(row.len >= 2);
+	assert(row[1] == 'X');
+}
+
+fn void test_wide_replaced_by_narrow_releases_placeholder() @test {
+	// Replacing a wide glyph with narrow text must free its trailing column.
+	ScreenBuffer* sb = new_screen_buffer(6, 1);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.set_string(0, 0, "漢", default_style());
+	sb.set_string(0, 0, "ab", default_style());
+
+	assert(sb.cell_at(0, 0).content[0] == 'a');
+	assert(sb.cell_at(1, 0).content[0] == 'b');
+	assert(sb.cell_at(0, 0).width == 1);
+}
+
+fn void test_wide_pair_survives_own_placeholder_write() @test {
+	// Adjacent wide glyphs must not tear each other apart: each writes its own
+	// trailing placeholder, which must not demote the glyph that just landed.
+	ScreenBuffer* sb = new_screen_buffer(6, 1);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.set_string(0, 0, "漢字", default_style());
+
+	assert(sb.cell_at(0, 0).width == 2);
+	assert(sb.cell_at(2, 0).width == 2);
+}
+
+fn void test_wide_at_last_column_becomes_space() @test {
+	// A wide glyph with only one column left would make the terminal wrap or
+	// truncate, desyncing our column accounting. It's stored as a space.
+	ScreenBuffer* sb = new_screen_buffer(3, 1);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.set_string(2, 0, "漢", default_style());
+
+	Cell* last = sb.cell_at(2, 0);
+	assert(last.width == 1);
+	assert(last.content[0] == ' ');
+}
+
+// ============================================================
+// Bounds safety
+//
+// `sz` is signed, so guards written as `col >= width` let negative
+// coordinates through to index before the buffer. Every public write path
+// must reject them.
+// ============================================================
+
+fn void test_negative_coordinates_are_rejected() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer { sb.destroy(); mem::free(sb); }
+
+	// None of these may index out of bounds.
+	sb.set_cell((sz)-5, (sz)0, empty_cell());
+	sb.set_cell((sz)0, (sz)-5, empty_cell());
+	sb.set_string((sz)0, (sz)-1, "hello", default_style());
+	sb.overlay_char((sz)-1, (sz)0, "x", default_style());
+	sb.clear_range((sz)-4, (sz)2);
+
+	assert(sb.cell_at((sz)-1, (sz)0) == null);
+	assert(sb.cell_at((sz)0, (sz)-1) == null);
+}
+
+fn void test_draw_string_in_negative_rect_is_clipped() @test {
+	// Rect.inset on a small area readily produces negative origins; they used
+	// to index before cells[0].
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.draw_string_in_rect(new_rect(-2, -1, 8, 2), "hello", default_style());
+
+	// The visible tail of the string still lands on-screen.
+	assert(sb.cell_at(0, 0) != null);
+}
+
+fn void test_zero_sized_buffer_is_safe() @test {
+	// A terminal can transiently report 0 rows/cols (SIGWINCH, non-tty stdout);
+	// mem::new_array(T, 0) yields null and mem::copy rejects it.
+	ScreenBuffer* sb = new_screen_buffer(0, 0);
+	defer { sb.destroy(); mem::free(sb); }
+
+	sb.clear();
+	sb.resize(0, 5);
+	sb.resize(4, 2);
+	assert(sb.width == 4);
+	assert(sb.height == 2);
 }
