@@ -26,3 +26,8 @@ format:
 # Regenerate examples/* targets in project.json (edit scripts/gen_targets.py OVERRIDES first)
 gen-targets:
     python3 scripts/gen_targets.py
+
+# Regenerate the character-width tables in xray/width.c3 and glaze/style.c3
+# from Unicode data (edit scripts/gen_width.py first)
+gen-width:
+    python3 scripts/gen_width.py

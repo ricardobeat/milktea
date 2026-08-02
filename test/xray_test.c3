@@ -1295,3 +1295,61 @@ fn void test_glaze_and_xray_widths_agree() @test {
 		}
 	}
 }
+
+
+// ============================================================
+// char_width — Unicode conformance
+//
+// The tables are generated from the UCD by scripts/gen_width.py. These cases
+// pin the classes that the previous hand-written cascade got wrong: BMP emoji
+// were reported narrow, and combining marks outside the Latin blocks were
+// reported as one column instead of zero. Either error shifts the cursor by a
+// column per character.
+// ============================================================
+
+fn void test_char_width_bmp_emoji_are_wide() @test {
+	assert(char_width(0x231A) == 2); // WATCH
+	assert(char_width(0x2615) == 2); // HOT BEVERAGE
+	assert(char_width(0x26A1) == 2); // HIGH VOLTAGE
+	assert(char_width(0x2705) == 2); // WHITE HEAVY CHECK MARK
+	assert(char_width(0x2728) == 2); // SPARKLES
+	assert(char_width(0x274C) == 2); // CROSS MARK
+	assert(char_width(0x2B50) == 2); // WHITE MEDIUM STAR
+	assert(char_width(0x1F004) == 2); // MAHJONG TILE RED DRAGON
+	assert(char_width(0x1F7E0) == 2); // LARGE ORANGE CIRCLE
+}
+
+fn void test_char_width_non_latin_combining_marks_are_zero() @test {
+	assert(char_width(0x064B) == 0); // Arabic fathatan
+	assert(char_width(0x0591) == 0); // Hebrew accent etnahta
+	assert(char_width(0x093C) == 0); // Devanagari nukta
+	assert(char_width(0x0E31) == 0); // Thai mai han akat
+	assert(char_width(0x17B4) == 0); // Khmer vowel inherent aq
+	assert(char_width(0x0F71) == 0); // Tibetan vowel sign aa
+}
+
+fn void test_char_width_variation_selectors_and_tags_are_zero() @test {
+	assert(char_width(0xFE0F) == 0);  // VS16
+	assert(char_width(0xE0101) == 0); // VS supplement
+	assert(char_width(0xE0061) == 0); // tag latin small letter a
+}
+
+fn void test_char_width_halfwidth_forms_stay_narrow() @test {
+	// The fullwidth block is wide but the halfwidth katakana that follows it
+	// is not — an easy range to over-claim.
+	assert(char_width(0xFF01) == 2); // FULLWIDTH EXCLAMATION MARK
+	assert(char_width(0xFF60) == 2);
+	assert(char_width(0xFF61) == 1); // HALFWIDTH IDEOGRAPHIC FULL STOP
+	assert(char_width(0xFFE6) == 2);
+	assert(char_width(0xFFE8) == 1);
+}
+
+fn void test_char_width_common_cases() @test {
+	assert(char_width(0) == 0);
+	assert(char_width('a') == 1);
+	assert(char_width(' ') == 1);
+	assert(char_width(0x0301) == 0);   // combining acute
+	assert(char_width(0x65E5) == 2);   // CJK 日
+	assert(char_width(0x1F600) == 2);  // grinning face
+	assert(char_width(0x10FFFF) == 1); // unassigned tail
+}
