@@ -397,10 +397,10 @@ fn String Viewport.view(&self) {
 			// Render normally and pad with spaces
 			out.append_string(self.render_line_with_selection(i, line, text_w));
 		} else {
-			// Truncate to text_w (byte approximation for ASCII)
-			sz trunc = (sz)text_w;
-			if (trunc > line.len) trunc = line.len;
-			String truncated = line[:trunc];
+			// Cut on a display-width boundary, not a byte index: a byte cut
+			// splits multi-byte characters and can leave a partial escape
+			// sequence that renders as visible garbage.
+			String truncated = glaze::truncate_to_width(line, text_w);
 			out.append_string(self.render_line_with_selection(i, truncated, text_w));
 		}
 
@@ -425,20 +425,18 @@ fn String Viewport.render_line_with_selection(&self, int row, String line, int p
 	DString out = dstring::temp();
 	int col = 0;
 
-	// Render line character by character with selection styling
-	for (sz i = 0; i < line.len; i++) {
-		if (self.is_in_selection(row, col)) {
-			// Create a single-char string and apply selection style
-			DString char_str = dstring::temp();
-			char_str.append_char(line[i]);
-			out.append_string(self.selection_style.render(char_str.str_view()));
-		} else {
-			// Apply content style to single char
-			DString char_str = dstring::temp();
-			char_str.append_char(line[i]);
-			out.append_string(self.content_style.render(char_str.str_view()));
-		}
+	// Render character by character with selection styling. Stepping one BYTE
+	// at a time wrapped each byte of a multi-byte character in its own SGR
+	// pair, so "日本語" rendered as nine replacement glyphs and the padding
+	// was computed against a byte count instead of a display width.
+	sz i = 0;
+	while (i < line.len) {
+		sz char_len = glaze::utf8_sequence_len(line, i);
+		String ch   = line[i:char_len];
+		glaze::Style s = self.is_in_selection(row, col) ? self.selection_style : self.content_style;
+		out.append_string(s.render(ch));
 		col++;
+		i += char_len;
 	}
 
 	// Pad remainder with spaces

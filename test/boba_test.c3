@@ -155,3 +155,33 @@ fn void test_table_row_capacity_is_enforced() @test {
 	}
 	assert(t.row_count == boba::MAX_TABLE_ROWS);
 }
+
+// ============================================================
+// Viewport — width-aware rendering
+// ============================================================
+
+fn void test_viewport_renders_multibyte_intact() @test {
+	// The render loop stepped one BYTE at a time and wrapped each byte in its
+	// own SGR pair, so "日本語" came out as nine replacement glyphs.
+	boba::Viewport vp = boba::new_viewport(40, 3);
+	vp.add_line("日本語");
+	String out = vp.view();
+
+	// The three-byte sequence for 日 must survive contiguously.
+	bool found = false;
+	for (sz i = 0; i + 2 < out.len; i++) {
+		if (out[i] == (char)0xe6 && out[i + 1] == (char)0x97 && out[i + 2] == (char)0xa5) {
+			found = true;
+			break;
+		}
+	}
+	assert(found);
+}
+
+fn void test_viewport_truncates_on_width_boundary() @test {
+	// Truncating at a byte index split multi-byte characters and could cut a
+	// CSI in half, leaking the escape as visible text.
+	boba::Viewport vp = boba::new_viewport(6, 2);
+	vp.add_line("日本語日本語日本語");
+	vp.view(); // must not produce a partial sequence or trap
+}

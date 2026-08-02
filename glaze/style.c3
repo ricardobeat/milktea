@@ -92,6 +92,62 @@ fn sz skip_escape(String s, sz start) @local {
 	return i + 1;
 }
 
+// truncate_to_width returns the longest prefix of `s` whose display width is
+// at most `max_width`, measured the same way as string_width.
+//
+// Escape sequences are carried through whole and cost no width, so the result
+// never ends in the middle of one — cutting at a byte index would emit the
+// leading bytes of a CSI as literal visible text. Multi-byte characters are
+// likewise kept intact, and a wide glyph that would straddle the limit is
+// dropped rather than half-included.
+fn String truncate_to_width(String s, int max_width) {
+	if (max_width <= 0) return "";
+	int w = 0;
+	sz i  = 0;
+	while (i < s.len) {
+		if (s[i] == '\x1b') {
+			i = skip_escape(s, i);
+			continue;
+		}
+		sz char_len = utf8_sequence_len(s, i);
+		uint cp     = decode_codepoint(s, i, char_len);
+		int cw      = codepoint_width(cp);
+		if (w + cw > max_width) break;
+		w += cw;
+		i += char_len;
+	}
+	return s[:i];
+}
+
+// utf8_sequence_len returns the byte length of the UTF-8 sequence at `i`,
+// clamped to the end of the string. Always at least 1, so callers advance.
+fn sz utf8_sequence_len(String s, sz i) {
+	char b = s[i];
+	sz n   = 1;
+	if ((b & 0xe0) == 0xc0) {
+		n = 2;
+	} else if ((b & 0xf0) == 0xe0) {
+		n = 3;
+	} else if ((b & 0xf8) == 0xf0) {
+		n = 4;
+	}
+	return i + n > s.len ? s.len - i : n;
+}
+
+// decode_codepoint decodes the `len`-byte UTF-8 sequence starting at `i`.
+fn uint decode_codepoint(String s, sz i, sz len) @local {
+	char b = s[i];
+	switch (len) {
+		case 2: return ((uint)(b & 0x1f) << 6) | (uint)(s[i + 1] & 0x3f);
+		case 3:
+			return ((uint)(b & 0x0f) << 12) | ((uint)(s[i + 1] & 0x3f) << 6) | (uint)(s[i + 2] & 0x3f);
+		case 4:
+			return ((uint)(b & 0x07) << 18) | ((uint)(s[i + 1] & 0x3f) << 12)
+				| ((uint)(s[i + 2] & 0x3f) << 6) | (uint)(s[i + 3] & 0x3f);
+		default: return (uint)b;
+	}
+}
+
 // string_width returns the terminal display width of a string, skipping ANSI
 // escape sequences. Uses the same codepoint width rules as xray::char_width.
 fn int string_width(String s) {
