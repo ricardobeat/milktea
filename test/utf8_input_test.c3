@@ -2,6 +2,7 @@ module utf8_input_test @test;
 
 import milktea;
 import boba;
+import xray;
 
 // ============================================================
 // UTF-8 keyboard input: parse_key decodes multi-byte sequences
@@ -100,4 +101,74 @@ fn void test_textarea_utf8_rune() @test {
 	assert(ta.handle_key(k));
 	assert(ta.text() == "😀"); // 0xF0 0x9F 0x98 0x80
 	assert(ta.len == 4);
+}
+
+// ============================================================
+// Malformed UTF-8 must decode to U+FFFD, not pass through
+//
+// A structurally valid sequence can still encode an invalid scalar value.
+// Letting those through means a terminal could deliver a rune == 0 that never
+// came from a NUL byte, and any caller re-encoding the value would emit bytes
+// that are not UTF-8.
+// ============================================================
+
+fn void test_overlong_encoding_rejected() @test {
+	uint cp;
+	xray::utf8_decode((String)(char[])"\xc0\x80", &cp);
+	assert(cp == xray::UNICODE_REPLACEMENT);
+
+	xray::utf8_decode((String)(char[])"\xe0\x80\x80", &cp);
+	assert(cp == xray::UNICODE_REPLACEMENT);
+}
+
+fn void test_surrogate_halves_rejected() @test {
+	uint cp;
+	xray::utf8_decode((String)(char[])"\xed\xa0\x80", &cp); // U+D800
+	assert(cp == xray::UNICODE_REPLACEMENT);
+
+	xray::utf8_decode((String)(char[])"\xed\xbf\xbf", &cp); // U+DFFF
+	assert(cp == xray::UNICODE_REPLACEMENT);
+}
+
+fn void test_codepoint_above_max_rejected() @test {
+	uint cp;
+	xray::utf8_decode((String)(char[])"\xf4\x90\x80\x80", &cp); // U+110000
+	assert(cp == xray::UNICODE_REPLACEMENT);
+}
+
+fn void test_valid_sequences_still_decode() @test {
+	uint cp;
+	xray::utf8_decode("é", &cp);
+	assert(cp == 0xE9);
+	xray::utf8_decode("日", &cp);
+	assert(cp == 0x65E5);
+	xray::utf8_decode("😀", &cp);
+	assert(cp == 0x1F600);
+}
+
+fn void test_utf8_encode_rejects_invalid_codepoints() @test {
+	// The 4-byte form is the fallback branch, so an out-of-range codepoint
+	// used to emit a lead byte past 0xF7 — bytes that are not UTF-8 and that
+	// utf8_decode reads back as a single '?'.
+	char[4] out;
+	sz n = milktea::utf8_encode(0x200000, out[..]);
+	uint cp;
+	xray::utf8_decode((String)out[:n], &cp);
+	assert(cp == xray::UNICODE_REPLACEMENT);
+
+	n = milktea::utf8_encode(0xD800, out[..]);
+	xray::utf8_decode((String)out[:n], &cp);
+	assert(cp == xray::UNICODE_REPLACEMENT);
+}
+
+fn void test_utf8_encode_decode_round_trip() @test {
+	uint[] cases = { 'a', 0xE9, 0x65E5, 0x1F600, 0x10FFFF };
+	foreach (want : cases) {
+		char[4] out;
+		sz n = milktea::utf8_encode(want, out[..]);
+		uint got;
+		sz consumed = xray::utf8_decode((String)out[:n], &got);
+		assert(consumed == n);
+		assert(got == want);
+	}
 }

@@ -1,5 +1,6 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <time.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,24 @@ long long c3_time_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, ((void *)0));
     return (long long)tv.tv_sec * 1000LL + tv.tv_usec / 1000LL;
+}
+
+/* Monotonic milliseconds, for measuring durations.
+ *
+ * Timer deadlines must not move when the system clock does: an NTP or DST step
+ * backwards would stall every armed timer for the length of the step, and a
+ * step forwards would fire them all at once. CLOCK_MONOTONIC is unaffected by
+ * clock adjustments. Wall-clock time is still the right basis for every(),
+ * which deliberately snaps to calendar boundaries — that uses c3_time_ms.
+ */
+long long c3_monotonic_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        /* Should not happen on any supported platform; fall back to wall time
+         * rather than returning a nonsense deadline. */
+        return c3_time_ms();
+    }
+    return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
 long c3_time_ms_long(void) {

@@ -17,6 +17,26 @@ struct ScreenBuffer {
 	bool full_redraw; // force full redraw on next flush
 }
 
+// fill_empty fills `width * height` cells with empty_cell().
+//
+// empty_cell() is NOT all-zero bytes (content[0]=' ', content_len=1,
+// width=1), so mem::set(0) would corrupt the grid. Instead the first row is
+// written cell-by-cell and then block-copied across the remaining rows.
+// A zero-sized grid is a no-op: mem::new_array yields a null pointer for
+// length 0, and mem::copy rejects null.
+fn void fill_empty(Cell[] cells, sz width, sz height) @local {
+	if (width <= 0 || height <= 0) return;
+	Cell empty = empty_cell();
+	Cell* row0 = cells.ptr;
+	for (sz i = 0; i < width; i++) {
+		row0[i] = empty;
+	}
+	sz row_bytes = width * Cell::size;
+	for (sz row = 1; row < height; row++) {
+		mem::copy(cells.ptr + row * width, row0, row_bytes);
+	}
+}
+
 // new_screen_buffer allocates a buffer of the given dimensions.
 fn ScreenBuffer* new_screen_buffer(sz width, sz height) {
 	ScreenBuffer* sb = mem::new(ScreenBuffer);
@@ -28,17 +48,8 @@ fn ScreenBuffer* new_screen_buffer(sz width, sz height) {
 	sb.dirty_lines = mem::new_array(bool, height);
 	sb.full_redraw = true;
 
-	// Fill first row, then copy-double into remaining rows (empty_cell is not all-zero).
-	Cell empty = empty_cell();
-	sz row_bytes = width * Cell::size;
-	Cell* row0 = sb.cells.ptr;
-	for (sz i = 0; i < width; i++) {
-		row0[i] = empty;
-	}
-	for (sz row = 1; row < height; row++) {
-		mem::copy(sb.cells.ptr + row * width, row0, row_bytes);
-	}
-	mem::copy(sb.prev_cells.ptr, sb.cells.ptr, total * Cell::size);
+	fill_empty(sb.cells, width, height);
+	if (total > 0) mem::copy(sb.prev_cells.ptr, sb.cells.ptr, total * Cell::size);
 	for (sz i = 0; i < height; i++) {
 		sb.dirty_lines[i] = true;
 	}
@@ -54,24 +65,14 @@ fn void ScreenBuffer.destroy(&self) {
 
 // resize reallocates the buffer to new dimensions and clears everything.
 fn void ScreenBuffer.resize(&self, sz width, sz height) {
-	sz old_total = self.width * self.height;
 	sz new_total = width * height;
 
 	Cell[] new_cells = mem::new_array(Cell, new_total);
 	Cell[] new_prev  = mem::new_array(Cell, new_total);
 	bool[] new_dirty = mem::new_array(bool, height);
 
-	// Fill first row, then copy-double into remaining rows (empty_cell is not all-zero).
-	Cell empty = empty_cell();
-	sz row_bytes = width * Cell::size;
-	Cell* row0 = new_cells.ptr;
-	for (sz i = 0; i < width; i++) {
-		row0[i] = empty;
-	}
-	for (sz row = 1; row < height; row++) {
-		mem::copy(new_cells.ptr + row * width, row0, row_bytes);
-	}
-	mem::copy(new_prev.ptr, new_cells.ptr, new_total * Cell::size);
+	fill_empty(new_cells, width, height);
+	if (new_total > 0) mem::copy(new_prev.ptr, new_cells.ptr, new_total * Cell::size);
 	for (sz i = 0; i < height; i++) {
 		new_dirty[i] = true;
 	}
@@ -90,18 +91,7 @@ fn void ScreenBuffer.resize(&self, sz width, sz height) {
 
 // clear sets all cells to empty and marks every line dirty.
 fn void ScreenBuffer.clear(&self) {
-	// empty_cell() is NOT all-zero bytes (content[0]=' ', content_len=1, width=1),
-	// so mem::set(0) would corrupt cells. Instead: fill the first row cell-by-cell,
-	// then copy-double that row across the remaining rows.
-	Cell empty = empty_cell();
-	sz row_bytes = self.width * Cell::size;
-	Cell* row0 = self.cells.ptr;
-	for (sz i = 0; i < self.width; i++) {
-		row0[i] = empty;
-	}
-	for (sz row = 1; row < self.height; row++) {
-		mem::copy(self.cells.ptr + row * self.width, row0, row_bytes);
-	}
+	fill_empty(self.cells, self.width, self.height);
 	// bool true != 0 in general; keep explicit loop to be safe.
 	for (sz i = 0; i < self.height; i++) {
 		self.dirty_lines[i] = true;
@@ -110,6 +100,7 @@ fn void ScreenBuffer.clear(&self) {
 
 // clear_range clears only rows [start_row, end_row) to empty and marks them dirty.
 fn void ScreenBuffer.clear_range(&self, sz start_row, sz end_row) {
+	if (start_row < 0) start_row = 0;
 	if (start_row >= self.height) return;
 	if (end_row > self.height) end_row = self.height;
 	Cell empty = empty_cell();
@@ -124,7 +115,7 @@ fn void ScreenBuffer.clear_range(&self, sz start_row, sz end_row) {
 
 // cell_at returns a pointer to the cell at (col, row), or null if out of bounds.
 fn Cell* ScreenBuffer.cell_at(&self, sz col, sz row) {
-	if (col >= self.width || row >= self.height) return null;
+	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return null;
 	return &self.cells[row * self.width + col];
 }
 
@@ -137,6 +128,54 @@ fn bool is_block_char(Cell* cell) @local {
 	return cp >= 0x2580 && cp <= 0x259F;
 }
 
+// put_raw_cell writes a cell with no colour compositing and no wide-pair
+// repair. Reserved for callers that are placing both halves of a wide glyph
+// themselves and must not have the pair torn apart mid-write.
+fn void ScreenBuffer.put_raw_cell(&self, sz col, sz row, Cell cell) {
+	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
+	sz idx = row * self.width + col;
+	if (!self.cells[idx].eq(cell)) {
+		self.cells[idx] = cell;
+		self.dirty_lines[row] = true;
+	}
+}
+
+// split_wide_neighbors repairs the wide-glyph pairings around (col, row)
+// before a cell of display width `incoming_width` is written there.
+//
+// A wide glyph owns two columns: the leading cell (width 2) plus a blank
+// placeholder. The renderer skips the column following a width-2 cell, so a
+// half-overwritten pair either swallows the new write or leaves the cursor
+// addressed mid-glyph. Both halves are therefore normalised here:
+//   - writing into a trailing half demotes the orphaned leading half to a blank
+//   - replacing a leading half with a narrow cell releases its placeholder
+//
+// The blank inherits the neighbour's style so clearing a glyph doesn't punch a
+// default-coloured hole through a styled background.
+fn void ScreenBuffer.split_wide_neighbors(&self, sz col, sz row, char incoming_width) {
+	sz idx = row * self.width + col;
+
+	if (col > 0) {
+		Cell* left = &self.cells[idx - 1];
+		if (left.width == 2) {
+			Style keep = left.style;
+			*left = empty_cell();
+			left.style = keep;
+			self.dirty_lines[row] = true;
+		}
+	}
+
+	if (self.cells[idx].width == 2 && incoming_width != 2 && col + 1 < self.width) {
+		Cell* right = &self.cells[idx + 1];
+		Cell blank = empty_cell();
+		blank.style = right.style;
+		if (!right.eq(blank)) {
+			*right = blank;
+			self.dirty_lines[row] = true;
+		}
+	}
+}
+
 // set_cell writes a cell at (col, row). Marks the line dirty if
 // the new cell differs from what's already there.
 // Channels set to TRANSPARENT inherit from the existing cell —
@@ -145,7 +184,10 @@ fn bool is_block_char(Cell* cell) @local {
 // For block characters whose bg is NONE, the fg is used instead,
 // since block glyphs fill the cell with their foreground color.
 fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
-	if (col >= self.width || row >= self.height) return;
+	// sz is signed: negative coordinates must be rejected explicitly, or they
+	// index before the buffer (a trap in safe builds, silent heap corruption
+	// in the -Os/-O3 example targets).
+	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
 	sz idx = row * self.width + col;
 	if (cell.style.bg.kind == ColorKind.TRANSPARENT) {
 		Cell* existing = &self.cells[idx];
@@ -162,6 +204,8 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 	} else if (cell.style.fg.kind == ColorKind.TRUECOLOR && cell.style.fg.effective_alpha() < 255) {
 		cell.style.fg = cell.style.fg.blend_over(self.cells[idx].style.fg);
 	}
+	self.split_wide_neighbors(col, row, cell.width);
+
 	if (!self.cells[idx].eq(cell)) {
 		self.cells[idx] = cell;
 		self.dirty_lines[row] = true;
@@ -172,7 +216,7 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 // Supports ANSI escape sequences (SGR color/style). Neighbors are never
 // touched — wide chars occupy one slot visually without shifting anything.
 fn void ScreenBuffer.overlay_char(&self, sz col, sz row, String text, Style base_style) {
-	if (col >= self.width || row >= self.height || text.len == 0) return;
+	if (col < 0 || row < 0 || col >= self.width || row >= self.height || text.len == 0) return;
 	// Parse through a stack-allocated 2x1 scratch buffer so ANSI sequences
 	// are handled without any heap allocation. render_ansi_string only reads
 	// width/height and writes into cells[]/dirty_lines[] — it never resizes,
@@ -203,7 +247,7 @@ fn void ScreenBuffer.overlay_char(&self, sz col, sz row, String text, Style base
 // set_string writes a string starting at (col, row) with the given style.
 // Advances col by each character's display width.
 fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style) {
-	if (row >= self.height) return;
+	if (row < 0 || row >= self.height) return;
 
 	sz c = col;
 	sz i = 0;
@@ -224,7 +268,7 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 		// combining mark is far less disruptive than shifting every following
 		// cell by one column.
 		if (cw == 0) {
-			if (c > col) {
+			if (c > col && c > 0) {
 				Cell* prev_cell = &self.cells[row * self.width + (c - 1)];
 				sz available = CELL_MAX_BYTES - (sz)prev_cell.content_len;
 				if (char_len <= available) {
@@ -242,12 +286,21 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 		}
 
 		char w = (char)cw;
+		if (w == 2 && c + 1 >= self.width) {
+			// A wide glyph needs two columns; only one is left. Emitting it
+			// would make the terminal wrap or truncate, desyncing our column
+			// accounting from the display. Write a space instead.
+			self.set_cell(c, row, new_cell(" ", 1, style));
+			break;
+		}
 		Cell cell = new_cell(text[i:char_len], w, style);
 		self.set_cell(c, row, cell);
-		// Wide cell: write a blank placeholder at c+1 so the renderer
-		// doesn't output stale content in the second terminal column.
-		if (w == 2 && c + 1 < self.width) {
-			self.set_cell(c + 1, row, empty_cell());
+		// Wide cell: write a blank placeholder at c+1 so the renderer doesn't
+		// output stale content in the second terminal column. This is the
+		// glyph's own trailing half, so it must bypass the wide-pair repair —
+		// otherwise it would demote the leading half we just wrote.
+		if (w == 2) {
+			self.put_raw_cell(c + 1, row, empty_cell());
 		}
 
 		c += w;
@@ -410,6 +463,20 @@ fn String ScreenBuffer.render_ansi(&self) {
 // UTF-8 decode helper
 // ============================================================
 
+// U+FFFD REPLACEMENT CHARACTER, substituted for any byte sequence that is
+// well-formed in shape but does not encode a valid Unicode scalar value.
+const uint UNICODE_REPLACEMENT = 0xFFFD;
+// Highest valid Unicode codepoint.
+const uint UNICODE_MAX = 0x10FFFF;
+
+// utf8_decode reads one UTF-8 sequence from `s`, storing the codepoint in
+// `out_cp` and returning the number of bytes consumed.
+//
+// Sequences that are structurally valid but semantically invalid — overlong
+// encodings (C0 80 for NUL), UTF-16 surrogate halves (ED A0 80), and values
+// above U+10FFFF — decode to U+FFFD rather than passing through. Otherwise a
+// terminal could smuggle a rune == 0 that never came from a NUL byte, and
+// callers that re-encode the value would emit bytes that are not UTF-8.
 fn sz utf8_decode(String s, uint* out_cp) {
 	if (s.len == 0) {
 		*out_cp = 0;
@@ -425,22 +492,27 @@ fn sz utf8_decode(String s, uint* out_cp) {
 			*out_cp = '?';
 			return 1;
 		}
-		*out_cp = ((uint)(b0 & 0x1F) << 6) | (uint)(s[1] & 0x3F);
+		uint cp = ((uint)(b0 & 0x1F) << 6) | (uint)(s[1] & 0x3F);
+		*out_cp = cp < 0x80 ? UNICODE_REPLACEMENT : cp; // reject overlong
 		return 2;
 	} else if ((b0 & 0xF0) == 0xE0) {
 		if (s.len < 3) {
 			*out_cp = '?';
 			return 1;
 		}
-		*out_cp = ((uint)(b0 & 0x0F) << 12) | ((uint)(s[1] & 0x3F) << 6) | (uint)(s[2] & 0x3F);
+		uint cp = ((uint)(b0 & 0x0F) << 12) | ((uint)(s[1] & 0x3F) << 6) | (uint)(s[2] & 0x3F);
+		// Reject overlong forms and UTF-16 surrogate halves, which are not
+		// valid scalar values and must never reach a model as KeyMsg.rune.
+		*out_cp = (cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF)) ? UNICODE_REPLACEMENT : cp;
 		return 3;
 	} else if ((b0 & 0xF8) == 0xF0) {
 		if (s.len < 4) {
 			*out_cp = '?';
 			return 1;
 		}
-		*out_cp = ((uint)(b0 & 0x07) << 18) | ((uint)(s[1] & 0x3F) << 12) | ((uint)(s[2] & 0x3F) << 6)
+		uint cp = ((uint)(b0 & 0x07) << 18) | ((uint)(s[1] & 0x3F) << 12) | ((uint)(s[2] & 0x3F) << 6)
 			| (uint)(s[3] & 0x3F);
+		*out_cp = (cp < 0x10000 || cp > UNICODE_MAX) ? UNICODE_REPLACEMENT : cp;
 		return 4;
 	}
 	*out_cp = '?';
@@ -611,7 +683,7 @@ fn void ScreenBuffer.render_ansi_string(
 			// Write a blank placeholder so the diff renderer doesn't output
 			// the stale content that was there before.
 			if (w == 2 && c + 1 < max_col) {
-				self.set_cell(c + 1, r, empty_cell());
+				self.put_raw_cell(c + 1, r, empty_cell());
 			}
 		}
 		c += w;
@@ -838,7 +910,7 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 				// Append combining bytes to the cell we just wrote, if room.
 				sz abs_col = (sz)r.x + col - 1;
 				sz abs_row = (sz)r.y + row;
-				if (abs_col < self.width && abs_row < self.height) {
+				if (abs_col >= 0 && abs_row >= 0 && abs_col < self.width && abs_row < self.height) {
 					Cell* prev_cell = &self.cells[abs_row * self.width + abs_col];
 					sz available = CELL_MAX_BYTES - (sz)prev_cell.content_len;
 					if (char_len <= available) {
@@ -862,6 +934,12 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 
 		Cell cell = new_cell(text[i:char_len], w, style);
 		self.set_cell((sz)r.x + col, (sz)r.y + row, cell);
+		// Wide glyph: claim its trailing column so the diff renderer doesn't
+		// emit stale content there. Bypasses the wide-pair repair, as this is
+		// the glyph's own second half.
+		if (w == 2) {
+			self.put_raw_cell((sz)r.x + col + 1, (sz)r.y + row, empty_cell());
+		}
 		col += (sz)w;
 		i += char_len;
 	}

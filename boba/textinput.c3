@@ -84,22 +84,30 @@ fn void TextInput.insert_string(&self, String s) {
 }
 
 // backspace deletes the character before the cursor.
+//
+// The whole UTF-8 sequence is removed, not one byte: deleting a single byte of
+// a multi-byte character leaves a dangling lead or continuation byte, which is
+// invalid UTF-8 and renders as garbage for the rest of the buffer.
 fn void TextInput.backspace(&self) {
 	if (self.cursor == 0) return;
+	sz start = utf8_prev_boundary(self.buf[:self.len], self.cursor);
+	sz n     = self.cursor - start;
 	for (sz i = self.cursor; i < self.len; i++) {
-		self.buf[i - 1] = self.buf[i];
+		self.buf[i - n] = self.buf[i];
 	}
-	self.len--;
-	self.cursor--;
+	self.len -= n;
+	self.cursor = start;
 }
 
-// delete_char deletes the character at the cursor.
+// delete_char deletes the character at the cursor, sequence and all.
 fn void TextInput.delete_char(&self) {
 	if (self.cursor >= self.len) return;
-	for (sz i = self.cursor; i < self.len - 1; i++) {
-		self.buf[i] = self.buf[i + 1];
+	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
+	sz n    = next - self.cursor;
+	for (sz i = next; i < self.len; i++) {
+		self.buf[i - n] = self.buf[i];
 	}
-	self.len--;
+	self.len -= n;
 }
 
 // text returns the current input as a String.
@@ -130,10 +138,12 @@ fn int TextInput.cursor_col(&self) {
 fn bool TextInput.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
-			if (self.cursor > 0) self.cursor--;
+			// Step a whole codepoint: landing mid-sequence would make the
+			// next backspace or insert split a character.
+			self.cursor = utf8_prev_boundary(self.buf[:self.len], self.cursor);
 			return true;
 		case milktea::KeyCode.RIGHT:
-			if (self.cursor < self.len) self.cursor++;
+			self.cursor = utf8_next_boundary(self.buf[:self.len], self.cursor);
 			return true;
 		case milktea::KeyCode.HOME:
 			self.cursor = 0;

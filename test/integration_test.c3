@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import std::thread;
 import xray;
 
 // contains is defined in test_render.c3
@@ -258,17 +259,38 @@ fn void test_every_fires() @test {
 	assert(m.every_count >= 1);
 }
 
-// test_every_deadline_snaps verifies every() snaps the deadline to the
-// next wall-clock boundary. We test this by observing that consecutive
-// calls to every(1000) produce deadlines at (or just past) multiples of
-// 1000ms relative to time_ms() — never in the middle of a 1-second slot.
+// test_every_deadline_snaps verifies every() snaps its delay to the next
+// wall-clock boundary, so a 1s display ticks on :00 forever regardless of how
+// long update() takes. The snapping math is exposed as snap_delay() so it can
+// be checked directly rather than inferred from timing.
 fn void test_every_deadline_snaps() @test {
-	// Simulate: at now=1234, every(1000) must produce a deadline in
-	// (1234, 2000]. The boundary is the next multiple of 1000.
-	// We can't easily call every() without a program, so this test
-	// simply verifies the pure deadline math is correct conceptually.
-	// (covered indirectly by test_every_fires via the event loop.)
-	assert(true);
+	// At wall=1234 with a 1000ms interval, the next boundary is 2000.
+	assert(milktea::snap_delay(1234, 1000) == 766);
+	// Exactly on a boundary: wait a full interval, never 0 (which would
+	// re-fire immediately and spin).
+	assert(milktea::snap_delay(2000, 1000) == 1000);
+	assert(milktea::snap_delay(0, 1000) == 1000);
+	// One millisecond before a boundary.
+	assert(milktea::snap_delay(1999, 1000) == 1);
+	// Sub-second intervals snap the same way.
+	assert(milktea::snap_delay(1234, 16) == 14);
+	// Degenerate interval must not divide by zero.
+	assert(milktea::snap_delay(1234, 0) == 1);
+}
+
+// test_every_delay_is_always_within_interval pins the invariant across a
+// sweep: the delay is always in (0, interval], so deadlines neither stall nor
+// fire back-to-back.
+fn void test_every_delay_is_always_within_interval() @test {
+	sz[] intervals = { 1, 16, 250, 1000, 60000 };
+	foreach (iv : intervals) {
+		for (sz wall = 0; wall < 3 * iv; wall += (iv / 7) + 1) {
+			sz d = milktea::snap_delay(wall, iv);
+			assert(d > 0);
+			assert(d <= iv);
+			assert((wall + d) % iv == 0);
+		}
+	}
 }
 
 // ============================================================
@@ -378,4 +400,149 @@ fn void test_add_overlay_inner_shadow() @test {
 	assert(!o.transparent); // transparent defaults to false
 	assert(!o.layer_style.shadow.enabled);
 	assert(o.layer_style.inner_shadow.enabled);
+}
+// ============================================================
+// Test-mode loop termination
+// ============================================================
+
+// NeverQuitsModel is the shape of a model with a bug: it consumes messages
+// but never returns quit().
+struct NeverQuitsModel {
+	int updates;
+}
+
+fn milktea::Cmd NeverQuitsModel.init(NeverQuitsModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) @dynamic {
+	self.updates++;
+	return null;
+}
+
+fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
+	return milktea::new_view("still here");
+}
+
+// test_test_mode_terminates_without_quit pins down that the event loop ends
+// once injected input is exhausted and no timer is armed, even if the model
+// never quits.
+//
+// In test mode there is no reader thread and no blocking wait, so the loop
+// used to spin at 100% CPU forever here — meaning a single buggy model under
+// test would hang the whole suite rather than failing it. If this regresses,
+// this test does not fail: it hangs. That is the symptom being guarded.
+fn void test_test_mode_terminates_without_quit() @test {
+	NeverQuitsModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	milktea::with_input(&p, (char[])"abc");
+	p.run()!!;
+
+	// The injected keys were delivered before the loop exited.
+	assert(m.updates > 0);
+}
+
+// ============================================================
+// Overlay clipping
+// ============================================================
+
+// NegativeOverlayModel places an overlay partly off the left/top edge, which
+// is what happens when a model scrolls or animates a floating panel out of
+// view. sz is signed, so the destination guard (dx >= width) let negative
+// coordinates through to index before the cell buffer.
+struct NegativeOverlayModel {
+	int frames;
+}
+
+fn milktea::Cmd NegativeOverlayModel.init(NegativeOverlayModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
+	self.frames++;
+	milktea::View v = milktea::new_alt_screen_view("base content");
+	// Off the top-left corner, and off the right/bottom edge. alpha != 0
+	// selects the per-cell blending path, which does its own destination
+	// bounds check rather than going through ScreenBuffer.set_cell.
+	v = v.add_overlay(-5, -3, 10, 6, "overlay", alpha: 128);
+	v = v.add_overlay(78, 22, 10, 6, "overlay", alpha: 128);
+	return v;
+}
+
+fn void test_overlay_with_negative_origin_is_clipped() @test {
+	NegativeOverlayModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	milktea::with_input(&p, (char[])"q");
+	p.run()!!;
+
+	assert(m.frames > 0);
+}
+
+// ============================================================
+// Program.send() concurrent shutdown
+// ============================================================
+
+// SendRaceModel quits after a handful of messages so run() tears down while
+// the sender threads below are still hammering send().
+struct SendRaceModel {
+	int updates;
+}
+
+fn milktea::Cmd SendRaceModel.init(SendRaceModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dynamic {
+	self.updates++;
+	if (self.updates > 20) return milktea::quit();
+	return null;
+}
+
+fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
+	return milktea::new_view("race");
+}
+
+fn int send_race_sender(void* arg) @private {
+	milktea::Program* p = (milktea::Program*)arg;
+	for (int i = 0; i < 200000; i++) {
+		milktea::Msg m = { .kind = milktea::MsgKind.USER };
+		p.send(m);
+	}
+	return 0;
+}
+
+// test_send_survives_concurrent_shutdown pins the handshake between send() and
+// run()'s teardown.
+//
+// send() used to gate on a plain bool that was cleared just before
+// send_mu.destroy(). Clearing a flag only stops *new* entrants: a sender that
+// had already passed the check went on to lock — and unlock — a destroyed
+// mutex. Against the old code this aborts with "Mutex was not initialized"
+// within a few runs; a heavier standalone version failed 6/6.
+//
+// send() now registers as in-flight before checking the flag, and teardown
+// stops accepting and then drains the in-flight count before destroying.
+fn void test_send_survives_concurrent_shutdown() @test {
+	for (int round = 0; round < 4; round++) {
+		SendRaceModel m;
+		DString out = dstring::temp();
+		milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+		milktea::with_input(&p, (char[])"abcdefghij");
+
+		thread::Thread t1, t2;
+		t1.create(&send_race_sender, &p)!!;
+		t2.create(&send_race_sender, &p)!!;
+
+		p.run()!!;
+
+		t1.join()!!;
+		t2.join()!!;
+	}
 }

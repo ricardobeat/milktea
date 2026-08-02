@@ -385,3 +385,63 @@ fn void test_string_width_ansi_skipped() @test {
 	String styled = glaze::style().foreground(glaze::color_hex("#ff0000")).render("hello");
 	assert(glaze::string_width(styled) == 5);
 }
+
+// ============================================================
+// string_width — escape-sequence skipping
+// ============================================================
+
+fn void test_string_width_skips_csi() @test {
+	assert(glaze::string_width("\x1b[31mred\x1b[0m") == 3);
+	assert(glaze::string_width("\x1b[38;2;255;128;0mx\x1b[0m") == 1);
+}
+
+fn void test_string_width_skips_osc() @test {
+	// OSC payloads legitimately contain letters. Treating them like a CSI
+	// ended the scan on the first letter and counted the rest as visible
+	// text, so this measured 10 instead of 0. viewport.c3 emits OSC 52 for
+	// clipboard writes, so this really does flow through here.
+	assert(glaze::string_width("\x1b]52;c;QUJDRA==\x07") == 0);
+	// ST-terminated form (ESC \) as well as BEL.
+	assert(glaze::string_width("\x1b]0;window title\x1b\\") == 0);
+	assert(glaze::string_width("\x1b]52;c;QQ==\x07ab") == 2);
+}
+
+fn void test_string_width_counts_wide_and_combining() @test {
+	assert(glaze::string_width("日本") == 4);
+	assert(glaze::string_width("é") == 1); // combining acute adds no width
+	assert(glaze::string_width("") == 0);
+}
+
+fn void test_string_width_unterminated_escape() @test {
+	// Must not run past the end of the string.
+	assert(glaze::string_width("\x1b[31") == 0);
+	assert(glaze::string_width("\x1b") == 0);
+	assert(glaze::string_width("\x1b]52;c;") == 0);
+}
+
+// ============================================================
+// truncate_to_width
+// ============================================================
+
+fn void test_truncate_to_width_ascii() @test {
+	assert(glaze::truncate_to_width("hello world", 5) == "hello");
+	assert(glaze::truncate_to_width("hi", 10) == "hi");
+	assert(glaze::truncate_to_width("hi", 0) == "");
+}
+
+fn void test_truncate_to_width_keeps_wide_chars_whole() @test {
+	// 日本 is 4 columns. A 3-column limit fits only the first glyph — the
+	// second must be dropped, not half-included.
+	assert(glaze::truncate_to_width("日本", 4) == "日本");
+	assert(glaze::truncate_to_width("日本", 3) == "日");
+	assert(glaze::truncate_to_width("日本", 1) == "");
+}
+
+fn void test_truncate_to_width_never_splits_escape() @test {
+	// The escape costs no width and must be carried through whole; cutting at
+	// a byte index would emit "\x1b[3" as literal visible text.
+	String s = glaze::truncate_to_width("\x1b[31mabcdef\x1b[0m", 3);
+	assert(glaze::string_width(s) == 3);
+	// Whatever prefix we kept must still measure as valid styled text.
+	assert(s.len > 3); // escape bytes are included but unmeasured
+}

@@ -171,10 +171,18 @@ fn void Runtime.set_prop_obj(&self, void* obj, String name, void* child) {
 	taro_set_prop_obj(self.ctx, obj, (ZString)name.ptr, child);
 }
 
+// to_string converts a JS value to a String in the temp allocator.
+//
+// taro_to_cstring hands back a malloc'd copy that the caller owns. Returning a
+// str_view over it leaked that copy on every call — and the only caller runs
+// once per TICK, i.e. every frame. Copy into temp and free the original, the
+// same shape get_prop_string uses.
 fn String Runtime.to_string(&self, void* val) {
 	ZString cstr = taro_to_cstring(self.ctx, val);
 	if (!cstr) return "";
-	return cstr.str_view();
+	String s = string::tformat("%s", cstr.str_view());
+	taro_free_cstring(self.ctx, cstr);
+	return s;
 }
 
 fn void Runtime.free_cstring(&self, ZString s) {

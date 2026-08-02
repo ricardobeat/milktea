@@ -1226,6 +1226,16 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 								sz cell_count = data.len / 6;
 								sz sx = (sz)area.x;
 								sz sy = (sz)(area.y + r);
+								// The array length is chosen by the JS script, so it
+								// cannot be trusted to match the draw area. Clamp to the
+								// node's width and to what is actually on screen —
+								// writing cell_count cells unchecked let a script return
+								// an oversized array and walk off the cell buffer.
+								if (sy < 0 || sy >= screen.height || sx >= screen.width) cell_count = 0;
+								if (sx < 0) sx = 0;
+								if (cell_count > (sz)area.w) cell_count = (sz)area.w;
+								sz room = screen.width - sx;
+								if (cell_count > room) cell_count = room;
 								sz row_base = sy * screen.width + sx;
 								for (sz ci = 0; ci < cell_count; ci++) {
 									sz off = ci * 6;

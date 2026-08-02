@@ -284,6 +284,11 @@ const sz MAX_TIMERS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
+// Longest OSC 22 mouse cursor name tracked across frames. The longest CSS
+// cursor keyword is "no-drop"/"nesw-resize" class at 12 chars; 32 leaves room
+// for terminal-specific names. Longer names still render — they just always
+// re-emit, since they can't be cached for comparison.
+const sz MAX_MOUSE_CURSOR_LEN = 32;
 
 struct TimerEntry {
 	bool active;
@@ -325,9 +330,18 @@ struct Program {
 	int send_tail;
 	// Mutex protecting send_queue / send_head / send_tail.
 	// Initialized lazily inside run() so send() is safe to call before
-	// the program is started (send_mu_init guards against that path).
+	// the program is started (send_accepting guards against that path).
 	thread::Mutex send_mu;
-	bool send_mu_init;
+	// True between send_mu.init() and the start of shutdown. Atomic because
+	// senders run on other threads: a plain bool would be a data race, and the
+	// compiler could cache the read.
+	Atomic{bool} send_accepting;
+	// Number of senders currently inside send(), i.e. between passing the
+	// accepting check and releasing the mutex. Shutdown clears
+	// send_accepting and then waits for this to reach zero before destroying
+	// the mutex — clearing the flag alone only stops *new* entrants, and a
+	// sender already past the check would otherwise lock a destroyed mutex.
+	Atomic{int} send_inflight;
 
 	// Threaded input reader
 	thread::Thread reader_thread;
@@ -336,7 +350,15 @@ struct Program {
 	xray::Renderer* renderer;
 
 	// Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
-	String last_mouse_cursor;
+	// Stored as owned bytes rather than a String: the name comes from a View
+	// built inside render_current_view's @pool(), so keeping the slice would
+	// retain temp memory that is freed before the next frame compares against
+	// it. Names are short CSS cursor keywords ("pointer", "nwse-resize").
+	char[MAX_MOUSE_CURSOR_LEN] last_mouse_cursor_buf;
+	sz last_mouse_cursor_len;
+	// False once an uncacheable (over-long) name has been emitted, forcing the
+	// next frame to re-emit rather than compare against a stale buffer.
+	bool last_mouse_cursor_valid;
 
 	// Last rendered content height (rows), for clean exit in inline (non-alt-screen) mode.
 	sz last_content_rows;
@@ -474,7 +496,15 @@ fn int input_reader_fn(void* arg) {
 		if (r <= 0) continue;
 
 		sz n = read(STDIN_FILENO, &tmp[0], 256);
-		if (n <= 0) break;
+		if (n <= 0) {
+			// EOF or a hard read error: no further input can ever arrive.
+			// Mark the queue closed rather than just returning — otherwise the
+			// event loop keeps blocking in input_queue_wait for up to a second
+			// per iteration, forever, with nothing left to wake it. Closing
+			// also broadcasts, so a waiter is released immediately.
+			input_queue_close(q);
+			break;
+		}
 
 		input_queue_push(q, tmp[:n]);
 	}
@@ -548,14 +578,29 @@ fn void with_input(Program* self, char[] data) {
 // ============================================================
 
 // send enqueues a message for the event loop to process.
-// Thread-safe: protected by send_mu, which is initialized in run().
-// Calls before run() (send_mu_init == false) are silently dropped — the
-// program isn't running yet so there is no consumer to wake.
+//
+// Thread-safe, and safe to call at any point in the program's lifetime: calls
+// before run() has initialized the mutex, or after shutdown has begun, are
+// silently dropped — there is no consumer to wake in either case.
+//
+// The handshake with shutdown is: register as in-flight, then check whether
+// the program is still accepting. Shutdown does the mirror image — stop
+// accepting, then wait for in-flight to drain. Registering *before* the check
+// is what makes it safe; the other order would let a sender pass the check,
+// stall, and then lock a mutex that shutdown had already destroyed.
+//
 // In test mode, the message is placed in a ring buffer consumed by run().
 // When the ring is full the message is dropped; enable Program.debug to
 // surface this in milktea-debug.log.
 fn void Program.send(Program* self, Msg msg) {
-	if (!self.send_mu_init) return; // program not running; no consumer
+	self.send_inflight.add(1);
+	if (!self.send_accepting.load()) {
+		// Not running yet, or already shutting down.
+		self.send_inflight.sub(1);
+		return;
+	}
+	defer self.send_inflight.sub(1);
+
 	self.send_mu.lock();
 	int next = (self.send_head + 1) % (int)MAX_BATCH;
 	bool dropped = next == self.send_tail;
@@ -692,16 +737,27 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // Default: 16ms (~60fps) sending a TICK message.
 // When all MAX_TIMERS slots are occupied the timer is silently dropped;
 // enable Program.debug to surface this in milktea-debug.log.
+// snap_delay returns how long to wait from `wall` to reach the next multiple
+// of `interval_ms`. Always in (0, interval_ms], so a timer re-armed exactly on
+// a boundary waits a full interval rather than firing again immediately.
+fn sz snap_delay(sz wall, sz interval_ms) {
+	if (interval_ms <= 0) return 1;
+	sz elapsed = wall % interval_ms;
+	return elapsed == 0 ? interval_ms : interval_ms - elapsed;
+}
+
 fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	// A zero interval would divide-by-zero on the modulo below; clamp to 1ms.
 	// Semantically, 0 means "as fast as possible" — 1ms is the smallest
 	// meaningful interval and avoids crashing inside the framework.
 	if (interval_ms == 0) interval_ms = 1;
-	sz now     = time_ms();
-	sz elapsed = now % interval_ms;
-	sz delay   = elapsed == 0 ? interval_ms : interval_ms - elapsed;
-	sz deadline = now + delay;
+	// The delay is computed against the wall clock so the deadline lands on a
+	// calendar boundary (a 1s display ticks exactly on :00). The stored
+	// deadline is monotonic, matching what the event loop compares against —
+	// mixing the two clocks in one field would make every deadline wrong by
+	// the offset between them.
+	sz deadline = time_ms() + snap_delay(wall_time_ms(), interval_ms);
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		if (!g_program.timers[i].active) {
 			g_program.timers[i].active = true;
@@ -730,20 +786,38 @@ fn void? Program.run(Program* self) {
 	g_program = self;
 	self.pending_len = 0;
 	self.in_alt_screen = false;
+	// No OSC 22 emitted yet, which is indistinguishable from having emitted
+	// the empty (reset) name — so a first frame with no cursor stays silent.
+	self.last_mouse_cursor_len = 0;
+	self.last_mouse_cursor_valid = true;
 	self.send_head = 0;
 	self.send_tail = 0;
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		self.timers[i] = { };
 	}
-	// Initialize send_mu before marking it ready so that any concurrent
-	// send() call after this point sees a valid mutex.
+	// Initialize send_mu before marking the program as accepting, so any
+	// concurrent send() that observes the flag sees a valid mutex.
+	// send_inflight is deliberately NOT reset here: a sender from a previous
+	// run may still be decrementing it, and storing 0 over that would lose the
+	// decrement and leave the counter permanently non-zero. It is balanced by
+	// construction — every add(1) has a matching sub(1) — so it returns to 0
+	// on its own.
 	self.send_mu.init()!;
-	self.send_mu_init = true;
+	self.send_accepting.store(true);
 	defer {
-		// Disable send() before destroying the mutex so late callers
-		// see send_mu_init == false and return early rather than
-		// locking a destroyed mutex.
-		self.send_mu_init = false;
+		// Mirror image of send()'s handshake: stop accepting, then wait for
+		// senders already past their check to finish. Clearing the flag alone
+		// only prevents *new* entrants — a sender that had already passed the
+		// check would go on to lock a mutex we had destroyed.
+		//
+		// The wait is bounded in practice: an in-flight sender holds the lock
+		// only for a ring-buffer push, and the main thread is not holding it
+		// here. Spinning with a yield is appropriate for a wait this short and
+		// avoids needing a second condvar purely for teardown.
+		self.send_accepting.store(false);
+		while (self.send_inflight.load() > 0) {
+			thread::yield();
+		}
 		self.send_mu.destroy();
 		g_program = null;
 	}
@@ -753,40 +827,22 @@ fn void? Program.run(Program* self) {
 	self.in_paste = false;
 	self.paste_buf.init(&allocators::LIBC_ALLOCATOR, 256);
 
+	// Tracks how far setup got, so the cleanup defer below tears down exactly
+	// what was built. Setup can fail partway (queue init, thread spawn), and a
+	// defer registered after the failing statement never runs — so the restore
+	// must be armed before the terminal is touched, not after setup completes.
+	bool tty_raw       = false;
+	bool queue_created = false;
+	bool reader_running = false;
+
 	if (!self.test_mode) {
 		saved = raw_mode_enter()!;
-		hide_cursor();
-		enable_focus();
-		enable_bracketed_paste();
-		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
-		// Terminals that don't support it ignore the sequence — safe to push always.
-		enable_kitty_keyboard();
-		setup_signals(saved, &self.in_alt_screen);
-
-		// Start the reader thread so stdin reads never block the event loop.
-		input_queue_init(&g_input_queue)!;
-		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!!;
+		tty_raw = true;
 	}
 
-	// Defers live at function scope so they run after the event loop exits,
-	// not when the if-block above closes (C3 defer is block-scoped).
+	// Armed immediately: from here on, every exit path restores the terminal.
 	defer {
-		// Free the paste accumulation buffer regardless of test mode.
-		self.paste_buf.free();
-
-		if (!self.test_mode) {
-			if (self.renderer != null) {
-				self.renderer.destroy();
-				mem::free(self.renderer);
-			}
-			// Two-phase shutdown: first signal the reader to stop, then join
-			// it so we never call input_queue_destroy while the reader thread
-			// may still be executing input_queue_push / input_queue_is_closed
-			// (which lock the mutex — destroying a locked mutex is UB on most
-			// POSIX implementations and all ARM memory models).
-			input_queue_close(&g_input_queue);
-			self.reader_thread.join();
-			input_queue_destroy(&g_input_queue);
+		if (tty_raw) {
 			if (self.mouse_pixels) {
 				disable_mouse_pixels();
 				self.mouse_pixels = false;
@@ -810,7 +866,49 @@ fn void? Program.run(Program* self) {
 			if (!self.in_alt_screen && self.last_content_rows > 0) {
 				write_stdout((char[])string::tformat("\x1b[%d;1H\x1b[m\r\n", self.last_content_rows));
 			}
+			// Stop dereferencing this frame's fields from signal handlers before
+			// it goes away — Program is a stack local in every entry point.
+			teardown_signals();
 			raw_mode_restore(saved);
+		}
+	}
+
+	if (!self.test_mode) {
+		hide_cursor();
+		enable_focus();
+		enable_bracketed_paste();
+		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
+		// Terminals that don't support it ignore the sequence — safe to push always.
+		enable_kitty_keyboard();
+		setup_signals(saved, &self.in_alt_screen);
+
+		// Start the reader thread so stdin reads never block the event loop.
+		input_queue_init(&g_input_queue)!;
+		queue_created = true;
+		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
+		reader_running = true;
+	}
+
+	// Defers live at function scope so they run after the event loop exits,
+	// not when the if-block above closes (C3 defer is block-scoped).
+	defer {
+		// Free the paste accumulation buffer regardless of test mode.
+		self.paste_buf.free();
+
+		if (self.renderer != null) {
+			self.renderer.destroy();
+			mem::free(self.renderer);
+			self.renderer = null;
+		}
+		// Two-phase shutdown: first signal the reader to stop, then join
+		// it so we never call input_queue_destroy while the reader thread
+		// may still be executing input_queue_push / input_queue_is_closed
+		// (which lock the mutex — destroying a locked mutex is UB on most
+		// POSIX implementations and all ARM memory models).
+		if (queue_created) {
+			input_queue_close(&g_input_queue);
+			if (reader_running) self.reader_thread.join();
+			input_queue_destroy(&g_input_queue);
 		}
 	}
 	defer {
@@ -1143,6 +1241,26 @@ fn void? Program.run(Program* self) {
 		}
 
 
+		// In test mode there is no reader thread and no wall-clock waiting, so
+		// once the injected input is consumed, the pending buffer is drained
+		// and no timer is armed, nothing can ever produce another message.
+		// Without this the loop spins at 100% CPU forever whenever a model
+		// under test doesn't return quit() — one bad test hangs the suite.
+		if (self.test_mode && self.inject_input_pos >= self.inject_input.len && self.pending_len == 0
+			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			return;
+		}
+
+		// Stdin reached EOF (piped input exhausted, or the terminal went away)
+		// and everything already received has been processed. No further input
+		// can arrive, so blocking again would spin — input_queue_wait returns
+		// immediately once the queue is closed. Timers still keep the program
+		// alive, so an animation driven purely by tick() is unaffected.
+		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
+			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			return;
+		}
+
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
 			sz wait_ms = 1000;
@@ -1165,6 +1283,42 @@ fn void? Program.run(Program* self) {
 			}
 		}
 	}
+}
+
+// has_active_timer reports whether any timer slot is armed.
+fn bool Program.has_active_timer(Program* self) {
+	for (sz i = 0; i < MAX_TIMERS; i++) {
+		if (self.timers[i].active) return true;
+	}
+	return false;
+}
+
+// mouse_cursor_matches reports whether `name` is already the emitted OSC 22
+// cursor shape. A name too long to cache never matches, so it re-emits each
+// frame — correct, just not deduplicated.
+fn bool Program.mouse_cursor_matches(Program* self, String name) {
+	if (!self.last_mouse_cursor_valid) return false;
+	if (name.len > MAX_MOUSE_CURSOR_LEN) return false;
+	if (name.len != self.last_mouse_cursor_len) return false;
+	for (sz i = 0; i < name.len; i++) {
+		if (self.last_mouse_cursor_buf[i] != name[i]) return false;
+	}
+	return true;
+}
+
+// remember_mouse_cursor copies `name` into the owned buffer. Names longer than
+// the buffer record a length of 0, so the next frame compares unequal and
+// re-emits rather than matching a truncated prefix.
+fn void Program.remember_mouse_cursor(Program* self, String name) {
+	if (name.len > MAX_MOUSE_CURSOR_LEN) {
+		self.last_mouse_cursor_valid = false;
+		return;
+	}
+	for (sz i = 0; i < name.len; i++) {
+		self.last_mouse_cursor_buf[i] = name[i];
+	}
+	self.last_mouse_cursor_len = name.len;
+	self.last_mouse_cursor_valid = true;
 }
 
 // render_current_view renders the model's current view, handling
@@ -1317,7 +1471,10 @@ fn void Program.render_current_view(Program* self) {
 							for (sz cx = 0; cx < (sz)o.w; cx++) {
 								sz dx = (sz)o.x + cx;
 								sz dy = (sz)o.y + cy;
-								if (dx >= r.screen.width || dy >= r.screen.height) continue;
+								// sz is signed: an overlay scrolled off the left
+								// or top edge yields negative coordinates that
+								// would index before the buffer.
+								if (dx < 0 || dy < 0 || dx >= r.screen.width || dy >= r.screen.height) continue;
 								xray::Cell src = tmp.cells[cy * tmp.width + cx];
 								src.style.bg.a = o.alpha;
 								src.style.fg.a = o.alpha;
@@ -1346,13 +1503,13 @@ fn void Program.render_current_view(Program* self) {
 				r.end_frame();
 
 				// Emit OSC 22 mouse cursor shape when it changes.
-				if (v.mouse_cursor != self.last_mouse_cursor) {
+				if (!self.mouse_cursor_matches(v.mouse_cursor)) {
 					if (v.mouse_cursor.len > 0) {
 						write_stdout((char[])mouse_cursor_seq(v.mouse_cursor));
 					} else {
 						write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 					}
-					self.last_mouse_cursor = v.mouse_cursor;
+					self.remember_mouse_cursor(v.mouse_cursor);
 				}
 
 				// Emit cursor positioning and shape after the diff frame

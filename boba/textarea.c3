@@ -121,39 +121,49 @@ fn void Textarea.insert_rune(&self, uint cp) {
 	for (sz i = 0; i < n; i++) self.insert(enc[i]);
 }
 
+// line_start_at returns the byte offset of the start of the line containing
+// `pos` — i.e. one past the preceding newline, or 0.
+fn sz Textarea.line_start_at(&self, sz pos) {
+	if (pos > self.len) pos = self.len;
+	while (pos > 0 && self.buf[pos - 1] != '\n') pos--;
+	return pos;
+}
+
 // backspace deletes the character before the cursor.
+//
+// Removes the whole UTF-8 sequence: deleting a single byte of a multi-byte
+// character leaves invalid UTF-8 that renders as garbage from there on.
 fn void Textarea.backspace(&self) {
 	if (self.cursor == 0) return;
 
 	char prev = self.buf[self.cursor - 1];
+	sz start  = utf8_prev_boundary(self.buf[:self.len], self.cursor);
+	sz n      = self.cursor - start;
 	for (sz i = self.cursor; i < self.len; i++) {
-		self.buf[i - 1] = self.buf[i];
+		self.buf[i - n] = self.buf[i];
 	}
-	self.len--;
-	self.cursor--;
+	self.len -= n;
+	self.cursor = start;
 
 	if (prev == '\n') {
-		self.cursor_row--;
-		// Count column in previous line
-		int col = 0;
-		sz pos  = self.cursor - 1;
-		while (pos > 0 && self.buf[pos] != '\n') {
-			col++;
-			pos--;
-		}
-		self.cursor_col = col;
+		if (self.cursor_row > 0) self.cursor_row--;
+		// The joined line's column is the distance back to its start.
+		self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
 	} else {
-		self.cursor_col--;
+		self.cursor_col -= (int)n;
+		if (self.cursor_col < 0) self.cursor_col = 0;
 	}
 }
 
-// delete_char deletes the character at the cursor.
+// delete_char deletes the character at the cursor, sequence and all.
 fn void Textarea.delete_char(&self) {
 	if (self.cursor >= self.len) return;
-	for (sz i = self.cursor; i < self.len - 1; i++) {
-		self.buf[i] = self.buf[i + 1];
+	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
+	sz n    = next - self.cursor;
+	for (sz i = next; i < self.len; i++) {
+		self.buf[i - n] = self.buf[i];
 	}
-	self.len--;
+	self.len -= n;
 }
 
 // text returns the current content as a String.
@@ -166,31 +176,25 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
 			if (self.cursor > 0) {
-				self.cursor--;
-				if (self.cursor_col > 0) {
-					self.cursor_col--;
-				} else {
-					// Moved to previous line
-					self.cursor_row--;
-					int col = 0;
-					sz pos  = self.cursor - 1;
-					while (pos > 0 && self.buf[pos] != '\n') {
-						col++;
-						pos--;
-					}
-					self.cursor_col = col;
-				}
+				// Step a whole codepoint, so the cursor never lands inside a
+				// multi-byte character and split it on the next edit.
+				sz prev = utf8_prev_boundary(self.buf[:self.len], self.cursor);
+				if (self.buf[prev] == '\n' && self.cursor_row > 0) self.cursor_row--;
+				self.cursor = prev;
+				self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
 			}
 			return true;
 		case milktea::KeyCode.RIGHT:
 			if (self.cursor < self.len) {
-				if (self.buf[self.cursor] == '\n') {
+				bool at_newline = self.buf[self.cursor] == '\n';
+				sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
+				self.cursor = next;
+				if (at_newline) {
 					self.cursor_row++;
 					self.cursor_col = 0;
 				} else {
-					self.cursor_col++;
+					self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
 				}
-				self.cursor++;
 			}
 			return true;
 		case milktea::KeyCode.UP:
@@ -265,10 +269,14 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 
 
 			{
+				// Find the end of the line, then measure back to its start.
+				// This used to read self.cursor *after* assigning it, so the
+				// column was always computed as pos - pos == 0 and the
+				// rendered cursor jumped to the start of the line.
 				sz pos = self.cursor;
 				while (pos < self.len && self.buf[pos] != '\n') pos++;
 				self.cursor = pos;
-				self.cursor_col = (int)(pos - (self.cursor > 0 ? self.cursor : 0));
+				self.cursor_col = (int)(pos - self.line_start_at(pos));
 			}
 			return true;
 		case milktea::KeyCode.BACKSPACE:

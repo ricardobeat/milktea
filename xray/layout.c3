@@ -107,8 +107,11 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 				fixed += len_val;
 
 			case ConstraintKind.CMIN:
-				sizes[i] = cs[i].value;
-				fixed += cs[i].value;
+				int min_val = cs[i].value;
+				if (min_val < 0) min_val = 0;
+				if (min_val > available) min_val = available;
+				sizes[i] = min_val;
+				fixed += min_val;
 
 			case ConstraintKind.CPERCENT:
 				int pct_sz = available * cs[i].value / 100;
@@ -124,7 +127,10 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 
 			case ConstraintKind.CMAX:
 				sizes[i] = 0;
-				max_caps[i] = cs[i].value;
+				int cap_val = cs[i].value;
+				if (cap_val < 0) cap_val = 0;
+				if (cap_val > available) cap_val = available;
+				max_caps[i] = cap_val;
 				fill_weight_total += 1;
 
 			case ConstraintKind.CFILL:
@@ -196,20 +202,39 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 		if (sizes[i] < 0) sizes[i] = 0;
 		final_total += sizes[i];
 	}
+	// Distribute integer-division leftovers to flexible children, last one
+	// first. A CMAX child only absorbs up to its cap, so we keep scanning
+	// backwards until the remainder is placed or no candidate has room —
+	// dumping it unconditionally on the last flexible child would silently
+	// defeat that child's cap.
 	int remainder = available - final_total;
-	if (remainder > 0) {
-		for (int i = n - 1; i >= 0; i--) {
-			if (cs[i].kind == ConstraintKind.CFILL || cs[i].kind == ConstraintKind.CMAX) {
-				sizes[i] += remainder;
-				break;
-			}
+	for (int i = n - 1; i >= 0 && remainder > 0; i--) {
+		if (cs[i].kind == ConstraintKind.CFILL) {
+			sizes[i] += remainder;
+			remainder = 0;
+		} else if (cs[i].kind == ConstraintKind.CMAX) {
+			int room = max_caps[i] - sizes[i];
+			if (room <= 0) continue;
+			int take = room < remainder ? room : remainder;
+			sizes[i] += take;
+			remainder -= take;
 		}
 	}
 
-	// Copy to output and clamp
+	// Copy to output, clamping the running total to the axis budget. Fixed
+	// constraints (CLEN/CMIN/CPERCENT/CFIT) are individually capped at
+	// `available` but can still oversubscribe it collectively — e.g. two
+	// constraint_min(40) children in a 30-wide area. Truncating here keeps the
+	// caller's invariant that every returned rect lies inside `area`, so
+	// downstream drawing never runs past the parent.
+	int used = 0;
 	for (int i = 0; i < n; i++) {
-		if (sizes[i] < 0) sizes[i] = 0;
-		out_sizes[i] = sizes[i];
+		int size = sizes[i] < 0 ? 0 : sizes[i];
+		int room = available - used;
+		if (room < 0) room = 0;
+		if (size > room) size = room;
+		out_sizes[i] = size;
+		used += size;
 	}
 
 	return n;

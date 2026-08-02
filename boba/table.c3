@@ -4,6 +4,12 @@ import milktea;
 import glaze;
 import std::core::dstring;
 
+// Capacities for Table's fixed-size storage. The add_* guards below are
+// written against these constants rather than literals: the row guard used to
+// read 256 while the array held 64, so the 65th add_row wrote past the end.
+const int MAX_TABLE_COLUMNS = 16;
+const int MAX_TABLE_ROWS    = 64;
+
 // TableColumn defines a column in a table.
 struct TableColumn {
 	String title;
@@ -18,9 +24,9 @@ struct TableRow {
 
 // Table is a structured data display component.
 struct Table {
-	TableColumn[16] columns;
+	TableColumn[MAX_TABLE_COLUMNS] columns;
 	int col_count;
-	TableRow[64] rows;
+	TableRow[MAX_TABLE_ROWS] rows;
 	int row_count;
 	int cursor;
 	int scroll_offset;
@@ -46,14 +52,14 @@ fn Table new_table() {
 
 // add_column adds a column with the given title and width.
 fn void Table.add_column(&self, String title, int width) {
-	if (self.col_count >= 16) return;
+	if (self.col_count >= MAX_TABLE_COLUMNS) return;
 	self.columns[self.col_count] = { .title = title, .width = width };
 	self.col_count++;
 }
 
 // add_row adds a row with the given cell values.
 fn void Table.add_row(&self, String c0) {
-	if (self.row_count >= 256) return;
+	if (self.row_count >= MAX_TABLE_ROWS) return;
 	TableRow r = { };
 	r.cells[0] = c0;
 	r.cell_count = 1;
@@ -63,7 +69,7 @@ fn void Table.add_row(&self, String c0) {
 
 // add_row2 adds a row with 2 cells.
 fn void Table.add_row2(&self, String c0, String c1) {
-	if (self.row_count >= 256) return;
+	if (self.row_count >= MAX_TABLE_ROWS) return;
 	TableRow r = { };
 	r.cells[0] = c0;
 	r.cells[1] = c1;
@@ -74,7 +80,7 @@ fn void Table.add_row2(&self, String c0, String c1) {
 
 // add_row3 adds a row with 3 cells.
 fn void Table.add_row3(&self, String c0, String c1, String c2) {
-	if (self.row_count >= 256) return;
+	if (self.row_count >= MAX_TABLE_ROWS) return;
 	TableRow r = { };
 	r.cells[0] = c0;
 	r.cells[1] = c1;
@@ -101,7 +107,9 @@ fn bool Table.handle_key(&self, milktea::KeyMsg k) {
 			self.cursor = 0;
 			return true;
 		case milktea::KeyCode.END:
-			self.cursor = self.row_count - 1;
+			// row_count == 0 would leave cursor at -1, which view() then
+			// indexes with.
+			self.cursor = self.row_count > 0 ? self.row_count - 1 : 0;
 			return true;
 		case milktea::KeyCode.PAGE_UP:
 			self.cursor -= visible;
@@ -109,7 +117,7 @@ fn bool Table.handle_key(&self, milktea::KeyMsg k) {
 			return true;
 		case milktea::KeyCode.PAGE_DOWN:
 			self.cursor += visible;
-			if (self.cursor >= self.row_count) self.cursor = self.row_count - 1;
+			if (self.cursor >= self.row_count) self.cursor = self.row_count > 0 ? self.row_count - 1 : 0;
 			return true;
 		default:
 			return false;
