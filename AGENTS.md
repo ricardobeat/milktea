@@ -1,26 +1,33 @@
-# bubble-tree — agent guide
+# milktea — agent guide
 
 Three modules. Each has one job.
 
+- **milktea** — Elm-style runtime loop (model/update/view, timers, input)
+- **glaze** — styling; builds ANSI-escaped strings
+- **xray** — geometry: layout constraints + the cell grid
+
+User-facing docs cover the API in depth — this file only adds what they don't:
+
+| I need to… | Read |
+|---|---|
+| model/update/view/main skeleton | `README.md` → "The model", "init", "update", "view", "main" |
+| styling, colors, borders | `README.md` → "Styling with glaze" |
+| splitting the screen (`vstack`/`hstack`) | `README.md` → "Layout with xray::layout" |
+| walkthrough | `TUTORIAL.md` (builds a pomodoro timer step by step) |
+| internals (event loop, render pipeline) | `ARCHITECTURE.md` |
+
 ## milktea — runtime loop
 
-Elm-style TUI framework. Your model implements three methods:
-
-```c3
-fn Cmd  init();
-fn Cmd  update(Msg msg);
-fn View view();
-```
-
-`update` receives key/window/timer messages and returns a `Cmd` (e.g. `milktea::quit()`).  
-`view` returns a `View` built from a cell grid or a plain string.  
+`update` receives key/window/timer messages and returns a `Cmd` (e.g. `milktea::quit()`).
+`view` returns a `View` built from a cell grid or a plain string.
 Launch with `milktea::@run_program(&model)`.
 
-### Timers — `tick()` and `every()`
+### Timers — `tick()` vs `every()`
 
-Both schedule a one-shot timer that fires after the given delay, then deliver
-a `TICK` message (or a custom callback's message) to the model. The model
-must re-arm the timer from `update()` to keep it firing.
+Both schedule a one-shot timer that fires after the given delay, then deliver a
+`TICK` message (or a custom callback's message). The model must re-arm the timer
+from `update()` to keep it firing. (README "Timed updates" covers the loop and
+custom messages.)
 
 ```c3
 milktea::tick(16);    // fires after 16ms — use for animations/frame pacing
@@ -38,40 +45,38 @@ display will tick exactly on `:00` forever, even if `update()` takes a few ms.
 
 ## glaze — styling
 
-Builds ANSI-escaped strings. Chain calls, then call `.render(content)`:
-
-```c3
-glaze::new_style()
-    .foreground(glaze::color_hex("#ff5fd7"))
-    .set_bold(true)
-    .render("hello")   // → ANSI string
-```
-
-Border presets: `rounded_border()`, `thick_border()`, `double_border()`.  
-Measure display width with `glaze::string_width(s)`.
+Builds ANSI-escaped strings. Chain calls, then call `.render(content)`. Full
+reference (colors, border presets, joining, width measurement) is in
+README → "Styling with glaze".
 
 ## xray — layout + cell grid
 
 Two independent tools that compose.
 
-**Layout** — splits a `Rect` into sub-rects using constraints:
+**Layout** — solves constraints against a `Rect`. The ergonomic wrapper
+(`vstack`/`hstack`, `slot()`, `LayoutOptions.gap`, `layout::screen()`) is
+documented in README → "Layout with xray::layout". The raw splitters and
+constraint kinds, which README doesn't cover, live in `xray/layout.c3`:
 
 ```c3
 Constraint[3] cs = { constraint_len(1), constraint_fill(1), constraint_len(1) };
 Rect[3] out;
 layout_v(area, cs[..], out[..]);        // vertical split
 layout_h(area, cs[..], out[..]);        // horizontal split
-layout_v_gap(area, cs[..], 1, out[..]); // vertical split with 1-row gap
-layout_h_gap(area, cs[..], 1, out[..]); // horizontal split with 1-col gap
+layout_v_gap(area, cs[..], 1, out[..]); // with 1-row gap
 ```
 
 Constraint kinds: `constraint_len(n)` fixed, `constraint_fill(w)` weighted fill,
 `constraint_percent(p)`, `constraint_min(n)`, `constraint_max(n)`,
 `constraint_fit(measure, ctx)` sized by a measure callback.
 
+For flexbox-style nested trees use `FlexNode`: `flex_row()` / `flex_col()` with
+`.with_direction/.with_justify/.with_align/.with_gap/.with_padding/.with_main_size/
+.with_cross_size` builders, then `.solve(area)` and read `.rect()` / `.child_rect(i)`.
+
 Shrink a rect with `rect.inset(left, top, right, bottom)`.
 
-**ScreenBuffer** — a persistent cell grid for precise x,y drawing:
+**ScreenBuffer** — a persistent cell grid for precise x,y drawing (not in README):
 
 ```c3
 ScreenBuffer* canvas = xray::new_screen_buffer(w, h);
@@ -96,55 +101,12 @@ since block glyphs fill the cell with their foreground. In `blit`, TRANSPARENT c
 skipped entirely (keep what's underneath). In `diff_sgr`, TRANSPARENT channels emit no SGR
 and trigger no reset.
 
-Borders can also be applied directly in glaze without touching the cell grid — useful in the simple string-based path:
-
-```c3
-glaze::new_style()
-    .border(glaze::rounded_border())
-    .foreground(glaze::color_hex("#5f0087"))   // colours the border characters
-    .render(content)                           // returns bordered ANSI string
-```
-
-Use `draw_border` on the `ScreenBuffer` when you need the inner `Rect` back for layout; use glaze's `.border()` when you just want a box around a string.
-
-## Layout — stacks (`xray::layout`)
-
-Split an area with `vstack`/`hstack`. Each slot pairs a constraint with an
-output `Rect*`; results are written back in place:
-
-```c3
-import xray::layout;
-
-Rect top, body, bottom;
-layout::vstack(layout::screen(w, h), {
-    layout::slot(layout::len(1),   &top),
-    layout::slot(layout::fill(1),  &body),
-    layout::slot(layout::len(1),   &bottom),
-});
-
-Rect sidebar, content;
-layout::hstack(body, {
-    layout::slot(layout::len(24), &sidebar),
-    layout::slot(layout::fill(1), &content),
-}, { .gap = 1 });   // 1-col gap
-```
-
-- `layout::screen(w, h)` is shorthand for `xray::new_rect(0, 0, w, h)`.
-- Constraint aliases: `layout::len(n)`, `layout::fill(weight)`, `layout::percent(p)`,
-  `layout::min(n)`, `layout::max(n)`.
-- Gap goes in `layout::LayoutOptions{ .gap = n }` (zero value = no gap).
-- Up to 64 slots per stack; extra slots are ignored.
-
-For flexbox-style nested trees use `FlexNode`: `flex_row()` / `flex_col()` with
-`.with_direction/.with_justify/.with_align/.with_gap/.with_padding/.with_main_size/
-.with_cross_size` builders, then `.solve(area)` and read `.rect()` / `.child_rect(i)`.
-
-For string-based row layout with auto cursor tracking, use `milktea::Layout`
-(`new_layout()`, `.write()`, `.write_line()`, `.write_input_line()`, `.view()`).
+Use `draw_border` on the `ScreenBuffer` when you need the inner `Rect` back for layout; use
+glaze's `.border()` (README → Borders) when you just want a box around a string.
 
 ## Returning a View
 
-**Simple case** — build a string (with glaze), hand it to milktea:
+**Simple case** — build a string (with glaze), hand it to milktea. See README → "View types":
 
 ```c3
 return milktea::new_alt_screen_view(glaze_string);   // alt screen (typical TUI)
@@ -179,7 +141,10 @@ return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
 
 ## Tests
 
-All tests live in `test/` (kept out of the library dirs so `milktea/**` etc. stay test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare against `snapshots/*/*.snap`; re-record with `just update-snapshots` (= `UPDATE_SNAPSHOTS=1 c3c test`) and review the diff.
+All tests live in `test/` (kept out of the library dirs so `milktea/**` etc. stay
+test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare
+against `snapshots/*/*.snap`; re-record with `just update-snapshots` and review the
+diff. See README → "Testing".
 
 ## Build
 
