@@ -2,6 +2,10 @@ module glaze;
 
 import std::core::dstring;
 
+// Maximum number of input lines Style.render lays out in one call. Lines
+// beyond this are dropped; the array is stack-allocated per call.
+const sz MAX_RENDER_LINES = 256;
+
 // BorderAnimation selects an animated border rendering mode.
 enum BorderAnimation : char {
 	NONE,    // static border (default)
@@ -287,14 +291,19 @@ fn void color_whitespace(DString* buf, Color* bg, bool has_bg, int n) @local {
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
-	// Split input into lines.
-	String[256] lines;
+	// Split input into lines. Content beyond MAX_RENDER_LINES is dropped
+	// rather than written past the end of the stack array — rendering a long
+	// log or file is an ordinary thing to ask for, and the unguarded write
+	// smashed the stack in the optimized (bounds-check-free) example builds.
+	String[MAX_RENDER_LINES] lines;
 	sz line_count = 0;
 	sz line_start = 0;
 	for (sz i = 0; i <= input.len; i++) {
 		if (i == input.len || input[i] == '\n') {
-			lines[line_count] = input[line_start:i - line_start];
-			line_count++;
+			if (line_count < MAX_RENDER_LINES) {
+				lines[line_count] = input[line_start:i - line_start];
+				line_count++;
+			}
 			line_start = i + 1;
 			if (i == input.len) break;
 		}

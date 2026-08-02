@@ -101,6 +101,19 @@ struct CSIParse {
 	bool valid;
 }
 
+// Largest value a CSI parameter may hold. Real parameters are codepoints,
+// coordinates and modifier bitfields — all far below this. Saturating keeps a
+// hostile or garbled sequence from wrapping the accumulator negative, which
+// would make parse_csi drop the parameter entirely and change param_count,
+// silently rerouting the sequence to the wrong handler.
+const int CSI_PARAM_MAX = 0x10FFFF;
+
+fn int accumulate_param(int acc, char digit) @local {
+	if (acc > (CSI_PARAM_MAX - 9) / 10) return CSI_PARAM_MAX;
+	int next = acc * 10 + (digit - '0');
+	return next > CSI_PARAM_MAX ? CSI_PARAM_MAX : next;
+}
+
 fn CSIParse parse_csi(char[] buf) {
 	CSIParse csi;
 	csi.param_count = 0;
@@ -132,11 +145,11 @@ fn CSIParse parse_csi(char[] buf) {
 			if (in_subparam) {
 				if (!subparam_seen_second_colon) {
 					if (current_subparam < 0) current_subparam = 0;
-					current_subparam = current_subparam * 10 + (ch - '0');
+					current_subparam = accumulate_param(current_subparam, ch);
 				}
 			} else {
 				if (current_param < 0) current_param = 0;
-				current_param = current_param * 10 + (ch - '0');
+				current_param = accumulate_param(current_param, ch);
 			}
 			pos++;
 		} else if (ch == ':') {
@@ -201,6 +214,25 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
 fn int csi_subparam(CSIParse csi, int idx, int default_val) {
 	if (idx < csi.param_count && csi.subparams[idx] != 0) return csi.subparams[idx];
 	return default_val;
+}
+
+struct KeyMods {
+	bool shift;
+	bool alt;
+	bool ctrl;
+}
+
+// decode_xterm_mods decodes an xterm modifier parameter, which encodes
+// "1 + bitfield": bit 0 (+1) shift, bit 1 (+2) alt, bit 2 (+4) ctrl. Higher
+// bits carry meta/super/hyper and the kitty lock states, which we don't model
+// but must not let disturb the three we do.
+//
+// This must be a bitmask test, not a set of equality comparisons against
+// 2/4/6/8 — those silently dropped every modifier once any higher bit was
+// set, so ctrl+meta+Up (mod 13) arrived with no modifiers at all.
+fn KeyMods decode_xterm_mods(int mod) {
+	int bits = mod > 0 ? mod - 1 : 0;
+	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0 };
 }
 
 fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
@@ -298,6 +330,16 @@ fn ParseResult parse_key(char[] buf) {
 				int cb = (int)(buf[3]) - 32;
 				int cx = (int)(buf[4]) - 32;
 				int cy = (int)(buf[5]) - 32;
+
+				// X10 encodes a coordinate as byte-32, so anything past column
+				// 223 wraps around and decodes negative. Nothing downstream
+				// expects a negative row/col — an app indexing a grid by
+				// mouse.row would read out of bounds — so drop the event
+				// rather than report a bogus position. Terminals use SGR
+				// (mode 1006) precisely because X10 cannot express these.
+				if (cx < 0 || cy < 0) {
+					return make_key(NONE, 0, false, false, false, 6);
+				}
 
 				MouseButton button;
 				MouseAction action;
@@ -405,21 +447,15 @@ fn ParseResult parse_key(char[] buf) {
 					default: code = UP;
 				}
 
-				int mod    = csi_param(csi, 1, 1);
-				bool shift = (mod == 2) || (mod == 4) || (mod == 6) || (mod == 8);
-				bool alt   = (mod == 3) || (mod == 4) || (mod == 7) || (mod == 8);
-				bool ctrl  = (mod == 5) || (mod == 6) || (mod == 7) || (mod == 8);
-				return make_key(code, 0, ctrl, alt, shift, total);
+				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
+				return make_key(code, 0, mods.ctrl, mods.alt, mods.shift, total);
 			}
 
 			// Home / End — xterm sends ESC [ 1 ; <mod> H/F, same modifier layout as arrows
 			if (fb == 'H' || fb == 'F') {
-				KeyCode code   = (fb == 'H') ? HOME : END;
-				int mod        = csi_param(csi, 1, 1);
-				bool shift     = (mod == 2) || (mod == 4) || (mod == 6) || (mod == 8);
-				bool alt       = (mod == 3) || (mod == 4) || (mod == 7) || (mod == 8);
-				bool ctrl      = (mod == 5) || (mod == 6) || (mod == 7) || (mod == 8);
-				return make_key(code, 0, ctrl, alt, shift, total);
+				KeyCode code = (fb == 'H') ? HOME : END;
+				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
+				return make_key(code, 0, mods.ctrl, mods.alt, mods.shift, total);
 			}
 
 			// Focus in / Focus out (xterm focus reporting: ESC [ I / ESC [ O)
@@ -443,23 +479,27 @@ fn ParseResult parse_key(char[] buf) {
 			// Tilde sequences: PgUp, PgDn, Ins, Del, F-keys, and bracketed paste markers.
 			if (fb == '~') {
 				int p1 = csi_param(csi, 0, 0);
+				// xterm reports modifiers as a second parameter, e.g.
+				// ESC[3;5~ for Ctrl+Delete. These used to be parsed and then
+				// thrown away, making Ctrl+Delete indistinguishable from Delete.
+				KeyMods tm = decode_xterm_mods(csi_param(csi, 1, 1));
 				switch (p1) {
-					case 2: return make_key(INSERT, 0, false, false, false, total);
-					case 3: return make_key(DELETE, 0, false, false, false, total);
-					case 5: return make_key(PAGE_UP, 0, false, false, false, total);
-					case 6: return make_key(PAGE_DOWN, 0, false, false, false, total);
-					case 11: return make_key(F1, 0, false, false, false, total);
-					case 12: return make_key(F2, 0, false, false, false, total);
-					case 13: return make_key(F3, 0, false, false, false, total);
-					case 14: return make_key(F4, 0, false, false, false, total);
-					case 15: return make_key(F5, 0, false, false, false, total);
-					case 17: return make_key(F6, 0, false, false, false, total);
-					case 18: return make_key(F7, 0, false, false, false, total);
-					case 19: return make_key(F8, 0, false, false, false, total);
-					case 20: return make_key(F9, 0, false, false, false, total);
-					case 21: return make_key(F10, 0, false, false, false, total);
-					case 23: return make_key(F11, 0, false, false, false, total);
-					case 24: return make_key(F12, 0, false, false, false, total);
+					case 2: return make_key(INSERT, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 3: return make_key(DELETE, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 5: return make_key(PAGE_UP, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 6: return make_key(PAGE_DOWN, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 11: return make_key(F1, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 12: return make_key(F2, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 13: return make_key(F3, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 14: return make_key(F4, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 15: return make_key(F5, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 17: return make_key(F6, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 18: return make_key(F7, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 19: return make_key(F8, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 20: return make_key(F9, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 21: return make_key(F10, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 23: return make_key(F11, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 24: return make_key(F12, 0, tm.ctrl, tm.alt, tm.shift, total);
 					// Bracketed paste markers — returned as internal sentinels consumed
 					// by Program.run(); never forwarded to model.update().
 					case 200: {
@@ -547,8 +587,18 @@ fn ParseResult parse_key(char[] buf) {
 				return make_key_action(RUNE, cp, ctrl, alt, shift, action, total);
 			}
 
-			// Unknown CSI — consume ESC only, let next call re-parse
-			return make_key(ESC, 0, false, false, false, 1);
+			// Unknown but well-formed CSI — consume the whole sequence and
+			// emit nothing.
+			//
+			// Consuming only the ESC used to leave the body in the buffer,
+			// where it re-parsed as printable ASCII one byte at a time. A
+			// terminal's reply to a capability query (CPR "ESC[24;80R", DA1
+			// "ESC[?1;2c", XTWINOPS, ...) therefore arrived at the model as a
+			// burst of real RUNE keypresses — literal garbage typed into
+			// whatever had focus. parse_csi already measured the full
+			// sequence, so we know exactly how much to drop. This matches how
+			// the kitty query response "ESC[?...u" is handled above.
+			return make_key(NONE, 0, false, false, false, total);
 		}
 
 		// ESC O : SS3 sequence (F1-F4 alternate encoding)
@@ -625,6 +675,13 @@ fn ParseResult parse_key(char[] buf) {
 // Returns the number of bytes written (1-4). Counterpart to xray::utf8_decode,
 // for consumers that store KeyMsg.rune into byte-oriented text buffers.
 fn sz utf8_encode(uint cp, char[] out) {
+	// The 4-byte form below is the fallback branch, so without this guard a
+	// codepoint above U+10FFFF would produce a lead byte past 0xF7 — bytes
+	// that are not UTF-8 and that utf8_decode reads back as a single '?'.
+	// Surrogate halves are likewise not encodable scalar values.
+	if (cp > xray::UNICODE_MAX || (cp >= 0xD800 && cp <= 0xDFFF)) {
+		cp = xray::UNICODE_REPLACEMENT;
+	}
 	if (cp < 0x80) {
 		out[0] = (char)cp;
 		return 1;

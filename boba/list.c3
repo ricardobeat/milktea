@@ -76,7 +76,9 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 			self.cursor = 0;
 			return true;
 		case milktea::KeyCode.END:
-			self.cursor = self.item_count - 1;
+			// item_count == 0 would leave cursor at -1, which view() then
+			// indexes with.
+			self.cursor = self.item_count > 0 ? self.item_count - 1 : 0;
 			return true;
 		case milktea::KeyCode.PAGE_UP:
 			self.cursor -= available;
@@ -84,7 +86,7 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 			return true;
 		case milktea::KeyCode.PAGE_DOWN:
 			self.cursor += available;
-			if (self.cursor >= self.item_count) self.cursor = self.item_count - 1;
+			if (self.cursor >= self.item_count) self.cursor = self.item_count > 0 ? self.item_count - 1 : 0;
 			return true;
 		case milktea::KeyCode.ENTER:
 			if (!self.selectable) return false;

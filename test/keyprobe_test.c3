@@ -313,3 +313,116 @@ fn void test_dispatch_delivers_key_message() @test {
 	// Second message should be KEY
 	assert(m.msg_kinds[1] == (int)milktea::MsgKind.KEY);
 }
+// ============================================================
+// Terminal replies must not surface as keypresses
+//
+// Terminals answer capability queries with CSI sequences we don't handle
+// (CPR, DA1, DSR, XTWINOPS). Consuming only the ESC left the body in the
+// buffer, where it re-parsed as printable ASCII — so a query reply arrived at
+// the model as a burst of real RUNE keys, i.e. literal garbage typed into
+// whatever had focus.
+// ============================================================
+
+// count_key_events runs the parser over a byte string the way the event loop
+// does and counts how many events a model would actually observe.
+fn int count_key_events(char[] bytes) @private {
+	int events = 0;
+	sz pos     = 0;
+	while (pos < bytes.len) {
+		ParseResult r = parse_key(bytes[pos..]);
+		if (r.consumed == 0) break;
+		bool real_key = r.kind == MsgKind.KEY && r.key.code != KeyCode.NONE;
+		if (real_key || r.kind == MsgKind.MOUSE) events++;
+		pos += r.consumed;
+	}
+	return events;
+}
+
+fn void test_cpr_reply_produces_no_keys() @test {
+	assert(count_key_events((char[])"\x1b[24;80R") == 0);
+}
+
+fn void test_da1_reply_produces_no_keys() @test {
+	assert(count_key_events((char[])"\x1b[?1;2c") == 0);
+}
+
+fn void test_xtwinops_reply_produces_no_keys() @test {
+	assert(count_key_events((char[])"\x1b[4;600;800t") == 0);
+}
+
+fn void test_malformed_sgr_mouse_produces_no_keys() @test {
+	// Wrong parameter count: must be dropped, not re-lexed as text.
+	assert(count_key_events((char[])"\x1b[<0;10M") == 0);
+}
+
+fn void test_unknown_csi_still_consumes_following_key() @test {
+	// Dropping the unknown sequence must not swallow what comes after it.
+	assert(count_key_events((char[])"\x1b[24;80Rx") == 1);
+}
+
+// ============================================================
+// Modifier decoding
+// ============================================================
+
+fn void test_arrow_modifiers_use_bitmask() @test {
+	// mod 5 = 1 + ctrl(4)
+	ParseResult r = parse_key((char[])"\x1b[1;5A");
+	assert(r.key.code == KeyCode.UP);
+	assert(r.key.ctrl);
+
+	// mod 13 = 1 + ctrl(4) + meta(8). Equality tests against 2/4/6/8 dropped
+	// every modifier once a higher bit was set.
+	r = parse_key((char[])"\x1b[1;13A");
+	assert(r.key.ctrl);
+}
+
+fn void test_tilde_sequence_modifiers_are_reported() @test {
+	// ESC[3;5~ is Ctrl+Delete; the modifier used to be parsed and discarded,
+	// making it indistinguishable from a bare Delete.
+	ParseResult r = parse_key((char[])"\x1b[3;5~");
+	assert(r.key.code == KeyCode.DELETE);
+	assert(r.key.ctrl);
+
+	r = parse_key((char[])"\x1b[15;2~");
+	assert(r.key.code == KeyCode.F5);
+	assert(r.key.shift);
+}
+
+// ============================================================
+// Malformed / adversarial input
+// ============================================================
+
+fn void test_x10_mouse_out_of_range_is_dropped() @test {
+	// X10 encodes coordinates as byte-32, so column 224 arrives as 0x00 and
+	// decodes to -32. A negative row/col must never reach the model.
+	char[6] bytes = { 0x1b, '[', 'M', ' ', 0x00, 0x00 };
+	ParseResult r = parse_key(bytes[..]);
+	assert(r.kind != MsgKind.MOUSE);
+	assert(r.consumed == 6); // still consumed, so the loop makes progress
+}
+
+fn void test_huge_csi_param_is_clamped_not_dropped() @test {
+	// Overflowing the accumulator used to wrap it negative, which made
+	// parse_csi discard the parameter and change param_count — rerouting the
+	// sequence to the wrong handler.
+	CSIParse csi = parse_csi((char[])"999999999999m");
+	assert(csi.valid);
+	assert(csi.param_count == 1);
+	assert(csi.params[0] == CSI_PARAM_MAX);
+}
+
+fn void test_parse_key_never_consumes_past_buffer() @test {
+	// The @ensure contract, exercised over every single-byte input plus a
+	// spread of adversarial multi-byte prefixes.
+	for (int b = 0; b < 256; b++) {
+		char[1] one = { (char)b };
+		assert(parse_key(one[..]).consumed <= 1);
+	}
+	String[] tricky = {
+		"\x1b", "\x1b[", "\x1b[<", "\x1b[M", "\x1b[M ", "\x1bO",
+		"\xc3", "\xe6\x97", "\xf0\x9f\x98", "\x1b[1;", "\x1b[999",
+	};
+	foreach (t : tricky) {
+		assert(parse_key((char[])t).consumed <= t.len);
+	}
+}

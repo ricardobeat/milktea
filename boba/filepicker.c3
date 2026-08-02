@@ -48,11 +48,14 @@ fn void FilePicker.load_dir(&self, String path) {
 
 	@pool() {
 		char[512] path_buf;
-		for (sz i = 0; i < path.len && i < 511; i++) {
+		// Truncate rather than overflow: the loop stops at 511, so the
+		// terminator must be clamped too. ENTER appends "/name" per directory
+		// level with no bound, so long paths are reachable in normal use.
+		sz path_len = path.len < 511 ? path.len : 511;
+		for (sz i = 0; i < path_len; i++) {
 			path_buf[i] = path[i];
-			path_buf[i + 1] = 0;
 		}
-		path_buf[path.len] = 0;
+		path_buf[path_len] = 0;
 
 		char[64 * 64] name_buf;
 		int[64] dir_flags;
