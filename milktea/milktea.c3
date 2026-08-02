@@ -330,9 +330,18 @@ struct Program {
 	int send_tail;
 	// Mutex protecting send_queue / send_head / send_tail.
 	// Initialized lazily inside run() so send() is safe to call before
-	// the program is started (send_mu_init guards against that path).
+	// the program is started (send_accepting guards against that path).
 	thread::Mutex send_mu;
-	bool send_mu_init;
+	// True between send_mu.init() and the start of shutdown. Atomic because
+	// senders run on other threads: a plain bool would be a data race, and the
+	// compiler could cache the read.
+	Atomic{bool} send_accepting;
+	// Number of senders currently inside send(), i.e. between passing the
+	// accepting check and releasing the mutex. Shutdown clears
+	// send_accepting and then waits for this to reach zero before destroying
+	// the mutex — clearing the flag alone only stops *new* entrants, and a
+	// sender already past the check would otherwise lock a destroyed mutex.
+	Atomic{int} send_inflight;
 
 	// Threaded input reader
 	thread::Thread reader_thread;
@@ -569,14 +578,29 @@ fn void with_input(Program* self, char[] data) {
 // ============================================================
 
 // send enqueues a message for the event loop to process.
-// Thread-safe: protected by send_mu, which is initialized in run().
-// Calls before run() (send_mu_init == false) are silently dropped — the
-// program isn't running yet so there is no consumer to wake.
+//
+// Thread-safe, and safe to call at any point in the program's lifetime: calls
+// before run() has initialized the mutex, or after shutdown has begun, are
+// silently dropped — there is no consumer to wake in either case.
+//
+// The handshake with shutdown is: register as in-flight, then check whether
+// the program is still accepting. Shutdown does the mirror image — stop
+// accepting, then wait for in-flight to drain. Registering *before* the check
+// is what makes it safe; the other order would let a sender pass the check,
+// stall, and then lock a mutex that shutdown had already destroyed.
+//
 // In test mode, the message is placed in a ring buffer consumed by run().
 // When the ring is full the message is dropped; enable Program.debug to
 // surface this in milktea-debug.log.
 fn void Program.send(Program* self, Msg msg) {
-	if (!self.send_mu_init) return; // program not running; no consumer
+	self.send_inflight.add(1);
+	if (!self.send_accepting.load()) {
+		// Not running yet, or already shutting down.
+		self.send_inflight.sub(1);
+		return;
+	}
+	defer self.send_inflight.sub(1);
+
 	self.send_mu.lock();
 	int next = (self.send_head + 1) % (int)MAX_BATCH;
 	bool dropped = next == self.send_tail;
@@ -771,15 +795,29 @@ fn void? Program.run(Program* self) {
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		self.timers[i] = { };
 	}
-	// Initialize send_mu before marking it ready so that any concurrent
-	// send() call after this point sees a valid mutex.
+	// Initialize send_mu before marking the program as accepting, so any
+	// concurrent send() that observes the flag sees a valid mutex.
+	// send_inflight is deliberately NOT reset here: a sender from a previous
+	// run may still be decrementing it, and storing 0 over that would lose the
+	// decrement and leave the counter permanently non-zero. It is balanced by
+	// construction — every add(1) has a matching sub(1) — so it returns to 0
+	// on its own.
 	self.send_mu.init()!;
-	self.send_mu_init = true;
+	self.send_accepting.store(true);
 	defer {
-		// Disable send() before destroying the mutex so late callers
-		// see send_mu_init == false and return early rather than
-		// locking a destroyed mutex.
-		self.send_mu_init = false;
+		// Mirror image of send()'s handshake: stop accepting, then wait for
+		// senders already past their check to finish. Clearing the flag alone
+		// only prevents *new* entrants — a sender that had already passed the
+		// check would go on to lock a mutex we had destroyed.
+		//
+		// The wait is bounded in practice: an in-flight sender holds the lock
+		// only for a ring-buffer push, and the main thread is not holding it
+		// here. Spinning with a yield is appropriate for a wait this short and
+		// avoids needing a second condvar purely for teardown.
+		self.send_accepting.store(false);
+		while (self.send_inflight.load() > 0) {
+			thread::yield();
+		}
 		self.send_mu.destroy();
 		g_program = null;
 	}

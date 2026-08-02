@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import std::thread;
 import xray;
 
 // contains is defined in test_render.c3
@@ -482,4 +483,66 @@ fn void test_overlay_with_negative_origin_is_clipped() @test {
 	p.run()!!;
 
 	assert(m.frames > 0);
+}
+
+// ============================================================
+// Program.send() concurrent shutdown
+// ============================================================
+
+// SendRaceModel quits after a handful of messages so run() tears down while
+// the sender threads below are still hammering send().
+struct SendRaceModel {
+	int updates;
+}
+
+fn milktea::Cmd SendRaceModel.init(SendRaceModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dynamic {
+	self.updates++;
+	if (self.updates > 20) return milktea::quit();
+	return null;
+}
+
+fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
+	return milktea::new_view("race");
+}
+
+fn int send_race_sender(void* arg) @private {
+	milktea::Program* p = (milktea::Program*)arg;
+	for (int i = 0; i < 200000; i++) {
+		milktea::Msg m = { .kind = milktea::MsgKind.USER };
+		p.send(m);
+	}
+	return 0;
+}
+
+// test_send_survives_concurrent_shutdown pins the handshake between send() and
+// run()'s teardown.
+//
+// send() used to gate on a plain bool that was cleared just before
+// send_mu.destroy(). Clearing a flag only stops *new* entrants: a sender that
+// had already passed the check went on to lock — and unlock — a destroyed
+// mutex. Against the old code this aborts with "Mutex was not initialized"
+// within a few runs; a heavier standalone version failed 6/6.
+//
+// send() now registers as in-flight before checking the flag, and teardown
+// stops accepting and then drains the in-flight count before destroying.
+fn void test_send_survives_concurrent_shutdown() @test {
+	for (int round = 0; round < 4; round++) {
+		SendRaceModel m;
+		DString out = dstring::temp();
+		milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+		milktea::with_input(&p, (char[])"abcdefghij");
+
+		thread::Thread t1, t2;
+		t1.create(&send_race_sender, &p)!!;
+		t2.create(&send_race_sender, &p)!!;
+
+		p.run()!!;
+
+		t1.join()!!;
+		t2.join()!!;
+	}
 }
