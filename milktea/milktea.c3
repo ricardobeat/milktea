@@ -1402,8 +1402,23 @@ fn void Program.render_current_view(Program* self) {
 					sz rows = v.cells_height;
 					if (rows > r.screen.height) rows = r.screen.height;
 					for (sz row = 0; row < rows; row++) {
+						bool prev_wide = false;
 						for (sz col = 0; col < cols; col++) {
-							r.screen.set_cell(col, row, v.cells[row * v.cells_width + col]);
+							xray::Cell c = v.cells[row * v.cells_width + col];
+							if (prev_wide) {
+								// The cell just placed at col-1 is a wide glyph
+								// (width 2) whose second terminal column this
+								// cell covers. It is the glyph's own trailing
+								// half — write it raw so the wide-pair repair
+								// doesn't demote the glyph we are copying.
+								// Without this, any wide glyph in a cell view
+								// was blanked a column later, on the spot.
+								r.screen.put_raw_cell(col, row, c);
+								prev_wide = false;
+							} else {
+								r.screen.set_cell(col, row, c);
+								prev_wide = c.width == 2;
+							}
 						}
 					}
 					self.last_content_rows = rows;

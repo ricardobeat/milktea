@@ -28,6 +28,11 @@ struct Model {
 	int glitter_count;
 	int spawn_idx; // round-robin index
 	int color_phase;
+	// Reused cell buffer, owned by the model. The View borrows its cell array
+	// until the framework has copied it into the renderer, so the buffer must
+	// outlive view() — building a fresh screen per frame and freeing it here
+	// left every View referencing freed memory (use-after-free).
+	xray::ScreenBuffer* screen;
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
@@ -256,7 +261,14 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	// ── render to screen buffer + glitter overlay ────────────────────────
 
-	xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
+	xray::ScreenBuffer* screen = self.screen;
+	if (screen == null) {
+		screen = xray::new_screen_buffer((sz)w, (sz)h);
+		self.screen = screen;
+	} else if (screen.width != (sz)w || screen.height != (sz)h) {
+		screen.resize((sz)w, (sz)h);
+	}
+	screen.clear();
 	screen.render_ansi_string(0, 0, content, xray::default_style());
 
 	// Overlay glitter particles — fg blends additively, bg inherited from content
@@ -284,10 +296,17 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h)
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
-	screen.destroy();
-	mem::free(screen);
+	// screen is owned by the model (self.screen); freed in on_destroy.
 
 	return view;
+}
+
+fn void Model.on_destroy(&self) @dynamic {
+	if (self.screen != null) {
+		self.screen.destroy();
+		mem::free(self.screen);
+		self.screen = null;
+	}
 }
 
 fn int main() {

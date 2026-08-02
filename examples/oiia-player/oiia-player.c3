@@ -411,6 +411,19 @@ struct App {
 	float cam_pz;
 	float cam_yaw;
 	float cam_pitch;
+
+	// Reused cell array, owned by the app. The View borrows it until the
+	// framework has copied it into the renderer, so it must outlive view() —
+	// freeing it inside view() left every View referencing freed memory.
+	xray::Cell[] view_cells;
+}
+
+fn xray::Cell[] App.ensure_cells(&self, sz needed) {
+	if (self.view_cells.len != needed) {
+		if (self.view_cells.ptr != null) mem::free(self.view_cells.ptr);
+		self.view_cells = mem::new_array(xray::Cell, needed);
+	}
+	return self.view_cells;
 }
 
 fn void App.play_sound(App* self) {
@@ -629,8 +642,7 @@ fn milktea::View App.view(App* self) @dynamic {
 
 	if (self.mode == SHOWING_IMAGE && self.img_data != null) {
 		// Render PNG image as half-block cells
-		xray::Cell[] cells = mem::new_array(xray::Cell, (sz)(w * h));
-		defer mem::free(cells.ptr);
+		xray::Cell[] cells = self.ensure_cells((sz)(w * h));
 
 		xray::Style base_style = xray::default_style();
 		int pixel_rows         = h * 2;
@@ -911,8 +923,7 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	// Fallback: loading screen
-	xray::Cell[] cells = mem::new_array(xray::Cell, (sz)(w * h));
-	defer mem::free(cells.ptr);
+	xray::Cell[] cells = self.ensure_cells((sz)(w * h));
 	xray::Style base_style = xray::default_style();
 	xray::Style txt_style  = base_style.set_fg(xray::color_rgb((char)200, (char)200, (char)200));
 	for (sz i = 0; i < (sz)(w * h); i++) cells[i] = xray::empty_cell();
@@ -938,6 +949,7 @@ fn int main() {
 		return 1;
 	}
 	milktea::disable_mouse();
+	if (app.view_cells.ptr != null) mem::free(app.view_cells.ptr);
 	mem::free(app);
 	return 0;
 }

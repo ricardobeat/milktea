@@ -1138,17 +1138,33 @@ fn String ScreenBuffer.render_diff_str(&self) {
 // Cells with TRANSPARENT bg or fg are always skipped — they inherit from the destination.
 fn void ScreenBuffer.blit(&self, sz dst_x, sz dst_y, ScreenBuffer* src, bool transparent) {
 	for (sz row = 0; row < src.height; row++) {
+		bool prev_wide = false;
 		for (sz col = 0; col < src.width; col++) {
 			Cell c = src.cells[row * src.width + col];
 			// Always skip TRANSPARENT cells — they mean "keep what's underneath"
-			if (c.style.bg.kind == ColorKind.TRANSPARENT || c.style.fg.kind == ColorKind.TRANSPARENT) continue;
+			if (c.style.bg.kind == ColorKind.TRANSPARENT || c.style.fg.kind == ColorKind.TRANSPARENT) {
+				prev_wide = false;
+				continue;
+			}
 			if (transparent) {
 				// Skip if content is space AND bg is NONE
-				if (c.content_len == 1 && c.content[0] == ' ' && c.style.bg.kind == ColorKind.NONE) continue;
+				if (c.content_len == 1 && c.content[0] == ' ' && c.style.bg.kind == ColorKind.NONE) {
+					prev_wide = false;
+					continue;
+				}
 			}
 			sz dx = dst_x + col;
 			sz dy = dst_y + row;
-			self.set_cell(dx, dy, c);
+			if (prev_wide) {
+				// Trailing half of the wide glyph just placed at col-1: write it
+				// raw so the wide-pair repair doesn't demote the glyph we're
+				// copying. Same reasoning as the cell-view copy loop in milktea.
+				self.put_raw_cell(dx, dy, c);
+				prev_wide = false;
+			} else {
+				self.set_cell(dx, dy, c);
+				prev_wide = c.width == 2;
+			}
 		}
 	}
 }

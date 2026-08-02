@@ -429,13 +429,19 @@ fn String Viewport.render_line_with_selection(&self, int row, String line, int p
 	// at a time wrapped each byte of a multi-byte character in its own SGR
 	// pair, so "日本語" rendered as nine replacement glyphs and the padding
 	// was computed against a byte count instead of a display width.
+	//
+	// col tracks the DISPLAY column — what the terminal shows, and what the
+	// selection anchors from mouse events are measured in. Wide glyphs occupy
+	// two columns, so they advance col by two; counting every character once
+	// left the highlight boundary one column short for every wide glyph before
+	// it.
 	sz i = 0;
 	while (i < line.len) {
 		sz char_len = glaze::utf8_sequence_len(line, i);
 		String ch   = line[i:char_len];
 		glaze::Style s = self.is_in_selection(row, col) ? self.selection_style : self.content_style;
 		out.append_string(s.render(ch));
-		col++;
+		col += glaze::utf8_width_at(line, i);
 		i += char_len;
 	}
 

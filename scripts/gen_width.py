@@ -2,13 +2,20 @@
 """Generate the character-width range tables used by xray and glaze.
 
 Terminal cell width is decided per codepoint: 0 for combining marks and other
-zero-advance characters, 2 for East Asian Wide/Fullwidth and emoji-presentation
-characters, 1 for everything else. The rules were previously hand-written as a
-cascade of range checks in two places, which drifted from real Unicode data —
-BMP emoji (U+231A watch, U+2615 coffee, U+2705 check mark) were reported narrow,
-and every combining mark outside Latin (Arabic, Hebrew, Devanagari, Thai,
-Khmer, Tibetan) was reported as one column instead of zero. Both errors
-desynchronise the cursor by a column per character.
+zero-advance characters, 2 for East Asian Wide/Fullwidth characters, 1 for
+everything else. The rules were previously hand-written as a cascade of range
+checks in two places, which drifted from real Unicode data — BMP emoji
+(U+231A watch, U+2615 coffee, U+2705 check mark) were reported narrow, and
+every combining mark outside Latin (Arabic, Hebrew, Devanagari, Thai, Khmer,
+Tibetan) was reported as one column instead of zero. Both errors desynchronise
+the cursor by a column per character.
+
+Emoji are covered by the EAW rule: default-emoji-presentation characters are
+overwhelmingly Wide or Fullwidth already. The notable exception is the regional
+indicators U+1F1E6..U+1F1FF (Emoji_Presentation=Yes, EAW=N), which are
+deliberately kept narrow: a flag is two adjacent indicators, and a terminal
+renders that pair as one glyph of two columns — measuring each indicator wide
+would count a flag as four.
 
 Sources, via Python's unicodedata (UCD 15.0):
   width 0 — general category Mn (nonspacing mark), Me (enclosing mark), Cf

@@ -4,6 +4,7 @@ import stb_json;
 import std::io;
 import std::math;
 import std::os;
+import xray;
 
 // ── Vec3 ─────────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ struct GlbModel {
 	int frame;
 	Pixel[] pixels;
 	float[] depth;
+	Cell[] view_cells; // owned by the model; the View borrows it after view() returns
 	float model_yaw;
 	float model_pitch;
 	float cam_px;
@@ -308,6 +310,7 @@ fn GlbModel*? load_glb(String path) {
 fn void GlbModel.free(GlbModel* self) {
 	mem::free(self.pixels.ptr);
 	mem::free(self.depth.ptr);
+	mem::free(self.view_cells.ptr);
 }
 
 fn void GlbModel.resize(GlbModel* self, int w, int h) {

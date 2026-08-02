@@ -185,3 +185,40 @@ fn void test_viewport_truncates_on_width_boundary() @test {
 	vp.add_line("日本語日本語日本語");
 	vp.view(); // must not produce a partial sequence or trap
 }
+
+fn void test_viewport_selection_uses_display_columns() @test {
+	// Selection anchors come from mouse events, which are DISPLAY columns. The
+	// render loop used to advance a char-count column, so a wide glyph
+	// (日 = 2 columns) shifted every later boundary one column left: with
+	// "日abc" (display 0-1 = 日, 2 = a, 3 = b, 4 = c) and a selection over
+	// display columns [2,4), the highlight landed on "bc" instead of "ab".
+	boba::Viewport vp = boba::new_viewport(40, 2);
+	vp.add_line("日abc");
+	vp.has_selection = true;
+	vp.sel_start_row = 0;
+	vp.sel_start_col = 2;
+	vp.sel_end_row = 0;
+	vp.sel_end_col = 4;
+	String out = vp.view();
+
+	// The selection style is fg #000000 on bg #ffffff. Each selected char is
+	// wrapped in its own SGR pair, so the style appears once per selected
+	// glyph, followed immediately by that glyph's bytes.
+	char[] sel = "\x1b[38;2;0;0;0;48;2;255;255;255m";
+	int matches = 0;
+	for (sz i = 0; i + sel.len + 1 <= out.len; i++) {
+		bool match = true;
+		for (sz j = 0; j < sel.len; j++) {
+			if (out[i + j] != sel[j]) {
+				match = false;
+				break;
+			}
+		}
+		if (!match) continue;
+		// The glyph following the style must be a or b — never 日 or c.
+		char next = out[i + sel.len];
+		assert(next == 'a' || next == 'b');
+		matches++;
+	}
+	assert(matches == 2);
+}

@@ -35,8 +35,12 @@ fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 	int ph = h * 2;
 
 	// Combine pixel buffer into half-block cells
-	xray::Cell[] cells = mem::new_array(xray::Cell, (sz)(w * h));
-	defer mem::free(cells.ptr);
+	xray::Cell[] cells;
+	if (self.view_cells.len != (sz)(w * h)) {
+		if (self.view_cells.ptr != null) mem::free(self.view_cells.ptr);
+		self.view_cells = mem::new_array(xray::Cell, (sz)(w * h));
+	}
+	cells = self.view_cells;
 
 	for (sz i = 0; i < (sz)(w * h); i++) cells[i] = xray::empty_cell();
 	for (int ty = 0; ty < h; ty++) {

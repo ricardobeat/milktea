@@ -119,6 +119,11 @@ struct Model {
 	int height;
 	int prev_cx;
 	int prev_cy;
+	// Reused cell buffer, owned by the model. The View borrows its cell array
+	// until the framework has copied it into the renderer, so the buffer must
+	// outlive view() — building a fresh screen per frame and freeing it here
+	// left every View referencing freed memory (use-after-free).
+	xray::ScreenBuffer* screen;
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
@@ -205,7 +210,14 @@ fn milktea::View Model.view(&self) @dynamic {
 	int w = self.width > 0 ? self.width : 80;
 	int h = self.height > 0 ? self.height : 24;
 
-	xray::ScreenBuffer* screen = xray::new_screen_buffer((sz)w, (sz)h);
+	xray::ScreenBuffer* screen = self.screen;
+	if (screen == null) {
+		screen = xray::new_screen_buffer((sz)w, (sz)h);
+		self.screen = screen;
+	} else if (screen.width != (sz)w || screen.height != (sz)h) {
+		screen.resize((sz)w, (sz)h);
+	}
+	screen.clear();
 
 	String title = "\x1b[1;37m  CURSOR GALLERY\x1b[0m  \x1b[2;37m tab/shift+tab · q quit\x1b[0m";
 	screen.render_ansi_string(0, 0, title, xray::default_style());
@@ -270,8 +282,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	self.prev_cy = focused_cy;
 
 	milktea::View view = milktea::new_alt_cell_view(screen.cells[0:(sz)w * (sz)h], (sz)w, (sz)h);
-	screen.destroy();
-	mem::free(screen);
+	// screen is owned by the model (self.screen); freed in on_destroy.
 
 	// Section B: native cursor for focused native entry
 	Entry* fe = &self.entries[self.focused];
@@ -286,6 +297,11 @@ fn milktea::View Model.view(&self) @dynamic {
 }
 
 fn void Model.on_destroy(&self) @dynamic {
+	if (self.screen != null) {
+		self.screen.destroy();
+		mem::free(self.screen);
+		self.screen = null;
+	}
 }
 
 fn int main() {

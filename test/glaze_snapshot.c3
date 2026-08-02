@@ -2,6 +2,7 @@ module glaze_snapshot @test;
 
 import snapshot;
 import glaze;
+import std::core::dstring;
 
 const String SNAP = "glaze";
 
@@ -444,4 +445,32 @@ fn void test_truncate_to_width_never_splits_escape() @test {
 	assert(glaze::string_width(s) == 3);
 	// Whatever prefix we kept must still measure as valid styled text.
 	assert(s.len > 3); // escape bytes are included but unmeasured
+}
+
+fn void test_render_long_input_is_not_truncated() @test {
+	// The line table used to be a fixed stack array that silently dropped
+	// content past line 256 — rendering a long log or file lost everything
+	// after that, with no marker in the output.
+	DString in = dstring::temp();
+	for (int i = 0; i < 300; i++) {
+		in.appendf("line %d\n", i);
+	}
+	String out = glaze::style().render(in.str_view());
+
+	// First and last lines must both survive (the old code cut at line 256).
+	String[] needles = { "line 0", "line 299" };
+	foreach (needle : needles) {
+		bool found = false;
+		for (sz i = 0; i + needle.len <= out.len && !found; i++) {
+			bool match = true;
+			for (sz j = 0; j < needle.len; j++) {
+				if (out[i + j] != needle[j]) {
+					match = false;
+					break;
+				}
+			}
+			found = match;
+		}
+		assert(found);
+	}
 }

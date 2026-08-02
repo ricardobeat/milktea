@@ -2,9 +2,10 @@ module glaze;
 
 import std::core::dstring;
 
-// Maximum number of input lines Style.render lays out in one call. Lines
-// beyond this are dropped; the array is stack-allocated per call.
-const sz MAX_RENDER_LINES = 256;
+// Stack capacity for Style.render's per-call line table. Content beyond this
+// falls back to a heap allocation rather than being truncated — the array is
+// sized to the actual line count either way.
+const sz STACK_RENDER_LINES = 256;
 
 // BorderAnimation selects an animated border rendering mode.
 enum BorderAnimation : char {
@@ -632,6 +633,15 @@ fn uint decode_codepoint(String s, sz i, sz len) @local {
 	}
 }
 
+// utf8_width_at returns the display width of the UTF-8 sequence starting at
+// index `i`. Callers stepping through a string character by character should
+// advance their column counter by this amount, not by one: a wide glyph (CJK,
+// emoji) occupies two terminal columns, so counting it once misaligns
+// selection and padding on lines that contain one.
+fn int utf8_width_at(String s, sz i) {
+	return codepoint_width(decode_codepoint(s, i, utf8_sequence_len(s, i)));
+}
+
 // string_width returns the terminal display width of a string, skipping ANSI
 // escape sequences. Uses the same codepoint width rules as xray::char_width.
 fn int string_width(String s) {
@@ -862,21 +872,34 @@ fn void color_whitespace(DString* buf, Color* bg, bool has_bg, int n) @local {
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
-	// Split input into lines. Content beyond MAX_RENDER_LINES is dropped
-	// rather than written past the end of the stack array — rendering a long
-	// log or file is an ordinary thing to ask for, and the unguarded write
-	// smashed the stack in the optimized (bounds-check-free) example builds.
-	String[MAX_RENDER_LINES] lines;
-	sz line_count = 0;
+	// Split input into lines. The line table is sized to the actual line
+	// count: a fixed stack array would silently truncate content beyond its
+	// capacity, and rendering a long log or file is an ordinary thing to ask
+	// for. Count first, then use a stack buffer when it fits, falling back to
+	// a heap allocation only for unusually long content.
+	sz line_count = 1;
+	for (sz i = 0; i < input.len; i++) {
+		if (input[i] == '\n') line_count++;
+	}
+
+	String[STACK_RENDER_LINES] stack_lines;
+	String* lines = stack_lines[..].ptr;
+	String* heap_lines = null;
+	if (line_count > STACK_RENDER_LINES) {
+		heap_lines = mem::new_array(String, line_count).ptr;
+		lines = heap_lines;
+	}
+	defer {
+		if (heap_lines != null) mem::free(heap_lines);
+	}
+
+	sz line_index = 0;
 	sz line_start = 0;
 	for (sz i = 0; i <= input.len; i++) {
 		if (i == input.len || input[i] == '\n') {
-			if (line_count < MAX_RENDER_LINES) {
-				lines[line_count] = input[line_start:i - line_start];
-				line_count++;
-			}
+			lines[line_index] = input[line_start:i - line_start];
+			line_index++;
 			line_start = i + 1;
-			if (i == input.len) break;
 		}
 	}
 
