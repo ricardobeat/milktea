@@ -379,3 +379,44 @@ fn void test_add_overlay_inner_shadow() @test {
 	assert(!o.layer_style.shadow.enabled);
 	assert(o.layer_style.inner_shadow.enabled);
 }
+// ============================================================
+// Test-mode loop termination
+// ============================================================
+
+// NeverQuitsModel is the shape of a model with a bug: it consumes messages
+// but never returns quit().
+struct NeverQuitsModel {
+	int updates;
+}
+
+fn milktea::Cmd NeverQuitsModel.init(NeverQuitsModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) @dynamic {
+	self.updates++;
+	return null;
+}
+
+fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
+	return milktea::new_view("still here");
+}
+
+// test_test_mode_terminates_without_quit pins down that the event loop ends
+// once injected input is exhausted and no timer is armed, even if the model
+// never quits.
+//
+// In test mode there is no reader thread and no blocking wait, so the loop
+// used to spin at 100% CPU forever here — meaning a single buggy model under
+// test would hang the whole suite rather than failing it. If this regresses,
+// this test does not fail: it hangs. That is the symptom being guarded.
+fn void test_test_mode_terminates_without_quit() @test {
+	NeverQuitsModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	milktea::with_input(&p, (char[])"abc");
+	p.run()!!;
+
+	// The injected keys were delivered before the loop exited.
+	assert(m.updates > 0);
+}

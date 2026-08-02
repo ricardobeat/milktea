@@ -284,6 +284,11 @@ const sz MAX_TIMERS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
+// Longest OSC 22 mouse cursor name tracked across frames. The longest CSS
+// cursor keyword is "no-drop"/"nesw-resize" class at 12 chars; 32 leaves room
+// for terminal-specific names. Longer names still render — they just always
+// re-emit, since they can't be cached for comparison.
+const sz MAX_MOUSE_CURSOR_LEN = 32;
 
 struct TimerEntry {
 	bool active;
@@ -336,7 +341,15 @@ struct Program {
 	xray::Renderer* renderer;
 
 	// Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
-	String last_mouse_cursor;
+	// Stored as owned bytes rather than a String: the name comes from a View
+	// built inside render_current_view's @pool(), so keeping the slice would
+	// retain temp memory that is freed before the next frame compares against
+	// it. Names are short CSS cursor keywords ("pointer", "nwse-resize").
+	char[MAX_MOUSE_CURSOR_LEN] last_mouse_cursor_buf;
+	sz last_mouse_cursor_len;
+	// False once an uncacheable (over-long) name has been emitted, forcing the
+	// next frame to re-emit rather than compare against a stale buffer.
+	bool last_mouse_cursor_valid;
 
 	// Last rendered content height (rows), for clean exit in inline (non-alt-screen) mode.
 	sz last_content_rows;
@@ -730,6 +743,10 @@ fn void? Program.run(Program* self) {
 	g_program = self;
 	self.pending_len = 0;
 	self.in_alt_screen = false;
+	// No OSC 22 emitted yet, which is indistinguishable from having emitted
+	// the empty (reset) name — so a first frame with no cursor stays silent.
+	self.last_mouse_cursor_len = 0;
+	self.last_mouse_cursor_valid = true;
 	self.send_head = 0;
 	self.send_tail = 0;
 	for (sz i = 0; i < MAX_TIMERS; i++) {
@@ -753,40 +770,22 @@ fn void? Program.run(Program* self) {
 	self.in_paste = false;
 	self.paste_buf.init(&allocators::LIBC_ALLOCATOR, 256);
 
+	// Tracks how far setup got, so the cleanup defer below tears down exactly
+	// what was built. Setup can fail partway (queue init, thread spawn), and a
+	// defer registered after the failing statement never runs — so the restore
+	// must be armed before the terminal is touched, not after setup completes.
+	bool tty_raw       = false;
+	bool queue_created = false;
+	bool reader_running = false;
+
 	if (!self.test_mode) {
 		saved = raw_mode_enter()!;
-		hide_cursor();
-		enable_focus();
-		enable_bracketed_paste();
-		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
-		// Terminals that don't support it ignore the sequence — safe to push always.
-		enable_kitty_keyboard();
-		setup_signals(saved, &self.in_alt_screen);
-
-		// Start the reader thread so stdin reads never block the event loop.
-		input_queue_init(&g_input_queue)!;
-		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!!;
+		tty_raw = true;
 	}
 
-	// Defers live at function scope so they run after the event loop exits,
-	// not when the if-block above closes (C3 defer is block-scoped).
+	// Armed immediately: from here on, every exit path restores the terminal.
 	defer {
-		// Free the paste accumulation buffer regardless of test mode.
-		self.paste_buf.free();
-
-		if (!self.test_mode) {
-			if (self.renderer != null) {
-				self.renderer.destroy();
-				mem::free(self.renderer);
-			}
-			// Two-phase shutdown: first signal the reader to stop, then join
-			// it so we never call input_queue_destroy while the reader thread
-			// may still be executing input_queue_push / input_queue_is_closed
-			// (which lock the mutex — destroying a locked mutex is UB on most
-			// POSIX implementations and all ARM memory models).
-			input_queue_close(&g_input_queue);
-			self.reader_thread.join();
-			input_queue_destroy(&g_input_queue);
+		if (tty_raw) {
 			if (self.mouse_pixels) {
 				disable_mouse_pixels();
 				self.mouse_pixels = false;
@@ -810,7 +809,49 @@ fn void? Program.run(Program* self) {
 			if (!self.in_alt_screen && self.last_content_rows > 0) {
 				write_stdout((char[])string::tformat("\x1b[%d;1H\x1b[m\r\n", self.last_content_rows));
 			}
+			// Stop dereferencing this frame's fields from signal handlers before
+			// it goes away — Program is a stack local in every entry point.
+			teardown_signals();
 			raw_mode_restore(saved);
+		}
+	}
+
+	if (!self.test_mode) {
+		hide_cursor();
+		enable_focus();
+		enable_bracketed_paste();
+		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
+		// Terminals that don't support it ignore the sequence — safe to push always.
+		enable_kitty_keyboard();
+		setup_signals(saved, &self.in_alt_screen);
+
+		// Start the reader thread so stdin reads never block the event loop.
+		input_queue_init(&g_input_queue)!;
+		queue_created = true;
+		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
+		reader_running = true;
+	}
+
+	// Defers live at function scope so they run after the event loop exits,
+	// not when the if-block above closes (C3 defer is block-scoped).
+	defer {
+		// Free the paste accumulation buffer regardless of test mode.
+		self.paste_buf.free();
+
+		if (self.renderer != null) {
+			self.renderer.destroy();
+			mem::free(self.renderer);
+			self.renderer = null;
+		}
+		// Two-phase shutdown: first signal the reader to stop, then join
+		// it so we never call input_queue_destroy while the reader thread
+		// may still be executing input_queue_push / input_queue_is_closed
+		// (which lock the mutex — destroying a locked mutex is UB on most
+		// POSIX implementations and all ARM memory models).
+		if (queue_created) {
+			input_queue_close(&g_input_queue);
+			if (reader_running) self.reader_thread.join();
+			input_queue_destroy(&g_input_queue);
 		}
 	}
 	defer {
@@ -1143,6 +1184,16 @@ fn void? Program.run(Program* self) {
 		}
 
 
+		// In test mode there is no reader thread and no wall-clock waiting, so
+		// once the injected input is consumed, the pending buffer is drained
+		// and no timer is armed, nothing can ever produce another message.
+		// Without this the loop spins at 100% CPU forever whenever a model
+		// under test doesn't return quit() — one bad test hangs the suite.
+		if (self.test_mode && self.inject_input_pos >= self.inject_input.len && self.pending_len == 0
+			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			return;
+		}
+
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
 			sz wait_ms = 1000;
@@ -1165,6 +1216,42 @@ fn void? Program.run(Program* self) {
 			}
 		}
 	}
+}
+
+// has_active_timer reports whether any timer slot is armed.
+fn bool Program.has_active_timer(Program* self) {
+	for (sz i = 0; i < MAX_TIMERS; i++) {
+		if (self.timers[i].active) return true;
+	}
+	return false;
+}
+
+// mouse_cursor_matches reports whether `name` is already the emitted OSC 22
+// cursor shape. A name too long to cache never matches, so it re-emits each
+// frame — correct, just not deduplicated.
+fn bool Program.mouse_cursor_matches(Program* self, String name) {
+	if (!self.last_mouse_cursor_valid) return false;
+	if (name.len > MAX_MOUSE_CURSOR_LEN) return false;
+	if (name.len != self.last_mouse_cursor_len) return false;
+	for (sz i = 0; i < name.len; i++) {
+		if (self.last_mouse_cursor_buf[i] != name[i]) return false;
+	}
+	return true;
+}
+
+// remember_mouse_cursor copies `name` into the owned buffer. Names longer than
+// the buffer record a length of 0, so the next frame compares unequal and
+// re-emits rather than matching a truncated prefix.
+fn void Program.remember_mouse_cursor(Program* self, String name) {
+	if (name.len > MAX_MOUSE_CURSOR_LEN) {
+		self.last_mouse_cursor_valid = false;
+		return;
+	}
+	for (sz i = 0; i < name.len; i++) {
+		self.last_mouse_cursor_buf[i] = name[i];
+	}
+	self.last_mouse_cursor_len = name.len;
+	self.last_mouse_cursor_valid = true;
 }
 
 // render_current_view renders the model's current view, handling
@@ -1346,13 +1433,13 @@ fn void Program.render_current_view(Program* self) {
 				r.end_frame();
 
 				// Emit OSC 22 mouse cursor shape when it changes.
-				if (v.mouse_cursor != self.last_mouse_cursor) {
+				if (!self.mouse_cursor_matches(v.mouse_cursor)) {
 					if (v.mouse_cursor.len > 0) {
 						write_stdout((char[])mouse_cursor_seq(v.mouse_cursor));
 					} else {
 						write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 					}
-					self.last_mouse_cursor = v.mouse_cursor;
+					self.remember_mouse_cursor(v.mouse_cursor);
 				}
 
 				// Emit cursor positioning and shape after the diff frame

@@ -119,6 +119,22 @@ fn void setup_signals(TtyState saved, bool* in_alt_screen) {
 	signal(SIGTERM, &fatal_signal_handler);
 }
 
+// teardown_signals restores the default disposition for every signal
+// setup_signals installed and drops the pointer into the Program frame.
+//
+// Program is a stack local in every entry point (run, @run, @run_program), so
+// leaving the handlers installed after run() returns leaves
+// g_in_alt_screen_ptr aimed at a reclaimed frame — a later SIGINT would read
+// whatever now occupies that slot. Sequential Program runs are supported, so
+// this is a reachable path, not just a shutdown nicety.
+fn void teardown_signals() {
+	signal(SIGWINCH, null);
+	signal(SIGINT, null);
+	signal(SIGTERM, null);
+	g_in_alt_screen_ptr = null;
+	g_tty_saved = false;
+}
+
 fn TtyState? raw_mode_enter() {
 	TtyState saved;
 
