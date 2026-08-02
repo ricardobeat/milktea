@@ -190,6 +190,11 @@ fn milktea::Cmd Wolf3D.init(Wolf3D* self) @dynamic {
 }
 
 fn void Wolf3D.allocate_buffers(Wolf3D* self) {
+	// Free any previous buffers first, so this is safe to call on resize
+	// without the caller having to free cells/pixels beforehand (freeing a
+	// null pointer is a no-op, so init can call this directly too).
+	mem::free(self.cells.ptr);
+	mem::free(self.pixels.ptr);
 	sz ptotal = (sz)(self.width * self.height * 2);
 	self.cells = mem::new_array(xray::Cell, (sz)(self.width * self.height));
 	self.pixels = mem::new_array(Pixel, ptotal);
@@ -205,8 +210,6 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
-		mem::free(self.cells.ptr);
-		mem::free(self.pixels.ptr);
 		self.allocate_buffers();
 		return null;
 	}
@@ -1063,8 +1066,6 @@ fn int handle_client(void* arg) {
 		if (term_w > 0 && term_h > 0) {
 			app.width = term_w;
 			app.height = term_h;
-			mem::free(app.cells.ptr);
-			mem::free(app.pixels.ptr);
 			app.allocate_buffers();
 		}
 
