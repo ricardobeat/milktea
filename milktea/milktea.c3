@@ -487,7 +487,15 @@ fn int input_reader_fn(void* arg) {
 		if (r <= 0) continue;
 
 		sz n = read(STDIN_FILENO, &tmp[0], 256);
-		if (n <= 0) break;
+		if (n <= 0) {
+			// EOF or a hard read error: no further input can ever arrive.
+			// Mark the queue closed rather than just returning — otherwise the
+			// event loop keeps blocking in input_queue_wait for up to a second
+			// per iteration, forever, with nothing left to wake it. Closing
+			// also broadcasts, so a waiter is released immediately.
+			input_queue_close(q);
+			break;
+		}
 
 		input_queue_push(q, tmp[:n]);
 	}
@@ -705,16 +713,27 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // Default: 16ms (~60fps) sending a TICK message.
 // When all MAX_TIMERS slots are occupied the timer is silently dropped;
 // enable Program.debug to surface this in milktea-debug.log.
+// snap_delay returns how long to wait from `wall` to reach the next multiple
+// of `interval_ms`. Always in (0, interval_ms], so a timer re-armed exactly on
+// a boundary waits a full interval rather than firing again immediately.
+fn sz snap_delay(sz wall, sz interval_ms) {
+	if (interval_ms <= 0) return 1;
+	sz elapsed = wall % interval_ms;
+	return elapsed == 0 ? interval_ms : interval_ms - elapsed;
+}
+
 fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	// A zero interval would divide-by-zero on the modulo below; clamp to 1ms.
 	// Semantically, 0 means "as fast as possible" — 1ms is the smallest
 	// meaningful interval and avoids crashing inside the framework.
 	if (interval_ms == 0) interval_ms = 1;
-	sz now     = time_ms();
-	sz elapsed = now % interval_ms;
-	sz delay   = elapsed == 0 ? interval_ms : interval_ms - elapsed;
-	sz deadline = now + delay;
+	// The delay is computed against the wall clock so the deadline lands on a
+	// calendar boundary (a 1s display ticks exactly on :00). The stored
+	// deadline is monotonic, matching what the event loop compares against —
+	// mixing the two clocks in one field would make every deadline wrong by
+	// the offset between them.
+	sz deadline = time_ms() + snap_delay(wall_time_ms(), interval_ms);
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		if (!g_program.timers[i].active) {
 			g_program.timers[i].active = true;
@@ -1190,6 +1209,16 @@ fn void? Program.run(Program* self) {
 		// Without this the loop spins at 100% CPU forever whenever a model
 		// under test doesn't return quit() — one bad test hangs the suite.
 		if (self.test_mode && self.inject_input_pos >= self.inject_input.len && self.pending_len == 0
+			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			return;
+		}
+
+		// Stdin reached EOF (piped input exhausted, or the terminal went away)
+		// and everything already received has been processed. No further input
+		// can arrive, so blocking again would spin — input_queue_wait returns
+		// immediately once the queue is closed. Timers still keep the program
+		// alive, so an animation driven purely by tick() is unaffected.
+		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
 			&& !self.has_active_timer() && self.send_head == self.send_tail) {
 			return;
 		}

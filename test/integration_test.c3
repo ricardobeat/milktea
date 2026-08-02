@@ -258,17 +258,38 @@ fn void test_every_fires() @test {
 	assert(m.every_count >= 1);
 }
 
-// test_every_deadline_snaps verifies every() snaps the deadline to the
-// next wall-clock boundary. We test this by observing that consecutive
-// calls to every(1000) produce deadlines at (or just past) multiples of
-// 1000ms relative to time_ms() — never in the middle of a 1-second slot.
+// test_every_deadline_snaps verifies every() snaps its delay to the next
+// wall-clock boundary, so a 1s display ticks on :00 forever regardless of how
+// long update() takes. The snapping math is exposed as snap_delay() so it can
+// be checked directly rather than inferred from timing.
 fn void test_every_deadline_snaps() @test {
-	// Simulate: at now=1234, every(1000) must produce a deadline in
-	// (1234, 2000]. The boundary is the next multiple of 1000.
-	// We can't easily call every() without a program, so this test
-	// simply verifies the pure deadline math is correct conceptually.
-	// (covered indirectly by test_every_fires via the event loop.)
-	assert(true);
+	// At wall=1234 with a 1000ms interval, the next boundary is 2000.
+	assert(milktea::snap_delay(1234, 1000) == 766);
+	// Exactly on a boundary: wait a full interval, never 0 (which would
+	// re-fire immediately and spin).
+	assert(milktea::snap_delay(2000, 1000) == 1000);
+	assert(milktea::snap_delay(0, 1000) == 1000);
+	// One millisecond before a boundary.
+	assert(milktea::snap_delay(1999, 1000) == 1);
+	// Sub-second intervals snap the same way.
+	assert(milktea::snap_delay(1234, 16) == 14);
+	// Degenerate interval must not divide by zero.
+	assert(milktea::snap_delay(1234, 0) == 1);
+}
+
+// test_every_delay_is_always_within_interval pins the invariant across a
+// sweep: the delay is always in (0, interval], so deadlines neither stall nor
+// fire back-to-back.
+fn void test_every_delay_is_always_within_interval() @test {
+	sz[] intervals = { 1, 16, 250, 1000, 60000 };
+	foreach (iv : intervals) {
+		for (sz wall = 0; wall < 3 * iv; wall += (iv / 7) + 1) {
+			sz d = milktea::snap_delay(wall, iv);
+			assert(d > 0);
+			assert(d <= iv);
+			assert((wall + d) % iv == 0);
+		}
+	}
 }
 
 // ============================================================

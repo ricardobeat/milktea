@@ -21,6 +21,7 @@ extern fn sz write(int fd, void* buf, sz nbytes);
 extern fn int c3_get_winsize(int fd, ushort* row, ushort* col);
 extern fn int c3_get_winsize_px(int fd, ushort* xpx, ushort* ypx);
 extern fn sz c3_time_ms();
+extern fn sz c3_monotonic_ms();
 extern fn double c3_sin(double x);
 extern fn double c3_cos(double x);
 extern fn int rand();
@@ -156,7 +157,18 @@ fn void raw_mode_restore(TtyState saved) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved.termios_buf[0]);
 }
 
+// time_ms returns monotonic milliseconds — the basis for every timer deadline
+// and hold window in the event loop. It must not move when the system clock
+// does: an NTP or DST step backwards would stall every armed timer for the
+// length of the step, and a step forwards would fire them all at once.
 fn sz time_ms() {
+	return (sz)c3_monotonic_ms();
+}
+
+// wall_time_ms returns milliseconds since the Unix epoch. Used only by
+// every(), which deliberately snaps its deadline to calendar boundaries so a
+// 1s display ticks exactly on :00.
+fn sz wall_time_ms() {
 	return (sz)c3_time_ms();
 }
 
