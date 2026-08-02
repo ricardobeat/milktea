@@ -15,11 +15,14 @@ Usage:
 """
 
 import argparse
+import fcntl
 import os
 import pty
 import select
 import signal
+import struct
 import sys
+import termios
 import time
 import unicodedata
 
@@ -302,6 +305,9 @@ def main() -> int:
         os.environ["TERM_PROGRAM"] = "ghostty"  # enable sync output markers
         os.execv(args.binary, [args.binary])
         os._exit(1)
+
+    # Set the pty winsize so the example sees --cols/--rows, not the pty default.
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", args.rows, args.cols, 0, 0))
 
     term = Terminal(args.cols, args.rows)
 

@@ -69,6 +69,9 @@ alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
 
 struct Entry {
 	String label;
+	// placeholder describes the cursor style; shown dimmed while the input
+	// is empty so each demo is self-describing without typing.
+	String placeholder;
 	String border_color;
 	// section A: non-null draw fn
 	DrawCursorFn draw;
@@ -128,20 +131,22 @@ struct Model {
 
 fn milktea::Cmd Model.init(&self) @dynamic {
 	// Section A: draw-cursor
-	self.entries[0] = { .label = "fire", .border_color = "#ff4400", .interval_ms = 400, .draw = &cursor_fire };
-	self.entries[1] = { .label = "skull", .border_color = "#888888", .interval_ms = 500, .draw = &cursor_skull };
+	self.entries[0] = { .label = "fire", .placeholder = "fire", .border_color = "#ff4400", .interval_ms = 400, .draw = &cursor_fire };
+	self.entries[1] = { .label = "skull", .placeholder = "skull", .border_color = "#888888", .interval_ms = 500, .draw = &cursor_skull };
 	self.entries[2] = {
 		.label = "crosshair",
+		.placeholder = "crosshair",
 		.border_color = "#ff8800",
 		.interval_ms = 250,
 		.draw = &cursor_crosshair
 	};
-	self.entries[3] = { .label = "snake", .border_color = "#00ffaa", .interval_ms = 150, .draw = &cursor_snake };
-	self.entries[4] = { .label = "rainbow", .border_color = "#ff00ff", .interval_ms = 100, .draw = &cursor_rainbow };
-	self.entries[5] = { .label = "matrix", .border_color = "#00ff44", .interval_ms = 80, .draw = &cursor_matrix };
+	self.entries[3] = { .label = "snake", .placeholder = "snake", .border_color = "#00ffaa", .interval_ms = 150, .draw = &cursor_snake };
+	self.entries[4] = { .label = "rainbow", .placeholder = "rainbow", .border_color = "#ff00ff", .interval_ms = 100, .draw = &cursor_rainbow };
+	self.entries[5] = { .label = "matrix", .placeholder = "matrix", .border_color = "#00ff44", .interval_ms = 80, .draw = &cursor_matrix };
 	// Section B: native shapes + OSC 12 colors
 	self.entries[6] = {
 		.label = "block",
+		.placeholder = "blinking block",
 		.border_color = "#4488ff",
 		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "",
@@ -149,6 +154,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	};
 	self.entries[7] = {
 		.label = "underline",
+		.placeholder = "blinking underline",
 		.border_color = "#44ccff",
 		.shape = milktea::CursorShape.CURSOR_UNDERLINE,
 		.native_color = "#00ccff",
@@ -156,6 +162,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	};
 	self.entries[8] = {
 		.label = "bar",
+		.placeholder = "blinking bar",
 		.border_color = "#ff44cc",
 		.shape = milktea::CursorShape.CURSOR_BAR,
 		.native_color = "#ff44cc",
@@ -163,6 +170,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	};
 	self.entries[9] = {
 		.label = "steady",
+		.placeholder = "steady block",
 		.border_color = "#ffaa00",
 		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "#ffaa00",
@@ -240,12 +248,17 @@ fn milktea::View Model.view(&self) @dynamic {
 		String bc       = is_focused ? e.border_color : "#333333";
 		String fc       = is_focused ? "#ffffff" : "#555555";
 
-		// Input box
+		// Input box — show a dim placeholder describing the cursor style while
+		// the input is empty, so each demo is self-explanatory without typing.
 		glaze::Style box = glaze::style().border(glaze::rounded_border())
 			.border_fg(glaze::color_hex(bc))
 			.foreground(glaze::color_hex(fc))
 			.width(input_w);
-		String rendered = box.render(string::tformat("%s%s", PROMPT, e.text()));
+		String content = e.text();
+		if (content.len == 0) {
+			content = string::tformat("\x1b[2;37m%s\x1b[0m", e.placeholder);
+		}
+		String rendered = box.render(string::tformat("%s%s", PROMPT, content));
 		screen.render_ansi_string((sz)BOX_LEFT, (sz)row, rendered, xray::default_style(), (sz)(row + 3));
 
 		int cx = BOX_LEFT + 1 + PROMPT_LEN + (int)e.cursor_pos;
