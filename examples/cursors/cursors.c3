@@ -113,41 +113,41 @@ struct Model {
 
 fn milktea::Cmd Model.init(&self) @dynamic {
 	// Section A: draw-cursor
-	self.entries[0] = { .label = "ꜰɪʀᴇ", .border_color = "#ff4400", .interval_ms = 400, .draw = &cursor_fire };
-	self.entries[1] = { .label = "ꜱᴋᴜʟʟ", .border_color = "#888888", .interval_ms = 500, .draw = &cursor_skull };
+	self.entries[0] = { .label = "fire", .border_color = "#ff4400", .interval_ms = 400, .draw = &cursor_fire };
+	self.entries[1] = { .label = "skull", .border_color = "#888888", .interval_ms = 500, .draw = &cursor_skull };
 	self.entries[2] = {
-		.label = "ᴄʀᴏꜱꜱʜᴀɪʀ",
+		.label = "crosshair",
 		.border_color = "#ff8800",
 		.interval_ms = 250,
 		.draw = &cursor_crosshair
 	};
-	self.entries[3] = { .label = "ꜱɴᴀᴋᴇ", .border_color = "#00ffaa", .interval_ms = 150, .draw = &cursor_snake };
-	self.entries[4] = { .label = "ʀᴀɪɴʙᴏᴡ", .border_color = "#ff00ff", .interval_ms = 100, .draw = &cursor_rainbow };
-	self.entries[5] = { .label = "ᴍᴀᴛʀɪx", .border_color = "#00ff44", .interval_ms = 80, .draw = &cursor_matrix };
+	self.entries[3] = { .label = "snake", .border_color = "#00ffaa", .interval_ms = 150, .draw = &cursor_snake };
+	self.entries[4] = { .label = "rainbow", .border_color = "#ff00ff", .interval_ms = 100, .draw = &cursor_rainbow };
+	self.entries[5] = { .label = "matrix", .border_color = "#00ff44", .interval_ms = 80, .draw = &cursor_matrix };
 	// Section B: native shapes + OSC 12 colors
 	self.entries[6] = {
-		.label = "ʙʟᴏᴄᴋ",
+		.label = "block",
 		.border_color = "#4488ff",
 		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "",
 		.blink_native = true
 	};
 	self.entries[7] = {
-		.label = "ᴜɴᴅᴇʀʟɪɴᴇ",
+		.label = "underline",
 		.border_color = "#44ccff",
 		.shape = milktea::CursorShape.CURSOR_UNDERLINE,
 		.native_color = "#00ccff",
 		.blink_native = true
 	};
 	self.entries[8] = {
-		.label = "ʙᴀʀ",
+		.label = "bar",
 		.border_color = "#ff44cc",
 		.shape = milktea::CursorShape.CURSOR_BAR,
 		.native_color = "#ff44cc",
 		.blink_native = true
 	};
 	self.entries[9] = {
-		.label = "ꜱᴛᴇᴀᴅʏ",
+		.label = "steady",
 		.border_color = "#ffaa00",
 		.shape = milktea::CursorShape.CURSOR_BLOCK,
 		.native_color = "#ffaa00",
@@ -214,12 +214,17 @@ fn milktea::View Model.view(&self) @dynamic {
 	const String PROMPT  = "> ";
 	const int PROMPT_LEN = 2;
 
-	// Page: title bar over a two-column body (flex).
+	// Page: title bar over a two-column body (flex). The page area is inset
+	// one row above the title, the vstack gap leaves 2 rows between the title
+	// and the content; both are inset 2 columns for breathing room.
+	xray::Rect page = layout::screen(w, h).inset(0, 1, 0, 0);
 	xray::Rect title_r, body_r;
-	layout::vstack(layout::screen(w, h), {
+	layout::vstack(page, {
 		layout::slot(layout::len(1), &title_r),
 		layout::slot(layout::fill(1), &body_r),
-	});
+	}, { .gap = 2 });
+	title_r = title_r.inset(2, 0, 2, 0);
+	body_r = body_r.inset(2, 0, 2, 0);
 
 	xray::Rect col_l, col_r;
 	layout::hstack(body_r, {
@@ -229,7 +234,6 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	String title = "\x1b[1;37m  CURSOR GALLERY\x1b[0m  \x1b[2;37m tab/shift+tab · q quit\x1b[0m";
 	screen.render_ansi_string((sz)title_r.x, (sz)title_r.y, title, xray::default_style());
-
 	// Each column stacks 5 entry rows; each row is exactly the box height.
 	xray::Rect[5] l_rows, r_rows;
 	layout::vstack(col_l, {
