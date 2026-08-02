@@ -1353,3 +1353,34 @@ fn void test_char_width_common_cases() @test {
 	assert(char_width(0x1F600) == 2);  // grinning face
 	assert(char_width(0x10FFFF) == 1); // unassigned tail
 }
+
+// ============================================================
+// Overlay/blit clipping at negative origins
+// ============================================================
+
+fn void test_blit_at_negative_origin_is_clipped() @test {
+	// A floating panel scrolled off the left/top edge produces negative
+	// destination coordinates. sz is signed, so an unguarded `dx >= width`
+	// check lets those index before cells[0].
+	ScreenBuffer* dst = new_screen_buffer(20, 5);
+	defer { dst.destroy(); mem::free(dst); }
+	ScreenBuffer* src = new_screen_buffer(8, 4);
+	defer { src.destroy(); mem::free(src); }
+	src.set_string(0, 0, "overlay", default_style());
+
+	dst.blit((sz)-5, (sz)-3, src, false);
+	dst.blit((sz)18, (sz)4, src, false);
+	dst.blit((sz)-100, (sz)-100, src, false);
+
+	// The on-screen part of a partially-visible blit still lands.
+	dst.blit((sz)-2, (sz)0, src, false);
+	assert(dst.cell_at(0, 0) != null);
+}
+
+fn void test_blit_ansi_at_negative_origin_is_clipped() @test {
+	ScreenBuffer* dst = new_screen_buffer(20, 5);
+	defer { dst.destroy(); mem::free(dst); }
+
+	dst.blit_ansi((sz)-4, (sz)-2, 10, 4, "\x1b[31mhello\x1b[0m", false);
+	dst.blit_ansi((sz)19, (sz)4, 10, 4, "hello", false);
+}

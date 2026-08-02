@@ -1433,7 +1433,10 @@ fn void Program.render_current_view(Program* self) {
 							for (sz cx = 0; cx < (sz)o.w; cx++) {
 								sz dx = (sz)o.x + cx;
 								sz dy = (sz)o.y + cy;
-								if (dx >= r.screen.width || dy >= r.screen.height) continue;
+								// sz is signed: an overlay scrolled off the left
+								// or top edge yields negative coordinates that
+								// would index before the buffer.
+								if (dx < 0 || dy < 0 || dx >= r.screen.width || dy >= r.screen.height) continue;
 								xray::Cell src = tmp.cells[cy * tmp.width + cx];
 								src.style.bg.a = o.alpha;
 								src.style.fg.a = o.alpha;

@@ -441,3 +441,45 @@ fn void test_test_mode_terminates_without_quit() @test {
 	// The injected keys were delivered before the loop exited.
 	assert(m.updates > 0);
 }
+
+// ============================================================
+// Overlay clipping
+// ============================================================
+
+// NegativeOverlayModel places an overlay partly off the left/top edge, which
+// is what happens when a model scrolls or animates a floating panel out of
+// view. sz is signed, so the destination guard (dx >= width) let negative
+// coordinates through to index before the cell buffer.
+struct NegativeOverlayModel {
+	int frames;
+}
+
+fn milktea::Cmd NegativeOverlayModel.init(NegativeOverlayModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
+	self.frames++;
+	milktea::View v = milktea::new_alt_screen_view("base content");
+	// Off the top-left corner, and off the right/bottom edge. alpha != 0
+	// selects the per-cell blending path, which does its own destination
+	// bounds check rather than going through ScreenBuffer.set_cell.
+	v = v.add_overlay(-5, -3, 10, 6, "overlay", alpha: 128);
+	v = v.add_overlay(78, 22, 10, 6, "overlay", alpha: 128);
+	return v;
+}
+
+fn void test_overlay_with_negative_origin_is_clipped() @test {
+	NegativeOverlayModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	milktea::with_input(&p, (char[])"q");
+	p.run()!!;
+
+	assert(m.frames > 0);
+}
