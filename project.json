@@ -314,7 +314,7 @@
     },
     "examples/cursors": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/cursors/**"],
+      "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "examples/cursors/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O0"
     },

@@ -58,7 +58,7 @@ OVERRIDES = {
         "linked_libraries": ["sqlite3"],
         "linker_search_paths": ["/opt/homebrew/lib"],
     },
-    "cursors": {"extra_dirs": ["xray"], "opt": "O0", "strip_unused": False},
+    "cursors": {"extra_dirs": ["boba", "xray"], "opt": "O0", "strip_unused": False},
     "inputbox": {"extra_dirs": ["xray"], "opt": "O0", "strip_unused": False},
     "doom-fire": {
         "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire.c3"],
