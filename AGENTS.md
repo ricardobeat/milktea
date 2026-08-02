@@ -59,12 +59,15 @@ Two independent tools that compose.
 ```c3
 Constraint[3] cs = { constraint_len(1), constraint_fill(1), constraint_len(1) };
 Rect[3] out;
-layout_v(area, cs[..], out[..]);   // vertical split
-layout_h(area, cs[..], out[..]);   // horizontal split
+layout_v(area, cs[..], out[..]);        // vertical split
+layout_h(area, cs[..], out[..]);        // horizontal split
+layout_v_gap(area, cs[..], 1, out[..]); // vertical split with 1-row gap
+layout_h_gap(area, cs[..], 1, out[..]); // horizontal split with 1-col gap
 ```
 
 Constraint kinds: `constraint_len(n)` fixed, `constraint_fill(w)` weighted fill,
-`constraint_percent(p)`, `constraint_min(n)`, `constraint_max(n)`.
+`constraint_percent(p)`, `constraint_min(n)`, `constraint_max(n)`,
+`constraint_fit(measure, ctx)` sized by a measure callback.
 
 Shrink a rect with `rect.inset(left, top, right, bottom)`.
 
@@ -104,20 +107,40 @@ glaze::new_style()
 
 Use `draw_border` on the `ScreenBuffer` when you need the inner `Rect` back for layout; use glaze's `.border()` when you just want a box around a string.
 
-## LayoutNode — declarative layout (in milktea)
+## Layout — stacks (`xray::layout`)
 
-Pairs xray constraints with glaze styling for declarative composition:
+Split an area with `vstack`/`hstack`. Each slot pairs a constraint with an
+output `Rect*`; results are written back in place:
 
 ```c3
-milktea::LayoutNode[2] nodes = {
-    { xray::constraint_len(3), glaze::new_style().set_bold(true), "Header" },
-    { xray::constraint_fill(1), glaze::new_style(), "Body" },
-};
-String doc = milktea::vstack(area, nodes[..]);          // vertical, gap=0
-String doc = milktea::vstack(area, nodes[..], 2);       // vertical, gap=2 rows
-String row = milktea::hstack(area, nodes[..]);           // horizontal
-String row = milktea::hstack(area, nodes[..], 1);       // horizontal, gap=1 col
+import xray::layout;
+
+Rect top, body, bottom;
+layout::vstack(layout::screen(w, h), {
+    layout::slot(layout::len(1),   &top),
+    layout::slot(layout::fill(1),  &body),
+    layout::slot(layout::len(1),   &bottom),
+});
+
+Rect sidebar, content;
+layout::hstack(body, {
+    layout::slot(layout::len(24), &sidebar),
+    layout::slot(layout::fill(1), &content),
+}, { .gap = 1 });   // 1-col gap
 ```
+
+- `layout::screen(w, h)` is shorthand for `xray::new_rect(0, 0, w, h)`.
+- Constraint aliases: `layout::len(n)`, `layout::fill(weight)`, `layout::percent(p)`,
+  `layout::min(n)`, `layout::max(n)`.
+- Gap goes in `layout::LayoutOptions{ .gap = n }` (zero value = no gap).
+- Up to 64 slots per stack; extra slots are ignored.
+
+For flexbox-style nested trees use `FlexNode`: `flex_row()` / `flex_col()` with
+`.with_direction/.with_justify/.with_align/.with_gap/.with_padding/.with_main_size/
+.with_cross_size` builders, then `.solve(area)` and read `.rect()` / `.child_rect(i)`.
+
+For string-based row layout with auto cursor tracking, use `milktea::Layout`
+(`new_layout()`, `.write()`, `.write_line()`, `.write_input_line()`, `.view()`).
 
 ## Returning a View
 
