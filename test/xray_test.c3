@@ -1,6 +1,8 @@
 module xray @test;
 
 import std::core::dstring;
+import std::io;
+import glaze;
 
 // ============================================================
 // Color tests
@@ -1272,4 +1274,24 @@ fn void test_zero_sized_buffer_is_safe() @test {
 	sb.resize(4, 2);
 	assert(sb.width == 4);
 	assert(sb.height == 2);
+}
+
+
+// ============================================================
+// glaze/xray width-table sync
+// ============================================================
+
+// glaze::codepoint_width is a hand-maintained duplicate of xray::char_width:
+// glaze is built without xray in several targets, so it cannot import it. The
+// comment on each has always said "keep both in sync" with nothing enforcing
+// it. This walks the entire Unicode range so any edit to one that isn't
+// mirrored in the other fails the build, naming the first divergent codepoint.
+fn void test_glaze_and_xray_widths_agree() @test {
+	for (uint cp = 0; cp <= 0x10FFFF; cp++) {
+		if (char_width(cp) != glaze::codepoint_width(cp)) {
+			io::printfn("width mismatch at U+%04X: xray=%d glaze=%d",
+				cp, char_width(cp), glaze::codepoint_width(cp));
+			assert(false, "glaze::codepoint_width diverged from xray::char_width");
+		}
+	}
 }

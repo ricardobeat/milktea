@@ -17,8 +17,11 @@ enum BorderAnimation : char {
 // codepoint_width returns the terminal display width of a single Unicode
 // codepoint. This mirrors xray::char_width exactly. It lives here because
 // glaze is compiled independently from xray in several build targets, so
-// we cannot import xray. Both copies must be kept in sync.
-fn int codepoint_width(uint cp) @local {
+// we cannot import xray. Both copies must be kept in sync — the two are
+// compared exhaustively over the whole codepoint range by
+// test_glaze_and_xray_widths_agree in test/xray_test.c3, so a change to
+// either one that isn't mirrored will fail the build.
+fn int codepoint_width(uint cp) {
 	if (cp == 0) return 0;
 	// Combining / zero-width ranges
 	if (cp >= 0x0300 && cp <= 0x036F) return 0;
@@ -52,23 +55,51 @@ fn int codepoint_width(uint cp) @local {
 	return 1;
 }
 
+// skip_escape returns the index just past the escape sequence starting at
+// `start` (which must point at ESC), or s.len if the sequence is unterminated.
+//
+// CSI (ESC [ ...) ends at the first byte in 0x40..0x7e. OSC (ESC ] ...) runs
+// until BEL or ST (ESC \) and may legitimately contain letters — treating it
+// like a CSI ended the scan on the first letter in the payload and counted the
+// remainder as visible text. viewport.c3 emits OSC 52 for clipboard writes, so
+// this is a sequence that really does flow through here.
+fn sz skip_escape(String s, sz start) @local {
+	sz i = start + 1; // past ESC
+	if (i >= s.len) return s.len;
+
+	char kind = s[i];
+	if (kind == ']') {
+		i++;
+		while (i < s.len) {
+			if (s[i] == 0x07) return i + 1; // BEL
+			if (s[i] == 0x1b && i + 1 < s.len && s[i + 1] == '\\') return i + 2; // ST
+			i++;
+		}
+		return s.len;
+	}
+
+	if (kind == '[') {
+		i++;
+		while (i < s.len) {
+			if (s[i] >= 0x40 && s[i] <= 0x7e) return i + 1;
+			i++;
+		}
+		return s.len;
+	}
+
+	// Two-byte escapes (ESC M, ESC 7, ...) and anything unrecognised: consume
+	// the single following byte.
+	return i + 1;
+}
+
 // string_width returns the terminal display width of a string, skipping ANSI
 // escape sequences. Uses the same codepoint width rules as xray::char_width.
 fn int string_width(String s) {
-	int w        = 0;
-	bool in_ansi = false;
-	sz i         = 0;
+	int w = 0;
+	sz i  = 0;
 	while (i < s.len) {
 		if (s[i] == '\x1b') {
-			in_ansi = true;
-			i++;
-			continue;
-		}
-		if (in_ansi) {
-			if ((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
-				in_ansi = false;
-			}
-			i++;
+			i = skip_escape(s, i);
 			continue;
 		}
 

@@ -385,3 +385,36 @@ fn void test_string_width_ansi_skipped() @test {
 	String styled = glaze::style().foreground(glaze::color_hex("#ff0000")).render("hello");
 	assert(glaze::string_width(styled) == 5);
 }
+
+// ============================================================
+// string_width — escape-sequence skipping
+// ============================================================
+
+fn void test_string_width_skips_csi() @test {
+	assert(glaze::string_width("\x1b[31mred\x1b[0m") == 3);
+	assert(glaze::string_width("\x1b[38;2;255;128;0mx\x1b[0m") == 1);
+}
+
+fn void test_string_width_skips_osc() @test {
+	// OSC payloads legitimately contain letters. Treating them like a CSI
+	// ended the scan on the first letter and counted the rest as visible
+	// text, so this measured 10 instead of 0. viewport.c3 emits OSC 52 for
+	// clipboard writes, so this really does flow through here.
+	assert(glaze::string_width("\x1b]52;c;QUJDRA==\x07") == 0);
+	// ST-terminated form (ESC \) as well as BEL.
+	assert(glaze::string_width("\x1b]0;window title\x1b\\") == 0);
+	assert(glaze::string_width("\x1b]52;c;QQ==\x07ab") == 2);
+}
+
+fn void test_string_width_counts_wide_and_combining() @test {
+	assert(glaze::string_width("日本") == 4);
+	assert(glaze::string_width("é") == 1); // combining acute adds no width
+	assert(glaze::string_width("") == 0);
+}
+
+fn void test_string_width_unterminated_escape() @test {
+	// Must not run past the end of the string.
+	assert(glaze::string_width("\x1b[31") == 0);
+	assert(glaze::string_width("\x1b") == 0);
+	assert(glaze::string_width("\x1b]52;c;") == 0);
+}
