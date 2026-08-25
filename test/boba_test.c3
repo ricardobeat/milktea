@@ -176,6 +176,7 @@ fn void test_viewport_renders_multibyte_intact() @test {
 		}
 	}
 	assert(found);
+	vp.free();
 }
 
 fn void test_viewport_truncates_on_width_boundary() @test {
@@ -184,6 +185,7 @@ fn void test_viewport_truncates_on_width_boundary() @test {
 	boba::Viewport vp = boba::new_viewport(6, 2);
 	vp.add_line("日本語日本語日本語");
 	vp.view(); // must not produce a partial sequence or trap
+	vp.free();
 }
 
 fn void test_viewport_selection_uses_display_columns() @test {
@@ -221,4 +223,5 @@ fn void test_viewport_selection_uses_display_columns() @test {
 		matches++;
 	}
 	assert(matches == 2);
+	vp.free();
 }

@@ -3,13 +3,15 @@ module boba;
 import milktea;
 import glaze;
 import std::core::dstring;
+import std::core::mem;
+import std::collections::list;
 
 struct Viewport {
 	int offset;
 	int width;
 	int height;
 	int total_lines;
-	String[256] lines;
+	std::collections::list::List{String} lines;
 	bool mouse_wheel_enabled;
 	bool show_scrollbar;
 	glaze::Style content_style;
@@ -30,6 +32,7 @@ fn Viewport new_viewport(int width, int height) {
 	Viewport v = { };
 	v.width = width;
 	v.height = height;
+	v.lines.init(mem);
 	v.content_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
 	v.track_style = glaze::style().foreground(glaze::color_hex("#333344"));
 	v.thumb_style = glaze::style().foreground(glaze::color_hex("#888888"));
@@ -55,16 +58,22 @@ fn void Viewport.set_content(&self, int total_lines) {
 }
 
 fn void Viewport.add_line(&self, String line) {
-	if (self.total_lines >= 256) return;
-	self.lines[self.total_lines] = line;
-	self.total_lines++;
+	if (!self.lines.is_initialized()) self.lines.init(mem);
+	self.lines.push(line);
+	self.total_lines = (int)self.lines.len();
 }
 
 fn void Viewport.set_lines(&self, String[] src) {
-	int n = (int)src.len;
-	if (n > 256) n = 256;
-	for (int i = 0; i < n; i++) self.lines[i] = src[i];
-	self.total_lines = n;
+	if (!self.lines.is_initialized()) self.lines.init(mem);
+	self.lines.clear();
+	self.lines.push_all(src);
+	self.total_lines = (int)self.lines.len();
+}
+
+// free releases the backing line storage. Call when the Viewport itself is
+// being discarded (not needed for the common case of a long-lived field).
+fn void Viewport.free(&self) {
+	if (self.lines.is_initialized()) self.lines.free();
 }
 
 // scroll_up scrolls up by one line.
