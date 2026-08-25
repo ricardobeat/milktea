@@ -351,6 +351,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/ai-harness": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "examples/lib/http_shim.c3", "examples/ai-harness/**"],
+      "c-sources": ["milktea/tty_winsize.c", "examples/lib/http_shim.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }
