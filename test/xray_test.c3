@@ -1384,3 +1384,110 @@ fn void test_blit_ansi_at_negative_origin_is_clipped() @test {
 	dst.blit_ansi((sz)-4, (sz)-2, 10, 4, "\x1b[31mhello\x1b[0m", false);
 	dst.blit_ansi((sz)19, (sz)4, 10, 4, "hello", false);
 }
+
+// ============================================================
+// Relative (inline) positioning tests
+// ============================================================
+
+fn void test_relative_mode_never_clears_screen() @test {
+	// The whole point of RELATIVE: the screen belongs to the user's
+	// scrollback, so no full clear and no absolute home may ever be emitted.
+	ScreenBuffer* sb = new_screen_buffer(20, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.position_mode = PositionMode.RELATIVE;
+	sb.set_string(0, 0, "hello", default_style());
+
+	String out = sb.render_diff_str();
+	assert(!out.contains("\x1b[2J"));
+	assert(!out.contains("\x1b[H"));
+}
+
+fn void test_relative_mode_returns_cursor_home() @test {
+	// Every relative frame must end with the cursor back at the block's
+	// top-left, since that is the origin the next frame's deltas assume.
+	ScreenBuffer* sb = new_screen_buffer(20, 4);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.position_mode = PositionMode.RELATIVE;
+	sb.set_string(0, 0, "a", default_style());
+	sb.render_diff_str();
+	sb.swap();
+
+	// Change only the last row, then confirm the frame walks back up by
+	// exactly the distance it walked down.
+	sb.set_string(0, 3, "z", default_style());
+	String out = sb.render_diff_str();
+	assert(out.contains("\x1b[3B")); // down to row 3
+	assert(out.contains("\x1b[3A")); // and back up to row 0
+}
+
+fn void test_relative_mode_incremental_is_minimal() @test {
+	// A one-cell change should not repaint the block.
+	ScreenBuffer* sb = new_screen_buffer(20, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.position_mode = PositionMode.RELATIVE;
+	sb.set_string(0, 0, "aaa", default_style());
+	sb.set_string(0, 1, "bbb", default_style());
+	sb.render_diff_str();
+	sb.swap();
+
+	sb.set_string(1, 1, "X", default_style());
+	String out = sb.render_diff_str();
+	assert(out.contains("X"));
+	assert(!out.contains("aaa"));
+}
+
+fn void test_absolute_mode_still_clears() @test {
+	// ABSOLUTE owns the screen and must keep its existing behaviour.
+	ScreenBuffer* sb = new_screen_buffer(10, 2);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "hi", default_style());
+	String out = sb.render_diff_str();
+	assert(out.contains("\x1b[2J"));
+}
+
+fn void test_term_col_of_accounts_for_wide_glyphs() @test {
+	// A wide glyph occupies one buffer slot plus a placeholder but two
+	// terminal columns, so buffer col 4 sits at terminal col 5 here.
+	ScreenBuffer* sb = new_screen_buffer(10, 1);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.render_ansi_string(0, 0, "A\xe4\xb8\xadBCD", default_style());
+	assert(sb.term_col_of(0, 0) == 0);
+	assert(sb.term_col_of(0, 1) == 1);
+	// buffer col 3 is 'B' — after 'A' (1) + wide (2) = 3
+	assert(sb.term_col_of(0, 3) == 3);
+	assert(sb.term_col_of(0, 4) == 4);
+}
+
+fn void test_absolute_diff_column_accounts_for_wide_glyphs() @test {
+	// Regression: the span move used to emit the *buffer* column, which is
+	// short by one for every wide glyph earlier in the line, so a change
+	// after a wide glyph was painted one column to the left. Buffer col 4
+	// sits at terminal col 5 (1-based) once 中 has consumed two columns.
+	ScreenBuffer* sb = new_screen_buffer(10, 1);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.render_ansi_string(0, 0, "A\xe4\xb8\xadBCD", default_style());
+	sb.render_diff_str();
+	sb.swap();
+
+	sb.set_string(4, 0, "X", default_style());
+	String diff = sb.render_diff_str();
+	assert(diff.contains("\x1b[1;5H"));
+}

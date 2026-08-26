@@ -16,6 +16,24 @@ struct ScreenBuffer {
 	sz height;
 	bool[] dirty_lines; // per-line dirty flag
 	bool full_redraw; // force full redraw on next flush
+	// Coordinate model for diff output. ABSOLUTE addresses the terminal
+	// screen directly (CUP row;col) and owns the whole screen — correct only
+	// inside the alt screen. RELATIVE emits cursor motion relative to the
+	// position the cursor held when the frame began, so the content can sit
+	// anywhere in the scrollback without the buffer knowing where.
+	PositionMode position_mode;
+	// RELATIVE only: where the cursor sits within the buffer's coordinate
+	// space between emits, so the next move can be expressed as a delta.
+	// Row 0 / col 0 is the buffer's top-left, i.e. the "home" the cursor is
+	// returned to at the end of every relative frame.
+	sz cur_row;
+	sz cur_col;
+}
+
+// PositionMode selects how render_diff expresses cursor movement.
+enum PositionMode {
+	ABSOLUTE,
+	RELATIVE,
 }
 
 // fill_empty fills `width * height` cells with empty_cell().
@@ -333,6 +351,69 @@ fn bool ScreenBuffer.needs_redraw(&self) {
 // Diff rendering — emit minimal ANSI to transform prev → current.
 // ============================================================
 
+// term_col_of converts a buffer column to the terminal column it occupies on
+// `row`, accounting for wide (width-2) glyphs earlier in the line, each of
+// which consumes two terminal columns while occupying one buffer slot plus a
+// placeholder.
+fn sz ScreenBuffer.term_col_of(&self, sz row, sz buf_col) {
+	sz line_start = row * self.width;
+	sz term = 0;
+	for (sz c = 0; c < buf_col; c++) {
+		Cell cell = self.cells[line_start + c];
+		if (cell.width == 2) {
+			term += 2;
+			c++; // skip the placeholder slot
+		} else {
+			term += 1;
+		}
+	}
+	return term;
+}
+
+// move_to emits cursor movement to buffer cell (row, col) in whichever
+// coordinate model this buffer uses, and records the new position.
+//
+// ABSOLUTE emits a CUP addressing the terminal screen. RELATIVE emits motion
+// relative to where the cursor currently is, so the content block can live
+// anywhere on screen: the caller guarantees the cursor starts each frame at
+// the block's top-left, and every emit keeps `cur_row`/`cur_col` in sync.
+fn void ScreenBuffer.move_to(&self, DString* out, sz row, sz col) {
+	if (self.position_mode == PositionMode.ABSOLUTE) {
+		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, col + 1));
+		return;
+	}
+
+	// Vertical: CUU/CUD by the row delta.
+	if (row > self.cur_row) {
+		out.append_string(string::tformat("\x1b[%dB", row - self.cur_row));
+	} else if (row < self.cur_row) {
+		out.append_string(string::tformat("\x1b[%dA", self.cur_row - row));
+	}
+	// Horizontal: absolute within the line — CR to column 0, then CUF. This
+	// is immune to the tracked column having drifted from the terminal's
+	// real one (a wrapped write advances the cursor without our seeing it),
+	// which a relative CUB/CUF from cur_col would not be.
+	out.append_char('\r');
+	if (col > 0) out.append_string(string::tformat("\x1b[%dC", col));
+	self.cur_row = row;
+	self.cur_col = col;
+}
+
+// advance records that `cols` terminal columns of content were just emitted
+// at the current position. Only RELATIVE needs this — ABSOLUTE recomputes an
+// exact CUP for every span and never consults the tracked position.
+fn void ScreenBuffer.advance(&self, sz cols) {
+	if (self.position_mode == PositionMode.RELATIVE) self.cur_col += cols;
+}
+
+// begin_relative_frame resets the tracked cursor to the buffer's top-left.
+// The caller must have the terminal cursor physically there when the frame
+// starts; render_diff restores it there before returning.
+fn void ScreenBuffer.begin_relative_frame(&self) {
+	self.cur_row = 0;
+	self.cur_col = 0;
+}
+
 // render_diff writes ANSI escape sequences to `out` that transform
 // the previous frame into the current frame. `pen_style` tracks the
 // terminal's current SGR state and is updated as styles are emitted.
@@ -350,13 +431,28 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 	}
 
 	if (self.full_redraw) {
-		// Full redraw: clear screen, write everything
-		out.append_string("\x1b[H\x1b[2J");
+		// Full redraw: repaint every row.
+		//
+		// ABSOLUTE owns the screen, so it clears it outright. RELATIVE must
+		// not: the screen holds the user's scrollback and everything above
+		// the content block belongs to them. It erases only to the end of
+		// each line it repaints (EL below), which is exactly the region the
+		// block occupies.
+		if (self.position_mode == PositionMode.ABSOLUTE) {
+			out.append_string("\x1b[H\x1b[2J");
+		} else {
+			self.begin_relative_frame();
+		}
 		*pen_style = default_style();
 
 		for (sz row = 0; row < self.height; row++) {
 			// Move cursor to start of row
-			out.append_string(string::tformat("\x1b[%d;1H", row + 1));
+			self.move_to(out, row, 0);
+			// RELATIVE: clear the rest of this line before repainting it, so
+			// content left by a previous, wider frame does not survive.
+			if (self.position_mode == PositionMode.RELATIVE) {
+				out.append_string("\x1b[K");
+			}
 
 			for (sz col = 0; col < self.width; col++) {
 				Cell cell = self.cells[row * self.width + col];
@@ -373,11 +469,13 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 
 				// Emit cell content
 				out.append_string(cell.content_str());
+				self.advance(cell.width == 2 ? 2 : 1);
 
 				// Wide cell: skip placeholder in next slot
 				if (cell.width == 2) col++;
 			}
 		}
+		if (self.position_mode == PositionMode.RELATIVE) self.move_to(out, 0, 0);
 		self.full_redraw = false;
 		return;
 	}
@@ -406,8 +504,11 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 
 		if (!changed) continue;
 
-		// Emit cells in the changed span
-		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, first_changed + 1));
+		// Emit cells in the changed span.
+		// first_changed is a buffer column; the terminal column it maps to
+		// differs whenever a wide glyph sits earlier in the line, so convert
+		// through the same width accounting the emit loop uses.
+		self.move_to(out, row, self.term_col_of(row, first_changed));
 
 		for (sz col = first_changed; col <= last_changed; col++) {
 			sz idx    = line_start + col;
@@ -424,12 +525,17 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 
 			// Content
 			out.append_string(cell.content_str());
+			self.advance(cell.width == 2 ? 2 : 1);
 
 			// Wide cell: the next slot is a blank placeholder that the terminal
 			// already advanced past. Skip it so we don't emit a spurious space.
 			if (cell.width == 2) col++;
 		}
 	}
+
+	// RELATIVE frames must end with the cursor back at the block's top-left,
+	// which is the origin the next frame's deltas are measured from.
+	if (self.position_mode == PositionMode.RELATIVE) self.move_to(out, 0, 0);
 }
 
 // render_ansi converts the entire cell grid to a flat ANSI string.

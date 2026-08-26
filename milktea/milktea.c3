@@ -861,10 +861,14 @@ fn void? Program.run(Program* self) {
 			show_cursor();
 			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
 			write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
-			// For inline (non-alt-screen) mode: move cursor below the last rendered
-			// content so the shell prompt appears on a clean line after the app exits.
+			// For inline (non-alt-screen) mode the cursor is parked at the
+			// top-left of the content block. Walk it down past the last
+			// rendered row so the shell prompt lands on a clean line below,
+			// leaving the block itself intact in the scrollback. This is a
+			// relative move: the block's absolute position is unknown, and
+			// assuming it starts at row 1 would jump into unrelated output.
 			if (!self.in_alt_screen && self.last_content_rows > 0) {
-				write_stdout((char[])string::tformat("\x1b[%d;1H\x1b[m\r\n", self.last_content_rows));
+				write_stdout((char[])string::tformat("\x1b[m\x1b[%dB\r\n", self.last_content_rows - 1));
 			}
 			// Stop dereferencing this frame's fields from signal handlers before
 			// it goes away — Program is a stack local in every entry point.
@@ -951,7 +955,11 @@ fn void? Program.run(Program* self) {
 
 	// Create xray renderer for differential rendering (non-test mode only)
 	if (!self.test_mode) {
-		self.renderer = xray::new_renderer((sz)initial_ws.ws_col, (sz)initial_ws.ws_row, &write_stdout);
+		// Start at a single row. The first frame resizes to whatever the view
+		// actually needs — growing from 1 costs one newline burst, whereas
+		// starting at full terminal height would make an inline app shrink
+		// (and erase) rows it never owned.
+		self.renderer = xray::new_renderer((sz)initial_ws.ws_col, 1, &write_stdout);
 		if (should_support_sync_output()) {
 			self.renderer.set_sync_supported(true);
 		}
@@ -1321,6 +1329,90 @@ fn void Program.remember_mouse_cursor(Program* self, String name) {
 	self.last_mouse_cursor_valid = true;
 }
 
+// view_content_rows returns how many terminal rows a view's content occupies.
+// For the cell path that is the grid height; for the string path it is the
+// newline count plus one. Inline rendering needs this to size the screen
+// buffer to the content rather than to the terminal.
+fn sz view_content_rows(View v) {
+	if (v.cells.ptr != null) return v.cells_height;
+	sz rows = 1;
+	for (sz i = 0; i < v.content.len; i++) {
+		if (v.content[i] == '\n') rows++;
+	}
+	// Overlays are positioned against the same origin and may extend past
+	// the content, so the block has to be tall enough to contain them.
+	for (int oi = 0; oi < v.overlay_count; oi++) {
+		sz bottom = (sz)v.overlays[oi].y + (sz)v.overlays[oi].h;
+		if (bottom > rows) rows = bottom;
+	}
+	return rows;
+}
+
+// view_content_cols returns the widest display column the view's content
+// reaches. Inline blocks are sized to this rather than the terminal width so
+// the renderer never paints trailing blanks over columns it does not own.
+fn sz view_content_cols(View v) {
+	if (v.cells.ptr != null) return v.cells_width;
+	sz widest = 0;
+	sz cur = 0;
+	bool in_esc = false;
+	for (sz i = 0; i < v.content.len; i++) {
+		char c = v.content[i];
+		// Skip CSI/OSC escape sequences — they occupy no display columns.
+		if (in_esc) {
+			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '\\') in_esc = false;
+			continue;
+		}
+		if (c == 0x1b) { in_esc = true; continue; }
+		if (c == '\n') {
+			if (cur > widest) widest = cur;
+			cur = 0;
+			continue;
+		}
+		if (c == '\r') { cur = 0; continue; }
+		// Count display columns, not bytes: skip UTF-8 continuation bytes and
+		// charge wide glyphs two columns.
+		if ((c & 0xc0) == 0x80) continue;
+		cur += 1;
+	}
+	if (cur > widest) widest = cur;
+	for (int oi = 0; oi < v.overlay_count; oi++) {
+		sz right = (sz)v.overlays[oi].x + (sz)v.overlays[oi].w;
+		if (right > widest) widest = right;
+	}
+	return widest;
+}
+
+// resize_inline grows or shrinks the inline content block to `rows`.
+//
+// Growing needs blank lines to exist below the cursor before the renderer can
+// address them: at the bottom of the screen the terminal would otherwise
+// scroll under us and every tracked row would be off by one. Emitting the
+// newlines first, then returning to the block's top-left, makes the space
+// real and keeps the origin correct whether or not the screen scrolled.
+fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols) {
+	sz old_rows = r.screen.height;
+	if (rows > old_rows) {
+		DString grow = dstring::temp();
+		for (sz i = old_rows; i < rows; i++) grow.append_char('\n');
+		// Come back up to the top-left of the (now taller) block.
+		if (rows > 1) grow.append_string(string::tformat("\x1b[%dA", rows - 1));
+		grow.append_char('\r');
+		write_stdout((char[])grow.str_view());
+	} else if (rows < old_rows) {
+		// Shrinking: erase the rows we are giving back before forgetting
+		// about them, or their content would linger above the prompt.
+		DString shrink = dstring::temp();
+		for (sz i = rows; i < old_rows; i++) {
+			shrink.append_string(string::tformat("\x1b[%dB\r\x1b[K", 1));
+		}
+		if (old_rows > rows) shrink.append_string(string::tformat("\x1b[%dA", old_rows - rows));
+		shrink.append_char('\r');
+		write_stdout((char[])shrink.str_view());
+	}
+	r.resize(cols, rows);
+}
+
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
@@ -1390,6 +1482,34 @@ fn void Program.render_current_view(Program* self) {
 			// Use xray renderer for differential output
 			xray::Renderer* r = self.renderer;
 			if (r != null) {
+				// Select the coordinate model for this view. An alt-screen
+				// view owns the terminal and addresses it absolutely; an
+				// inline view shares the screen with the user's scrollback
+				// and must position relative to where it started.
+				xray::PositionMode want = v.alt_screen
+					? xray::PositionMode.ABSOLUTE
+					: xray::PositionMode.RELATIVE;
+				if (r.screen.position_mode != want) r.set_position_mode(want);
+
+				// An inline buffer is exactly as tall as its content: the
+				// rows below it are the user's, not ours to paint or clear.
+				// Alt-screen keeps the full terminal height.
+				if (!v.alt_screen) {
+					sz want_rows = view_content_rows(v);
+					if (want_rows < 1) want_rows = 1;
+					// Never exceed the terminal: a block taller than the
+					// screen cannot be addressed relatively without scrolling.
+					if (want_rows > (sz)self.cached_ws.ws_row) want_rows = (sz)self.cached_ws.ws_row;
+					sz want_cols = view_content_cols(v);
+					if (want_cols < 1) want_cols = 1;
+					if (want_cols > (sz)self.cached_ws.ws_col) want_cols = (sz)self.cached_ws.ws_col;
+					if (want_rows != r.screen.height || want_cols != r.screen.width) {
+						self.resize_inline(r, want_rows, want_cols);
+					}
+				} else if (r.screen.height != (sz)self.cached_ws.ws_row) {
+					r.resize((sz)self.cached_ws.ws_col, (sz)self.cached_ws.ws_row);
+				}
+
 				r.begin_frame();
 
 				// Clear the screen buffer and write new content

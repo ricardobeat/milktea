@@ -118,3 +118,15 @@ fn void Renderer.end_frame(&self) {
 	// Swap buffers for next frame's diff
 	self.screen.swap();
 }
+
+// set_position_mode selects the coordinate model for diff output.
+// ABSOLUTE (the default) addresses the terminal screen and is correct only
+// when the renderer owns it, i.e. inside the alt screen. RELATIVE emits
+// motion relative to the cursor's position at frame start, so inline content
+// can sit anywhere in the scrollback.
+fn void Renderer.set_position_mode(&self, PositionMode mode) {
+	self.screen.position_mode = mode;
+	// The new model addresses the terminal differently, so the previous
+	// frame's diff baseline no longer describes what is on screen.
+	self.screen.full_redraw = true;
+}
