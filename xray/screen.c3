@@ -1,6 +1,7 @@
 module xray;
 
 import std::core::dstring;
+import glaze;
 
 // ============================================================
 // ScreenBuffer — cell grid with diff-based rendering.
@@ -1013,13 +1014,19 @@ fn Rect ScreenBuffer.draw_border(&self, Rect r, Border b, Style style) {
 // Gradient drawing
 // ============================================================
 
-fn char lerp_u8(char a, char b, int t, int max_t) @local {
-	if (max_t <= 0) return a;
-	return (char)(((int)a * (max_t - t) + (int)b * t) / max_t);
-}
-
+// lerp_color blends a→b perceptually, in CIE LUV via glaze. A straight
+// per-channel sRGB lerp dips in lightness mid-ramp and reads as a seam;
+// LUV keeps the ramp even. Non-truecolor endpoints have no RGB to blend,
+// so fall back to picking the nearer end.
 fn Color lerp_color(Color a, Color b, int t, int max_t) @local {
-	return color_rgb(lerp_u8(a.r, b.r, t, max_t), lerp_u8(a.g, b.g, t, max_t), lerp_u8(a.b, b.b, t, max_t));
+	if (max_t <= 0) return a;
+	if (a.kind != ColorKind.TRUECOLOR || b.kind != ColorKind.TRUECOLOR) {
+		return t * 2 < max_t ? a : b;
+	}
+	glaze::Color ga = { .kind = glaze::ColorKind.TRUECOLOR, .r = a.r, .g = a.g, .b = a.b };
+	glaze::Color gb = { .kind = glaze::ColorKind.TRUECOLOR, .r = b.r, .g = b.g, .b = b.b };
+	glaze::Color m = glaze::blend_luv(ga, gb, (double)t / (double)max_t);
+	return color_rgb(m.r, m.g, m.b);
 }
 
 // fill_gradient_v sets the background of every cell in r to a vertical

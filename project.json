@@ -11,7 +11,7 @@
     },
     "bench-draw": {
       "type": "executable",
-      "sources": ["xray/**", "bench/bench_draw.c3"],
+      "sources": ["glaze/**", "xray/**", "bench/bench_draw.c3"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O3"
     },
