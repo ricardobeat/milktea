@@ -351,6 +351,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/nanobots": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "xray/**", "examples/nanobots/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }

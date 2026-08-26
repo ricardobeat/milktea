@@ -50,6 +50,7 @@ OVERRIDES = {
     "paste": {"extra_dirs": ["boba", "xray"]},
     "split-editors": {"extra_dirs": ["xray"]},
     "clock": {"extra_dirs": ["xray"]},
+    "nanobots": {"extra_dirs": ["xray"]},
     "paint": {"extra_dirs": ["xray"]},
     "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
