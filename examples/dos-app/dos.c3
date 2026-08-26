@@ -423,7 +423,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		String buttons    = glaze::join_horizontal_arr(glaze::Position.CENTER, { btn_ok, btn_cancel }, 2);
 
 		String modal_title = modal_title_style.render("About milktea");
-		String modal_body  = "A Bubble Tea-inspired TUI framework\nfor the C3 programming language.\n\nVersion 0.1.0  —  MIT License";
+		String modal_body  = "A TUI framework for the C3\nprogramming language.\n\nVersion 0.1.0  —  MIT License";
 		String modal_inner = glaze::join_vertical_arr(glaze::Position.LEFT,
 			{ modal_title, "", modal_body, "", buttons });
 		String modal_panel = modal_style.render(modal_inner);

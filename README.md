@@ -452,3 +452,13 @@ Snapshot tests render components and compare the output against the `.snap` file
 ```sh
 just update-snapshots    # or: UPDATE_SNAPSHOTS=1 c3c test
 ```
+
+---
+
+## Credits
+
+milktea is built on the [Elm Architecture](https://guide.elm-lang.org/architecture/), and its shape for terminal applications follows the approach popularized by [Bubble Tea](https://github.com/charmbracelet/bubbletea) from [Charm](https://charm.sh). milktea is an independent implementation, written from scratch in C3, and is not affiliated with or endorsed by Charmbracelet, Inc.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

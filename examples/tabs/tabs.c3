@@ -30,7 +30,7 @@ fn milktea::Cmd TabsModel.update(TabsModel* self, milktea::Msg msg) @dynamic {
 
 const String[3] TAB_NAMES    = { "Home", "About", "Settings" };
 const String[3] TAB_CONTENTS = {
-	"Welcome to milktea!\n\nA Bubble Tea-inspired TUI framework for C3.\nUse ← → or h/l to switch tabs.",
+	"Welcome to milktea!\n\nA TUI framework for C3.\nUse ← → or h/l to switch tabs.",
 	"milktea  event loop and TTY management\nglaze    styling and layout\nboba     reusable widgets",
 	"Theme     Default\nBorder    Rounded\nColors    True color",
 };
