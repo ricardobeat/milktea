@@ -295,7 +295,7 @@ fn void Model.randomize_palette(Model* self) {
 		while (hue < 0.0) hue += 360.0;
 		while (hue >= 360.0) hue -= 360.0;
 		double chroma = (double)rand_range(55.0f, 85.0f);
-		double lum = (double)rand_range(72.0f, 88.0f);
+		double lum = (double)rand_range(60.0f, 76.0f);
 		self.palette[i] = from_glaze(glaze::hcl(hue, chroma, lum));
 	}
 }
@@ -501,10 +501,12 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.cycle = 0;
 	self.next_emit_index = 0;
 	self.corner = { .col = 0, .row = 0 };
+	// Same HCL luminance band as randomize_palette, so cycle 0 is no
+	// brighter than the cycles that follow.
 	self.palette = {
-		xray::color_rgb(180, 255, 80),  // lime green
-		xray::color_rgb(120, 200, 255), // light blue
-		xray::color_rgb(255, 245, 180), // pale yellow
+		xray::color_rgb(138, 207, 5),   // lime green
+		xray::color_rgb(87, 174, 228),  // light blue
+		xray::color_rgb(199, 189, 122), // pale yellow
 	};
 	self.canvas = xray::new_screen_buffer(80, 24);
 	self.alloc_half_buffers();
