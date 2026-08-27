@@ -215,7 +215,7 @@ fn void fire_render(void* raw) {
 			// A touch of residual red so the char still reads as burnt, not
 			// just erased.
 			xray::Color cc = xray::color_rgb((char)(70.0f * dim), (char)(10.0f * dim), 0);
-			xray::Style fsy = xray::default_style().set_fg(cc);
+			xray::Style fsy = xray::default_style().set_fg(cc).set_bg(xray::color_transparent());
 			sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, fsy));
 			continue;
 		}
@@ -224,7 +224,7 @@ fn void fire_render(void* raw) {
 			// Ahead of the flame: draw the real glyph, untouched.
 			if (c.col < 0 || c.col >= self.w) continue;
 			if (c.row < 0 || c.row >= self.h) continue;
-			xray::Style fsy = xray::default_style().set_fg(gradient_color(self, c.col));
+			xray::Style fsy = xray::default_style().set_fg(gradient_color(self, c.col)).set_bg(xray::color_transparent());
 			String g = glyph_at(self.rows, c.row_src, c.byte_off, c.byte_len);
 			sb.set_cell((sz)c.col, (sz)c.row, xray::new_cell(g, 1, fsy));
 			continue;
@@ -273,13 +273,13 @@ fn void fire_render(void* raw) {
 		int cell_row = c.row;
 		if (cell_col < 0 || cell_col >= self.w) continue;
 		if (cell_row < 0 || cell_row >= self.h) continue;
-		xray::Style fsy = xray::default_style().set_fg(cc);
+		xray::Style fsy = xray::default_style().set_fg(cc).set_bg(xray::color_transparent());
 		sb.set_cell((sz)cell_col, (sz)cell_row, xray::new_cell("█", 1, fsy));
 	}
 
 	// Embers: the airborne sparks above the fire, drawn after the fuel so
 	// they read as flame rising off the burning word.
-	xray::Style er = xray::default_style();
+	xray::Style er = xray::default_style().set_bg(xray::color_transparent());
 	for (int i = 0; i < EMBER_POOL; i++) {
 		FireEmber* e = &fs.embers[i];
 		if (!e.active) continue;

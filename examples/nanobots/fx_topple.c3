@@ -149,7 +149,7 @@ fn void topple_render(void* raw) {
 		int row = (int)ry;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
-		xray::Style ts = xray::default_style().set_fg(gradient_color(self, p.col));
+		xray::Style ts = xray::default_style().set_fg(gradient_color(self, p.col)).set_bg(xray::color_transparent());
 		sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, ts));
 	}
 }

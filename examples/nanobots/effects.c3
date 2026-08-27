@@ -56,6 +56,7 @@ fn void Model.run_exit(Model* self, Exit e) {
 		case Exit.FIRE: self.fx = fire_effect();
 		case Exit.SPHERES: self.fx = spheres_effect();
 		case Exit.RAINBOW: self.fx = rainbow_effect();
+		case Exit.GRADIENT: self.fx = gradient_effect();
 	}
 	self.fx_active = true;
 	self.fx.setup(self);

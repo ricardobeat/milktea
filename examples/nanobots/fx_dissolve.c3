@@ -61,7 +61,7 @@ fn void dissolve_render(void* raw) {
 				(char)((float)base.g * f),
 				(char)((float)base.b * f));
 		}
-		xray::Style ds = xray::default_style().set_fg(base);
+		xray::Style ds = xray::default_style().set_fg(base).set_bg(xray::color_transparent());
 		sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, ds));
 	}
 }

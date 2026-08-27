@@ -173,7 +173,7 @@ fn void splat_render(void* raw) {
 				(char)((float)c.g * fade),
 				(char)((float)c.b * fade));
 		}
-		xray::Style ss = xray::default_style().set_fg(c);
+		xray::Style ss = xray::default_style().set_fg(c).set_bg(xray::color_transparent());
 		String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
 		sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, ss));
 	}

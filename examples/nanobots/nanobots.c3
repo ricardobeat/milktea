@@ -30,6 +30,10 @@ const char[] EMBED_TEXT = $embed("milktea.txt");
 // slower.
 const int FRAME_MS = 21;        // ~48fps
 const float DT = 20.0f * (float)FRAME_MS / 1000.0f; // sim-ticks per frame
+// Sim steps per rendered frame. This is the real speed knob: raising the
+// frame rate is mostly compensated out by @dur/DT scaling, so speed comes
+// from advancing the sim more than once per frame. 2 = twice the pace.
+const int BASE_STEPS = 2;
 
 // Convert a duration tuned in 20fps ticks into frames at the current rate.
 macro int @dur(#ticks) => (int)((float)(#ticks) / DT);
@@ -40,13 +44,13 @@ fn float decay(float per_tick) {
 }
 
 const int PARTICLES_PER_WAVE = 20; // 7 rounds of 20 = 140 blocks; user-tunable
-const int EMIT_COOLDOWN = @dur(42);   // ~2.1s between waves at 50ms/tick
+const int EMIT_COOLDOWN = @dur(14);   // ticks between waves — release bots fast
 const int HOLD_DURATION = @dur(60);   // ticks the finished word stays up (~3s)
 const int BUILD_TIMEOUT = @dur(600);  // safety net: if a straggler somehow never
                                 // settles, snap it home rather than stall
 const float PULL_MAX = 0.9f;    // ceiling on the spring force, so a thrown
                                 // bot coasts before the pull takes over
-const int SPAWN_STAGGER = @dur(2);    // ticks between bots within one wave, so a wave
+const int SPAWN_STAGGER = @dur(1);    // ticks between bots within one wave, so a wave
                                 // sprays out over ~2s instead of popping at once
 const float GRAVITY = 1.4f;     // cells/tick^2 in the FALL exit
 const float BOUNCE = 0.32f;     // energy kept when a block hits the pile
@@ -114,6 +118,7 @@ enum Phase {
 	FIRE,
 	SPHERES,
 	RAINBOW,
+	GRADIENT,
 }
 
 // How the word leaves the screen at the end of a cycle. Picked at random
@@ -131,8 +136,9 @@ enum Exit {
 	FIRE,
 	SPHERES,
 	RAINBOW,
+	GRADIENT,
 }
-const int EXIT_COUNT = 12;
+const int EXIT_COUNT = 13;
 
 struct Corner {
 	int col;
@@ -384,8 +390,9 @@ fn void Model.emit_cloud(Model* self) {
 		p.x = (float)self.corner.col + rand_range(-4.0f, 4.0f);
 		p.y = (float)self.corner.row + rand_range(-3.0f, 3.0f);
 
-		float angle = rand_range(0.0f, 6.2831853f);
-		float speed = rand_range(10.0f, 22.0f);
+		float angle = math::atan2((float)p.row - p.y, (float)p.col - p.x)
+			+ rand_range(-1.2f, 1.2f); // cone around the heading to its cell
+		float speed = rand_range(14.0f, 22.0f); // fired hard so they overshoot
 		p.vx = math::cos(angle) * speed;
 		p.vy = math::sin(angle) * speed * 0.7f; // cells are taller than wide
 
@@ -393,8 +400,8 @@ fn void Model.emit_cloud(Model* self) {
 		// No scripted timing: a weak, floppy spring takes far longer to bring
 		// its bot home than a stiff one, so the word fills a cell at a time on
 		// its own — and each bot springs in with its own character.
-		p.attract = rand_range(0.040f, 0.085f);
-		p.damp = rand_range(0.905f, 0.935f);
+		p.attract = rand_range(0.070f, 0.125f);
+		p.damp = rand_range(0.915f, 0.945f);
 		p.wander = rand_range(0.0f, 6.2831853f);
 		p.wander_rate = rand_range(-0.15f, 0.15f);
 		p.alive = true;
@@ -412,17 +419,37 @@ fn xray::Color from_glaze(glaze::Color c) {
 // chroma/luminance so every palette lands at a similar brightness — random
 // RGB would throw up muddy or near-black stops.
 fn void Model.randomize_palette(Model* self) {
+	// The three stops are spread symmetrically around a base hue with a
+	// guaranteed minimum gap, so the word always carries visible colour travel
+	// — the old independently-random hues could cluster into a flat wash.
 	double base = (double)rand_range(0.0f, 360.0f);
-	double spread = (double)rand_range(40.0f, 110.0f);
-	double dir = rand() % 2 == 0 ? 1.0 : -1.0;
-	for (int i = 0; i < 3; i++) {
-		double hue = base + dir * spread * (double)i;
-		while (hue < 0.0) hue += 360.0;
-		while (hue >= 360.0) hue -= 360.0;
-		double chroma = (double)rand_range(55.0f, 85.0f);
-		double lum = (double)rand_range(60.0f, 76.0f);
-		self.palette[i] = from_glaze(glaze::hcl(hue, chroma, lum));
-	}
+	double s = (double)rand_range(80.0f, 150.0f);
+	double h0 = base;
+	double h1 = base + s;
+	double h2 = base - s;
+	while (h1 < 0.0) h1 += 360.0;
+	while (h1 >= 360.0) h1 -= 360.0;
+	while (h2 < 0.0) h2 += 360.0;
+	while (h2 >= 360.0) h2 -= 360.0;
+
+	double chroma = (double)rand_range(55.0f, 90.0f);
+	// Luminance ramps low → mid → high (or reversed) across the stops, so the
+	// gradient is never a single flat shade and never washes out to a pale
+	// luminance — a consistent brightness sheen runs across the word.
+	double mid = (double)rand_range(40.0f, 58.0f);
+	double step = (double)rand_range(6.0f, 14.0f);
+	int up = rand() % 2 == 0 ? 1 : -1;
+	double l0 = mid + (double)up * -step;
+	double l1 = mid;
+	double l2 = mid + (double)up * step;
+	if (l0 < 20.0) l0 = 20.0;
+	if (l2 < 20.0) l2 = 20.0;
+	if (l0 > 92.0) l0 = 92.0;
+	if (l2 > 92.0) l2 = 92.0;
+
+	self.palette[0] = from_glaze(glaze::hcl(h0, chroma, l0));
+	self.palette[1] = from_glaze(glaze::hcl(h1, chroma, l1));
+	self.palette[2] = from_glaze(glaze::hcl(h2, chroma, l2));
 }
 
 fn bool Model.all_settled(Model* self) {
@@ -554,8 +581,11 @@ fn void Model.update_physics(Model* self) {
 		p.vx *= p.damp;
 		p.vy *= p.damp;
 
+		// Cap is well above the launch speed so a hard throw isn't flattened
+		// to a constant glide — the bot carries full momentum past its cell,
+		// then the underdamped spring whips it back (rubber band).
 		float sp2 = p.vx * p.vx + p.vy * p.vy;
-		float cap = 18.0f;
+		float cap = 62.0f;
 		if (sp2 > cap * cap) {
 			float sp = math::sqrt(sp2);
 			p.vx = p.vx / sp * cap;
@@ -577,7 +607,7 @@ fn void Model.update_physics(Model* self) {
 		// Recheck against the post-move position, not the stale pre-move one.
 		float ndx = tx - p.x;
 		float ndy = ty - p.y;
-		if (ndx * ndx + ndy * ndy < 0.50f && sp2 < 1.5f) {
+		if (ndx * ndx + ndy * ndy < 0.75f && sp2 < 4.0f) {
 			p.x = tx;
 			p.y = ty;
 			p.vx = 0;
@@ -650,7 +680,17 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.alloc_half_buffers();
 	self.parse_text();
 	self.emit_cloud();
-	return milktea::tick(FRAME_MS);
+	return arm_tick(self);
+}
+
+// Re-arm the animation timer under a stable owner so cancel(self) can clear
+// it. Re-arming in both the TICK and WINDOW_SIZE handlers with the default
+// null owner leaves *two* live timers whenever a resize lands between ticks:
+// each keeps firing a TICK and re-arming itself, so the frame clock runs
+// double (or more) speed and resizing makes the sim faster.
+fn milktea::Cmd arm_tick(Model* self) {
+	milktea::cancel(self);
+	return milktea::tick(FRAME_MS, &milktea::tick_msg, self);
 }
 
 // One simulation step: advance the clock, integrate, then let the current
@@ -708,15 +748,15 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		self.last_emit_frame = self.frame - EMIT_COOLDOWN;
 		self.rotate_corner();
 		self.emit_cloud();
-		return milktea::tick(FRAME_MS);
+		return arm_tick(self);
 	}
 
 	if (msg.kind == milktea::MsgKind.TICK) {
-		// Holding space runs four steps per frame rather than shortening the
+		// Holding space runs extra steps per frame rather than shortening the
 		// frame, so the frame rate stays put and only the sim speeds up.
-		int steps = self.frame < self.turbo_until ? 4 : 1;
+		int steps = self.frame < self.turbo_until ? BASE_STEPS * 4 : BASE_STEPS;
 		for (int step = 0; step < steps; step++) self.step();
-		return milktea::tick(FRAME_MS);
+		return arm_tick(self);
 	}
 
 	if (msg.kind != milktea::MsgKind.KEY) return null;
@@ -794,6 +834,7 @@ fn String exit_name(Exit e) {
 		case Exit.FIRE: return "FIRE";
 		case Exit.SPHERES: return "SPHERES";
 		case Exit.RAINBOW: return "RAINBOW";
+		case Exit.GRADIENT: return "GRADIENT";
 		default: return "?";
 	}
 }
@@ -835,7 +876,15 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	sb.clear();
 
 	xray::Rect full = xray::new_rect(0, 0, self.w, self.h);
-	sb.fill_gradient_v(full, xray::color_rgb(6, 8, 22), xray::color_rgb(18, 22, 38));
+	// Sunset: elliptical gradient focused at the bottom-centre of the screen,
+	// so the brighter colour glows from the horizon and falls off wider
+	// horizontally (elliptical, not radial) toward the dark top and sides.
+	sb.fill_gradient_ellipse(
+		full,
+		xray::color_rgb(38, 16, 54),
+		xray::color_rgb(4, 4, 10),
+		(float)self.w / 2.0f, (float)(self.h - 1),
+		(float)self.w * 0.65f, (float)self.h * 0.95f);
 
 	xray::Style dot_s = xray::default_style().set_fg(xray::color_rgb(30, 38, 60)).set_bg(xray::color_transparent());
 	for (int row = 0; row < self.h; row++) {
@@ -884,7 +933,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 			String g = "█";
 			if (mask == 1) g = "▀";
 			if (mask == 2) g = "▄";
-			xray::Style s2 = xray::default_style().set_fg(self.half_col[idx]);
+			xray::Style s2 = xray::default_style().set_fg(self.half_col[idx]).set_bg(xray::color_transparent());
 			sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, s2));
 		}
 	}
@@ -896,7 +945,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		if (p.col < 0 || p.col >= self.w) continue;
 		if (p.row < 0 || p.row >= self.h) continue;
 		xray::Color col = gradient_color(self, p.col);
-		xray::Style s2 = xray::default_style().set_fg(col);
+		xray::Style s2 = xray::default_style().set_fg(col).set_bg(xray::color_transparent());
 		String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
 		sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, s2));
 	}

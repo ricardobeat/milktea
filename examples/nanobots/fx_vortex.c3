@@ -84,8 +84,8 @@ fn void vortex_render(void* raw) {
 	// behind it. The ellipse is squashed 2:1 for the cell aspect.
 	if (s.hole_r > 0.05f) {
 		xray::Color ring = xray::color_rgb(255, 64, 160);
-		xray::Style ring_s = xray::default_style().set_fg(ring);
-		xray::Style void_s = xray::default_style().set_fg(xray::color_rgb(10, 4, 14));
+		xray::Style ring_s = xray::default_style().set_fg(ring).set_bg(xray::color_transparent());
+		xray::Style void_s = xray::default_style().set_fg(xray::color_rgb(10, 4, 14)).set_bg(xray::color_transparent());
 		int span = (int)s.hole_r + 2;
 		for (int dy = -span; dy <= span; dy++) {
 			for (int dx = -span * 2; dx <= span * 2; dx++) {

@@ -55,7 +55,7 @@ fn void fx_draw_moving(Model* self, float fade) {
 			String g = "\u2588";              // both halves
 			if (mask == 1) g = "\u2580";      // upper half
 			if (mask == 2) g = "\u2584";      // lower half
-			xray::Style s2 = xray::default_style().set_fg(self.half_col[idx]);
+			xray::Style s2 = xray::default_style().set_fg(self.half_col[idx]).set_bg(xray::color_transparent());
 			sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, s2));
 		}
 	}

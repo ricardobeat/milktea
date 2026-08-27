@@ -1,6 +1,7 @@
 module xray;
 
 import std::core::dstring;
+import std::math;
 import glaze;
 
 // ============================================================
@@ -1149,6 +1150,33 @@ fn void ScreenBuffer.fill_gradient_v(&self, Rect r, Color c1, Color c2) {
 			int abs_col = r.x + col;
 			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
 			self.cells[(sz)abs_row * self.width + (sz)abs_col].style.bg = c;
+		}
+	}
+}
+
+// fill_gradient_ellipse paints an elliptical (non-radial) gradient whose
+// iso-colour bands are ellipses, not circles. cx, cy is the focus (brightest
+// point) in absolute coordinates and rx, ry the horizontal and vertical
+// radii in cells. Cells fade from c1 at the focus to c2 once the normalized
+// elliptical distance reaches 1 (and clamp to c2 beyond), so the falloff is
+// sharper along the shorter axis — a wide, low ellipse reads as a sunset
+// glow hugging the bottom of the screen.
+fn void ScreenBuffer.fill_gradient_ellipse(&self, Rect r, Color c1, Color c2, float cx, float cy, float rx, float ry) {
+	if (r.w <= 0 || r.h <= 0) return;
+	float rxi = rx > 0.0f ? 1.0f / rx : 1.0f;
+	float ryi = ry > 0.0f ? 1.0f / ry : 1.0f;
+	for (int row = 0; row < r.h; row++) {
+		int abs_row = r.y + row;
+		if (abs_row < 0 || (sz)abs_row >= self.height) continue;
+		float dy = ((float)abs_row - cy) * ryi;
+		sz rowbase = (sz)abs_row * self.width;
+		for (int col = 0; col < r.w; col++) {
+			int abs_col = r.x + col;
+			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
+			float dx = ((float)abs_col - cx) * rxi;
+			float t = math::sqrt(dx * dx + dy * dy);
+			if (t > 1.0f) t = 1.0f;
+			self.cells[rowbase + (sz)abs_col].style.bg = lerp_color(c1, c2, (int)(t * 1000.0f), 1000);
 		}
 	}
 }

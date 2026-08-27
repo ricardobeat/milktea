@@ -149,7 +149,7 @@ fn void implode_render(void* raw) {
 			(char)((float)c.r + (255.0f - (float)c.r) * heat),
 			(char)((float)c.g + (255.0f - (float)c.g) * heat),
 			(char)((float)c.b + (255.0f - (float)c.b) * heat));
-		xray::Style is = xray::default_style().set_fg(c);
+		xray::Style is = xray::default_style().set_fg(c).set_bg(xray::color_transparent());
 		String g = s.crt_stage >= 2 ? "\u2580" : "\u2588";
 		sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, is));
 	}
@@ -160,7 +160,7 @@ fn void implode_render(void* raw) {
 			float v = s.crt_dot;
 			xray::Color dcol = xray::color_rgb(
 				(char)(255.0f * v), (char)(255.0f * v), (char)(235.0f * v));
-			xray::Style ds2 = xray::default_style().set_fg(dcol);
+			xray::Style ds2 = xray::default_style().set_fg(dcol).set_bg(xray::color_transparent());
 			sb.set_cell((sz)dc, (sz)dr, xray::new_cell("\u25AA", 1, ds2));
 		}
 	}

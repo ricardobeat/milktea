@@ -157,7 +157,7 @@ fn void spheres_render(void* raw) {
 				(char)((float)bc.g * fade),
 				(char)((float)bc.b * fade));
 		}
-		xray::Style bs = xray::default_style().set_fg(bc);
+		xray::Style bs = xray::default_style().set_fg(bc).set_bg(xray::color_transparent());
 		if (self.frame < p.spawn_tick) {
 			// Not dropped yet — still part of the word.
 			if (p.col < 0 || p.col >= self.w) continue;
