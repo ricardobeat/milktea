@@ -28,7 +28,7 @@ const char[] EMBED_TEXT = $embed("milktea.txt");
 // gets pow(damp, DT) via the `decay` helper rather than a plain multiply —
 // multiplying a damping factor by DT would make things stop faster, not
 // slower.
-const int FRAME_MS = 33;        // ~48fps
+const int FRAME_MS = 21;        // ~48fps
 const float DT = 20.0f * (float)FRAME_MS / 1000.0f; // sim-ticks per frame
 
 // Convert a duration tuned in 20fps ticks into frames at the current rate.
