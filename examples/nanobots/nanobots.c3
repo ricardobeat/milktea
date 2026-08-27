@@ -28,7 +28,7 @@ const char[] EMBED_TEXT = $embed("milktea.txt");
 // gets pow(damp, DT) via the `decay` helper rather than a plain multiply —
 // multiplying a damping factor by DT would make things stop faster, not
 // slower.
-const int FRAME_MS = 21;        // ~48fps
+const int FRAME_MS = 33;        // ~48fps
 const float DT = 20.0f * (float)FRAME_MS / 1000.0f; // sim-ticks per frame
 
 // Convert a duration tuned in 20fps ticks into frames at the current rate.
@@ -59,19 +59,9 @@ const int LINE_HOLD = @dur(10);       // ticks the hot line holds before it coll
 const int DOT_HOLD = @dur(16);        // ticks the dot lingers after the flare
 const int SWELL_DURATION = @dur(22);  // ticks the picture stretches and brightens
 const float SWELL_MAX = 1.5f;   // how far the picture widens before collapsing
-const float SPLAT_SPEED = 15.0f; // top speed of the thrown slab
+const float SPLAT_SPEED = 20.0f; // top speed of the thrown slab
 const int SPLAT_WINDUP = @dur(14);     // ticks of pull-back before the release
 const float SPLAT_SPLASH = 7.0f; // how hard blocks spray along the wall
-const float FIRE_LIFT = -0.62f;  // upward drift of a rising ember spark
-const int FIRE_LIFE = @dur(44);  // how long a glyph cell burns (its fuel) before charring
-const int FIRE_ROWDELAY = @dur(9);  // extra ticks of fire delay per row up the word,
-	                            // so the flame creeps from the bottom rather than
-	                            // lighting everything at once
-const int FIRE_CHAR_FADE = @dur(46); // ticks a charred piece crumbles and fades
-const int FIRE_EMBER_LIFE = @dur(34); // longest life of an emitted ember
-const int EMBER_POOL = 240;      // live-ember slots (ring buffer)
-const int EMBER_EMIT = 20;       // 1/EMBER_EMIT chance a burning cell spits an
-	                             // ember each tick (~1-2/s per cell)
 const float BALL_BOUNCE = 0.82f; // energy a sphere keeps per floor bounce
 const float BALL_REST = 0.7f;    // below this impact speed a sphere stops
 const float BALL_RADIUS = 0.75f; // contact distance between two spheres, in
@@ -106,26 +96,6 @@ struct Particle {
 	bool resting;      // FALL exit: landed on the pile, no longer moving
 	int fall_col;      // FALL exit: column it is stacking in
 	float noise_seed;  // DISSOLVE exit: per-block offset into the noise glyphs
-	int ignite_tick;   // FIRE exit: frame this block caught. Its age drives
-	                   // the colour ramp, and once it passes FIRE_LIFE the
-	                   // block chars and crumbles.
-	bool charred;      // FIRE exit: this fuel cell has burnt out and is now
-	                   // crumbling (falling) away
-	int char_tick;     // FIRE exit: frame it charred, so it can fade out
-	int fire_col;      // FIRE exit: column of the fuel cell (used when it
-	                   // shimmers in place and when it crumbles)
-}
-
-// A short-lived spark billowing off a burning fuel cell. Floats up, cools
-// through the fire colours, and dies — the visible "flame" above the word.
-struct Ember {
-	float x;
-	float y;
-	float vx;
-	float vy;
-	int born;          // frame it was emitted
-	int life;          // total frames it lives
-	bool active;
 }
 
 // The word builds up, holds, then blows apart and rebuilds — forever.
@@ -143,6 +113,7 @@ enum Phase {
 	SPLAT,
 	FIRE,
 	SPHERES,
+	RAINBOW,
 }
 
 // How the word leaves the screen at the end of a cycle. Picked at random
@@ -159,12 +130,37 @@ enum Exit {
 	SPLAT,
 	FIRE,
 	SPHERES,
+	RAINBOW,
 }
-const int EXIT_COUNT = 13;
+const int EXIT_COUNT = 12;
 
 struct Corner {
 	int col;
 	int row;
+}
+
+// An exit effect: a self-contained animation owning all its own state,
+// reached through four lifecycle hooks. The model is a thin dispatcher —
+// while an effect is active it stops stepping the build/physics and just
+// calls fx.step / fx.render each frame. "Taking over" the exit phase this
+// way keeps each effect's logic and data in one file instead of scattered
+// through the model. fx_state is owned by whichever effect is running and
+// released by its teardown.
+//
+// Hooks take void* (the Model) so Effect can be declared before Model, which
+// in turn lets Model hold an Effect field without a forward-declared struct.
+// An effect casts its argument back to Model* on entry.
+alias FnFxSetup    = fn void (void*);
+alias FnFxStep     = fn void (void*);
+alias FnFxRender   = fn void (void*);
+alias FnFxTeardown = fn void (void*);
+
+struct Effect {
+	String  name;
+	FnFxSetup    setup;
+	FnFxStep     step;
+	FnFxRender   render;
+	FnFxTeardown teardown;
 }
 
 struct Model {
@@ -189,9 +185,6 @@ struct Model {
 	xray::Color[] half_col;    // colour for those cells
 	List{String} rows;         // parsed source lines, indexed by row_src
 	bool rows_ready;
-	int[] stack_top;           // FALL exit: next free half-row per column,
-	                           // measured in half-cells from the top
-	int fade_start;            // frame the pile started fading
 	Exit last_exit;            // previous cycle's exit, never picked twice
 	bool has_last_exit;        // false until the first exit has run
 	bool exit_forced;          // TAB queued a specific exit for the next run.
@@ -211,31 +204,10 @@ struct Model {
 	float[DUST_COUNT] dust_x;  // motes left behind after the flash
 	float[DUST_COUNT] dust_y;
 	float[DUST_COUNT] dust_v;  // brightness, so they twinkle out
-	Ember[EMBER_POOL] fire_embers;   // FIRE exit: sparks billowing off the
-	                                 // burning fuel cells
-	int fire_ember_head;       // ring cursor into fire_embers[]
-	float hole_x;              // VORTEX exit: centre of the hole, in cells
-	float hole_y;
-	float hole_r;              // current visual radius, grows as it opens
-	float bar_dir;             // SHEAR/TOPPLE: which way the gust blows or
-	                           // the slab tips. +1 right, -1 left.
-	float topple_angle;        // TOPPLE exit: current rotation, radians
-	float topple_vel;          // angular velocity
-	float pivot_x;             // corner the slab rotates about
-	float pivot_y;
-	bool topple_shattered;     // true once the slab has hit the floor
-	float line_y;              // IMPLODE exit: the centreline blocks collapse to
-	int line_frame;            // frame the line finished compressing (0 = not yet)
-	int crt_stage;             // IMPLODE: 0=swell, 1=squash, 2=hold line,
-	                           // 3=collapse to dot, 4=dot lingers
-	float crt_swell;           // horizontal stretch during stage 0, 1 = normal
-	int crt_stage_frame;       // frame the current stage began
-	float crt_dot;             // brightness of the final dot, 1 at the flare
-	float splat_wall;          // SPLAT exit: x of the wall blocks are thrown
-	                           // at — 0 for the left edge, w-1 for the right
-	bool splat_falling;        // true once the slab has hit and broken up
-	int splat_launch;          // frame the throw was released; before it the
-	                           // slab is winding up in the opposite direction
+	Effect fx;                 // the active exit effect, when fx_active
+	bool fx_active;            // an exit effect is running and owns the phase
+	void* fx_state;            // the active effect's private state; owned by
+	                           // the effect and released by its teardown
 	int turbo_until;           // frame the 4x speed-up lapses. Terminals only
 	                           // report key *release* under the kitty
 	                           // protocol, so "held" is inferred from auto-
@@ -391,8 +363,6 @@ fn void Model.alloc_half_buffers(Model* self) {
 	sz n = (sz)(self.w * self.h);
 	self.half_mask = mem::new_array(char, n);
 	self.half_col = mem::new_array(xray::Color, n);
-	if (self.stack_top.len) mem::free(self.stack_top);
-	self.stack_top = mem::new_array(int, (sz)self.w);
 	if (self.glow.len) mem::free(self.glow);
 	self.glow = mem::new_array(float, n);
 }
@@ -480,6 +450,16 @@ fn bool Model.any_alive(Model* self) {
 	return false;
 }
 
+// True when every living bot is at rest — used by effects that end with a
+// settled pile (COLLAPSE, SPLAT, TOPPLE, SPHERES) to know when to fade out.
+fn bool Model.all_resting(Model* self) {
+	for (int i = 0; i < self.total; i++) {
+		Particle* p = &self.particles[i];
+		if (p.alive && !p.resting) return false;
+	}
+	return true;
+}
+
 fn void Model.restart_cycle(Model* self) {
 	self.cycle++;
 	self.randomize_palette();
@@ -487,21 +467,15 @@ fn void Model.restart_cycle(Model* self) {
 		self.particles[i].alive = false;
 		self.particles[i].settled = false;
 		self.particles[i].resting = false;
-		self.particles[i].charred = false;
 	}
-	// Any leftover embers from a fire exit die with the cycle.
-	for (int i = 0; i < EMBER_POOL; i++) self.fire_embers[i].active = false;
-	self.fire_ember_head = 0;
-	self.fade_start = 0;
-	self.line_frame = 0;
-	self.splat_falling = false;
+	// Tear down any exit effect that is still running so its state isn't
+	// carried into the next cycle.
+	if (self.fx_active) {
+		if (self.fx.teardown) self.fx.teardown(self);
+		self.fx_active = false;
+		self.fx_state = null;
+	}
 	self.preview_at = 0;
-	self.crt_stage = 0;
-	self.crt_dot = 0;
-	self.crt_swell = 1.0f;
-	self.topple_angle = 0;
-	self.topple_vel = 0;
-	self.topple_shattered = false;
 	self.next_emit_index = 0;
 	self.last_emit_frame = self.frame - EMIT_COOLDOWN;
 	self.phase = Phase.BUILD;
@@ -511,8 +485,6 @@ fn void Model.restart_cycle(Model* self) {
 }
 
 fn void Model.update_physics(Model* self) {
-	if (self.phase == Phase.SPHERES) self.collide_spheres();
-	if (self.phase == Phase.FIRE) self.update_embers();
 	for (int i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
@@ -522,287 +494,6 @@ fn void Model.update_physics(Model* self) {
 			p.y = (float)p.row;
 			p.vx = 0;
 			p.vy = 0;
-			continue;
-		}
-		if (self.phase == Phase.FALL) {
-			if (p.resting) continue;
-			p.vy += GRAVITY * DT;
-			p.vx *= decay(0.98f);
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-
-			float max_x = (float)(self.w - 1);
-			if (p.x < 0)     { p.x = 0;     p.vx = -p.vx * 0.4f; }
-			if (p.x > max_x) { p.x = max_x; p.vx = -p.vx * 0.4f; }
-
-			// Stack in whichever column the block is currently over, so a
-			// block that drifts sideways lands on that column's pile.
-			int c = (int)p.x;
-			if (c < 0) c = 0;
-			if (c >= self.w) c = self.w - 1;
-			p.fall_col = c;
-			// The resting spot is one half-cell above the column's fill line;
-			// p.y is in cells, the stack in half-cells.
-			float floor_y = (float)(self.stack_top[c] - 1) * 0.5f;
-			if (p.y >= floor_y) {
-				p.y = floor_y;
-				if (p.vy > 3.0f) {
-					// Enough speed left to bounce once more.
-					p.vy = -p.vy * BOUNCE;
-					p.vx *= 0.7f;
-				} else {
-					p.vy = 0;
-					p.vx = 0;
-					p.x = (float)c;
-					p.resting = true;
-					if (self.stack_top[c] > 0) self.stack_top[c]--;
-				}
-			}
-			continue;
-		}
-		if (self.phase == Phase.DISSOLVE) {
-			// Purely visual — the block stays put and the view decides what
-			// glyph to draw. It retires once its flicker sequence is done.
-			int age = self.frame - p.spawn_tick;
-			if (age >= DISSOLVE_FLICKERS * DISSOLVE_STEP) p.alive = false;
-			continue;
-		}
-		if (self.phase == Phase.SHEAR) {
-			if (self.frame < p.spawn_tick) continue; // not torn loose yet
-			p.vx += WIND_ACCEL * self.bar_dir * DT;
-			// Flutter: a slowly turning heading gives lift that alternates,
-			// so blocks tumble down the gust instead of tracking straight.
-			p.wander += p.wander_rate * DT;
-			p.vy += math::sin(p.wander) * 0.55f * DT;
-			p.vx *= decay(0.88f); // heavy drag, so they streak rather than launch
-			p.vy *= decay(0.86f);
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			if (p.x < -4.0f || p.x > (float)self.w + 4.0f) p.alive = false;
-			continue;
-		}
-		if (self.phase == Phase.TOPPLE) {
-			// Before the crash the slab is rigid: the shared angle drives
-			// every block, so there's nothing per-particle to integrate.
-			if (!self.topple_shattered) continue;
-			// After it, blocks behave exactly like the FALL pile.
-			if (p.resting) continue;
-			p.vy += GRAVITY * DT;
-			p.vx *= decay(0.98f);
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			float mx = (float)(self.w - 1);
-			if (p.x < 0)  { p.x = 0;  p.vx = -p.vx * 0.4f; }
-			if (p.x > mx) { p.x = mx; p.vx = -p.vx * 0.4f; }
-			int c = (int)p.x;
-			if (c < 0) c = 0;
-			if (c >= self.w) c = self.w - 1;
-			float floor_y = (float)(self.stack_top[c] - 1) * 0.5f;
-			if (p.y >= floor_y) {
-				p.y = floor_y;
-				if (p.vy > 3.0f) {
-					p.vy = -p.vy * BOUNCE;
-					p.vx *= 0.7f;
-				} else {
-					p.vy = 0;
-					p.vx = 0;
-					p.x = (float)c;
-					p.resting = true;
-					if (self.stack_top[c] > 0) self.stack_top[c]--;
-				}
-			}
-			continue;
-		}
-		if (self.phase == Phase.SPHERES) {
-			if (self.frame < p.spawn_tick) continue; // still part of the word
-			if (p.resting) continue;
-			p.vy += GRAVITY * DT;
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			// Side walls: bounce, losing a little each time.
-			float mx = (float)(self.w - 1);
-			if (p.x < 0)  { p.x = 0;  p.vx = -p.vx * 0.7f; }
-			if (p.x > mx) { p.x = mx; p.vx = -p.vx * 0.7f; }
-			// The floor is the bottom row — these bounce on the ground
-			// rather than stacking on each other, so the scatter stays
-			// visible instead of building a wall. The top of the settled
-			// pile counts as ground too, or a ball that lands on another
-			// ball would never stop bouncing.
-			float floor_y = (float)(self.h - 1);
-			bool landed = false;
-			if (p.y >= floor_y) {
-				p.y = floor_y;
-				landed = true;
-			} else if (p.vy >= 0 && self.on_resting_ball(p)) {
-				landed = true;
-			}
-			if (landed) {
-				if (p.vy > BALL_REST) {
-					p.vy = -p.vy * BALL_BOUNCE;
-					p.vx *= 0.94f; // slight friction on contact
-				} else {
-					p.vy = 0;
-					p.vx *= 0.7f;
-					// Once it has stopped hopping it rolls to a halt.
-					if (p.vx > -0.25f && p.vx < 0.25f) {
-						p.vx = 0;
-						p.resting = true;
-					}
-				}
-			}
-			continue;
-		}
-		if (self.phase == Phase.FIRE) {
-			if (p.charred) {
-				// The burnt-out piece crumbles: it falls, wobbles a little,
-				// and fades to nothing over FIRE_CHAR_FADE.
-				int c_age = self.frame - p.char_tick;
-				if (c_age >= FIRE_CHAR_FADE || p.y > (float)self.h + 1.0f) {
-					p.alive = false;
-					continue;
-				}
-				p.vy += 0.10f * DT;
-				p.vx += math::sin((float)c_age * 0.5f + p.noise_seed) * 0.03f * DT;
-				p.vx *= 0.96f;
-				p.x += p.vx * 0.25f * DT;
-				p.y += p.vy * 0.25f * DT;
-				continue;
-			}
-			// Not charred yet, and the loop gate at the top skipped frames
-			// before p.spawn_tick (== the ignition frame), so this block is
-			// burning: it stays in place as the fuel while it spits embers,
-			// then chars into crumble once its fuel is spent.
-			int age = self.frame - p.ignite_tick;
-			if (age >= FIRE_LIFE) {
-				p.charred = true;
-				p.char_tick = self.frame;
-				p.vy = rand_range(0.3f, 0.8f);
-				p.vx = rand_range(-0.4f, 0.4f);
-				continue;
-			}
-			p.noise_seed += 0.01f;   // shimmer phase advances while it burns
-			if ((rand() % EMBER_EMIT) == 0) self.emit_fire_ember(p.fire_col, p.row);
-			continue;
-		}
-		if (self.phase == Phase.SPLAT) {
-			if (!self.splat_falling) {
-				// The throw, eased. Windup: the slab eases backward away
-				// from the wall, decelerating into the turn. Release: it
-				// accelerates hard, so the impact is the fastest moment
-				// rather than just where the travel happens to stop.
-				int rel = self.frame - self.splat_launch;
-				float ease;
-				if (rel < 0) {
-					// Pull-back, tapering to a standstill at the turn.
-					float u = (float)(-rel) / (float)SPLAT_WINDUP;
-					ease = -0.16f * u * u;
-				} else {
-					// Accelerate into the wall: quadratic ramp, clamped once
-					// it reaches full speed so it doesn't run away.
-					float u = (float)rel / 9.0f;
-					if (u > 1.0f) u = 1.0f;
-					ease = u * u;
-				}
-				p.x += p.vx * ease * 0.25f * DT;
-				p.y += p.vy * ease * 0.25f * DT;
-				continue;
-			}
-			if (p.resting) continue;
-			p.vy += GRAVITY * DT;
-			p.vx *= decay(0.94f); // scrubbing along the wall bleeds sideways speed
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			float mx = (float)(self.w - 1);
-			if (p.x < 0)  { p.x = 0;  p.vx = -p.vx * 0.3f; }
-			if (p.x > mx) { p.x = mx; p.vx = -p.vx * 0.3f; }
-			int c = (int)p.x;
-			if (c < 0) c = 0;
-			if (c >= self.w) c = self.w - 1;
-			float floor_y = (float)(self.stack_top[c] - 1) * 0.5f;
-			if (p.y >= floor_y) {
-				p.y = floor_y;
-				if (p.vy > 3.0f) {
-					p.vy = -p.vy * BOUNCE;
-					p.vx *= 0.7f;
-				} else {
-					p.vy = 0;
-					p.vx = 0;
-					p.x = (float)c;
-					p.resting = true;
-					if (self.stack_top[c] > 0) self.stack_top[c]--;
-				}
-			}
-			continue;
-		}
-		if (self.phase == Phase.IMPLODE) {
-			if (self.crt_stage == 0) {
-				// Swelling: blocks hold their rows; the render does the
-				// stretching, so the shape stays coherent as it widens.
-			} else if (self.crt_stage == 1) {
-				// Vertical squash. A stiff, underdamped spring, so the
-				// picture slams past the centreline and rings back instead
-				// of easing into it.
-				float dy = self.line_y - p.y;
-				p.vy += dy * 0.55f * DT;
-				p.vy *= decay(0.72f);
-				p.y += p.vy * 0.25f * DT;
-			} else if (self.crt_stage == 2) {
-				// The line burns. Blocks jitter a fraction of a cell on the
-				// scanline so it looks live rather than frozen.
-				p.y = self.line_y + p.wander * 0.15f;
-			} else if (self.crt_stage == 3) {
-				// Horizontal collapse, accelerating hard toward the centre
-				// so the line snaps shut rather than sliding closed.
-				float cx = (float)self.text_x + (float)self.text_w * 0.5f;
-				float dx = cx - p.x;
-				p.vx += dx * 0.42f * DT;
-				p.vx *= decay(0.74f);
-				p.x += p.vx * 0.25f * DT;
-				p.y = self.line_y;
-				if (dx > -0.8f && dx < 0.8f) p.alive = false;
-			} else {
-				p.y = self.line_y;
-			}
-			continue;
-		}
-		if (self.phase == Phase.VORTEX) {
-			float dx = self.hole_x - p.x;
-			float dy = (self.hole_y - p.y) * 2.0f; // cells are ~2x tall
-			float d = math::sqrt(dx * dx + dy * dy);
-			if (d < 0.9f) { p.alive = false; continue; }
-			float nx = dx / d;
-			float ny = dy / d;
-			// Pull scales with 1/d, capped near the middle so a block that
-			// gets close doesn't take an infinite kick on the last tick.
-			float pull = 26.0f / d;
-			if (pull > 5.0f) pull = 5.0f;
-			p.vx += nx * pull * DT;
-			p.vy += ny * pull * 0.5f * DT;
-			// Tangential component: perpendicular to the inward normal, and
-			// it's what turns a straight fall into a spiral. It has to fade
-			// as the block closes in — held at full strength it balances the
-			// inward pull exactly and the block just orbits forever.
-			float swirl = d / 14.0f;
-			if (swirl > 1.0f) swirl = 1.0f;
-			p.vx += -ny * pull * 0.55f * swirl * DT;
-			p.vy += nx * pull * 0.28f * swirl * DT;
-			// Damping alone can't kill a circular orbit, since it sheds
-			// tangential and radial speed alike. This extra inward creep is
-			// unconditional, so every block loses altitude every tick.
-			p.x += nx * 0.10f;
-			p.y += ny * 0.05f;
-			p.vx *= decay(0.90f);
-			p.vy *= decay(0.90f);
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			continue;
-		}
-		if (self.phase == Phase.SLICE) {
-			// A slab, not a cloud: no drag on vx, so the strip holds its
-			// shape all the way off the edge.
-			p.x += p.vx * 0.25f * DT;
-			p.y += p.vy * 0.25f * DT;
-			if (p.x < -4.0f || p.x > (float)self.w + 4.0f) p.alive = false;
 			continue;
 		}
 		if (self.phase == Phase.BLOW) {
@@ -973,6 +664,12 @@ fn void Model.step(Model* self) {
 		self.start_exit();
 		return;
 	}
+	// While an exit effect is running it owns this phase: the model stops
+	// touching the build/physics switch and just advances the effect.
+	if (self.fx_active) {
+		self.fx.step(self);
+		return;
+	}
 	self.update_physics();
 		switch (self.phase) {
 			case Phase.BUILD:
@@ -993,126 +690,7 @@ fn void Model.step(Model* self) {
 						&& self.frame - self.phase_frame >= HOLD_DURATION) {
 					self.start_exit();
 				}
-			case Phase.BLOW:
-				if (!self.any_alive()) self.restart_cycle();
-			case Phase.SLICE:
-				if (!self.any_alive()) self.restart_cycle();
-			case Phase.DISSOLVE:
-				if (!self.any_alive()) self.restart_cycle();
-			case Phase.SHEAR:
-				if (!self.any_alive()) self.restart_cycle();
-			case Phase.TOPPLE:
-				if (!self.topple_shattered) {
-					// Gravity torque: accelerates as the slab goes over.
-					self.topple_vel += (TOPPLE_ACCEL + self.topple_angle * 0.004f) * DT;
-					self.topple_angle += self.topple_vel;
-					// Flat on the floor at a quarter turn — shatter, and hand
-					// each block the velocity its rotation had given it.
-					if (self.topple_angle >= 1.5707963f) {
-						self.topple_angle = 1.5707963f;
-						self.topple_shattered = true;
-						self.scatter_from_topple();
-					}
-				} else if (self.all_resting()) {
-					if (self.fade_start == 0) self.fade_start = self.frame + @dur(10);
-					if (self.frame - self.fade_start >= FADE_DURATION) {
-						self.restart_cycle();
-					}
-				}
-			case Phase.IMPLODE: {
-				// Stage timings are what make this read as a shutdown rather
-				// than a generic collapse: the picture swells and brightens
-				// as the supply sags, then a fast squash, a brief burn, a
-				// fast pinch, and a dot that outlives the picture.
-				int held = self.frame - self.crt_stage_frame;
-				if (self.crt_stage == 0) {
-					// Bloom outward. Eases off toward the end, so it looks
-					// like it's straining against something.
-					float t = (float)held / (float)SWELL_DURATION;
-					if (t > 1.0f) t = 1.0f;
-					self.crt_swell = 1.0f + (SWELL_MAX - 1.0f) * (t * (2.0f - t));
-					if (held >= SWELL_DURATION) {
-						self.crt_stage = 1;
-						self.crt_stage_frame = self.frame;
-					}
-				} else if (self.crt_stage == 1) {
-					if (self.all_on_line() && held > @dur(6)) {
-						self.crt_stage = 2;
-						self.crt_stage_frame = self.frame;
-						self.line_frame = self.frame;
-					}
-				} else if (self.crt_stage == 2) {
-					if (held >= LINE_HOLD) {
-						self.crt_stage = 3;
-						self.crt_stage_frame = self.frame;
-					}
-				} else if (self.crt_stage == 3) {
-					if (!self.any_alive()) {
-						self.crt_stage = 4;
-						self.crt_stage_frame = self.frame;
-						self.crt_dot = 1.0f; // flare at full white
-					}
-				} else if (self.crt_stage == 4) {
-					// The dot decays after the flare, then the cycle restarts.
-					self.crt_dot -= 1.0f / (float)DOT_HOLD;
-					if (self.crt_dot <= 0.0f) {
-						self.crt_dot = 0.0f;
-						self.restart_cycle();
-					}
-				}
-			}
-			case Phase.FIRE:
-				if (!self.any_alive()) self.restart_cycle();
-			case Phase.SPHERES:
-				// Everything has to have been released before the pile can
-				// be called finished, or it settles while balls still wait.
-				// Collisions can keep knocking balls awake, so this has a
-				// hard cap as well as the settled test — otherwise a lively
-				// pile could jostle forever and never end the phase.
-				bool done = self.all_resting()
-						|| self.frame - self.phase_frame > @dur(320);
-				if (self.frame > self.phase_frame + @dur(90) && done) {
-					if (self.fade_start == 0) self.fade_start = self.frame + @dur(10);
-					if (self.frame - self.fade_start >= FADE_DURATION) {
-						self.restart_cycle();
-					}
-				}
-			case Phase.SPLAT:
-				if (!self.splat_falling) {
-					// The leading edge reaching the wall triggers the impact
-					// for the whole slab at once — that's what makes it read
-					// as one object hitting, not a stream of pellets.
-					if (self.splat_hit()) {
-						self.splat_falling = true;
-						self.splash_from_wall();
-					}
-				} else if (self.all_resting()) {
-					if (self.fade_start == 0) self.fade_start = self.frame + @dur(10);
-					if (self.frame - self.fade_start >= FADE_DURATION) {
-						self.restart_cycle();
-					}
-				}
-			case Phase.VORTEX:
-				// The ring irises open, holds while it feeds, then pinches
-				// shut once the last block is gone — and only when it has
-				// fully closed does the next cycle start.
-				if (self.any_alive()) {
-					if (self.hole_r < 2.0f) self.hole_r += 0.2f * DT;
-				} else {
-					self.hole_r -= 0.12f * DT;
-					if (self.hole_r <= 0.0f) {
-						self.hole_r = 0.0f;
-						self.restart_cycle();
-					}
-				}
-			case Phase.FALL:
-				// Once the pile has come to rest, hold a beat, then fade the
-				// whole heap out before the next cycle starts building.
-				if (self.fade_start == 0) {
-					if (self.all_resting()) self.fade_start = self.frame + @dur(10);
-				} else if (self.frame - self.fade_start >= FADE_DURATION) {
-					self.restart_cycle();
-				}
+			default:
 		}
 }
 
@@ -1159,11 +737,19 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			}
 			self.exit_forced = true;
 			self.exit_previewed = true;
+			// If an animation is already playing, hold a short preview (~1s) so you
+			// can read the badge before the selected effect fires — the
+			// running animation keeps playing in the meantime, and step()
+			// activates the switch once preview_at passes.
+			if (self.fx_active) {
+				self.preview_at = self.frame + @dur(20);
+				self.badge_until = self.frame + BADGE_DURATION;
+				return null;
+			}
 			// Snap the word together, then hold ~2s before firing: long
 			// enough to read the badge and see the word whole, without the
 			// full rebuild that would make the key useless for comparing.
 			self.snap_stragglers();
-			self.fade_start = 0;
 			self.phase = Phase.HOLD;
 			self.phase_frame = self.frame;
 			self.preview_at = self.frame + @dur(40);
@@ -1207,6 +793,7 @@ fn String exit_name(Exit e) {
 		case Exit.SPLAT: return "SPLAT";
 		case Exit.FIRE: return "FIRE";
 		case Exit.SPHERES: return "SPHERES";
+		case Exit.RAINBOW: return "RAINBOW";
 		default: return "?";
 	}
 }
@@ -1216,6 +803,31 @@ fn String glyph_at(List{String} rows, int row_src, int byte_off, int byte_len) {
 	// C3's `a..b` range is inclusive and would grab a trailing stray byte.
 	String line = rows[row_src];
 	return line[byte_off:(sz)byte_len];
+}
+
+// Effect name badge, top right, shown briefly after TAB. Drawn last so it
+// stays readable and nothing paints over it. Also drawn during an active
+// effect, so stepping effects with TAB still shows where you are.
+fn void draw_badge(Model* self) {
+	if (self.frame >= self.badge_until) return;
+	xray::ScreenBuffer* sb = self.canvas;
+	Exit shown = self.forced_exit;
+	String label = exit_name(shown);
+	int pad = 1;
+	int bw = (int)label.len + pad * 2;
+	int bx = self.w - bw - 1;
+	int by = 0;
+	if (bx < 0 || self.h <= 0) return;
+	xray::Color plate = xray::color_rgb(46, 44, 62);
+	xray::Color ink = xray::color_rgb(190, 180, 210);
+	xray::Style bg = xray::default_style().set_fg(ink).set_bg(plate);
+	for (int i = 0; i < bw; i++) {
+		sb.set_cell((sz)(bx + i), (sz)by, xray::new_cell(" ", 1, bg));
+	}
+	for (int i = 0; i < label.len; i++) {
+		String ch = label[(sz)i:1];
+		sb.set_cell((sz)(bx + pad + i), (sz)by, xray::new_cell(ch, 1, bg));
+	}
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
@@ -1235,365 +847,45 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		}
 	}
 
-	// In flight a bot is a half block, so it moves at twice the vertical
-	// resolution of a cell — the drift reads as smooth instead of stepping a
-	// whole row at a time. Two bots sharing a cell composite into a full
-	// block, so accumulate into a mask first rather than drawing directly.
-	for (sz i = 0; i < self.half_mask.len; i++) self.half_mask[i] = 0;
-
-	// During the FALL exit the pile dims to nothing once everything has
-	// landed; elsewhere blocks draw at full brightness.
-	// Every exit that ends in a settled pile fades it out the same way.
-	float fade = 1.0f;
-	bool piling = self.phase == Phase.FALL || self.phase == Phase.SPLAT
-			|| self.phase == Phase.TOPPLE || self.phase == Phase.SPHERES;
-	if (piling && self.fade_start != 0 && self.frame > self.fade_start) {
-		fade = 1.0f - (float)(self.frame - self.fade_start) / (float)FADE_DURATION;
-		if (fade < 0.0f) fade = 0.0f;
+	// An exit effect owns the whole scene while it runs; defer to it. The
+	// effect has already had the clear + background gradient painted behind
+	// it, and draws everything else itself.
+	if (self.fx_active) {
+		self.fx.render(self);
+		draw_badge(self);
+		return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
 	}
 
+	// In flight a bot is a half block, so it moves at twice the vertical
+	// resolution of a cell. Two bots sharing a cell composite into a full
+	// block, so accumulate into a mask first rather than drawing directly.
+	for (sz i = 0; i < self.half_mask.len; i++) self.half_mask[i] = 0;
 	for (int i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
-		// In SLICE a row waiting its turn still sits on screen — skipping it
-		// here would blink the strip out until its stagger elapsed. SHEAR
-		// does the same, but draws its waiting blocks as whole glyphs
-		// further down instead: at rest p.y lands exactly on a row, so the
-		// half-block path would light only the upper half of each cell and
-		// the word would look striped while it waits for the wind.
-		if (self.phase == Phase.SHEAR) continue;  // keeps its real glyphs
-		if (self.phase == Phase.SPHERES) continue;    // drawn as circles
-		if (self.phase == Phase.FIRE) continue;  // drawn with its own colours
-		if (self.frame < p.spawn_tick
-				&& self.phase != Phase.SLICE && self.phase != Phase.VORTEX) {
-			continue;
-		}
-		// These phases draw their blocks as glyphs further down rather than
-		// as half-block particles.
-		if (self.phase == Phase.DISSOLVE) continue;
-		if (self.phase == Phase.TOPPLE && !self.topple_shattered) continue;
-		if (self.phase == Phase.IMPLODE) continue;
+		if (self.frame < p.spawn_tick) continue;
 		if (p.settled) continue;
+		if (p.resting) continue;
 		int cell_col = (int)p.x;
-		int half_row = (int)(p.y * 2.0f);   // vertical position in half-cells
+		int half_row = (int)(p.y * 2.0f);
 		int cell_row = half_row / 2;
 		if (cell_col < 0 || cell_col >= self.w) continue;
 		if (cell_row < 0 || cell_row >= self.h) continue;
 		int idx = cell_row * self.w + cell_col;
 		self.half_mask[idx] |= (char)(half_row % 2 == 0 ? 1 : 2);
-		// A bot carries the colour of the cell it's heading for, so it
-		// arrives already matching the word rather than changing hue the
-		// instant it lands.
 		xray::Color pc = gradient_color(self, p.col);
-		if (fade < 1.0f) {
-			pc = xray::color_rgb(
-				(char)((float)pc.r * fade),
-				(char)((float)pc.g * fade),
-				(char)((float)pc.b * fade));
-		}
 		self.half_col[idx] = pc;
 	}
-
 	for (int row = 0; row < self.h; row++) {
 		for (int col = 0; col < self.w; col++) {
 			int idx = row * self.w + col;
 			char mask = self.half_mask[idx];
 			if (mask == 0) continue;
-			String g = "\u2588";              // both halves
-			if (mask == 1) g = "\u2580";      // upper half
-			if (mask == 2) g = "\u2584";      // lower half
+			String g = "█";
+			if (mask == 1) g = "▀";
+			if (mask == 2) g = "▄";
 			xray::Style s2 = xray::default_style().set_fg(self.half_col[idx]);
 			sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, s2));
-		}
-	}
-
-	// DISSOLVE: each block flashes through noise glyphs in place, then goes
-	// dark. Before its turn comes it still shows its real glyph.
-	if (self.phase == Phase.DISSOLVE) {
-		String[5] noise = { "\u2591", "\u2593", "\u2592", "\u2588", "\u2591" };
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			if (p.col < 0 || p.col >= self.w) continue;
-			if (p.row < 0 || p.row >= self.h) continue;
-			int age = self.frame - p.spawn_tick;
-			xray::Color base = gradient_color(self, p.col);
-			String g;
-			if (age < 0) {
-				g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
-			} else {
-				int step = age / DISSOLVE_STEP;
-				if (step >= DISSOLVE_FLICKERS) continue;
-				int ni = (step + (int)p.noise_seed) % 5;
-				g = noise[ni];
-				// Dim as it breaks up, so the word fades as it shreds.
-				float f = 1.0f - (float)step / (float)DISSOLVE_FLICKERS;
-				base = xray::color_rgb(
-					(char)((float)base.r * f),
-					(char)((float)base.g * f),
-					(char)((float)base.b * f));
-			}
-			xray::Style ds = xray::default_style().set_fg(base);
-			sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, ds));
-		}
-	}
-
-	// TOPPLE, before the crash: the word is still one rigid slab, so draw
-	// every block at its rotated position with its real glyph.
-	if (self.phase == Phase.TOPPLE && !self.topple_shattered) {
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			float rx = 0;
-			float ry = 0;
-			self.topple_pos(p, &rx, &ry);
-			int col = (int)rx;
-			int row = (int)ry;
-			if (col < 0 || col >= self.w) continue;
-			if (row < 0 || row >= self.h) continue;
-			xray::Style ts = xray::default_style().set_fg(gradient_color(self, p.col));
-			// Rotated glyphs would point the wrong way, so use a plain block.
-			sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, ts));
-		}
-	}
-
-	// IMPLODE, the CRT shutdown. Colour tracks the stage: the picture washes
-	// hot as it squashes, the scanline burns near-white, and the dot flares
-	// then decays after everything else is gone.
-	if (self.phase == Phase.IMPLODE) {
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			// Stage 0 stretches horizontally about the text centre; later
-			// stages have already moved the blocks themselves.
-			float px = p.x;
-			if (self.crt_stage == 0) {
-				float scx = (float)self.text_x + (float)self.text_w * 0.5f;
-				px = scx + (p.x - scx) * self.crt_swell;
-			}
-			int col = (int)px;
-			int row = (int)p.y;
-			if (col < 0 || col >= self.w) continue;
-			if (row < 0 || row >= self.h) continue;
-			xray::Color c = gradient_color(self, p.col);
-			// Blow out toward white — ramping up through the swell, then
-			// pinned high for the collapse itself.
-			float heat;
-			if (self.crt_stage == 0) {
-				heat = 0.30f + 0.45f * (self.crt_swell - 1.0f) / (SWELL_MAX - 1.0f);
-			} else {
-				heat = 0.85f;
-			}
-			c = xray::color_rgb(
-				(char)((float)c.r + (255.0f - (float)c.r) * heat),
-				(char)((float)c.g + (255.0f - (float)c.g) * heat),
-				(char)((float)c.b + (255.0f - (float)c.b) * heat));
-			xray::Style is = xray::default_style().set_fg(c);
-			// On the burning scanline the blocks fuse into a solid bar.
-			String g = self.crt_stage >= 2 ? "\u2580" : "\u2588";
-			sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, is));
-		}
-		// The dying dot, drawn after the picture is gone.
-		if (self.crt_dot > 0.0f) {
-			int dc = (int)((float)self.text_x + (float)self.text_w * 0.5f);
-			int dr = (int)self.line_y;
-			if (dc >= 0 && dc < self.w && dr >= 0 && dr < self.h) {
-				float v = self.crt_dot;
-				xray::Color dcol = xray::color_rgb(
-					(char)(255.0f * v), (char)(255.0f * v), (char)(235.0f * v));
-				xray::Style ds2 = xray::default_style().set_fg(dcol);
-				sb.set_cell((sz)dc, (sz)dr, xray::new_cell("\u25AA", 1, ds2));
-			}
-		}
-	}
-
-	// SHEAR keeps the word's own glyphs throughout — at rest and in flight.
-	// The half-block path would light only half of each stationary cell and
-	// stripe the word, and swapping to blocks mid-gust would read as the
-	// letters dissolving rather than being carried off intact.
-	if (self.phase == Phase.SHEAR) {
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			int col = (int)p.x;
-			int row = (int)p.y;
-			if (col < 0 || col >= self.w) continue;
-			if (row < 0 || row >= self.h) continue;
-			xray::Style ss = xray::default_style().set_fg(gradient_color(self, p.col));
-			String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
-			sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, ss));
-		}
-	}
-
-	// FIRE: the flame front creeps up the word. Blocks ahead of it are still
-	// the real glyph; burning cells glow through the blackbody colours while
-	// they hold still as fuel; spent cells char black and crumble, fading as
-	// they fall. On top of all that, short ember sparks rise and die.
-	if (self.phase == Phase.FIRE) {
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			if (p.charred) {
-				// Crumble: a burnt-out piece fades from dark red to black as it
-				// falls, so the letters blacken before the char drifts clear.
-				int c_age = self.frame - p.char_tick;
-				float t = (float)c_age / (float)FIRE_CHAR_FADE;
-				if (t > 1.0f) t = 1.0f;
-				int col = (int)p.x;
-				int row = (int)p.y;
-				if (col < 0 || col >= self.w) continue;
-				if (row < 0 || row >= self.h) continue;
-				float dim = 1.0f - t;
-				// A touch of residual red so the char still reads as burnt, not
-				// just erased.
-				xray::Color c = xray::color_rgb((char)(70.0f * dim), (char)(10.0f * dim), 0);
-				xray::Style fs = xray::default_style().set_fg(c);
-				sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, fs));
-				continue;
-			}
-			int age = self.frame - p.ignite_tick;
-			if (age < 0) {
-				// Awahead of the flame: draw the real glyph, untouched.
-				if (p.col < 0 || p.col >= self.w) continue;
-				if (p.row < 0 || p.row >= self.h) continue;
-				xray::Style fs = xray::default_style().set_fg(gradient_color(self, p.col));
-				String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
-				sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, fs));
-				continue;
-			}
-			if (age > FIRE_LIFE) age = FIRE_LIFE;
-			float t = (float)age / (float)FIRE_LIFE;
-			if (t >= 1.0f) continue;    // about to char; fuel is spent
-			// Flicker: a fast per-block wobble on the temperature, so
-			// neighbouring cells aren't locked to the same shade. Real flame is
-			// noisy, and a perfectly smooth ramp is what makes a synthetic fire
-			// look like a gradient chart.
-			float flick = math::sin((float)self.frame * 0.55f + p.noise_seed * 6.3f);
-			float tt = t + flick * 0.05f;
-			if (tt < 0.0f) tt = 0.0f;
-			if (tt > 1.0f) tt = 1.0f;
-			xray::Color c;
-			if (tt < 0.10f) {
-				// Ignition: the fuel's own colour flashes to white-hot.
-				float u = tt / 0.10f;
-				xray::Color base = gradient_color(self, p.col);
-				c = xray::color_rgb(
-					(char)((float)base.r + (255.0f - (float)base.r) * u),
-					(char)((float)base.g + (250.0f - (float)base.g) * u),
-					(char)((float)base.b + (225.0f - (float)base.b) * u));
-			} else if (tt < 0.28f) {
-				// White-hot core cooling to yellow.
-				float u = (tt - 0.10f) / 0.18f;
-				c = xray::color_rgb(255, (char)(250.0f - 26.0f * u), (char)(225.0f - 190.0f * u));
-			} else if (tt < 0.60f) {
-				// Yellow through amber to orange.
-				float u = (tt - 0.28f) / 0.32f;
-				c = xray::color_rgb(255, (char)(224.0f - 106.0f * u), (char)(35.0f * (1.0f - u)));
-			} else if (tt < 0.85f) {
-				// Orange to deep red, still bright.
-				float u = (tt - 0.60f) / 0.25f;
-				c = xray::color_rgb((char)(255.0f - 45.0f * u), (char)(118.0f - 88.0f * u), 0);
-			} else {
-				// Dying fuel: dims to black, smouldering rather than fading
-				// evenly — flicker is strongest at the end.
-				float u = (tt - 0.85f) / 0.15f;
-				float dim = (1.0f - u) * (0.72f + 0.28f * flick);
-				if (dim < 0.0f) dim = 0.0f;
-				c = xray::color_rgb((char)(210.0f * dim), (char)(30.0f * dim), 0);
-			}
-			int cell_col = p.fire_col;
-			int cell_row = p.row;
-			if (cell_col < 0 || cell_col >= self.w) continue;
-			if (cell_row < 0 || cell_row >= self.h) continue;
-			xray::Style fs = xray::default_style().set_fg(c);
-			sb.set_cell((sz)cell_col, (sz)cell_row, xray::new_cell("█", 1, fs));
-		}
-		// Embers: the airborne sparks above the fire, drawn after the fuel so
-		// they read as flame rising off the burning word.
-		xray::Style er = xray::default_style();
-		for (int i = 0; i < EMBER_POOL; i++) {
-			Ember* e = &self.fire_embers[i];
-			if (!e.active) continue;
-			int age = self.frame - e.born;
-			if (age < 0 || age >= e.life) continue;
-			int col = (int)e.x;
-			int row = (int)e.y;
-			if (col < 0 || col >= self.w) continue;
-			if (row < 0 || row >= self.h) continue;
-			float t = (float)age / (float)e.life;
-			float purs = math::sin((float)self.frame * 0.9f + (float)i);
-			xray::Color c;
-			if (t < 0.30f) {
-				c = xray::color_rgb(255, (char)(235.0f + 20.0f * purs), (char)(150.0f + 50.0f * purs));
-			} else if (t < 0.65f) {
-				float u = (t - 0.30f) / 0.35f;
-				c = xray::color_rgb(255, (char)(235.0f - 125.0f * u), (char)(150.0f - 120.0f * u));
-			} else {
-				float u = (t - 0.65f) / 0.35f;
-				float dim = (1.0f - u) * (0.55f + 0.45f * purs);
-				if (dim < 0.0f) dim = 0.0f;
-				c = xray::color_rgb((char)(28.0f * dim), (char)(10.0f * dim), 0);
-			}
-			sb.set_cell((sz)col, (sz)row, xray::new_cell("█", 1, er.set_fg(c)));
-		}
-	}
-
-	// SPHERES: released glyphs become circles; the rest are still the word.
-	// A ball uses a filled round glyph so it reads as a solid object, and
-	// keeps its gradient colour so the word's palette survives the drop.
-	if (self.phase == Phase.SPHERES) {
-		for (int i = 0; i < self.total; i++) {
-			Particle* p = &self.particles[i];
-			if (!p.alive) continue;
-			xray::Color bc = gradient_color(self, p.col);
-			if (fade < 1.0f) {
-				bc = xray::color_rgb(
-					(char)((float)bc.r * fade),
-					(char)((float)bc.g * fade),
-					(char)((float)bc.b * fade));
-			}
-			xray::Style bs = xray::default_style().set_fg(bc);
-			if (self.frame < p.spawn_tick) {
-				// Not dropped yet — still drawn as part of the word.
-				if (p.col < 0 || p.col >= self.w) continue;
-				if (p.row < 0 || p.row >= self.h) continue;
-				String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
-				sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, bs));
-				continue;
-			}
-			int col = (int)p.x;
-			int row = (int)p.y;
-			if (col < 0 || col >= self.w) continue;
-			if (row < 0 || row >= self.h) continue;
-			sb.set_cell((sz)col, (sz)row, xray::new_cell("\u25CF", 1, bs));
-		}
-	}
-
-	// The vortex hole: a dark disc ringed in pink. Drawn after the blocks so
-	// anything still spiralling in passes behind it. The ellipse is squashed
-	// 2:1 vertically because cells are about twice as tall as they are wide.
-	if (self.phase == Phase.VORTEX && self.hole_r > 0.05f) {
-		xray::Color ring = xray::color_rgb(255, 64, 160);
-		xray::Style ring_s = xray::default_style().set_fg(ring);
-		xray::Style void_s = xray::default_style().set_fg(xray::color_rgb(10, 4, 14));
-		int span = (int)self.hole_r + 2;
-		for (int dy = -span; dy <= span; dy++) {
-			for (int dx = -span * 2; dx <= span * 2; dx++) {
-				int col = (int)self.hole_x + dx;
-				int row = (int)self.hole_y + dy;
-				if (col < 0 || col >= self.w) continue;
-				if (row < 0 || row >= self.h) continue;
-				float fx = (float)dx * 0.5f;
-				float fy = (float)dy;
-				float d = math::sqrt(fx * fx + fy * fy);
-				if (d > self.hole_r) continue;
-				// The outermost band of the disc is the pink outline.
-				if (d > self.hole_r - 0.45f) {
-					sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, ring_s));
-				} else {
-					sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, void_s));
-				}
-			}
 		}
 	}
 
@@ -1609,32 +901,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, s2));
 	}
 
-	// Effect name badge, top right, shown briefly after TAB. Drawn last so
-	// no effect paints over it. Muted slate on a dark plate: it has to stay
-	// readable against both the dark background and a bright effect passing
-	// behind it, without competing with the animation for attention.
-	if (self.frame < self.badge_until) {
-		// Name the effect that's about to run — the badge is what tells you
-		// where TAB has got to.
-		Exit shown = self.forced_exit;
-		String label = exit_name(shown);
-		int pad = 1;
-		int bw = (int)label.len + pad * 2;
-		int bx = self.w - bw - 1;
-		int by = 0;
-		if (bx >= 0 && self.h > 0) {
-			xray::Color plate = xray::color_rgb(46, 44, 62);
-			xray::Color ink = xray::color_rgb(190, 180, 210);
-			xray::Style bg = xray::default_style().set_fg(ink).set_bg(plate);
-			for (int i = 0; i < bw; i++) {
-				sb.set_cell((sz)(bx + i), (sz)by, xray::new_cell(" ", 1, bg));
-			}
-			for (int i = 0; i < label.len; i++) {
-				String ch = label[(sz)i:1];
-				sb.set_cell((sz)(bx + pad + i), (sz)by, xray::new_cell(ch, 1, bg));
-			}
-		}
-	}
+	// Effect name badge, top right, shown briefly after TAB.
+	draw_badge(self);
 
 	return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
 }
