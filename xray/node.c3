@@ -28,12 +28,35 @@ interface Content {
 	fn ContentCursor cursor(Rect r) @optional;
 }
 
+// DrawCursorFn paints the cursor itself instead of leaving it to the
+// terminal. It is called after everything else is on screen, so `under` is
+// the character already at that cell — a crosshair or a matrix rain effect
+// can show it through rather than hiding it. Returning an empty string
+// leaves the cell as it was.
+//
+// blink alternates on the interval the cursor asked for; a callback that
+// animates on its own clock can ignore it.
+alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
+
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
 // coordinates. has_cursor = false means "not mine this frame".
+//
+// Leaving draw null gives the real terminal cursor at that position, with
+// the given shape and blink. Setting it paints the cursor into the grid
+// instead, and the terminal cursor stays hidden.
 struct ContentCursor {
 	int x;
 	int y;
 	bool has_cursor;
+	DrawCursorFn draw;
+	// Milliseconds per blink phase for a drawn cursor. 0 uses the default.
+	int blink_ms;
+	// Terminal cursor appearance, used only when draw is null. shape is an
+	// index into whatever shapes the host defines (milktea::CursorShape);
+	// color is a hex string such as "#ff6600", empty for the default.
+	int shape;
+	bool blink;
+	String color;
 }
 
 // JustifyContent positions children along a container's main axis;

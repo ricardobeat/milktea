@@ -71,15 +71,38 @@ fn int Timer.measure(&self, int width) @dynamic => 1;
 // TextInput is one row, and its cursor sits at the caret offset within it.
 
 fn String TextInput.render(&self, xray::Rect r) @dynamic {
-	self.max_width = r.w > 0 ? r.w : self.max_width;
+	self.width = r.w;
+	self.height = r.h;
 	return self.view();
 }
 
-fn int TextInput.measure(&self, int width) @dynamic => 1;
+// One row of text, plus whatever the style frames it with.
+fn int TextInput.measure(&self, int width) @dynamic {
+	glaze::Style s = self.focused ? self.focused_style : self.blurred_style;
+	int frame = 0;
+	if (s.border_style.top.len > 0) frame++;
+	if (s.border_style.bottom.len > 0) frame++;
+	return 1 + s.pad_top + s.pad_bottom + frame;
+}
 
 fn xray::ContentCursor TextInput.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.focused) return {};
-	return { .x = r.x + self.cursor_col(), .y = r.y, .has_cursor = true };
+	// The style frames the text, so the caret sits inside the border and
+	// padding rather than at the rect's own corner. Reading it from the style
+	// means changing the border cannot move the cursor off the text.
+	glaze::Style s = self.focused_style;
+	int inset_x = s.pad_left + (s.border_style.left.len > 0 ? 1 : 0);
+	int inset_y = s.pad_top + (s.border_style.top.len > 0 ? 1 : 0);
+	return {
+		.x = r.x + inset_x + self.cursor_col(),
+		.y = r.y + inset_y,
+		.has_cursor = true,
+		.draw = self.cursor_draw,
+		.blink_ms = self.cursor_blink_ms,
+		.shape = (int)self.cursor_shape,
+		.blink = self.cursor_blink,
+		.color = self.cursor_color,
+	};
 }
 
 // Textarea tracks its caret as a row and column within its own text; the

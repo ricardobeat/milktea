@@ -15,6 +15,19 @@ struct TextInput (xray::Content) {
 	bool focused;
 	bool is_password;
 	int max_width;
+	// Size the rendered box, in cells. Zero means "fit the text", which is
+	// what a string-built view wants; the layout tree sets both from the rect
+	// it solved so a bordered style is drawn at the size the layout chose.
+	int width;
+	int height;
+	// How this input's cursor is drawn while it is focused. Leaving draw null
+	// uses the real terminal cursor with the given shape, blink and color;
+	// setting it paints the cursor instead (see xray::DrawCursorFn).
+	milktea::CursorShape cursor_shape;
+	bool cursor_blink;
+	String cursor_color;
+	xray::DrawCursorFn cursor_draw;
+	int cursor_blink_ms;
 	glaze::Style focused_style;
 	glaze::Style blurred_style;
 	glaze::Style placeholder_style;
@@ -24,6 +37,7 @@ struct TextInput (xray::Content) {
 fn TextInput new_text_input() {
 	TextInput t = { };
 	t.max_width = 512;
+	t.cursor_blink = true;
 	t.focused_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
 	t.blurred_style = glaze::style().foreground(glaze::color_hex("#888888"));
 	t.placeholder_style = glaze::style().foreground(glaze::color_hex("#444444"));
@@ -198,5 +212,7 @@ fn String TextInput.view(&self) {
 	} else {
 		s = self.placeholder_style;
 	}
+	if (self.width > 0) s = s.width(self.width);
+	if (self.height > 0) s = s.height(self.height);
 	return s.render(display);
 }

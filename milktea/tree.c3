@@ -30,6 +30,10 @@ alias Shadow         = xray::Shadow;
 alias InnerShadow    = xray::InnerShadow;
 alias Constraint     = xray::Constraint;
 
+// component wraps anything implementing Content as a leaf node, so a boba
+// component drops into a tree: .add(milktea::component(&self.list)).
+alias component = xray::content_node;
+
 alias root    = xray::root;
 alias vstack  = xray::vstack;
 alias hstack  = xray::hstack;
@@ -150,7 +154,7 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	buf.clear();
 
 	root.solve(xray::new_rect(0, 0, w, h));
-	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch);
+	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)time_ms());
 
 	View v = {
 		.cells        = buf.cells,
@@ -158,9 +162,12 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 		.cells_height = (sz)h,
 		.alt_screen   = alt,
 	};
-	if (res.cursor.has_cursor) {
-		v.has_cursor = true;
-		v.cursor = new_cursor(res.cursor.x, res.cursor.y);
+	// A drawn cursor is already in the grid, so the terminal cursor stays
+	// hidden — showing both would put two cursors on screen.
+	if (res.cursor.has_cursor && res.cursor.draw == null) {
+		v = v.set_cursor_shape(res.cursor.x, res.cursor.y,
+			(CursorShape)res.cursor.shape, res.cursor.blink);
+		if (res.cursor.color.len > 0) v = v.set_cursor_color(res.cursor.color);
 	}
 	// A node that animates asks to be painted again rather than making the
 	// app run a timer for it. Cancel first: view() runs every frame, so

@@ -27,10 +27,44 @@ struct PaintResult {
 // is grown as needed and reused across nodes and frames, so callers should
 // hang one off something long-lived and pass its address. Passing null
 // disables blending: those nodes paint opaque.
-fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null) {
+fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null, long now_ms = 0) {
 	PaintResult res;
 	self.paint_node(root, &res, scratch);
+	self.draw_cursor(&res, now_ms);
 	return res;
+}
+
+// Default blink period for a drawn cursor, in milliseconds per phase.
+const int CURSOR_BLINK_MS = 500;
+
+// draw_cursor runs a self-painting cursor's callback, last, once the grid is
+// finished. It has to be last because the callback is handed the character
+// already at that cell so it can show it through — which does not exist until
+// everything else has painted.
+//
+// now_ms drives the blink. xray has no clock of its own, so the caller
+// supplies one; milktea::draw passes milktea::time_ms().
+fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
+	ContentCursor c = res.cursor;
+	if (!c.has_cursor || c.draw == null) return;
+	if (c.x < 0 || c.y < 0 || (sz)c.x >= self.width || (sz)c.y >= self.height) return;
+
+	int period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
+	bool blink = ((now_ms / (long)period) % 2) == 0;
+
+	Cell* cell = self.cell_at((sz)c.x, (sz)c.y);
+	String under = (cell != null && cell.content_len > 0) ? cell.content_str() : "";
+
+	String drawn = c.draw(c.x, c.y, blink, under);
+	// An empty return means "leave the cell alone", which is how a blinking
+	// cursor spends its off phase.
+	if (drawn.len == 0) return;
+	// overlay_char writes exactly one cell slot, so a wide glyph — an emoji,
+	// a katakana character — cannot displace its neighbour.
+	self.overlay_char((sz)c.x, (sz)c.y, drawn, default_style());
+
+	// A drawn cursor animates, so ask for a repaint on its own blink period.
+	if (res.repaint_ms == 0 || period < res.repaint_ms) res.repaint_ms = period;
 }
 
 fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer** scratch) {
