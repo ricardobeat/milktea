@@ -84,7 +84,7 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 			.height(milktea::cells(1))
 			.with_gap(LABEL_GAP)
 			.add(milktea::text(label_s, LABELS[i]).width(milktea::cells(label_cols())))
-			.add(milktea::component(&self.inputs[i]).fill(1)));
+			.add(self.inputs[i].node().fill(1)));
 	}
 
 	glaze::Style btn_s = self.focus == 2

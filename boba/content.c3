@@ -5,11 +5,14 @@ import xray;
 import glaze;
 
 // Content implementations, so a component can be added to a layout tree
-// directly:
+// through its own node():
 //
 //   milktea::vstack()
 //       .add(milktea::text(title_s, "Files").height(milktea::cells(1)))
-//       .add(&self.list)
+//       .add(self.list.node())
+//
+// node() returns a fresh leaf each frame, which is what the tree expects —
+// trees are temp-allocated and rebuilt by every view().
 //
 // render takes the size the layout settled on and stores it on the component
 // before calling view(). That is impure, but components already keep their
@@ -154,3 +157,18 @@ fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 		.has_cursor = true,
 	};
 }
+
+// node() wraps a component as a tree leaf. It is one line per component
+// because C3 does not inherit a default implementation from an interface.
+fn xray::Node* List.node(&self) => xray::content_node(self);
+fn xray::Node* Table.node(&self) => xray::content_node(self);
+fn xray::Node* Viewport.node(&self) => xray::content_node(self);
+fn xray::Node* FilePicker.node(&self) => xray::content_node(self);
+fn xray::Node* Help.node(&self) => xray::content_node(self);
+fn xray::Node* Progress.node(&self) => xray::content_node(self);
+fn xray::Node* Pagination.node(&self) => xray::content_node(self);
+fn xray::Node* Spinner.node(&self) => xray::content_node(self);
+fn xray::Node* Stopwatch.node(&self) => xray::content_node(self);
+fn xray::Node* Timer.node(&self) => xray::content_node(self);
+fn xray::Node* TextInput.node(&self) => xray::content_node(self);
+fn xray::Node* Textarea.node(&self) => xray::content_node(self);

@@ -239,14 +239,15 @@ parent. A node given neither fills.
 
 ### Components
 
-Anything implementing `xray::Content` goes straight into a tree, sizing itself
-from the rect it is given:
+Every boba component has a `node()` that puts it in a tree, sizing itself from
+the rect it is given:
 
 ```c3
-.add(milktea::component(&self.list))
+.add(self.list.node())
 ```
 
-Every boba component does. A text input also reports where the cursor belongs,
+Anything else implementing `xray::Content` goes in with
+`milktea::component(&thing)`. A text input also reports where the cursor belongs,
 so the terminal cursor follows the layout rather than a hand-counted row.
 
 ### Inline mode

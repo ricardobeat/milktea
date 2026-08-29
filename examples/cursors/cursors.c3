@@ -215,7 +215,7 @@ fn milktea::Node* Model.entry_row(&self, int i) {
 		.height(milktea::cells(BOX_ROWS))
 		.with_gap(NAME_GAP)
 		.add(milktea::text(name_s, e.label).width(milktea::cells(NAME_COLS)))
-		.add(milktea::component(&e.input).fill(1));
+		.add(e.input.node().fill(1));
 }
 
 fn int main() {

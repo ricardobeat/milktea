@@ -30,8 +30,9 @@ alias Shadow         = xray::Shadow;
 alias InnerShadow    = xray::InnerShadow;
 alias Constraint     = xray::Constraint;
 
-// component wraps anything implementing Content as a leaf node, so a boba
-// component drops into a tree: .add(milktea::component(&self.list)).
+// component wraps anything implementing Content as a leaf node. Every boba
+// component has its own node() — .add(self.list.node()) — so this is for
+// content types an app defines itself.
 alias component = xray::content_node;
 
 alias root    = xray::root;
