@@ -388,11 +388,11 @@ fn int _measure_box_height(void* raw_ctx, int cross) @local {
 // For col layout, box/text children with no explicit height get CFIT so the layout
 // engine measures them at the available width before distributing fill space.
 fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray::Rect parent_area) @local {
-	if (!child || rt.is_null(child)) return xray::constraint_fill(1);
+	if (!child || rt.is_null(child)) return xray::fill(1);
 	void* props = rt.get_prop(child, "props");
 	if (!props || rt.is_null(props)) {
 		if (props) rt.free_value(props);
-		return xray::constraint_fill(1);
+		return xray::fill(1);
 	}
 	int size = is_col ? get_prop_int(rt, props, "height", 0) : get_prop_int(rt, props, "width", 0);
 
@@ -410,7 +410,7 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 
 	rt.free_value(props);
 
-	if (size > 0) return xray::constraint_len(size);
+	if (size > 0) return xray::cells(size);
 
 	if (is_col && is_vnode(rt, child)) {
 		void* type_prop = rt.get_prop(child, "type");
@@ -425,7 +425,7 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 		if (type_prop) rt.free_value(type_prop);
 
 		// spinner is always 1 row
-		if (t == "spinner") return xray::constraint_len(1);
+		if (t == "spinner") return xray::cells(1);
 
 		// text with fit:true measures itself; plain text is 1 row
 		if (t == "text") {
@@ -436,18 +436,18 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 				BoxMeasureCtx* ctx = mem::tnew(BoxMeasureCtx);
 				ctx.rt = rt;
 				ctx.vnode = child;
-				return xray::constraint_fit(&_measure_box_height, ctx);
+				return xray::fit(&_measure_box_height, ctx);
 			}
-			return xray::constraint_len(1);
+			return xray::cells(1);
 		}
 
 		// horizontal stack (row or stack{horizontal:true}) is 1 row when no height set
-		if (t == "row") return xray::constraint_len(1);
+		if (t == "row") return xray::cells(1);
 		if (t == "stack") {
 			void* fprops = rt.get_prop(child, "props");
 			bool horiz   = fprops && !rt.is_null(fprops) && get_prop_bool(rt, fprops, "horizontal");
 			if (fprops) rt.free_value(fprops);
-			if (horiz) return xray::constraint_len(1);
+			if (horiz) return xray::cells(1);
 		}
 
 		// box with fit:true measures itself
@@ -459,12 +459,12 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 				BoxMeasureCtx* ctx = mem::tnew(BoxMeasureCtx);
 				ctx.rt = rt;
 				ctx.vnode = child;
-				return xray::constraint_fit(&_measure_box_height, ctx);
+				return xray::fit(&_measure_box_height, ctx);
 			}
 		}
 	}
 
-	return xray::constraint_fill(1);
+	return xray::fill(1);
 }
 
 // ── Draw animation cache ──────────────────────────────────────────────────────
@@ -595,7 +595,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				void* child = rt.array_item(children_arr, i);
 				children_refs[i] = null;
 				if (!child || rt.is_null(child)) {
-					cs[i] = xray::constraint_fill(1);
+					cs[i] = xray::fill(1);
 					if (child) rt.free_value(child);
 				} else {
 					cs[i] = child_constraint(rt, child, is_col, area);
@@ -741,7 +741,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				xray::Rect[64] rects;
 				for (int i = 0; i < n; i++) {
 					void* ch = rt.array_item(children_arr, i);
-					cs[i] = ch ? child_constraint(rt, ch, true, inner) : xray::constraint_fill(1);
+					cs[i] = ch ? child_constraint(rt, ch, true, inner) : xray::fill(1);
 					if (ch) rt.free_value(ch);
 				}
 				int computed = xray::layout_v_gap(inner, cs[0:n], 0, rects[0:n]);

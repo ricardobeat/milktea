@@ -45,9 +45,9 @@ fn void test_vstack_divides_main_axis() @test {
 	Fixed* bot = fixed(0, 1);
 
 	xray::Node* r = xray::vstack()
-		.add(xray::content_node(top).height(xray::constraint_len(1)))
+		.add(xray::content_node(top).height(xray::cells(1)))
 		.add(xray::content_node(mid).fill(1))
-		.add(xray::content_node(bot).height(xray::constraint_len(1)));
+		.add(xray::content_node(bot).height(xray::cells(1)));
 	r.solve(xray::new_rect(0, 0, 20, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
@@ -66,7 +66,7 @@ fn void test_hstack_divides_cross_axis() @test {
 	Fixed* right = fixed(0, 0);
 
 	xray::Node* r = xray::hstack()
-		.add(xray::content_node(left).width(xray::constraint_len(6)))
+		.add(xray::content_node(left).width(xray::cells(6)))
 		.add(xray::content_node(right).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 4));
 
@@ -83,10 +83,10 @@ fn void test_nested_stacks_solve_through() @test {
 	Fixed* body = fixed(0, 0);
 
 	xray::Node* r = xray::vstack()
-		.add(xray::vstack().height(xray::constraint_len(2)))
+		.add(xray::vstack().height(xray::cells(2)))
 		.add(xray::hstack()
 			.fill(1)
-			.add(xray::vstack().width(xray::constraint_len(4)))
+			.add(xray::vstack().width(xray::cells(4)))
 			.add(xray::content_node(body).fill(1)));
 	r.solve(xray::new_rect(0, 0, 30, 12));
 
@@ -103,7 +103,7 @@ fn void test_centered_node_fits_content() @test {
 	Fixed* modal = fixed(0, 3);
 
 	xray::Node* r = xray::root()
-		.add(xray::content_node(modal).width(xray::constraint_len(10)).center());
+		.add(xray::content_node(modal).width(xray::cells(10)).center());
 	r.solve(xray::new_rect(0, 0, 40, 20));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
@@ -120,7 +120,7 @@ fn void test_centered_node_fits_content() @test {
 fn void test_zstack_paints_later_children_on_top() @test {
 	xray::Node* r = xray::root()
 		.add(xray::content_node(fixed(0, 0, "a")))
-		.add(xray::content_node(fixed(2, 1, "b")).width(xray::constraint_len(2)).center());
+		.add(xray::content_node(fixed(2, 1, "b")).width(xray::cells(2)).center());
 	r.solve(xray::new_rect(0, 0, 6, 3));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(6, 3);
@@ -136,7 +136,7 @@ fn void test_cursor_reported_in_screen_coordinates() @test {
 	input.want_cursor = true;
 
 	xray::Node* r = xray::vstack()
-		.add(xray::vstack().height(xray::constraint_len(4)))
+		.add(xray::vstack().height(xray::cells(4)))
 		.add(xray::content_node(input).fill(1));
 	r.solve(xray::new_rect(0, 0, 10, 8));
 
@@ -191,7 +191,7 @@ fn void test_fill_fits_content_when_the_parent_has_no_fixed_height() @test {
 	// Inline mode: nothing constrains the column, so a fill child reports
 	// what its content needs rather than expanding.
 	xray::Node* r = xray::vstack()
-		.add(xray::content_node(fixed(0, 1)).height(xray::constraint_len(1)))
+		.add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
 		.add(xray::content_node(fixed(0, 4)).fill(1));
 	assert(r.natural_height(20) == 5, "1 + 4");
 }
@@ -200,8 +200,8 @@ fn void test_fill_divides_when_the_parent_has_a_fixed_height() @test {
 	Fixed* body = fixed(0, 4);
 
 	xray::Node* r = xray::vstack()
-		.height(xray::constraint_len(10))
-		.add(xray::content_node(fixed(0, 1)).height(xray::constraint_len(1)))
+		.height(xray::cells(10))
+		.add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
 		.add(xray::content_node(body).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 10));
 
@@ -234,8 +234,8 @@ fn void test_gap_separates_children() @test {
 
 	xray::Node* r = xray::vstack()
 		.with_gap(2)
-		.add(xray::content_node(a).height(xray::constraint_len(3)))
-		.add(xray::content_node(b).height(xray::constraint_len(3)));
+		.add(xray::content_node(a).height(xray::cells(3)))
+		.add(xray::content_node(b).height(xray::cells(3)));
 	r.solve(xray::new_rect(0, 0, 10, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 10);

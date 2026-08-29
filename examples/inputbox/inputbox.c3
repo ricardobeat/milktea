@@ -60,10 +60,10 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	xray::Rect title_r, output_r, input_r, hint_r;
 	layout::vstack(layout::screen(w, h), {
-		layout::slot(layout::len(1),    &title_r),
+		layout::slot(layout::cells(1),    &title_r),
 		layout::slot(layout::fill(1),   &output_r),
-		layout::slot(layout::len(3),    &input_r),
-		layout::slot(layout::len(1),    &hint_r),
+		layout::slot(layout::cells(3),    &input_r),
+		layout::slot(layout::cells(1),    &hint_r),
 	});
 
 	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);

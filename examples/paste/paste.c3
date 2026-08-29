@@ -88,7 +88,7 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	xray::Rect editor_r, status_r;
 	layout::vstack(layout::screen(w, h), {
 		layout::slot(layout::fill(1), &editor_r),
-		layout::slot(layout::len(1),  &status_r),
+		layout::slot(layout::cells(1),  &status_r),
 	});
 
 	// Fit textarea to available area (no padding — use full rect).

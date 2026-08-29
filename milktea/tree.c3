@@ -34,12 +34,12 @@ alias zstack  = xray::zstack;
 alias shadow  = xray::shadow;
 alias inner_shadow = xray::inner_shadow;
 
-// Sizing constraints. cells is the default spelling — .height(1) — and pct
-// takes a percentage of the parent instead.
-fn Constraint cells(int n)   => xray::constraint_len(n);
-fn Constraint pct(int p)     => xray::constraint_percent(p);
-fn Constraint at_least(int n) => xray::constraint_min(n);
-fn Constraint at_most(int n)  => xray::constraint_max(n);
+// Sizing constraints, re-exported so .height(cells(1)) needs no xray prefix.
+alias cells    = xray::cells;
+alias fill     = xray::fill;
+alias percent  = xray::percent;
+alias at_least = xray::at_least;
+alias at_most  = xray::at_most;
 
 // Alignment constants, named for what they do to a node rather than for the
 // axis they act on.

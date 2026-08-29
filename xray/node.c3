@@ -107,8 +107,8 @@ struct Node {
 
 fn Node* new_node(NodeDirection dir) @local {
 	Node* n = mem::tnew(Node);
-	n.size_w = constraint_fill(1);
-	n.size_h = constraint_fill(1);
+	n.size_w = fill(1);
+	n.size_h = fill(1);
 	n.direction = dir;
 	n.justify = JustifyContent.JUSTIFY_START;
 	n.align = AlignItems.ALIGN_STRETCH;
@@ -170,8 +170,8 @@ fn Node* Node.height(&self, Constraint c) {
 // main axis, weighted against its siblings. Which axis that is depends on the
 // parent, so it sets both and the parent uses the one it lays out along.
 fn Node* Node.fill(&self, int weight) {
-	self.size_w = constraint_fill(weight);
-	self.size_h = constraint_fill(weight);
+	self.size_w = fill(weight);
+	self.size_h = fill(weight);
 	return self;
 }
 
@@ -208,8 +208,8 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 	// Fit only the axes the caller has not already sized, so .width(30) before
 	// .center() survives and only the height is measured. An axis still set to
 	// the default fill has nothing to preserve.
-	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = constraint_fit(&node_measure_w, self);
-	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = constraint_fit(&node_measure_h, self);
+	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
 	return self;
 }
 

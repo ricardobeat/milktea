@@ -112,15 +112,15 @@ fn milktea::View Model.view(&self) @dynamic {
 	// 1. Split the screen vertically: title / body / status.
 	xray::Rect title_r, body_r, status_r;
 	layout::vstack(layout::screen(w, h), {
-		layout::slot(layout::len(1),  &title_r),
+		layout::slot(layout::cells(1),  &title_r),
 		layout::slot(layout::fill(1), &body_r),
-		layout::slot(layout::len(1),  &status_r),
+		layout::slot(layout::cells(1),  &status_r),
 	});
 
 	// 2. Split the body horizontally: a stats sidebar and the timer panel.
 	xray::Rect side_r, timer_r;
 	layout::hstack(body_r, {
-		layout::slot(layout::len(22), &side_r),
+		layout::slot(layout::cells(22), &side_r),
 		layout::slot(layout::fill(1), &timer_r),
 	});
 

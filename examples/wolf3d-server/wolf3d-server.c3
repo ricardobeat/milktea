@@ -786,8 +786,8 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		// Centre a box of the rendered size; the tree solves the position.
 		xray::Node* root = xray::root()
 			.add(xray::vstack()
-				.width(xray::constraint_len(box_w))
-				.height(xray::constraint_len(box_h))
+				.width(xray::cells(box_w))
+				.height(xray::cells(box_h))
 				.center());
 		root.solve(xray::new_rect(0, 0, w, h));
 		xray::Rect box = root.child_rect(0);

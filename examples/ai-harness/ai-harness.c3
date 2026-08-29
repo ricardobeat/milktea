@@ -610,10 +610,10 @@ fn milktea::View Model.view(&self) @dynamic {
 	xray::Rect main_r = { .x = 0, .y = 0, .w = w - sb_w, .h = h };
 	xray::Rect title_r, output_r, input_r, hint_r;
 	layout::vstack(main_r, {
-		layout::slot(layout::len(1),    &title_r),
+		layout::slot(layout::cells(1),    &title_r),
 		layout::slot(layout::fill(1),   &output_r),
-		layout::slot(layout::len(3),    &input_r),
-		layout::slot(layout::len(1),    &hint_r),
+		layout::slot(layout::cells(3),    &input_r),
+		layout::slot(layout::cells(1),    &hint_r),
 	});
 
 	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);

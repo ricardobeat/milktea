@@ -128,7 +128,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		// Row 0 = toolbar; remaining rows split into palette (5 wide) + canvas
 		xray::Rect body = xray::new_rect(0, 1, self.term_width, self.term_height - 1);
 		xray::Rect[2] cols;
-		xray::layout_h(body, { xray::constraint_len(5), xray::constraint_fill(1) }, cols[..]);
+		xray::layout_h(body, { xray::cells(5), xray::fill(1) }, cols[..]);
 		self.palette_rect = cols[0];
 		self.canvas_rect = cols[1];
 		self.canvas.resize(self.canvas_rect.w, self.canvas_rect.h * 2);

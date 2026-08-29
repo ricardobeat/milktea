@@ -261,7 +261,7 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 	if (edit_h < 5) edit_h = 5;
 
 	xray::Constraint[4] pane_cs;
-	for (int i = 0; i < self.count; i++) pane_cs[i] = xray::constraint_fill(1);
+	for (int i = 0; i < self.count; i++) pane_cs[i] = xray::fill(1);
 	xray::Rect[4] pane_rects;
 	xray::layout_h(xray::new_rect(0, 0, milktea::screen_width(), edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
 

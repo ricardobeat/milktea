@@ -379,14 +379,14 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	xray::Rect header_r, body_r, footer_r;
 	layout::vstack(layout::screen(w, h), {
-		layout::slot(layout::len(1),  &header_r),
+		layout::slot(layout::cells(1),  &header_r),
 		layout::slot(layout::fill(1), &body_r),
-		layout::slot(layout::len(1),  &footer_r),
+		layout::slot(layout::cells(1),  &footer_r),
 	});
 
 	xray::Rect sidebar_r, preview_r;
 	layout::hstack(body_r, {
-		layout::slot(layout::len(LEFT_PANE_W), &sidebar_r),
+		layout::slot(layout::cells(LEFT_PANE_W), &sidebar_r),
 		layout::slot(layout::fill(1),          &preview_r),
 	}, { .gap = 0 });
 

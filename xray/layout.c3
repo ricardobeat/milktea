@@ -48,27 +48,27 @@ struct Constraint {
 	void* ctx; // passed to measure
 }
 
-fn Constraint constraint_len(int n) {
+fn Constraint cells(int n) {
 	return { .kind = ConstraintKind.CLEN, .value = n };
 }
 
-fn Constraint constraint_min(int n) {
+fn Constraint at_least(int n) {
 	return { .kind = ConstraintKind.CMIN, .value = n };
 }
 
-fn Constraint constraint_max(int n) {
+fn Constraint at_most(int n) {
 	return { .kind = ConstraintKind.CMAX, .value = n };
 }
 
-fn Constraint constraint_percent(int p) {
+fn Constraint percent(int p) {
 	return { .kind = ConstraintKind.CPERCENT, .value = p };
 }
 
-fn Constraint constraint_fill(int weight) {
+fn Constraint fill(int weight) {
 	return { .kind = ConstraintKind.CFILL, .value = weight };
 }
 
-fn Constraint constraint_fit(MeasureFn measure, void* ctx) {
+fn Constraint fit(MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .measure = measure, .ctx = ctx };
 }
 
@@ -224,7 +224,7 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 	// Copy to output, clamping the running total to the axis budget. Fixed
 	// constraints (CLEN/CMIN/CPERCENT/CFIT) are individually capped at
 	// `available` but can still oversubscribe it collectively — e.g. two
-	// constraint_min(40) children in a 30-wide area. Truncating here keeps the
+	// at_least(40) children in a 30-wide area. Truncating here keeps the
 	// caller's invariant that every returned rect lies inside `area`, so
 	// downstream drawing never runs past the parent.
 	int used = 0;

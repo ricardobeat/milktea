@@ -1,13 +1,15 @@
 module xray::layout;
 import xray;
 
-// Constraint constructors — shorter names for the common cases.
+// Constraint constructors — shorter names for the common cases. These are
+// the same constraints the layout tree takes, so cells/fill/percent mean the
+// same thing whether a rect or a Node is being sized.
 
-fn xray::Constraint len(int n)       => xray::constraint_len(n);
-fn xray::Constraint fill(int weight) => xray::constraint_fill(weight);
-fn xray::Constraint percent(int p)   => xray::constraint_percent(p);
-fn xray::Constraint min(int n)       => xray::constraint_min(n);
-fn xray::Constraint max(int n)       => xray::constraint_max(n);
+fn xray::Constraint cells(int n)     => xray::cells(n);
+fn xray::Constraint fill(int weight) => xray::fill(weight);
+fn xray::Constraint percent(int p)   => xray::percent(p);
+fn xray::Constraint min(int n)       => xray::at_least(n);
+fn xray::Constraint max(int n)       => xray::at_most(n);
 
 // screen returns a Rect covering the full terminal at (0,0).
 fn xray::Rect screen(int w, int h) => xray::new_rect(0, 0, w, h);

@@ -33,7 +33,7 @@ fn String render_rows(xray::ScreenBuffer* sb) @local {
 
 fn void test_snap_layout_h_fill() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 40, .h = 1 };
-	xray::Constraint[2] cs = { xray::constraint_fill(1), xray::constraint_fill(1) };
+	xray::Constraint[2] cs = { xray::fill(1), xray::fill(1) };
 	xray::Rect[2] out;
 	xray::layout_h_gap(area, cs[..], 1, out[..]);
 
@@ -58,7 +58,7 @@ fn void test_snap_layout_h_fill() @test {
 
 fn void test_snap_layout_v_fill() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 20, .h = 6 };
-	xray::Constraint[2] cs = { xray::constraint_fill(1), xray::constraint_fill(1) };
+	xray::Constraint[2] cs = { xray::fill(1), xray::fill(1) };
 	xray::Rect[2] out;
 	xray::layout_v(area, cs[..], out[..]);
 
@@ -80,7 +80,7 @@ fn void test_snap_layout_v_fill() @test {
 
 fn void test_snap_layout_h_len_fill() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 30, .h = 1 };
-	xray::Constraint[2] cs = { xray::constraint_len(10), xray::constraint_fill(1) };
+	xray::Constraint[2] cs = { xray::cells(10), xray::fill(1) };
 	xray::Rect[2] out;
 	xray::layout_h(area, cs[..], out[..]);
 
@@ -98,7 +98,7 @@ fn void test_snap_layout_h_len_fill() @test {
 
 fn void test_snap_layout_h_three_cols() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 36, .h = 1 };
-	xray::Constraint[3] cs = { xray::constraint_len(8), xray::constraint_fill(1), xray::constraint_len(8) };
+	xray::Constraint[3] cs = { xray::cells(8), xray::fill(1), xray::cells(8) };
 	xray::Rect[3] out;
 	xray::layout_h(area, cs[..], out[..]);
 
@@ -118,7 +118,7 @@ fn void test_snap_layout_h_three_cols() @test {
 
 fn void test_snap_layout_v_three_rows() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 20, .h = 9 };
-	xray::Constraint[3] cs = { xray::constraint_len(2), xray::constraint_fill(1), xray::constraint_len(2) };
+	xray::Constraint[3] cs = { xray::cells(2), xray::fill(1), xray::cells(2) };
 	xray::Rect[3] out;
 	xray::layout_v(area, cs[..], out[..]);
 
@@ -140,7 +140,7 @@ fn void test_snap_layout_v_three_rows() @test {
 
 fn void test_snap_layout_h_percent() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 40, .h = 1 };
-	xray::Constraint[2] cs = { xray::constraint_percent(25), xray::constraint_fill(1) };
+	xray::Constraint[2] cs = { xray::percent(25), xray::fill(1) };
 	xray::Rect[2] out;
 	xray::layout_h(area, cs[..], out[..]);
 
@@ -158,7 +158,7 @@ fn void test_snap_layout_h_percent() @test {
 
 fn void test_snap_layout_h_gap() @test {
 	xray::Rect area = { .x = 0, .y = 0, .w = 30, .h = 1 };
-	xray::Constraint[3] cs = { xray::constraint_fill(1), xray::constraint_fill(1), xray::constraint_fill(1) };
+	xray::Constraint[3] cs = { xray::fill(1), xray::fill(1), xray::fill(1) };
 	xray::Rect[3] out;
 	xray::layout_h_gap(area, cs[..], 2, out[..]);
 
@@ -265,7 +265,7 @@ fn void test_snap_screen_layout_render() @test {
 
 	// Header + body layout
 	xray::Rect screen = { .x = 0, .y = 0, .w = 40, .h = 7 };
-	xray::Constraint[2] cs = { xray::constraint_len(3), xray::constraint_fill(1) };
+	xray::Constraint[2] cs = { xray::cells(3), xray::fill(1) };
 	xray::Rect[2] zones;
 	xray::layout_v(screen, cs[..], zones[..]);
 
@@ -298,12 +298,12 @@ fn void test_snap_screen_nested_layout() @test {
 	xray::Rect screen = { .x = 0, .y = 0, .w = 60, .h = 24 };
 
 	// Top-level: header(3) + body(fill) + footer(2)
-	xray::Constraint[3] vcs = { xray::constraint_len(3), xray::constraint_fill(1), xray::constraint_len(2) };
+	xray::Constraint[3] vcs = { xray::cells(3), xray::fill(1), xray::cells(2) };
 	xray::Rect[3] vzones;
 	xray::layout_v(screen, vcs[..], vzones[..]);
 
 	// Body: sidebar(18) + content(fill)
-	xray::Constraint[2] hcs = { xray::constraint_len(18), xray::constraint_fill(1) };
+	xray::Constraint[2] hcs = { xray::cells(18), xray::fill(1) };
 	xray::Rect[2] hzones;
 	xray::layout_h(vzones[1], hcs[..], hzones[..]);
 
@@ -334,7 +334,7 @@ fn void test_snap_screen_nested_layout() @test {
 
 	// Content: nested split — main area + info card
 	xray::Rect content_area = hzones[1];
-	xray::Constraint[2] ccs = { xray::constraint_fill(1), xray::constraint_len(6) };
+	xray::Constraint[2] ccs = { xray::fill(1), xray::cells(6) };
 	xray::Rect[2] czones;
 	xray::layout_v(content_area, ccs[..], czones[..]);
 

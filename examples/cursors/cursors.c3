@@ -220,7 +220,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	xray::Rect page = layout::screen(w, h).inset(0, 1, 0, 0);
 	xray::Rect title_r, body_r;
 	layout::vstack(page, {
-		layout::slot(layout::len(1), &title_r),
+		layout::slot(layout::cells(1), &title_r),
 		layout::slot(layout::fill(1), &body_r),
 	}, { .gap = 2 });
 	title_r = title_r.inset(2, 0, 2, 0);
@@ -237,18 +237,18 @@ fn milktea::View Model.view(&self) @dynamic {
 	// Each column stacks 5 entry rows; each row is exactly the box height.
 	xray::Rect[5] l_rows, r_rows;
 	layout::vstack(col_l, {
-		layout::slot(layout::len(3), &l_rows[0]),
-		layout::slot(layout::len(3), &l_rows[1]),
-		layout::slot(layout::len(3), &l_rows[2]),
-		layout::slot(layout::len(3), &l_rows[3]),
-		layout::slot(layout::len(3), &l_rows[4]),
+		layout::slot(layout::cells(3), &l_rows[0]),
+		layout::slot(layout::cells(3), &l_rows[1]),
+		layout::slot(layout::cells(3), &l_rows[2]),
+		layout::slot(layout::cells(3), &l_rows[3]),
+		layout::slot(layout::cells(3), &l_rows[4]),
 	}, { .gap = 1 });
 	layout::vstack(col_r, {
-		layout::slot(layout::len(3), &r_rows[0]),
-		layout::slot(layout::len(3), &r_rows[1]),
-		layout::slot(layout::len(3), &r_rows[2]),
-		layout::slot(layout::len(3), &r_rows[3]),
-		layout::slot(layout::len(3), &r_rows[4]),
+		layout::slot(layout::cells(3), &r_rows[0]),
+		layout::slot(layout::cells(3), &r_rows[1]),
+		layout::slot(layout::cells(3), &r_rows[2]),
+		layout::slot(layout::cells(3), &r_rows[3]),
+		layout::slot(layout::cells(3), &r_rows[4]),
 	}, { .gap = 1 });
 
 	int focused_cx = 0;
@@ -263,7 +263,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		xray::Rect row = (i < 5) ? l_rows[i] : r_rows[i - 5];
 		xray::Rect name_r, input_r;
 		layout::hstack(row, {
-			layout::slot(layout::len(10), &name_r),
+			layout::slot(layout::cells(10), &name_r),
 			layout::slot(layout::fill(1), &input_r),
 		}, { .gap = 1 });
 

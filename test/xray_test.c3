@@ -528,7 +528,7 @@ fn void test_rect_inset_clamp() @test {
 
 fn void test_layout_h_len() @test {
 	Rect[8] out;
-	Constraint[3] constraints = { constraint_len(5), constraint_len(10), constraint_len(5) };
+	Constraint[3] constraints = { cells(5), cells(10), cells(5) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].x == 0 && out[0].w == 5);
@@ -541,7 +541,7 @@ fn void test_layout_h_len() @test {
 
 fn void test_layout_h_fill() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_fill(1), constraint_fill(1) };
+	Constraint[2] constraints = { fill(1), fill(1) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 10);
@@ -550,7 +550,7 @@ fn void test_layout_h_fill() @test {
 
 fn void test_layout_h_fill_weighted() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_fill(1), constraint_fill(2) };
+	Constraint[2] constraints = { fill(1), fill(2) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	// Total weight is 3; 20 width split 1:2
@@ -562,7 +562,7 @@ fn void test_layout_h_fill_weighted() @test {
 
 fn void test_layout_h_mixed() @test {
 	Rect[8] out;
-	Constraint[3] constraints = { constraint_len(5), constraint_fill(1), constraint_fill(2) };
+	Constraint[3] constraints = { cells(5), fill(1), fill(2) };
 	layout_h(new_rect(0, 0, 20, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 5);
@@ -574,7 +574,7 @@ fn void test_layout_h_mixed() @test {
 
 fn void test_layout_v_basic() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_len(5), constraint_fill(1) };
+	Constraint[2] constraints = { cells(5), fill(1) };
 	layout_v(new_rect(0, 0, 10, 20), constraints[..], out[..]);
 
 	assert(out[0].y == 0 && out[0].h == 5);
@@ -585,7 +585,7 @@ fn void test_layout_v_basic() @test {
 
 fn void test_layout_h_percent() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_percent(25), constraint_percent(75) };
+	Constraint[2] constraints = { percent(25), percent(75) };
 	layout_h(new_rect(0, 0, 100, 1), constraints[..], out[..]);
 
 	assert(out[0].w == 25);
@@ -594,7 +594,7 @@ fn void test_layout_h_percent() @test {
 
 fn void test_layout_h_gap() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_fill(1), constraint_fill(1) };
+	Constraint[2] constraints = { fill(1), fill(1) };
 	layout_h_gap(new_rect(0, 0, 20, 1), constraints[..], 2, out[..]);
 
 	// Available = 20 - 2 (gap) = 18; each fill gets 9
@@ -606,7 +606,7 @@ fn void test_layout_h_gap() @test {
 
 fn void test_layout_h_max() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_max(5), constraint_fill(1) };
+	Constraint[2] constraints = { at_most(5), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w <= 5);
@@ -616,7 +616,7 @@ fn void test_layout_h_max() @test {
 
 fn void test_layout_h_min() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { constraint_min(8), constraint_fill(1) };
+	Constraint[2] constraints = { at_least(8), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w >= 8);
@@ -637,7 +637,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 	// A lone CMAX child used to swallow the entire axis: pass 2 clamped it to
 	// the cap, then the remainder loop handed the slack straight back.
 	Rect[1] out;
-	Constraint[1] constraints = { constraint_max(5) };
+	Constraint[1] constraints = { at_most(5) };
 	layout_h(new_rect(0, 0, 80, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 5);
@@ -646,7 +646,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 fn void test_layout_all_max_respect_caps() @test {
 	// With every child capped, the last one absorbed all the leftover space.
 	Rect[3] out;
-	Constraint[3] constraints = { constraint_max(2), constraint_max(2), constraint_max(2) };
+	Constraint[3] constraints = { at_most(2), at_most(2), at_most(2) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 2);
@@ -657,7 +657,7 @@ fn void test_layout_all_max_respect_caps() @test {
 fn void test_layout_max_then_len_respects_cap() @test {
 	// A zero-length trailing child must not let the CMAX child grow past its cap.
 	Rect[2] out;
-	Constraint[2] constraints = { constraint_max(20), constraint_len(0) };
+	Constraint[2] constraints = { at_most(20), cells(0) };
 	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 20);
@@ -667,7 +667,7 @@ fn void test_layout_min_stays_inside_area() @test {
 	// Oversubscribed CMIN children used to be emitted at their full requested
 	// size, putting the second rect's right edge at 80 in a 30-wide area.
 	Rect[2] out;
-	Constraint[2] constraints = { constraint_min(40), constraint_min(40) };
+	Constraint[2] constraints = { at_least(40), at_least(40) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w + out[1].w <= 30);
@@ -678,7 +678,7 @@ fn void test_layout_fill_consumes_full_axis() @test {
 	// Integer division leaves a remainder; it must land on a fill child so the
 	// children exactly tile the axis.
 	Rect[3] out;
-	Constraint[3] constraints = { constraint_len(10), constraint_fill(1), constraint_fill(2) };
+	Constraint[3] constraints = { cells(10), fill(1), fill(2) };
 	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
 
 	assert(out[0].w + out[1].w + out[2].w == 100);
@@ -687,7 +687,7 @@ fn void test_layout_fill_consumes_full_axis() @test {
 fn void test_layout_vertical_stays_inside_area() @test {
 	// Same invariant on the vertical axis, including the gap accounting.
 	Rect[3] out;
-	Constraint[3] constraints = { constraint_max(4), constraint_fill(1), constraint_min(50) };
+	Constraint[3] constraints = { at_most(4), fill(1), at_least(50) };
 	layout_v_gap(new_rect(0, 0, 20, 24), constraints[..], 1, out[..]);
 
 	assert(out[0].h <= 4);
