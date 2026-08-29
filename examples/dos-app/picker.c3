@@ -12,6 +12,8 @@ import xray;
 // suits a short list, which is what a picker is for.
 
 const int MAX_CHOICES = 8;
+// PANEL_PAD_TOP/SIDE/BOTTOM, PANEL_BORDER, HEADER_GAP, BUTTON_ROW_H are
+// shared with Dialog — see dialog.c3, same module.
 
 struct Picker {
 	String title;
@@ -28,6 +30,22 @@ struct Picker {
 	bool open;
 
 	int min_cols;
+
+	// Click-path counterpart to what handle_key returns — see Dialog.pending.
+	Pressed pending;
+
+	PickerButtonSlot[DIALOG_BUTTONS] button_slots;
+	ChoiceSlot[MAX_CHOICES] choice_slots;
+}
+
+struct ChoiceSlot {
+	Picker* picker;
+	int index;
+}
+
+struct PickerButtonSlot {
+	Picker* picker;
+	int index;
 }
 
 fn Picker new_picker(String title, String ok, String cancel) {
@@ -83,62 +101,129 @@ fn Pressed Picker.handle_key(&self, milktea::KeyMsg k) {
 	return Pressed.NOTHING;
 }
 
+// take_pending returns and clears whatever a mouse click reported since the
+// last call — the click path's counterpart to handle_key's return value.
+fn Pressed Picker.take_pending(&self) {
+	Pressed p = self.pending;
+	self.pending = Pressed.NOTHING;
+	return p;
+}
+
+fn void picker_choice_clicked(void* ctx, int col, int row) @local {
+	ChoiceSlot* slot = (ChoiceSlot*)ctx;
+	// A click on a choice previews it, same as arrowing to it — it does not
+	// confirm on its own, matching how Up/Down behave for the keyboard path.
+	slot.picker.selected = slot.index;
+}
+
+fn void picker_button_clicked(void* ctx, int col, int row) @local {
+	PickerButtonSlot* slot = (PickerButtonSlot*)ctx;
+	Picker* p = slot.picker;
+	p.focused_button = slot.index;
+	p.open = false;
+	if (slot.index == 1) {
+		p.selected = p.opening;
+		p.pending = Pressed.DISMISSED;
+	} else {
+		p.pending = Pressed.CONFIRMED;
+	}
+}
+
+fn void picker_backdrop_dismissed(void* ctx, int col, int row) @local {
+	Picker* p = (Picker*)ctx;
+	p.open = false;
+	p.selected = p.opening;
+	p.pending = Pressed.DISMISSED;
+}
+
 // node returns the picker, or null when it is closed.
+//
+// Same shape as Dialog.node(): the panel paints an empty-content bordered
+// background sized to fit its children, which are real nodes (the choice
+// list rows and the button row) rather than one joined string, so both stay
+// individually clickable.
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
 		.bg = th.panel, .fg = th.text,
 		.border = glaze::DOUBLE, .border_color = th.accent,
-		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-		.align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
 	};
-	glaze::Style title_s = { .fg = th.accent, .bold = true };
+	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	String list = self.choice_list(th);
-
-	String[DIALOG_BUTTONS] rendered;
-	for (int i = 0; i < DIALOG_BUTTONS; i++) {
-		rendered[i] = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
+	int list_w = self.choice_list_width();
+	int btn_w = self.buttons_width();
+	int content_w = list_w > btn_w ? list_w : btn_w;
+	if (content_w < self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2) {
+		content_w = self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2;
 	}
-	String buttons = glaze::join_horizontal_arr(glaze::Position.CENTER, rendered[..], 2);
+	// title (1) + blank (1) + choice rows + blank (HEADER_GAP handles this
+	// via with_gap, so just title + rows here) + button row.
+	int content_h = 1 + self.count + BUTTON_ROW_H;
 
-	String inner = glaze::join_vertical_arr(glaze::Position.CENTER, {
-		title_s.render(self.title), "", list, "", buttons,
-	});
+	int panel_w = content_w + PANEL_PAD_SIDE * 2 + PANEL_BORDER * 2;
+	int panel_h = content_h + PANEL_PAD_TOP + PANEL_PAD_BOTTOM + PANEL_BORDER * 2 + HEADER_GAP * 2;
 
-	return milktea::text(panel, inner)
-		.width(milktea::at_least(self.min_cols))
+	xray::Node* panel_node = milktea::text(panel, "")
+		.width(milktea::cells(panel_w))
+		.height(milktea::cells(panel_h))
+		.with_padding(PANEL_PAD_TOP, PANEL_PAD_SIDE, PANEL_PAD_BOTTOM, PANEL_PAD_SIDE)
+		.with_gap(HEADER_GAP)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
+	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
+
+	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
+
+	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
+	int widest = self.widest_choice();
+	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
+	glaze::Style current = {
+		.fg = th.ink, .bg = th.accent, .bold = true,
+		.pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT,
+	};
+	for (int i = 0; i < self.count; i++) {
+		self.choice_slots[i] = { .picker = self, .index = i };
+		bool on = i == self.selected;
+		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
+		String rendered = (on ? current : row).with_width(widest + 4).render(label);
+		xray::Node* choice_node = milktea::text({ .bg = th.panel }, rendered).height(milktea::cells(1));
+		choice_node.on_click(&picker_choice_clicked, &self.choice_slots[i]);
+		list_node.add(choice_node);
+	}
+	panel_node.add(list_node);
+
+	xray::Node* buttons_row = xray::hstack()
+		.with_gap(2)
+		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
+		.height(milktea::cells(BUTTON_ROW_H));
+	for (int i = 0; i < DIALOG_BUTTONS; i++) {
+		self.button_slots[i] = { .picker = self, .index = i };
+		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
+		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
+		btn.on_click(&picker_button_clicked, &self.button_slots[i]);
+		buttons_row.add(btn);
+	}
+	panel_node.add(buttons_row);
+
+	return panel_node;
 }
 
-// choice_list draws the options one per row, the highlighted one marked and
-// inverted. Every row is padded to the widest label so the highlight is a
-// solid bar rather than ragged.
-fn String Picker.choice_list(&self, Theme* th) {
+fn int Picker.widest_choice(&self) {
 	int widest = 0;
 	for (int i = 0; i < self.count; i++) {
 		int w = glaze::string_width(self.choices[i]);
 		if (w > widest) widest = w;
 	}
+	return widest;
+}
 
-	// Every row is the same width and left-aligned, so the highlight is an
-	// even bar and the marker column does not shift the labels.
-	glaze::Style row = {
-		.fg = th.text, .pad_left = 1, .pad_right = 1,
-		.align_h = glaze::Position.LEFT,
-	};
-	glaze::Style current = {
-		.fg = th.ink, .bg = th.accent, .bold = true, .pad_left = 1, .pad_right = 1,
-		.align_h = glaze::Position.LEFT,
-	};
+fn int Picker.choice_list_width(&self) => self.widest_choice() + 4;
 
-	String[MAX_CHOICES] rows;
-	for (int i = 0; i < self.count; i++) {
-		bool on = i == self.selected;
-		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
-		rows[i] = (on ? current : row).with_width(widest + 4).render(label);
+fn int Picker.buttons_width(&self) {
+	int total = 0;
+	for (int i = 0; i < DIALOG_BUTTONS; i++) {
+		total += self.buttons[i].measure_width(2);
 	}
-	return glaze::join_vertical_arr(glaze::Position.LEFT, rows[:self.count]);
+	return total + 2 * (DIALOG_BUTTONS - 1);
 }

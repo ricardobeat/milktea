@@ -55,6 +55,14 @@ fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
+	// on_click/on_click_outside hooks on the menu/dialog/picker nodes already
+	// ran (see milktea::dispatch_click, called before update() for every
+	// MOUSE_PRESS) and mutated menu/about/theme_picker state directly — a
+	// click on a button or a dropdown item already flipped .open/.selected/
+	// .focused the same way handle_key does. All that's left here is reading
+	// what happened for the status-message side effects, via take_pending(),
+	// the same shape handle_key returns synchronously for the keyboard path.
+	if (msg.kind == milktea::MsgKind.MOUSE) return self.handle_mouse_result();
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -66,6 +74,38 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 	if (self.about.open) return self.handle_dialog(k);
 	if (self.menu.open) return self.handle_menu(k);
 	return self.handle_desktop(k);
+}
+
+fn milktea::Cmd DosModel.handle_mouse_result(&self) {
+	switch (self.menu.take_pending()) {
+		case Chosen.PICKED:
+			return self.run_menu_item(self.menu.current_item().label);
+		case Chosen.DISMISSED:
+			self.status_msg = "Ready";
+			return null;
+		default:
+	}
+	switch (self.theme_picker.take_pending()) {
+		case Pressed.CONFIRMED:
+			self.themes.active = self.theme_picker.selected;
+			self.status_msg = string::tformat("Theme: %s", self.theme().name);
+			return null;
+		case Pressed.DISMISSED:
+			self.themes.active = self.theme_picker.selected;
+			self.status_msg = "Ready";
+			return null;
+		default:
+	}
+	switch (self.about.take_pending()) {
+		case Pressed.CONFIRMED:
+			self.status_msg = "Confirmed";
+			return null;
+		case Pressed.DISMISSED:
+			self.status_msg = "Cancelled";
+			return null;
+		default:
+	}
+	return null;
 }
 
 fn milktea::Cmd DosModel.handle_dialog(&self, milktea::KeyMsg k) {
@@ -152,7 +192,8 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		// neither needs a condition here.
 		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
 		.add(self.about.node(self.theme()))
-		.add(self.theme_picker.node(self.theme())));
+		.add(self.theme_picker.node(self.theme())))
+		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_CELL_MOTION);
 }
 
 fn xray::Node* DosModel.content(&self) {
