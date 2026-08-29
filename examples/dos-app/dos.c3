@@ -31,6 +31,11 @@ struct DosModel {
 	String status_msg;
 }
 
+// Inner width of a dropdown panel, and the modal's outer size.
+const int DROPDOWN_INNER = 20;
+const int MODAL_COLS     = 44;
+const int MODAL_ROWS     = 12;
+
 const String[4] MENU_NAMES = { " File ", " Edit ", " View ", " Help " };
 const int[4]    MENU_X     = { 2, 8, 14, 20 };  // col offsets of menu titles in menubar
 
@@ -150,32 +155,6 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Build a shadowed panel: returns {panel_layer, shadow_layer} via compositor layers.
-// shadow is at z=0, panel at z=1. Both positioned at (x, y) — shadow auto-offset.
-fn void add_shadowed(milktea::Compositor* comp, String panel_str, int x, int y, int z) {
-	// Measure panel width and height by splitting on newlines and using string_width per line.
-	int pw = 0;
-	int ph = 0;
-	sz start = 0;
-	for (sz i = 0; i <= panel_str.len; i++) {
-		if (i == panel_str.len || panel_str[i] == '\n') {
-			int lw = glaze::string_width(panel_str[start:i - start]);
-			if (lw > pw) pw = lw;
-			ph++;
-			start = i + 1;
-		}
-	}
-
-	glaze::Style shadow_style = glaze::style()
-		.background(glaze::color_hex(C_SHADOW))
-		.with_width(pw)
-		.with_height(ph);
-	String shadow_str = shadow_style.render("");
-
-	comp.add_layer(milktea::new_layer(shadow_str).set_x(x + 2).set_y(y + 1).set_z(z));
-	comp.add_layer(milktea::new_layer(panel_str).set_x(x).set_y(y).set_z(z + 1));
-}
-
 // dos_button renders a classic DOS-style raised button with drop shadow.
 //
 // Layout (face_w = label.len + 4, pad 2 each side):
@@ -255,178 +234,149 @@ fn String render_menu_item(MenuItem mi, glaze::Style base_style, int inner_w) {
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
+// Chrome the layout reserves: the menu bar and status bar are one row each,
+// and the content panel sits inside a one-row, two-column margin.
+const int BAR_ROWS       = 1;
+const int CONTENT_MARGIN = 1;
+
 fn milktea::View DosModel.view(DosModel* self) @dynamic {
-	int w = milktea::screen_width();
-	int h = milktea::screen_height();
-	if (w < 40) w = 80;
-	if (h < 10) h = 24;
+	milktea::Node* root = milktea::root()
+		.add(milktea::vstack()
+			.add(self.menubar())
+			.add(self.content()
+				.fill(1)
+				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2))
+			.add(self.statusbar()));
 
-	milktea::Compositor* comp = milktea::new_compositor(w, h);
+	// A dropdown hangs off the menu bar and a modal sits over everything. Both
+	// are children of the root, so they paint over the layout without it
+	// knowing they exist.
+	if (self.dropdown_open) root.add(self.dropdown());
+	if (self.modal_open) root.add(self.modal());
 
-	// ── Background ────────────────────────────────────────────────────────────
-	glaze::Style bg_style = glaze::style()
-		.background(glaze::color_hex(C_BLUE))
-		.with_width(w)
-		.with_height(h);
-	comp.add_layer(milktea::new_layer(bg_style.render("")).set_z(0));
+	return milktea::draw(root);
+}
 
-	// ── Menu bar ─────────────────────────────────────────────────────────────
-	glaze::Style menubar_style = glaze::style()
-		.background(glaze::color_hex(C_CYAN))
-		.foreground(glaze::color_hex(C_BLACK))
-		.with_width(w)
-		.with_height(1);
+// The desktop behind everything. Painting it as the root's own background
+// means the panels above do not each have to carry it.
+fn milktea::Node* DosModel.menubar(&self) {
+	glaze::Style bar = {
+		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
+	};
+	glaze::Style active = {
+		.bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_WHITE), .bold = true,
+	};
 
-	glaze::Style menu_active_style = glaze::style()
-		.background(glaze::color_hex(C_BLACK))
-		.foreground(glaze::color_hex(C_WHITE))
-		.with_bold(true);
-
-	glaze::Style menu_item_style = glaze::style()
-		.background(glaze::color_hex(C_CYAN))
-		.foreground(glaze::color_hex(C_BLACK));
-
-	// Build the full menubar text
-	glaze::Style[4] item_styles;
-	String[4] rendered_items;
+	String[4] items;
 	for (int i = 0; i < 4; i++) {
-		rendered_items[i] = i == self.menu_sel
-			? menu_active_style.render(MENU_NAMES[i])
-			: menu_item_style.render(MENU_NAMES[i]);
+		items[i] = (i == self.menu_sel ? active : bar).render(MENU_NAMES[i]);
 	}
-	String menubar_content = glaze::join_horizontal_arr(glaze::Position.CENTER, rendered_items[..], 0);
-	comp.add_layer(milktea::new_layer(menubar_style.render(menubar_content)).set_z(10));
+	String row = glaze::join_horizontal_arr(glaze::Position.CENTER, items[..], 0);
 
-	// ── Content area ─────────────────────────────────────────────────────────
-	int content_x = 2;
-	int content_y = 2;
-	int content_w = w - 4;
-	int content_h = h - 5; // menubar(1) + gap(1) + statusbar(1) + 2 margin
+	return milktea::text(bar, row).height(milktea::cells(BAR_ROWS));
+}
 
-	glaze::Style content_style = glaze::style()
-		.foreground(glaze::color_hex(C_WHITE))
-		.background(glaze::color_hex(C_BLUE))
-		.with_border(glaze::DOUBLE)
-		.border_fg(glaze::color_hex(C_CYAN))
-		.with_width(content_w)
-		.with_height(content_h)
-		.padding(1, 3, 1, 3)
-		.align(glaze::Position.LEFT, glaze::Position.TOP);
+fn milktea::Node* DosModel.content(&self) {
+	glaze::Style panel = {
+		.fg = glaze::color_hex(C_WHITE), .bg = glaze::color_hex(C_BLUE),
+		.border = glaze::DOUBLE, .border_color = glaze::color_hex(C_CYAN),
+		.pad_top = 1, .pad_right = 3, .pad_bottom = 1, .pad_left = 3,
+	};
+	glaze::Style title = { .fg = glaze::color_hex(C_YELLOW), .bold = true };
+	glaze::Style body  = { .fg = glaze::color_hex(C_WHITE) };
 
 	String[3] tab_titles = { "Welcome", "System Info", "Settings" };
 	String[3] tab_bodies = {
-		"Welcome to milktea DOS Demo!\n\nThis demonstrates the glaze compositor:\n  ▸ Menu bar with keyboard navigation\n  ▸ Dropdown menus\n  ▸ Modal dialogs\n  ▸ Drop shadows via layer compositing\n\nUse ← → to navigate menus.\nPress Enter or ↓ to open a menu.\nPress q or ESC to quit.",
-		"milktea    TUI event loop & TTY management\nglaze      Styling, layout & compositor\nboba       Reusable widgets\n\nC3 language — fast, safe, C-compatible\nno GC · no runtime · direct C interop\n\nTerminal size: see status bar",
+		"Welcome to milktea DOS Demo!\n\nThis demonstrates the layout tree:\n  ▸ Menu bar with keyboard navigation\n  ▸ Dropdown menus\n  ▸ Modal dialogs\n  ▸ Drop shadows on any node\n\nUse ← → to navigate menus.\nPress Enter or ↓ to open a menu.\nPress q or ESC to quit.",
+		"milktea    TUI event loop & TTY management\nglaze      Styling & string composition\nxray       Layout, cells & rendering\nboba       Reusable widgets\n\nC3 language — fast, safe, C-compatible\nno GC · no runtime · direct C interop\n\nTerminal size: see status bar",
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	glaze::Style title_style = glaze::style()
-		.foreground(glaze::color_hex(C_YELLOW))
-		.with_bold(true);
-	glaze::Style body_style = glaze::style()
-		.foreground(glaze::color_hex(C_WHITE));
+	String inner = glaze::join_vertical(glaze::Position.LEFT,
+		title.render(tab_titles[self.active_tab]),
+		body.render(tab_bodies[self.active_tab]));
 
-	String tab_title = title_style.render(tab_titles[self.active_tab]);
-	String tab_body  = body_style.render(tab_bodies[self.active_tab]);
-	String inner     = glaze::join_vertical(glaze::Position.LEFT, tab_title, tab_body);
-	comp.add_layer(milktea::new_layer(content_style.render(inner)).set_x(content_x).set_y(content_y).set_z(10));
+	return milktea::text(panel, inner);
+}
 
-	// ── Status bar ────────────────────────────────────────────────────────────
-	glaze::Style status_style = glaze::style()
-		.background(glaze::color_hex(C_CYAN))
-		.foreground(glaze::color_hex(C_BLACK))
-		.with_width(w);
-	glaze::Style status_key_style = glaze::style()
-		.background(glaze::color_hex(C_BLACK))
-		.foreground(glaze::color_hex(C_WHITE))
-		.with_bold(true);
+fn milktea::Node* DosModel.statusbar(&self) {
+	glaze::Style bar = {
+		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
+	};
+	glaze::Style key = {
+		.bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_WHITE), .bold = true,
+	};
+	glaze::Style info = {
+		.bg = glaze::color_hex(C_DARK), .fg = glaze::color_hex(C_GRAY),
+	};
 
-	String size_info = string::tformat("%dx%d", w, h);
-	String hint_keys = string::tformat("  %s %s  menus    %s  tabs    %s  quit",
-		status_key_style.render("←→"),
-		status_key_style.render("↵"),
-		status_key_style.render("1-3"),
-		status_key_style.render("q"));
-	String status_right = string::tformat("  %s  │  %s ", self.status_msg, size_info);
-	String status_left  = status_style.render(hint_keys);
-	comp.add_layer(milktea::new_layer(status_left).set_x(0).set_y(h - 1).set_z(10));
-	// Right-side status info
-	glaze::Style status_r_style = glaze::style()
-		.background(glaze::color_hex(C_DARK))
-		.foreground(glaze::color_hex(C_GRAY));
-	int srw = glaze::string_width(status_right) + 2;
-	comp.add_layer(milktea::new_layer(status_r_style.render(status_right)).set_x(w - srw).set_y(h - 1).set_z(11));
+	String hints = string::tformat("  %s %s  menus    %s  tabs    %s  quit",
+		key.render("←→"), key.render("↵"), key.render("1-3"), key.render("q"));
+	String right = string::tformat("  %s  │  %dx%d ",
+		self.status_msg, milktea::screen_width(), milktea::screen_height());
 
-	// ── Dropdown ─────────────────────────────────────────────────────────────
-	if (self.dropdown_open) {
-		glaze::Style dd_style = glaze::style()
-			.background(glaze::color_hex(C_CYAN))
-			.foreground(glaze::color_hex(C_BLACK))
-			.with_border(glaze::NORMAL)
-			.border_fg(glaze::color_hex(C_WHITE))
-			.padding(0, 1, 0, 1)
-			.with_width(22);
+	// The hints fill the bar and the info block is pushed to the far end, so
+	// neither side needs its width computed.
+	return milktea::hstack()
+		.height(milktea::cells(BAR_ROWS))
+		.add(milktea::text(bar, hints).fill(1))
+		.add(milktea::text(info, right).width(milktea::cells(glaze::string_width(right))));
+}
 
-		glaze::Style dd_sel_style = glaze::style()
-			.background(glaze::color_hex(C_BLACK))
-			.foreground(glaze::color_hex(C_YELLOW))
-			.with_bold(true)
-			.with_width(20);
+// The dropdown opens directly under the menu title that owns it, and sizes
+// itself to its items.
+fn milktea::Node* DosModel.dropdown(&self) {
+	glaze::Style panel = {
+		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
+		.border = glaze::NORMAL, .border_color = glaze::color_hex(C_WHITE),
+		.pad_left = 1, .pad_right = 1,
+	};
+	glaze::Style selected = {
+		.bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_YELLOW), .bold = true,
+	};
+	glaze::Style item = {
+		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
+	};
 
-		glaze::Style dd_item_style = glaze::style()
-			.background(glaze::color_hex(C_CYAN))
-			.foreground(glaze::color_hex(C_BLACK))
-			.with_width(20);
-
-		String[4] rows;
-		for (int i = 0; i < 4; i++) {
-			glaze::Style s = i == self.dropdown_sel ? dd_sel_style : dd_item_style;
-			rows[i] = render_menu_item(get_menu_item(self.menu_sel, i), s, 20);
-		}
-		String dd_content = glaze::join_vertical_arr(glaze::Position.LEFT, rows[..]);
-		String dd_panel   = dd_style.render(dd_content);
-
-		int ddx = MENU_X[self.menu_sel];
-		add_shadowed(comp, dd_panel, ddx, 1, 20);
+	String[4] rows;
+	for (int i = 0; i < 4; i++) {
+		glaze::Style s = (i == self.dropdown_sel ? selected : item).with_width(DROPDOWN_INNER);
+		rows[i] = render_menu_item(get_menu_item(self.menu_sel, i), s, DROPDOWN_INNER);
 	}
+	String content = glaze::join_vertical_arr(glaze::Position.LEFT, rows[..]);
 
-	// ── Modal ─────────────────────────────────────────────────────────────────
-	if (self.modal_open) {
-		int modal_w  = 42;
-		int modal_h  = 10;
-		int modal_rw = modal_w + 2; // +2 for double border
-		int modal_rh = modal_h + 2;
-		int modal_x  = (w - modal_rw) / 2;
-		int modal_y  = (h - modal_rh) / 2;
+	return milktea::text(panel, content)
+		.at(MENU_X[self.menu_sel], BAR_ROWS)
+		.shadow(milktea::shadow(2, 1));
+}
 
-		glaze::Style modal_style = glaze::style()
-			.background(glaze::color_hex(C_DARK))
-			.foreground(glaze::color_hex(C_WHITE))
-			.with_border(glaze::DOUBLE)
-			.border_fg(glaze::color_hex(C_YELLOW))
-			.with_width(modal_w)
-			.with_height(modal_h)
-			.padding(1, 2, 1, 2)
-			.align(glaze::Position.CENTER, glaze::Position.CENTER);
+fn milktea::Node* DosModel.modal(&self) {
+	glaze::Style panel = {
+		.bg = glaze::color_hex(C_DARK), .fg = glaze::color_hex(C_WHITE),
+		.border = glaze::DOUBLE, .border_color = glaze::color_hex(C_YELLOW),
+		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+		.align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
+	};
+	glaze::Style title = { .fg = glaze::color_hex(C_YELLOW), .bold = true };
 
-		glaze::Style modal_title_style = glaze::style()
-			.foreground(glaze::color_hex(C_YELLOW))
-			.with_bold(true);
+	String buttons = glaze::join_horizontal_arr(glaze::Position.CENTER, {
+		dos_button("  OK  ", self.modal_btn == 0),
+		dos_button("Cancel", self.modal_btn == 1),
+	}, 2);
 
-		String btn_ok     = dos_button("  OK  ", self.modal_btn == 0);
-		String btn_cancel = dos_button("Cancel", self.modal_btn == 1);
-		String buttons    = glaze::join_horizontal_arr(glaze::Position.CENTER, { btn_ok, btn_cancel }, 2);
+	String inner = glaze::join_vertical_arr(glaze::Position.LEFT, {
+		title.render("About milktea"),
+		"",
+		"A TUI framework for the C3\nprogramming language.\n\nVersion 0.1.0  —  MIT License",
+		"",
+		buttons,
+	});
 
-		String modal_title = modal_title_style.render("About milktea");
-		String modal_body  = "A TUI framework for the C3\nprogramming language.\n\nVersion 0.1.0  —  MIT License";
-		String modal_inner = glaze::join_vertical_arr(glaze::Position.LEFT,
-			{ modal_title, "", modal_body, "", buttons });
-		String modal_panel = modal_style.render(modal_inner);
-
-		add_shadowed(comp, modal_panel, modal_x, modal_y, 30);
-	}
-
-	return comp.render();
+	return milktea::text(panel, inner)
+		.width(milktea::cells(MODAL_COLS))
+		.height(milktea::cells(MODAL_ROWS))
+		.center()
+		.shadow(milktea::shadow(2, 1));
 }
 
 fn int main() {
