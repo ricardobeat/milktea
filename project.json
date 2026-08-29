@@ -366,6 +366,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/modal": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/modal/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }
