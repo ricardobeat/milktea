@@ -774,7 +774,7 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		prompt[p_len++] = '_';
 		prompt[p_len] = '\0';
 
-		// Render the prompt box with glaze, center it with FlexNode
+		// Render the prompt box with glaze, then centre it with the layout tree
 		glaze::Style box_st = glaze::style().border(glaze::rounded_border())
 			.border_fg(glaze::color_hex("#6450c8"))
 			.background(glaze::color_hex("#140a28"))
@@ -783,10 +783,12 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		int box_w       = (int)glaze::string_width(rendered);
 		int box_h       = 3;
 
-		xray::FlexNode* root = xray::flex_col().with_justify(xray::JustifyContent.JUSTIFY_CENTER)
-			.with_align(xray::AlignItems.ALIGN_CENTER)
-			.add(xray::flex_node().with_main_size(xray::constraint_len(box_h))
-				.with_cross_size(xray::constraint_len(box_w)));
+		// Centre a box of the rendered size; the tree solves the position.
+		xray::Node* root = xray::root()
+			.add(xray::vstack()
+				.width(xray::constraint_len(box_w))
+				.height(xray::constraint_len(box_h))
+				.center());
 		root.solve(xray::new_rect(0, 0, w, h));
 		xray::Rect box = root.child_rect(0);
 

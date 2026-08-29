@@ -36,6 +36,24 @@ struct ContentCursor {
 	bool has_cursor;
 }
 
+// JustifyContent positions children along a container's main axis;
+// AlignItems sizes and positions them across it.
+enum JustifyContent : char {
+	JUSTIFY_START,
+	JUSTIFY_CENTER,
+	JUSTIFY_END,
+	JUSTIFY_SPACE_BETWEEN,
+	JUSTIFY_SPACE_AROUND,
+	JUSTIFY_SPACE_EVENLY
+}
+
+enum AlignItems : char {
+	ALIGN_STRETCH,
+	ALIGN_START,
+	ALIGN_CENTER,
+	ALIGN_END
+}
+
 // Direction of a container's main axis. STACK has no main axis: every child
 // is solved against the parent's whole rect, and later children paint over
 // earlier ones.
