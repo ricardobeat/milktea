@@ -110,8 +110,8 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) @local {
 // ── view ─────────────────────────────────────────────────────────────────────
 
 fn xray::Node* Menu.bar(&self, Theme* th) {
-	glaze::Style bar = { .bg = th.bar, .fg = th.ink };
-	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
+	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
+	glaze::Style active = { .bg = th.accent, .fg = th.ink, .bold = true };
 
 	String[MENU_COLS] rendered;
 	for (int i = 0; i < MENU_COLS; i++) {
@@ -128,12 +128,12 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
-		.bg = th.bar, .fg = th.ink,
+		.bg = th.bar, .fg = th.bar_text,
 		.border = glaze::NORMAL, .border_color = th.text,
 		.pad_left = 1, .pad_right = 1,
 	};
-	glaze::Style selected = { .bg = th.ink, .fg = th.accent, .bold = true };
-	glaze::Style item = { .bg = th.bar, .fg = th.ink };
+	glaze::Style selected = { .bg = th.accent, .fg = th.ink, .bold = true };
+	glaze::Style item = { .bg = th.bar, .fg = th.bar_text };
 
 	String[MENU_ITEMS] rows;
 	for (int i = 0; i < MENU_ITEMS; i++) {

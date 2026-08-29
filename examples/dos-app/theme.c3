@@ -18,7 +18,11 @@ const int MAX_THEMES = 8;
 struct Theme {
 	String name;
 	glaze::Color desktop; // behind everything
+	// Optional second color. When set, the content panel's background is a
+	// vertical gradient from desktop to this; unset leaves it flat.
+	glaze::Color desktop_to;
 	glaze::Color bar;     // menu bar and status bar
+	glaze::Color bar_text; // text on the bar — ink is too dark on a dark bar
 	glaze::Color panel;   // dialog and content panel background
 	glaze::Color text;    // body text
 	glaze::Color dim;     // secondary text
@@ -56,7 +60,9 @@ fn ThemeSet load_themes() {
 		set.themes[set.count] = {
 			.name    = theme_string(t, "name", "Untitled"),
 			.desktop = theme_color(t, "desktop", "#0000aa"),
-			.bar     = theme_color(t, "bar",     "#00aaaa"),
+			.desktop_to = theme_color(t, "desktop_to", ""),
+			.bar      = theme_color(t, "bar",      "#00aaaa"),
+			.bar_text = theme_color(t, "bar_text", "#000000"),
 			.panel   = theme_color(t, "panel",   "#000055"),
 			.text    = theme_color(t, "text",    "#ffffff"),
 			.dim     = theme_color(t, "dim",     "#aaaaaa"),
@@ -79,9 +85,11 @@ fn String theme_string(Object* t, String key, String fallback) @local {
 	return v.copy(mem);
 }
 
+// An empty fallback means the key is optional: absent leaves the color unset,
+// which is how a theme says it has no gradient.
 fn glaze::Color theme_color(Object* t, String key, String fallback) @local {
 	String? v = t.get_string(key);
-	if (catch v) return glaze::color_hex(fallback);
+	if (catch v) return fallback.len > 0 ? glaze::color_hex(fallback) : glaze::color_none();
 	return glaze::color_hex(v);
 }
 
@@ -92,7 +100,8 @@ fn ThemeSet default_themes() @local {
 	set.themes[0] = {
 		.name    = "DOS Classic",
 		.desktop = glaze::color_hex("#0000aa"),
-		.bar     = glaze::color_hex("#00aaaa"),
+		.bar      = glaze::color_hex("#00aaaa"),
+		.bar_text = glaze::color_hex("#000000"),
 		.panel   = glaze::color_hex("#000055"),
 		.text    = glaze::color_hex("#ffffff"),
 		.dim     = glaze::color_hex("#aaaaaa"),

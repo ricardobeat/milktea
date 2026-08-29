@@ -4,6 +4,7 @@
       "name": "DOS Classic",
       "desktop": "#0000aa",
       "bar": "#00aaaa",
+      "bar_text": "#000000",
       "panel": "#000055",
       "text": "#ffffff",
       "dim": "#aaaaaa",
@@ -14,7 +15,8 @@
     {
       "name": "Amber CRT",
       "desktop": "#1a0f00",
-      "bar": "#5a3a00",
+      "bar": "#7a4e00",
+      "bar_text": "#ffe0a0",
       "panel": "#2a1a00",
       "text": "#ffb000",
       "dim": "#8a6000",
@@ -25,7 +27,8 @@
     {
       "name": "Green Screen",
       "desktop": "#001a00",
-      "bar": "#004400",
+      "bar": "#005500",
+      "bar_text": "#ccffcc",
       "panel": "#002200",
       "text": "#33ff33",
       "dim": "#118811",
@@ -36,13 +39,40 @@
     {
       "name": "Midnight",
       "desktop": "#1a1b26",
-      "bar": "#414868",
+      "bar": "#3b4261",
+      "bar_text": "#e6ecff",
       "panel": "#24283b",
       "text": "#c0caf5",
       "dim": "#565f89",
       "accent": "#7aa2f7",
       "ink": "#1a1b26",
       "shadow": "#0d0e14"
+    },
+    {
+      "name": "Sunset",
+      "desktop": "#2b1055",
+      "desktop_to": "#c2456b",
+      "bar": "#c2456b",
+      "bar_text": "#fff0f5",
+      "panel": "#43206b",
+      "text": "#ffd9e8",
+      "dim": "#b08bbf",
+      "accent": "#ff9e57",
+      "ink": "#2b1055",
+      "shadow": "#150828"
+    },
+    {
+      "name": "Neon",
+      "desktop": "#05010f",
+      "desktop_to": "#3d0a5c",
+      "bar": "#8a00a8",
+      "bar_text": "#f5d0ff",
+      "panel": "#12032b",
+      "text": "#00f0ff",
+      "dim": "#7a4fa8",
+      "accent": "#ff2bd6",
+      "ink": "#05010f",
+      "shadow": "#000000"
     }
   ]
 }

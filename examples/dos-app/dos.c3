@@ -157,8 +157,9 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 
 fn xray::Node* DosModel.content(&self) {
 	Theme* th = self.theme();
+	// bg_gradient is unset on a theme without one, which leaves bg flat.
 	glaze::Style panel = {
-		.fg = th.text, .bg = th.desktop,
+		.fg = th.text, .bg = th.desktop, .bg_gradient = th.desktop_to,
 		.border = glaze::DOUBLE, .border_color = th.bar,
 		.pad_top = 1, .pad_right = 3, .pad_bottom = 1, .pad_left = 3,
 	};
@@ -181,8 +182,8 @@ fn xray::Node* DosModel.content(&self) {
 
 fn xray::Node* DosModel.statusbar(&self) {
 	Theme* th = self.theme();
-	glaze::Style bar  = { .bg = th.bar, .fg = th.ink };
-	glaze::Style key  = { .bg = th.ink, .fg = th.text, .bold = true };
+	glaze::Style bar  = { .bg = th.bar, .fg = th.bar_text };
+	glaze::Style key  = { .bg = th.accent, .fg = th.ink, .bold = true };
 	glaze::Style info = { .bg = th.panel, .fg = th.dim };
 
 	String hints = string::tformat("  %s %s  menus    %s  tabs    %s  quit",
