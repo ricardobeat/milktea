@@ -155,6 +155,10 @@ struct Node {
 	LayerStyle layer_style;
 	char alpha_value;
 
+	// Fixed offset inside the parent, used only when pinned (see at()).
+	int offset_x, offset_y;
+	bool pinned;
+
 	// Milliseconds until this node wants to be painted again, or 0 for
 	// "never on my account". paint collects the smallest non-zero value in
 	// the tree so the runtime can schedule one repaint for all of them.
@@ -266,6 +270,22 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 	// Fit only the axes the caller has not already sized, so .width(30) before
 	// .center() survives and only the height is measured. An axis still set to
 	// the default fill has nothing to preserve.
+	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
+	return self;
+}
+
+// at pins this node to a fixed offset inside its parent, sized to its content
+// unless a width or height was given. It is for content whose position is
+// known rather than solved — a dropdown under the menu title that opened it,
+// a tooltip beside its anchor.
+//
+// Only meaningful in a stack, where every child gets the parent's whole rect
+// to place itself in; a row or column decides its children's offsets itself.
+fn Node* Node.at(&self, int x, int y) {
+	self.offset_x = x;
+	self.offset_y = y;
+	self.pinned = true;
 	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
 	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
 	return self;

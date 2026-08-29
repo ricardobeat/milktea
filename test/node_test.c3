@@ -25,7 +25,8 @@ fn String Fixed.render(&self, xray::Rect r) @dynamic {
 	return out.str_view();
 }
 
-fn int Fixed.measure(&self, int cross) @dynamic => self.h;
+fn int Fixed.measure(&self, int width) @dynamic => self.h;
+fn int Fixed.measure_width(&self, int height) @dynamic => self.w;
 
 fn xray::ContentCursor Fixed.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.want_cursor) return {};
@@ -320,4 +321,36 @@ fn void test_centered_component_has_a_width() @test {
 
 	assert(n.rect().h == 1, "one row tall");
 	assert(n.rect().w > 0, "and wide enough to show the clock");
+}
+
+// at() pins a node to a known offset inside a stack, for content whose
+// position is decided by something other than the layout — a dropdown under
+// the menu title that opened it.
+fn void test_at_pins_a_node_and_fits_it() @test {
+	Fixed* menu = fixed(20, 4);
+
+	xray::Node* r = xray::root().add(xray::content_node(menu).at(8, 1));
+	r.solve(xray::new_rect(0, 0, 40, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.paint(r);
+
+	assert(menu.got.x == 8 && menu.got.y == 1, "pinned where asked");
+	assert(menu.got.w == 20 && menu.got.h == 4, "and sized to its content");
+}
+
+fn void test_at_keeps_an_explicit_size() @test {
+	Fixed* box = fixed(0, 4);
+
+	xray::Node* r = xray::root()
+		.add(xray::content_node(box).width(xray::cells(12)).at(3, 2));
+	r.solve(xray::new_rect(0, 0, 40, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.paint(r);
+
+	assert(box.got.w == 12, "explicit width survives at()");
+	assert(box.got.x == 3, "still pinned");
 }

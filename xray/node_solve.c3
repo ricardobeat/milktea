@@ -220,12 +220,16 @@ fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
 	if (w < 0) w = 0;
 	if (h < 0) h = 0;
 
-	return {
-		.x = area.x + justify_offset(child.justify, area.w - w, 0, 1),
-		.y = area.y + align_offset(child.align, area.h - h),
-		.w = w,
-		.h = h,
-	};
+	// A pinned child names its own offset; everything else is placed by its
+	// justify and align within the space it did not fill.
+	int x = child.pinned
+		? child.offset_x
+		: justify_offset(child.justify, area.w - w, 0, 1);
+	int y = child.pinned
+		? child.offset_y
+		: align_offset(child.align, area.h - h);
+
+	return { .x = area.x + x, .y = area.y + y, .w = w, .h = h };
 }
 
 // resolve_axis turns one constraint into a size. avail is the space on this
