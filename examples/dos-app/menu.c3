@@ -114,7 +114,7 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) @local {
 
 fn xray::Node* Menu.bar(&self, Theme* th) {
 	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
-	glaze::Style active = { .bg = th.accent, .fg = th.ink, .bold = true };
+	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
 
 	String[MENU_COLS] rendered;
 	for (int i = 0; i < MENU_COLS; i++) {
@@ -139,7 +139,7 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	// A cell of padding on each side, so the highlight is a bar with the label
 	// inset rather than text flush against the panel border.
 	glaze::Style selected = {
-		.bg = th.accent, .fg = th.ink, .bold = true,
+		.bg = th.ink, .fg = th.accent, .bold = true,
 		.pad_left = ITEM_PAD, .pad_right = ITEM_PAD,
 	};
 	glaze::Style item = {
