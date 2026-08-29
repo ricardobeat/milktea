@@ -41,11 +41,25 @@ QUICKJS_C_SOURCES = [
 #                  (used for targets with per-file sources, e.g. doom-fire)
 #   c_sources    - full explicit `c-sources` list (default: tty_winsize.c only)
 #   opt          - opt level (default: "Os")
+#   optsize      - value for "optsize" (omitted entirely by default)
 #   strip_unused - whether to set "strip-unused": true (default: True; set to
 #                  False to omit the key entirely, as cursors/inputbox do)
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
 OVERRIDES = {
+    "ai-harness": {
+        "sources": [
+            "milktea/**",
+            "glaze/**",
+            "dye/**",
+            "boba/**",
+            "xray/**",
+            "examples/lib/http_shim.c3",
+            "examples/ai-harness/**",
+        ],
+        "c_sources": ["milktea/tty_winsize.c", "examples/lib/http_shim.c"],
+        "optsize": "tiny",
+    },
     "component-viewer": {"extra_dirs": ["boba", "xray"]},
     "paste": {"extra_dirs": ["boba", "xray"]},
     "split-editors": {"extra_dirs": ["xray"]},
@@ -156,6 +170,8 @@ def build_target(name):
         "c-sources": override.get("c_sources", list(DEFAULT_C_SOURCES)),
         "opt": override.get("opt", "Os"),
     }
+    if "optsize" in override:
+        target["optsize"] = override["optsize"]
     if override.get("strip_unused", True):
         target["strip-unused"] = True
     if "linked_libraries" in override:
