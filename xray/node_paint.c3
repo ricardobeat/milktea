@@ -55,6 +55,12 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 	Cell* cell = self.cell_at((sz)c.x, (sz)c.y);
 	String under = (cell != null && cell.content_len > 0) ? cell.content_str() : "";
 
+	// A drawn cursor animates, so ask for a repaint on its own blink period.
+	// This is set before painting and regardless of what the callback returns:
+	// an empty return is the blink's off phase, and skipping the request there
+	// would stop the animation until something else forced a frame.
+	if (res.repaint_ms == 0 || period < res.repaint_ms) res.repaint_ms = period;
+
 	String drawn = c.draw(c.x, c.y, blink, under);
 	// An empty return means "leave the cell alone", which is how a blinking
 	// cursor spends its off phase.
@@ -62,9 +68,6 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 	// overlay_char writes exactly one cell slot, so a wide glyph — an emoji,
 	// a katakana character — cannot displace its neighbour.
 	self.overlay_char((sz)c.x, (sz)c.y, drawn, default_style());
-
-	// A drawn cursor animates, so ask for a repaint on its own blink period.
-	if (res.repaint_ms == 0 || period < res.repaint_ms) res.repaint_ms = period;
 }
 
 fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer** scratch) {
