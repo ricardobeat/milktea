@@ -537,3 +537,44 @@ fn void test_border_bg_overrides_the_block_background() @test {
 
 	assert(out.contains("48;2;0;0;85"), "border drawn on the surface color: %s", out);
 }
+
+// bg_gradient makes the block's background a vertical ramp rather than a flat
+// color, one step per row across the finished block — border rows included,
+// since the gradient runs over the whole thing.
+fn void test_bg_gradient_varies_the_background_per_row() @test {
+	glaze::Style s = {
+		.bg = glaze::color_hex("#000000"),
+		.bg_gradient = glaze::color_hex("#ffffff"),
+		.height = 4,
+		.width = 8,
+	};
+
+	String out = s.render("a\nb");
+
+	// The first row keeps the start color and the last reaches the end.
+	assert(out.contains("48;2;0;0;0"), "starts at bg: %s", out);
+	assert(out.contains("48;2;255;255;255"), "ends at bg_gradient: %s", out);
+}
+
+fn void test_bg_gradient_leaves_the_foreground_alone() @test {
+	glaze::Style s = {
+		.fg = glaze::color_hex("#ff0000"),
+		.bg = glaze::color_hex("#000000"),
+		.bg_gradient = glaze::color_hex("#ffffff"),
+		.height = 4,
+	};
+
+	String out = s.render("x\ny\nz");
+
+	assert(out.contains("38;2;255;0;0"), "text keeps its color over the ramp");
+}
+
+// A style with no bg_gradient renders exactly as it did before the field
+// existed: one background for the whole block.
+fn void test_no_bg_gradient_leaves_the_background_flat() @test {
+	glaze::Style s = { .bg = glaze::color_hex("#0000aa"), .height = 4, .width = 6 };
+
+	String out = s.render("a\nb");
+
+	assert(!out.contains("48;2;255"), "no other background appears: %s", out);
+}

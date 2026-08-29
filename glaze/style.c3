@@ -711,6 +711,10 @@ struct Style {
 	// border used as a drop shadow wants the surface behind the block instead,
 	// so that the half of each cell the shadow does not cover shows it.
 	Color border_bg;
+	// Second background color. When set, the block's background is a vertical
+	// gradient from bg to this, one step per row, interpolated in LUV so the
+	// change reads evenly. Unset leaves bg flat.
+	Color bg_gradient;
 	bool bold;
 	bool italic;
 	bool underline;
@@ -1151,9 +1155,82 @@ fn String Style.render(self, String input) {
 
 	if (!border_is_empty) {
 		Color bbg = self.border_bg.kind != ColorKind.NONE ? self.border_bg : self.bg;
-		return self.border.wrap_with_color(rendered, self.border_color, bbg);
+		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg);
+		// The gradient runs over the whole block, border rows included, so it
+		// is applied after wrapping rather than to the content alone.
+		return apply_bg_gradient(bordered, self.bg, self.bg_gradient);
 	}
-	return rendered.tcopy();
+	return apply_bg_gradient(rendered.tcopy(), self.bg, self.bg_gradient);
+}
+
+// apply_bg_gradient rewrites a rendered block so each row's background is a
+// step between `from` and `to`, interpolated in LUV — perceptually even, where
+// a straight RGB lerp bunches the visible change at one end.
+//
+// It runs over the finished block because the row count is not settled until
+// vertical alignment and the border have been applied, and a gradient needs to
+// know how many rows it is spread across.
+//
+// Rows are found by splitting on newlines, which is safe for multi-byte
+// content: no UTF-8 continuation byte can be 0x0a.
+fn String apply_bg_gradient(String block, Color from, Color to) @local {
+	if (to.kind != ColorKind.TRUECOLOR || from.kind != ColorKind.TRUECOLOR) return block;
+
+	int rows = 1;
+	foreach (c : block) if (c == '\n') rows++;
+
+	DString out = dstring::temp();
+	int row = 0;
+	usz start = 0;
+	for (usz i = 0; i <= block.len; i++) {
+		if (i < block.len && block[i] != '\n') continue;
+
+		if (row > 0) out.append_char('\n');
+		// A one-row block has no span to interpolate over.
+		double t = rows > 1 ? (double)row / (double)(rows - 1) : 0.0;
+		Color bg = blend_luv(from, to, t);
+		replace_bg(&out, block[start:i - start], bg);
+
+		row++;
+		start = i + 1;
+	}
+	return out.copy_str(tmem);
+}
+
+// replace_bg copies one row with `bg` as its background throughout: it opens
+// with it so unstyled cells are covered, and reasserts it after every escape
+// sequence — including ones that set a background of their own, whose color is
+// the flat one this gradient replaces.
+//
+// Foreground and attributes in those sequences are left alone, so text keeps
+// its own color over the gradient.
+fn void replace_bg(DString* out, String row, Color bg) @local {
+	out.append_string("\x1b[");
+	bg.write_sgr_params(out, false);
+	out.append_char('m');
+
+	usz i = 0;
+	while (i < row.len) {
+		if (row[i] != '\x1b' || i + 1 >= row.len || row[i + 1] != '[') {
+			out.append_char(row[i]);
+			i++;
+			continue;
+		}
+		usz esc = i;
+		i += 2;
+		while (i < row.len && row[i] != 'm' && !is_csi_final(row[i])) i++;
+		if (i < row.len) i++;
+		out.append_string(row[esc:i - esc]);
+
+		out.append_string("\x1b[");
+		bg.write_sgr_params(out, false);
+		out.append_char('m');
+	}
+	out.append_string("\x1b[0m");
+}
+
+fn bool is_csi_final(char c) @local {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
 // render_content_only renders the styled content WITHOUT the border.
