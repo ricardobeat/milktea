@@ -12,7 +12,7 @@ fn milktea::Cmd Mod.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 fn milktea::View Mod.view(&self) @dynamic {
-	glaze::Style box = glaze::style().border(glaze::rounded_border());
+	glaze::Style box = glaze::style().with_border(glaze::rounded_border());
 	glaze::Style nm = glaze::style().align(glaze::Position.RIGHT, glaze::Position.CENTER);
 	milktea::Node* col = milktea::vstack().with_gap(1);
 	col.add(milktea::hstack().height(milktea::cells(3)).with_gap(1)
@@ -34,7 +34,7 @@ fn bool contains_seq(String h, String n) {
 // and the caret lands inside the border without the app computing an offset.
 fn void test_bordered_input_places_its_own_cursor() @test {
 	Mod m;
-	glaze::Style bx = glaze::style().border(glaze::rounded_border());
+	glaze::Style bx = glaze::style().with_border(glaze::rounded_border());
 	m.a = boba::new_text_input().with_styles(bx, bx);
 	m.b = boba::new_text_input().with_styles(bx, bx);
 	m.a.placeholder_style = bx;
@@ -55,4 +55,19 @@ fn void test_bordered_input_places_its_own_cursor() @test {
 	}
 	// The caret sits inside the border, after "hi": rect x 7, +1 border, +2 text.
 	assert(contains_seq(s, "\x1b[2;11H"), "cursor at row 2 col 11: %s", d.str_view());
+}
+
+// An input draws its frame from the moment it appears. The box used to come
+// from placeholder_style, which carries only a color, so a field had no
+// border until it had been focused and typed into.
+fn void test_empty_unfocused_input_still_draws_its_border() @test {
+	glaze::Style bx = glaze::style().with_border(glaze::rounded_border());
+	boba::TextInput inp = boba::new_text_input().with_styles(bx, bx);
+	inp.focused = false;
+	inp.width = 12;
+	inp.height = 3;
+
+	String out = inp.view();
+	assert(out.contains("╭"), "top-left corner drawn: %s", out);
+	assert(out.contains("╯"), "bottom-right corner drawn: %s", out);
 }

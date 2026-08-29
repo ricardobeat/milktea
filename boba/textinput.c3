@@ -30,6 +30,8 @@ struct TextInput (xray::Content) {
 	int cursor_blink_ms;
 	glaze::Style focused_style;
 	glaze::Style blurred_style;
+	// Only the foreground is taken from this style; the box is drawn by the
+	// focused or blurred style, so an empty field still has its frame.
 	glaze::Style placeholder_style;
 }
 
@@ -202,17 +204,15 @@ fn void TextInput.handle_paste(&self, String s) {
 
 // view returns the rendered text input string.
 fn String TextInput.view(&self) {
-	String display = self.display_text();
-
-	glaze::Style s;
-	if (self.len > 0 && self.focused) {
-		s = self.focused_style;
-	} else if (self.len > 0) {
-		s = self.blurred_style;
-	} else {
-		s = self.placeholder_style;
+	// The box comes from the focus state, so an empty input still draws the
+	// border and padding its style asks for. Only the text color changes when
+	// there is nothing to show but the placeholder — otherwise a field would
+	// have no frame until the first time it was focused and typed into.
+	glaze::Style s = self.focused ? self.focused_style : self.blurred_style;
+	if (self.len == 0) {
+		s.fg = self.placeholder_style.fg;
 	}
-	if (self.width > 0) s = s.width(self.width);
-	if (self.height > 0) s = s.height(self.height);
-	return s.render(display);
+	if (self.width > 0) s = s.with_width(self.width);
+	if (self.height > 0) s = s.with_height(self.height);
+	return s.render(self.display_text());
 }
