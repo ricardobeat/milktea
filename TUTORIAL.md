@@ -49,7 +49,6 @@ module pomodoro;
 
 import milktea;
 import glaze;
-import xray::layout;
 import std::io;
 
 enum Phase : int {
@@ -189,112 +188,65 @@ Printable characters arrive as `KeyCode.RUNE`, with the actual character in
 This is the fun part, and where layout and styling come together. The view runs
 after every update and returns a `View`.
 
-### Step 1 — ask the runtime for the size
+### Step 1 — pick colors
 
-milktea tracks the terminal size, so the model does not carry it. It is already
-set before the first `view`, so there is nothing to guard against:
-
-```c3
-fn milktea::View Model.view(&self) @dynamic {
-    int w = milktea::screen_width();
-    int h = milktea::screen_height();
-
-    bool focus = self.phase == Phase.FOCUS;
-```
-
-A model only needs to handle `MsgKind.WINDOW_SIZE` when a resize requires actual
-work — reallocating a grid, reflowing cached text. Ours just reads the numbers,
-so it can skip that entirely.
-
-### Step 2 — pick colors
-
-We theme the whole UI off a single accent that changes with the phase — warm
+The whole UI themes off a single accent that changes with the phase — warm
 peach for focus, soft mint for breaks.
 
 ```c3
+fn milktea::View Model.view(&self) @dynamic {
+    bool focus = self.phase == Phase.FOCUS;
+
     glaze::Color accent = focus
         ? glaze::color_hex("#f3a26d")   // peach for focus
         : glaze::color_hex("#8fcab0");  // mint for break
     glaze::Color dim = glaze::color_hex("#7a6a58");
 ```
 
-### Step 3 — solve the layout
+Nothing here reads the terminal size. milktea tracks it, and the layout solves
+against it, so the model never stores or passes it around. A model only handles
+`MsgKind.WINDOW_SIZE` when a resize means real work — reallocating a grid,
+reflowing cached text.
 
-This is the heart of the tutorial. Instead of computing positions by hand, you
-hand `xray::layout` a list of **constraints** and it fills in a `Rect` for each
-slot.
+### Step 2 — define styles
 
-First split the screen into three horizontal bands — a one-line title, a body
-that fills whatever's left, and a one-line status bar:
-
-```c3
-    xray::Rect title_r, body_r, status_r;
-    layout::vstack(layout::screen(w, h), {
-        layout::slot(layout::len(1),  &title_r),
-        layout::slot(layout::fill(1), &body_r),
-        layout::slot(layout::len(1),  &status_r),
-    });
-```
-
-Then split the body into two columns — a fixed-width sidebar and a timer panel
-that takes the rest:
+A `Style` is a plain value, so a literal says what something looks like without
+a chain of calls. The title *inverts* the accent — dark text on an accent
+background — and both boxes use a rounded border tinted to match.
 
 ```c3
-    xray::Rect side_r, timer_r;
-    layout::hstack(body_r, {
-        layout::slot(layout::len(22), &side_r),
-        layout::slot(layout::fill(1), &timer_r),
-    });
+    glaze::Style title_s = {
+        .fg = glaze::color_hex("#4a3f35"), .bg = accent, .bold = true,
+        .pad_left = 1, .pad_right = 1,
+    };
+    glaze::Style side_s = {
+        .fg = dim, .border = glaze::ROUNDED, .border_color = dim,
+        .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+    };
+    glaze::Style timer_s = {
+        .fg = accent, .bold = true,
+        .border = glaze::ROUNDED, .border_color = accent,
+        .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+        .align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
+    };
+    glaze::Style status_s = { .fg = dim };
 ```
 
-The constraint vocabulary:
+The builder form still works — `glaze::style().with_bold(true)` — and is handy
+when a style is derived from another one.
 
-| constraint | meaning |
-|---|---|
-| `len(n)`     | exactly `n` cells |
-| `fill(w)`    | share the leftover space, weighted by `w` |
-| `percent(p)` | `p`% of the available space |
-| `min(n)` / `max(n)` | clamp to a bound |
-
-Because everything is solved against `w` and `h`, the UI reflows correctly when
-the terminal is resized — no manual math.
-
-### Step 4 — define styles
-
-Styles are plain values: build one, chain methods, reuse it. Note how the title
-*inverts* the accent (dark text on an accent background), and both boxes use a
-rounded border tinted to match.
-
-```c3
-    glaze::Style title_s = glaze::style()
-        .foreground(glaze::color_hex("#4a3f35")).background(accent)
-        .bold(true).padding(0, 1, 0, 1);
-
-    glaze::Style side_s = glaze::style()
-        .foreground(dim)
-        .border(glaze::rounded_border()).border_fg(dim).padding(1, 2, 1, 2);
-
-    glaze::Style timer_s = glaze::style()
-        .foreground(accent).bold(true)
-        .border(glaze::rounded_border()).border_fg(accent)
-        .padding(1, 2, 1, 2)
-        .align(glaze::Position.CENTER, glaze::Position.CENTER);
-
-    glaze::Style status_s = glaze::style().foreground(dim);
-```
-
-### Step 5 — build the text content
+### Step 3 — build the text content
 
 Format the clock, and use glaze's built-in **progress bar** to show how far
 through the phase we are:
 
 ```c3
-    int mins  = self.remaining / 60;
-    int secs  = self.remaining % 60;
+    int mins = self.remaining / 60;
+    int secs = self.remaining % 60;
     int total = phase_length(self.phase);
     int pct   = total > 0 ? 100 - (self.remaining * 100 / total) : 0;
 
-    String bar = glaze::progress_bar(28, pct, "█", "░", accent, dim);
+    String bar = glaze::progress_bar(PROGRESS_CELLS, pct, "█", "░", accent, dim);
 
     String clock = string::tformat("%s\n\n  %02d:%02d  \n\n%s",
         focus ? "◆ FOCUS ◆" : "♦ BREAK ♦", mins, secs, bar);
@@ -307,31 +259,50 @@ through the phase we are:
         self.running ? "running" : "paused");
 ```
 
-### Step 6 — render into the rects and stack
+### Step 4 — build the tree
 
-Now the bridge between geometry and styling: `rect.render(style, content)` sizes
-a styled block to fill its slot. Then we glue the pieces together with
-`join_horizontal` and `join_vertical`, which understand strings that already
-contain ANSI color codes.
+Here is where the layout happens. Rather than computing positions, you describe
+the shape and each node is given a rect to paint itself into.
+
+Three horizontal bands — a one-line title, a body that takes whatever's left,
+and a one-line status bar — with the body split into a fixed sidebar and a
+timer panel:
 
 ```c3
-    String title_v  = title_r.render(title_s,  " 🍵 milktea pomodoro");
-    String side_v   = side_r.render(side_s,     side);
-    String timer_v  = timer_r.render(timer_s,   clock);
-    String status_v = status_r.render(status_s,
-        "  space pause · tab switch · r reset · q quit");
-
-    String body = glaze::join_horizontal(side_v, timer_v, 0);
-    String doc  = glaze::join_vertical(glaze::Position.LEFT, title_v, body);
-    doc = glaze::join_vertical(glaze::Position.LEFT, doc, status_v);
-
-    return milktea::new_alt_screen_view(doc);
+    return milktea::draw(milktea::root()
+        .add(milktea::vstack()
+            .add(milktea::text(title_s, " 🍵 milktea pomodoro").height(milktea::cells(1)))
+            .add(milktea::hstack()
+                .fill(1)
+                .with_gap(PANEL_GAP)
+                .add(milktea::text(side_s, side).width(milktea::cells(SIDEBAR_COLS)))
+                .add(milktea::text(timer_s, clock).fill(1)))
+            .add(milktea::text(status_s,
+                "  space pause · tab switch · r reset · q quit")
+                .height(milktea::cells(1)))));
 }
 ```
 
-`new_alt_screen_view` puts the app on the terminal's alternate screen (the
-full-window mode `vim` and `less` use) and hides the cursor. For a simple
-scrolling tool you'd use `new_view` instead.
+The constraint vocabulary:
+
+| constraint | meaning |
+|---|---|
+| `cells(n)`   | exactly `n` cells |
+| `fill(w)`    | share the leftover space, weighted by `w` |
+| `percent(p)` | `p`% of the available space |
+| `at_least(n)` / `at_most(n)` | clamp to a bound |
+
+`with_gap(1)` puts a column between the two panels. Without it their borders
+sit flush and the sidebar's right edge is overwritten — a gap is the layout's
+job, not something to fake with padding.
+
+Because everything is solved against the live terminal size, the UI reflows on
+resize with no manual math.
+
+`milktea::draw` puts the app on the terminal's alternate screen — the
+full-window mode `vim` and `less` use. For a tool that shares the screen with
+your scrollback, `milktea::draw_inline` sizes the block to its content
+instead.
 
 ---
 

@@ -88,9 +88,9 @@ Messages come in several kinds:
 fn milktea::View Counter.view(Counter* self) @dynamic {
     glaze::Style box = glaze::style()
         .foreground(glaze::color_hex("#00d7ff"))
-        .bold(true)
+        .with_bold(true)
         .padding(1, 3, 1, 3)
-        .border(glaze::rounded_border());
+        .with_border(glaze::ROUNDED);
 
     String content = string::tformat("Counter: %d\nUse ↑↓ to change, q to quit", self.value);
     return milktea::new_view(box.render(content));
@@ -120,10 +120,10 @@ Glaze builds styled strings using ANSI codes. Styles are values — create them,
 glaze::Style s = glaze::style()
     .foreground(glaze::color_hex("#ff6600"))
     .background(glaze::color_hex("#1a1a2e"))
-    .bold(true)
-    .italic(true)
+    .with_bold(true)
+    .with_italic(true)
     .padding(1, 2, 1, 2)
-    .border(glaze::rounded_border());
+    .with_border(glaze::ROUNDED);
 
 String rendered = s.render("Hello, world");
 ```
@@ -145,19 +145,19 @@ glaze::blend_hcl(a, b, 0.5)     // perceptual + hue-aware blend
 ### Borders
 
 ```c3
-glaze::rounded_border()         // ╭─╮╰─╯
-glaze::normal_border()          // ┌─┐└─┘
-glaze::double_border()          // ╔═╗╚═╝
-glaze::thick_border()           // ┏━┓┗━┛
-glaze::hidden_border()          // invisible (takes up space)
-glaze::no_border()              // none
+glaze::ROUNDED         // ╭─╮╰─╯
+glaze::NORMAL          // ┌─┐└─┘
+glaze::DOUBLE          // ╔═╗╚═╝
+glaze::THICK           // ┏━┓┗━┛
+glaze::HIDDEN          // invisible (takes up space)
+glaze::NONE              // none
 ```
 
 Set individual colors per side:
 
 ```c3
 glaze::style()
-    .border(glaze::rounded_border())
+    .with_border(glaze::ROUNDED)
     .border_fg(glaze::color_hex("#3b82f6"))
     .border_bg(glaze::color_hex("#1e1e2e"))
 ```
@@ -179,102 +179,111 @@ glaze::join_vertical_arr(glaze::Position.LEFT, pieces[..]);
 
 ---
 
-## Layout with xray::layout
+## Layout
 
-For real apps with multiple panels, use `xray::layout`. It solves a list of size constraints against an available area and gives you back a `Rect` for each slot. Then render into those rects.
-
-```c3
-import xray;
-import xray::layout;
-```
-
-### Constraints
+A view is a tree of nodes. The solver gives each node a rect, and each node
+paints itself there — so pieces can overlap, nest, and size themselves.
 
 ```c3
-layout::len(n)       // exactly n cells
-layout::fill(weight) // fills remaining space (proportional to weight)
-layout::percent(p)   // percentage of available space
-layout::min(n)       // at least n cells
-layout::max(n)       // at most n cells
+fn milktea::View Model.view(&self) @dynamic {
+    glaze::Style title_s  = { .fg = glaze::color_hex("#00d7ff"), .bold = true };
+    glaze::Style body_s   = { .fg = glaze::color_hex("#ffffff") };
+    glaze::Style status_s = { .fg = glaze::color_hex("#555555") };
+
+    return milktea::draw(milktea::root()
+        .add(milktea::vstack()
+            .add(milktea::text(title_s, "  My App").height(milktea::cells(1)))
+            .add(milktea::text(body_s, self.body).fill(1))
+            .add(milktea::text(status_s, "  Ready").height(milktea::cells(1)))));
+}
 ```
 
-### vstack / hstack
+`milktea::root()` is the outermost node and is always present. Anything added
+to it sits over the rest of the tree, which is how a modal works:
+
+```c3
+if (self.confirming_quit) {
+    root.add(milktea::text(modal_s, "Really quit? (y/n)").center());
+}
+```
+
+`add` returns the same node, so the chained and statement forms are the same
+call and conditional content is a plain `if`.
+
+### Containers
+
+| | |
+|---|---|
+| `root()` | the mandatory outermost node; a zstack |
+| `vstack()` | children stacked top to bottom |
+| `hstack()` | children side by side |
+| `zstack()` | children share the rect, later ones on top |
+
+Containers take `.with_gap(n)`, `.with_padding(top, right, bottom, left)`,
+`.with_justify(...)` and `.with_align(...)`.
+
+### Sizing
+
+`.width()` and `.height()` are both optional on every node, and take:
+
+```c3
+milktea::cells(n)     // exactly n cells
+milktea::percent(p)   // percentage of the parent
+milktea::at_least(n)  // at least n cells
+milktea::at_most(n)   // at most n cells
+```
+
+`.fill(weight)` divides whatever space is left over among siblings.
+`.center()` sizes a node to its content and puts it in the middle of its
+parent. A node given neither fills.
+
+### Components
+
+Anything implementing `xray::Content` goes straight into a tree, sizing itself
+from the rect it is given:
+
+```c3
+.add(milktea::component(&self.list))
+```
+
+Every boba component does. A text input also reports where the cursor belongs,
+so the terminal cursor follows the layout rather than a hand-counted row.
+
+### Inline mode
+
+`milktea::draw()` uses the whole terminal. `milktea::draw_inline()` measures
+the tree and claims only as many rows as it needs, leaving the scrollback
+alone.
+
+### Solving to rects instead
+
+`xray::layout` solves the same constraints into plain `Rect`s, for building a
+view as a string:
 
 ```c3
 xray::Rect top, body, bottom;
 
 layout::vstack(layout::screen(w, h), {
-    layout::slot(layout::len(1),  &top),
-    layout::slot(layout::fill(1), &body),
-    layout::slot(layout::len(1),  &bottom),
-});
+    layout::slot(xray::cells(1),  &top),
+    layout::slot(xray::fill(1),   &body),
+    layout::slot(xray::cells(1),  &bottom),
+}, { .gap = 1 });
+
+String doc = glaze::join_vertical(glaze::Position.LEFT,
+    top.render(title_s, "  My App"),
+    body.render(body_s, self.body));
 ```
 
 `layout::screen(w, h)` is shorthand for `xray::new_rect(0, 0, w, h)`.
 
-Add a gap between slots with the options struct:
+Use `rect.render(style, content)` to fill a solved rect; `style.render_in(rect,
+content)` is the same thing style-first. Both live in `milktea`, which is what
+keeps `glaze` and `xray` independent — `glaze` styles, `xray` measures, and
+`milktea` joins them.
 
-```c3
-layout::vstack(area, slots, { .gap = 1 });
-```
-
-### A full layout example
-
-A terminal app with a title bar, sidebar, main content, and status bar:
-
-```c3
-fn milktea::View Model.view(&self) @dynamic {
-    int w = self.width > 0 ? self.width : 80;
-    int h = self.height > 0 ? self.height : 24;
-
-    // Solve the layout
-    xray::Rect title_r, main_r, status_r;
-    layout::vstack(layout::screen(w, h), {
-        layout::slot(layout::len(1),  &title_r),
-        layout::slot(layout::fill(1), &main_r),
-        layout::slot(layout::len(1),  &status_r),
-    });
-
-    xray::Rect sidebar_r, content_r;
-    layout::hstack(main_r, {
-        layout::slot(layout::len(24),  &sidebar_r),
-        layout::slot(layout::fill(1),  &content_r),
-    });
-
-    // Render into each rect
-    glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
-    glaze::Style side_s   = glaze::style().foreground(glaze::color_hex("#888888"));
-    glaze::Style body_s   = glaze::style().foreground(glaze::color_hex("#ffffff"));
-    glaze::Style status_s = glaze::style().foreground(glaze::color_hex("#555555"));
-
-    String title   = title_r.render(title_s,   "  My App");
-    String sidebar = sidebar_r.render(side_s,   "  Navigation\n  ──────────\n  > Home\n  Files\n  Settings");
-    String content = content_r.render(body_s,   self.body);
-    String status  = status_r.render(status_s,  "  Ready");
-
-    // Stack into a single string and return
-    String doc = glaze::join_vertical(glaze::Position.LEFT, title, glaze::join_horizontal(sidebar, content, 0));
-    doc = glaze::join_vertical(glaze::Position.LEFT, doc, status);
-
-    return milktea::new_alt_screen_view(doc);
-}
-```
-
-### Rendering into rects
-
-When you have a layout rect, prefer `rect.render(style, content)` over `style.render_in(rect, content)`. Both do the same thing — size the rendered block to fit the rect — but the rect-as-receiver form reflects the mental model better: you have a slot, and you're filling it with styled content.
-
-```c3
-// preferred
-String title  = title_r.render(title_s,  "  My App");
-String body   = body_r.render(body_s,    self.body);
-String status = status_r.render(status_s, "  Ready");
-
-// also available, style-first
-String title  = title_s.render_in(title_r, "  My App");
-```
-
-Both methods are provided by `milktea` (not `glaze`), so they are only available when you `import milktea`. This keeps `glaze` and `xray` independent of each other — `glaze` handles styling, `xray` handles geometry, and `milktea` bridges them.
+Note that joining strings discards the coordinates the solver computed, so
+pieces land in argument order and cannot overlap. Reach for the tree when a
+layout nests deeply, needs to overlap, or contains components.
 
 ---
 

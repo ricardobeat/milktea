@@ -10,10 +10,16 @@ module pomodoro;
 
 import milktea;
 import glaze;
-import xray::layout;
 import std::io;
 
 // ── Model ────────────────────────────────────────────────────────────────────
+
+// Width of the stats sidebar, and of the progress bar inside the timer panel.
+const int SIDEBAR_COLS  = 22;
+const int PROGRESS_CELLS = 28;
+// Columns between the sidebar and the timer panel. Without it the two borders
+// sit flush and the sidebar's right edge is overwritten.
+const int PANEL_GAP = 1;
 
 enum Phase : int {
 	FOCUS,
@@ -98,9 +104,6 @@ fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
 // ── view ─────────────────────────────────────────────────────────────────────
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
-	int h = milktea::screen_height();
-
 	bool focus = self.phase == Phase.FOCUS;
 
 	// Warm pastel accents — one per phase.
@@ -109,46 +112,28 @@ fn milktea::View Model.view(&self) @dynamic {
 		: glaze::color_hex("#8fcab0");  // mint for break
 	glaze::Color dim = glaze::color_hex("#7a6a58");
 
-	// 1. Split the screen vertically: title / body / status.
-	xray::Rect title_r, body_r, status_r;
-	layout::vstack(layout::screen(w, h), {
-		layout::slot(layout::cells(1),  &title_r),
-		layout::slot(layout::fill(1), &body_r),
-		layout::slot(layout::cells(1),  &status_r),
-	});
+	glaze::Style title_s = {
+		.fg = glaze::color_hex("#4a3f35"), .bg = accent, .bold = true,
+		.pad_left = 1, .pad_right = 1,
+	};
+	glaze::Style side_s = {
+		.fg = dim, .border = glaze::ROUNDED, .border_color = dim,
+		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+	};
+	glaze::Style timer_s = {
+		.fg = accent, .bold = true,
+		.border = glaze::ROUNDED, .border_color = accent,
+		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+		.align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
+	};
+	glaze::Style status_s = { .fg = dim };
 
-	// 2. Split the body horizontally: a stats sidebar and the timer panel.
-	xray::Rect side_r, timer_r;
-	layout::hstack(body_r, {
-		layout::slot(layout::cells(22), &side_r),
-		layout::slot(layout::fill(1), &timer_r),
-	});
-
-	// 3. Styles.
-	glaze::Style title_s = glaze::style()
-		.foreground(glaze::color_hex("#4a3f35")).background(accent)
-		.with_bold(true).padding(0, 1, 0, 1);
-
-	glaze::Style side_s = glaze::style()
-		.foreground(dim)
-		.with_border(glaze::ROUNDED).border_fg(dim).padding(1, 2, 1, 2);
-
-	glaze::Style timer_s = glaze::style()
-		.foreground(accent).with_bold(true)
-		.with_border(glaze::ROUNDED).border_fg(accent)
-		.padding(1, 2, 1, 2)
-		.align(glaze::Position.CENTER, glaze::Position.CENTER);
-
-	glaze::Style status_s = glaze::style().foreground(dim);
-
-	// 4. Build content.
 	int mins = self.remaining / 60;
 	int secs = self.remaining % 60;
 	int total = phase_length(self.phase);
 	int pct   = total > 0 ? 100 - (self.remaining * 100 / total) : 0;
 
-	String bar = glaze::progress_bar(
-		28, pct, "█", "░", accent, dim);
+	String bar = glaze::progress_bar(PROGRESS_CELLS, pct, "█", "░", accent, dim);
 
 	String clock = string::tformat("%s\n\n  %02d:%02d  \n\n%s",
 		focus ? "◆ FOCUS ◆" : "♦ BREAK ♦", mins, secs, bar);
@@ -160,18 +145,17 @@ fn milktea::View Model.view(&self) @dynamic {
 		focus ? "focus" : "break",
 		self.running ? "running" : "paused");
 
-	// 5. Render each piece into its rect, then stack them into one document.
-	String title_v  = title_r.render(title_s,   " 🍵 milktea pomodoro");
-	String side_v   = side_r.render(side_s,      side);
-	String timer_v  = timer_r.render(timer_s,    clock);
-	String status_v = status_r.render(status_s,
-		"  space pause · tab switch · r reset · q quit");
-
-	String body = glaze::join_horizontal(side_v, timer_v, 0);
-	String doc  = glaze::join_vertical(glaze::Position.LEFT, title_v, body);
-	doc = glaze::join_vertical(glaze::Position.LEFT, doc, status_v);
-
-	return milktea::new_alt_screen_view(doc);
+	return milktea::draw(milktea::root()
+		.add(milktea::vstack()
+			.add(milktea::text(title_s, " 🍵 milktea pomodoro").height(milktea::cells(1)))
+			.add(milktea::hstack()
+				.fill(1)
+				.with_gap(PANEL_GAP)
+				.add(milktea::text(side_s, side).width(milktea::cells(SIDEBAR_COLS)))
+				.add(milktea::text(timer_s, clock).fill(1)))
+			.add(milktea::text(status_s,
+				"  space pause · tab switch · r reset · q quit")
+				.height(milktea::cells(1)))));
 }
 
 fn int main() {
