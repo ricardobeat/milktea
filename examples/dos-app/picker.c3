@@ -12,8 +12,6 @@ import xray;
 // suits a short list, which is what a picker is for.
 
 const int MAX_CHOICES = 8;
-// PANEL_PAD_TOP/SIDE/BOTTOM, PANEL_BORDER, HEADER_GAP, BUTTON_ROW_H are
-// shared with Dialog — see dialog.c3, same module.
 
 struct Picker {
 	String title;
@@ -138,37 +136,24 @@ fn void picker_backdrop_dismissed(void* ctx, int col, int row) @local {
 
 // node returns the picker, or null when it is closed.
 //
-// Same shape as Dialog.node(): the panel paints an empty-content bordered
-// background sized to fit its children, which are real nodes (the choice
-// list rows and the button row) rather than one joined string, so both stay
-// individually clickable.
+// Same shape as Dialog.node(): the panel is a real container sized by the
+// solver from its children (min_width().center()) — the choice rows and the
+// button row are individually clickable nodes, and each choice row stretches
+// to the panel's own content width (ALIGN_STRETCH, the vstack default)
+// instead of a widest-choice width computed by hand ahead of layout.
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
 		.bg = th.panel, .fg = th.text,
 		.border = glaze::DOUBLE, .border_color = th.accent,
+		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
 	};
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	int list_w = self.choice_list_width();
-	int btn_w = self.buttons_width();
-	int content_w = list_w > btn_w ? list_w : btn_w;
-	if (content_w < self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2) {
-		content_w = self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2;
-	}
-	// title (1) + blank (1) + choice rows + blank (HEADER_GAP handles this
-	// via with_gap, so just title + rows here) + button row.
-	int content_h = 1 + self.count + BUTTON_ROW_H;
-
-	int panel_w = content_w + PANEL_PAD_SIDE * 2 + PANEL_BORDER * 2;
-	int panel_h = content_h + PANEL_PAD_TOP + PANEL_PAD_BOTTOM + PANEL_BORDER * 2 + HEADER_GAP * 2;
-
 	xray::Node* panel_node = milktea::text(panel, "")
-		.width(milktea::cells(panel_w))
-		.height(milktea::cells(panel_h))
-		.with_padding(PANEL_PAD_TOP, PANEL_PAD_SIDE, PANEL_PAD_BOTTOM, PANEL_PAD_SIDE)
-		.with_gap(HEADER_GAP)
+		.min_width(self.min_cols)
+		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
@@ -176,7 +161,6 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
 
 	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
-	int widest = self.widest_choice();
 	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
 	glaze::Style current = {
 		.fg = th.ink, .bg = th.accent, .bold = true,
@@ -186,8 +170,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.choice_slots[i] = { .picker = self, .index = i };
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
-		String rendered = (on ? current : row).with_width(widest + 4).render(label);
-		xray::Node* choice_node = milktea::text({ .bg = th.panel }, rendered).height(milktea::cells(1));
+		xray::Node* choice_node = milktea::text(on ? current : row, label).height(milktea::cells(1));
 		choice_node.on_click(&picker_choice_clicked, &self.choice_slots[i]);
 		list_node.add(choice_node);
 	}
@@ -196,7 +179,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)
 		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
-		.height(milktea::cells(BUTTON_ROW_H));
+		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (int i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
@@ -207,23 +190,4 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	panel_node.add(buttons_row);
 
 	return panel_node;
-}
-
-fn int Picker.widest_choice(&self) {
-	int widest = 0;
-	for (int i = 0; i < self.count; i++) {
-		int w = glaze::string_width(self.choices[i]);
-		if (w > widest) widest = w;
-	}
-	return widest;
-}
-
-fn int Picker.choice_list_width(&self) => self.widest_choice() + 4;
-
-fn int Picker.buttons_width(&self) {
-	int total = 0;
-	for (int i = 0; i < DIALOG_BUTTONS; i++) {
-		total += self.buttons[i].measure_width(2);
-	}
-	return total + 2 * (DIALOG_BUTTONS - 1);
 }

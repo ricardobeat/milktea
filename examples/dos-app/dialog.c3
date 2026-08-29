@@ -9,16 +9,6 @@ import xray;
 // pressed, so the app does not track the selection itself.
 
 const int DIALOG_BUTTONS = 2;
-// Panel padding inside its DOUBLE border (1 cell) — matches the old style's
-// pad_top/right/bottom/left.
-const int PANEL_PAD_TOP = 1;
-const int PANEL_PAD_SIDE = 2;
-const int PANEL_PAD_BOTTOM = 1;
-const int PANEL_BORDER = 1;
-// Blank row between the header text and the button row.
-const int HEADER_GAP = 1;
-// A button is its label plus a one-row drop shadow underneath.
-const int BUTTON_ROW_H = 2;
 
 struct Dialog {
 	String title;
@@ -110,67 +100,27 @@ fn void backdrop_dismissed(void* ctx, int col, int row) @local {
 	d.pending = Pressed.DISMISSED;
 }
 
-// header_dims measures the title+body block's rendered size (before the
-// button row), matching join_vertical_arr(Position.LEFT, {title, "", body}).
-fn int[2] Dialog.header_dims(&self) {
-	String header = glaze::join_vertical_arr(glaze::Position.LEFT, { self.title, "", self.body });
-	int width = 0;
-	int height = 1;
-	usz start = 0;
-	for (usz i = 0; i <= header.len; i++) {
-		if (i < header.len && header[i] != '\n') continue;
-		int w = glaze::string_width(header[start:i - start]);
-		if (w > width) width = w;
-		if (i < header.len) height++;
-		start = i + 1;
-	}
-	return { width, height };
-}
-
-fn int Dialog.buttons_width(&self) {
-	int total = 0;
-	for (int i = 0; i < DIALOG_BUTTONS; i++) {
-		total += self.buttons[i].measure_width(2);
-	}
-	return total + 2 * (DIALOG_BUTTONS - 1); // gaps between buttons
-}
-
 // node returns the dialog, or null when it is closed, so the caller can add
 // it unconditionally.
 //
-// The panel is one node whose own content is the bordered background,
-// painted from an empty string so nothing is baked into a single opaque
-// blob — the header text and the button row are its children instead, each
-// a real node so the buttons stay individually clickable. The panel is
-// explicitly sized (not auto-fit via center()) because auto-fit only
-// measures a node's own content string, which does not account for
-// children.
+// The panel is a real container sized entirely by the layout solver: the
+// header text and the button row are children, and min_width().center()
+// measures the panel from them (same content_width/content_height the
+// solver already uses for any CFIT node) rather than computing panel_w/
+// panel_h by hand ahead of time.
 fn xray::Node* Dialog.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
 		.bg = th.panel, .fg = th.text,
 		.border = glaze::DOUBLE, .border_color = th.accent,
+		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
 	};
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
-	int[2] hdr = self.header_dims();
-	int content_w = hdr[0];
-	int btn_w = self.buttons_width();
-	if (btn_w > content_w) content_w = btn_w;
-	if (content_w < self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2) {
-		content_w = self.min_cols - PANEL_PAD_SIDE * 2 - PANEL_BORDER * 2;
-	}
-	int content_h = hdr[1] + HEADER_GAP + BUTTON_ROW_H;
-
-	int panel_w = content_w + PANEL_PAD_SIDE * 2 + PANEL_BORDER * 2;
-	int panel_h = content_h + PANEL_PAD_TOP + PANEL_PAD_BOTTOM + PANEL_BORDER * 2;
-
 	xray::Node* panel_node = milktea::text(panel, "")
-		.width(milktea::cells(panel_w))
-		.height(milktea::cells(panel_h))
-		.with_padding(PANEL_PAD_TOP, PANEL_PAD_SIDE, PANEL_PAD_BOTTOM, PANEL_PAD_SIDE)
-		.with_gap(HEADER_GAP)
+		.min_width(self.min_cols)
+		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.on_click_outside(&backdrop_dismissed, self);
@@ -183,12 +133,12 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	String header = glaze::join_vertical_arr(glaze::Position.LEFT, {
 		title_s.background(th.panel).render(self.title), "", body_s.render(self.body),
 	});
-	panel_node.add(milktea::text(body_s, header).height(milktea::cells(hdr[1])));
+	panel_node.add(milktea::text(body_s, header));
 
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)
 		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
-		.height(milktea::cells(BUTTON_ROW_H));
+		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (int i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .dialog = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused).view();
