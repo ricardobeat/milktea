@@ -17,6 +17,9 @@ struct MenuItem {
 	String key;
 }
 
+// Cells of padding on each side of a dropdown item, inside its highlight.
+const int ITEM_PAD = 1;
+
 const int MENU_COLS  = 4;
 const int MENU_ITEMS = 4;
 
@@ -31,7 +34,7 @@ struct Menu {
 	int item;          // which item within the open dropdown
 	bool open;
 
-	// Inner width of a dropdown panel, before its border and padding.
+	// Width of an item's text, before the padding around it.
 	int item_width;
 }
 
@@ -127,17 +130,27 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	if (!self.open) return null;
 
+	// The panel has no padding of its own: each item carries its, inside the
+	// highlight, so the highlighted row reaches the border on both sides.
 	glaze::Style panel = {
 		.bg = th.bar, .fg = th.bar_text,
 		.border = glaze::NORMAL, .border_color = th.text,
-		.pad_left = 1, .pad_right = 1,
 	};
-	glaze::Style selected = { .bg = th.accent, .fg = th.ink, .bold = true };
-	glaze::Style item = { .bg = th.bar, .fg = th.bar_text };
+	// A cell of padding on each side, so the highlight is a bar with the label
+	// inset rather than text flush against the panel border.
+	glaze::Style selected = {
+		.bg = th.accent, .fg = th.ink, .bold = true,
+		.pad_left = ITEM_PAD, .pad_right = ITEM_PAD,
+	};
+	glaze::Style item = {
+		.bg = th.bar, .fg = th.bar_text,
+		.pad_left = ITEM_PAD, .pad_right = ITEM_PAD,
+	};
 
 	String[MENU_ITEMS] rows;
 	for (int i = 0; i < MENU_ITEMS; i++) {
-		glaze::Style s = (i == self.item ? selected : item).with_width(self.item_width);
+		glaze::Style s = (i == self.item ? selected : item)
+			.with_width(self.item_width + ITEM_PAD * 2);
 		rows[i] = self.render_item(self.items[self.selected][i], s);
 	}
 	String content = glaze::join_vertical_arr(glaze::Position.LEFT, rows[..]);
