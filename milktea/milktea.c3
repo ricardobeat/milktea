@@ -281,6 +281,7 @@ interface Model {
 // Constants
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
+const int MAX_CLICK_TARGETS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
@@ -309,6 +310,15 @@ struct Program {
 	xray::ScreenBuffer* draw_buf;
 	xray::ScreenBuffer* draw_scratch;
 	bool in_alt_screen;
+	// Mouse hit-testing: repopulated by draw() every frame from the just-
+	// solved tree (xray::collect_click_targets), so a MOUSE_PRESS is matched
+	// against the layout that was actually on screen when the click landed
+	// rather than the app re-deriving widget geometry by hand. Fixed-size
+	// like the other per-frame buffers below — a screen with more than
+	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
+	// timers/send_queue/pending.
+	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
+	int click_target_count;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -543,6 +553,16 @@ fn int screen_height() {
 	return (int)g_program.cached_ws.ws_row;
 }
 
+// dispatch_click fires on_click/on_click_outside hooks (see xray::Node.on_click,
+// .on_click_outside) against the click targets collected from the last drawn
+// frame — called for every MOUSE_PRESS before the raw MouseMsg reaches
+// model.update(), by dispatch() in the normal event loop and directly by any
+// backend (e.g. a GUI renderer) that drives a Model outside Program.run().
+fn void dispatch_click(int col, int row) {
+	if (g_program == null) return;
+	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);
+}
+
 // debug_warn appends a timestamped line to milktea-debug.log.
 // Only writes when the running program has debug=true; silently swallows all
 // I/O errors so a logging failure never disrupts the TUI surface.
@@ -661,6 +681,9 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // ever crashing or blocking the event loop.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
+	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
+		dispatch_click(m.mouse.col, m.mouse.row);
+	}
 	Cmd c     = model.update(m);
 	int chain = 0;
 	while (c != null && chain < MAX_BATCH) {

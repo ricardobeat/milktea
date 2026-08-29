@@ -38,6 +38,12 @@ interface Content {
 // animates on its own clock can ignore it.
 alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
 
+// ClickFn fires when a mouse press lands inside (on_click) or outside
+// (on_click_outside) the node's solved rect. ctx is whatever the caller
+// passed to .on_click()/.on_click_outside() — typically `self` from the
+// component that built the node, cast back on the way in.
+alias ClickFn = fn void(void* ctx, int col, int row);
+
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
 //
@@ -165,6 +171,16 @@ struct Node {
 	int repaint_ms;
 
 	Rect computed_rect;
+
+	// Mouse hit-testing, collected into Program.click_targets after solve()
+	// (see xray::collect_click_targets / milktea's draw_in). Each hook keeps
+	// its own ctx — a node that sets both (a button that also wants to know
+	// about clicks elsewhere) would otherwise have the second call silently
+	// clobber the first's context.
+	ClickFn on_click_fn;
+	void* on_click_ctx;
+	ClickFn on_click_outside_fn;
+	void* on_click_outside_ctx;
 }
 
 fn Node* new_node(NodeDirection dir) @local {
@@ -326,6 +342,25 @@ fn Node* Node.alpha(&self, char a) {
 // the app does not have to run a timer for it.
 fn Node* Node.repaint_after(&self, int ms) {
 	self.repaint_ms = ms;
+	return self;
+}
+
+// on_click fires fn(ctx, col, row) when a mouse press lands inside this
+// node's solved rect. Hit-testing picks the topmost (last-painted) node
+// whose rect contains the click, so a button inside a dialog gets the
+// click rather than the dialog panel behind it.
+fn Node* Node.on_click(&self, ClickFn handler, void* ctx) {
+	self.on_click_fn = handler;
+	self.on_click_ctx = ctx;
+	return self;
+}
+
+// on_click_outside fires handler(ctx, col, row) when a mouse press lands
+// anywhere outside this node's solved rect — the standard "dismiss on
+// outside click" behavior for a dropdown or modal backdrop.
+fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
+	self.on_click_outside_fn = handler;
+	self.on_click_outside_ctx = ctx;
 	return self;
 }
 
