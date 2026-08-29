@@ -302,6 +302,12 @@ struct TimerEntry {
 struct Program {
 	Model model;
 	TimerEntry[MAX_TIMERS] timers;
+	// Buffers for tree layout (see draw / draw_inline), kept across frames
+	// rather than reallocated per view. draw_buf holds the painted grid the
+	// View points at; draw_scratch is used only when a node blends. Both are
+	// lazily allocated on first draw and freed when the program stops.
+	xray::ScreenBuffer* draw_buf;
+	xray::ScreenBuffer* draw_scratch;
 	bool in_alt_screen;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
@@ -919,6 +925,19 @@ fn void? Program.run(Program* self) {
 	defer {
 		// Free the paste accumulation buffer regardless of test mode.
 		self.paste_buf.free();
+
+		// Tree-layout buffers. A View built by draw() points into draw_buf,
+		// so these outlive the last frame and are released only here.
+		if (self.draw_buf != null) {
+			self.draw_buf.destroy();
+			mem::free(self.draw_buf);
+			self.draw_buf = null;
+		}
+		if (self.draw_scratch != null) {
+			self.draw_scratch.destroy();
+			mem::free(self.draw_scratch);
+			self.draw_scratch = null;
+		}
 
 		if (self.renderer != null) {
 			self.renderer.destroy();

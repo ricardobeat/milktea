@@ -2,6 +2,7 @@ module milktea;
 
 import std::core::dstring;
 import std::thread;
+import glaze;
 import xray;
 
 // contains is defined in test_render.c3
@@ -599,3 +600,75 @@ fn void test_screen_size_accessors_fall_back_when_not_running() @test {
 	assert(milktea::screen_height() == 24);
 }
 
+// ============================================================
+// Tree layout — milktea::draw / draw_inline through a real program
+// ============================================================
+
+struct TreeModel {
+	bool modal;
+	bool inline_mode;
+}
+
+fn milktea::Cmd TreeModel.init(&self) @dynamic => null;
+
+fn milktea::Cmd TreeModel.update(&self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View TreeModel.view(&self) @dynamic {
+	glaze::Style plain = {};
+	milktea::Node* root = milktea::root()
+		.add(milktea::vstack()
+			.add(milktea::text(plain, "HEADER").height(milktea::cells(1)))
+			.add(milktea::text(plain, "body").fill(1))
+			.add(milktea::text(plain, "FOOTER").height(milktea::cells(1))));
+
+	if (self.modal) {
+		root.add(milktea::text(plain, "MODAL").center());
+	}
+
+	return self.inline_mode ? milktea::draw_inline(root) : milktea::draw(root);
+}
+
+fn void test_draw_places_header_and_footer_at_the_edges() @test {
+	TreeModel m = { };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 40, 10, "q");
+
+	p.run()!!;
+
+	String s = out.str_view();
+	assert(contains(s, "HEADER"));
+	assert(contains(s, "FOOTER"));
+	assert(contains(s, "body"));
+}
+
+fn void test_draw_paints_a_centered_modal_over_the_layout() @test {
+	TreeModel m = { .modal = true };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 40, 10, "q");
+
+	p.run()!!;
+
+	String s = out.str_view();
+	assert(contains(s, "MODAL"));
+	// The base layout is still there underneath.
+	assert(contains(s, "HEADER"));
+}
+
+fn void test_draw_inline_sizes_the_block_to_its_content() @test {
+	// Three rows of content in a 24-row terminal: an inline view must claim
+	// only those three, leaving the rest of the screen to the user.
+	TreeModel m = { .inline_mode = true };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 40, 24, "q");
+
+	p.run()!!;
+
+	String s = out.str_view();
+	assert(contains(s, "HEADER"));
+	assert(contains(s, "FOOTER"));
+	// Alt screen is never entered for an inline view.
+	assert(!contains(s, "\x1b[?1049h"));
+}
