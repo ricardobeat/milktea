@@ -6,12 +6,13 @@ For usage, see `README.md`. For a quick API map, see `AGENTS.md`.
 
 ## Module map
 
-Five modules, one-way dependency chain:
+Six modules, one-way dependency chain:
 
 ```
-xray    — cell grid, diff renderer, layout solver, color        (no internal deps)
-glaze   — styles, borders, gradients → ANSI strings              (no internal deps)
-milktea — event loop, input parsing, TTY control, View/Cmd       (depends on xray)
+dye     — Color, palettes, HSL/HCL/LUV colour spaces              (no internal deps)
+xray    — cell grid, diff renderer, layout solver                (depends on dye)
+glaze   — styles, borders, gradients → ANSI strings              (depends on dye)
+milktea — event loop, input parsing, TTY control, View/Cmd       (depends on dye, xray)
 boba    — widget collection (list, textinput, viewport, ...)     (depends on milktea, glaze, xray)
 taro    — QuickJS bridge (JS models drive milktea from taro.js)  (depends on milktea, glaze, xray, boba)
 ```
@@ -21,6 +22,18 @@ standalone. `glaze` produces ANSI-styled strings; `xray` owns the persistent
 cell grid and the diffing renderer. `milktea` composites the two: a `View`
 carries either a plain string (parsed by xray's ANSI parser) or a direct
 `Cell[]` grid. Package manifests (`*/manifest.json`) encode this same order.
+
+`dye` sits under both. It owns the one `Color` type, its constructors, the
+xterm-256 palette and the downsampling between colour depths, plus the
+colour-space maths (sRGB↔linear, XYZ, LUV, HSL, HCL) that `hsl`/`hcl`/
+`blend_luv` are built from. `xray` and `glaze` each alias `Color` and the
+constructors into their own namespace, so a caller still writes
+`glaze::color_hex(...)` or `xray::color_rgb(...)` and never names `dye`.
+
+The type is shared, but not every field means something to both: `dye::Color`
+carries an alpha channel and a `TRANSPARENT` kind that only xray's compositor
+acts on. glaze renders to a string with no layer beneath it, so it treats
+`TRANSPARENT` the way it treats `NONE` — it emits nothing.
 
 `taro/taro.c` and `vendor/quickjs/*.c` are C sources pulled in via
 `c-sources`; `taro/taro.c3` declares `extern fn` bindings into that C layer.

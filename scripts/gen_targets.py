@@ -31,7 +31,7 @@ QUICKJS_C_SOURCES = [
 
 # Per-example overrides, keyed by the target name (without "examples/"
 # prefix). Anything not specified here falls back to the default: sources =
-# ["milktea/**", "glaze/**", "examples/<name>/**"], c-sources =
+# ["milktea/**", "glaze/**", "dye/**", "examples/<name>/**"], c-sources =
 # ["milktea/tty_winsize.c"], opt = "Os", strip-unused = true.
 #
 # Recognized keys:
@@ -62,15 +62,16 @@ OVERRIDES = {
     "cursors": {"extra_dirs": ["boba", "xray"], "opt": "O0", "strip_unused": False},
     "inputbox": {"extra_dirs": ["xray"], "opt": "O0", "strip_unused": False},
     "doom-fire": {
-        "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire.c3"],
+        "sources": ["milktea/**", "glaze/**", "dye/**", "examples/doom-fire/doom-fire.c3"],
     },
     "doom-fire-milktea": {
-        "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire-milktea.c3"],
+        "sources": ["milktea/**", "glaze/**", "dye/**", "examples/doom-fire/doom-fire-milktea.c3"],
     },
     "doom-fire-donut": {
         "sources": [
             "milktea/**",
             "glaze/**",
+            "dye/**",
             "examples/lib/glb.c3",
             "examples/doom-fire-donut/**",
             "examples/lib/stb_json.c3",
@@ -81,6 +82,7 @@ OVERRIDES = {
         "sources": [
             "milktea/**",
             "glaze/**",
+            "dye/**",
             "examples/lib/glb.c3",
             "examples/lib/stb_json.c3",
             "examples/glb-viewer/**",
@@ -91,6 +93,7 @@ OVERRIDES = {
         "sources": [
             "milktea/**",
             "glaze/**",
+            "dye/**",
             "examples/oiia-player/**",
             "examples/lib/stb_image.c3",
             "examples/lib/stb_json.c3",
@@ -143,7 +146,7 @@ def build_target(name):
         sources = override["sources"]
     else:
         extra_dirs = override.get("extra_dirs", [])
-        sources = ["milktea/**", "glaze/**"]
+        sources = ["milktea/**", "glaze/**", "dye/**"]
         sources.extend(f"{d}/**" for d in extra_dirs)
         sources.append(f"examples/{name}/**")
 

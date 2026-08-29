@@ -155,7 +155,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.min_width(self.min_cols)
 		.with_gap(1)
 		.center()
-		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
+		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
 	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
 
 	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
