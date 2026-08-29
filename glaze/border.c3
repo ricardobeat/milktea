@@ -121,13 +121,21 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 
 	DString out = dstring::temp();
 
+	// A side with no characters draws no row at all. A partial border — say a
+	// half-block shadow down the right edge and along the bottom — would
+	// otherwise cost a blank line where its missing top should be.
+	bool has_top = self.top.len > 0 || self.top_left.len > 0 || self.top_right.len > 0;
+	bool has_bottom = self.bottom.len > 0 || self.bottom_left.len > 0 || self.bottom_right.len > 0;
+
 	// Top border row.
-	if (color_border) out.append_string(sgr_open_str);
-	out.append_string(self.top_left);
-	for (sz i = 0; i < max_width; i++) out.append_string(self.top);
-	out.append_string(self.top_right);
-	if (color_border) out.append_string(sgr_close);
-	out.append_char('\n');
+	if (has_top) {
+		if (color_border) out.append_string(sgr_open_str);
+		out.append_string(self.top_left);
+		for (sz i = 0; i < max_width; i++) out.append_string(self.top);
+		out.append_string(self.top_right);
+		if (color_border) out.append_string(sgr_close);
+		out.append_char('\n');
+	}
 
 	// Body lines.
 	line_start = 0;
@@ -149,11 +157,16 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 	}
 
 	// Bottom border row.
-	if (color_border) out.append_string(sgr_open_str);
-	out.append_string(self.bottom_left);
-	for (sz i = 0; i < max_width; i++) out.append_string(self.bottom);
-	out.append_string(self.bottom_right);
-	if (color_border) out.append_string(sgr_close);
+	if (has_bottom) {
+		if (color_border) out.append_string(sgr_open_str);
+		out.append_string(self.bottom_left);
+		for (sz i = 0; i < max_width; i++) out.append_string(self.bottom);
+		out.append_string(self.bottom_right);
+		if (color_border) out.append_string(sgr_close);
+	} else {
+		// The last body line left a trailing newline that nothing follows.
+		out.chop(out.len() - 1);
+	}
 
 	return out.copy_str(tmem);
 }

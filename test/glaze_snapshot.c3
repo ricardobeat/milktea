@@ -474,3 +474,18 @@ fn void test_render_long_input_is_not_truncated() @test {
 		assert(found);
 	}
 }
+
+// A border with only some sides drawn used to cost a blank row where each
+// missing side should have been, which made a partial border — a half-block
+// shadow down two edges, say — unusable.
+fn void test_partial_border_draws_only_its_sides() @test {
+	glaze::Border shadow = { .right = "▌", .bottom = "▀", .bottom_right = "▘" };
+	glaze::Style s = { .border = shadow };
+
+	String out = s.render("ok");
+
+	int lines = 1;
+	foreach (c : out) if (c == '\n') lines++;
+	assert(lines == 2, "one content row and one bottom row, not four: %s", out);
+	assert(!out.starts_with("\n"), "no blank row where the top border is absent");
+}
