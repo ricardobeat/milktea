@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import xray;
 
 const String SGR_HIDE_CURSOR      = "\x1b[?25l";
 const String SGR_SHOW_CURSOR      = "\x1b[?25h";
@@ -51,6 +52,36 @@ fn String cursor_style_seq(CursorShape shape, bool blink) {
 
 // render_view_to writes the full rendered output for a View into [out].
 // Split from render_view so tests can inspect the buffer without touching stdout.
+// cells_to_string flattens a cell view into an ANSI string, one line per row.
+// The differential renderer normally consumes the grid directly; this is the
+// path for test mode and for any caller holding only a string sink.
+fn String cells_to_string(View v) {
+	DString out = dstring::temp();
+	xray::Style pen = xray::default_style();
+
+	for (sz row = 0; row < v.cells_height; row++) {
+		if (row > 0) out.append_char('\n');
+		sz line_start = row * v.cells_width;
+		for (sz col = 0; col < v.cells_width; col++) {
+			xray::Cell cell = v.cells[line_start + col];
+			String sgr = cell.style.diff_sgr(pen);
+			if (sgr.len > 0) out.append_string(sgr);
+			// TRANSPARENT leaves the channel as it was, so the pen keeps its
+			// previous color rather than adopting a non-color.
+			if (cell.style.fg.kind != xray::ColorKind.TRANSPARENT) pen.fg = cell.style.fg;
+			if (cell.style.bg.kind != xray::ColorKind.TRANSPARENT) pen.bg = cell.style.bg;
+			pen.attrs = cell.style.attrs;
+			pen.underline_color = cell.style.underline_color;
+			out.append_string(cell.content_str());
+			// A wide glyph owns the next column too; its placeholder cell
+			// must not be emitted as a second character.
+			if (cell.width == 2) col++;
+		}
+	}
+	if (!pen.is_empty()) out.append_string("\x1b[0m");
+	return out.copy_str(tmem);
+}
+
 fn void render_view_to(View v, DString* out) {
 	// Hide cursor while rendering to avoid flicker
 	out.append_string(SGR_HIDE_CURSOR);
@@ -58,8 +89,11 @@ fn void render_view_to(View v, DString* out) {
 	// Clear screen and move to home position
 	out.append_string(SGR_CLEAR_HOME);
 
+	// A cell view carries a grid rather than a string, so flatten it here.
+	// Test mode has no differential renderer to hand the cells to.
+	String frame = v.cells.ptr != null ? cells_to_string(v) : v.content;
+
 	// Write content, converting \n to \r\n for proper terminal line endings
-	String frame = v.content;
 	for (sz i = 0; i < frame.len; i++) {
 		if (frame[i] == '\n' && (i == 0 || frame[i - 1] != '\r')) {
 			out.append_char('\r');
