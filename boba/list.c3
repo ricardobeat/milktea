@@ -1,10 +1,15 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 
 // ListItem represents a single item in a list.
+// Rows the list reserves for its own chrome rather than items: a title row
+// and the pagination row beneath.
+const int LIST_CHROME_ROWS = 2;
+
 struct ListItem {
 	String title;
 	String description;
@@ -12,7 +17,7 @@ struct ListItem {
 }
 
 // List is a scrollable list component with optional selection.
-struct List {
+struct List (xray::Content) {
 	ListItem[64] items;
 	int item_count;
 	int cursor;
@@ -98,9 +103,15 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 }
 
 // view returns the rendered list string.
+// visible_rows is how many items fit in the list's height, leaving room for
+// the chrome the view draws around them.
+fn int List.visible_rows(&self) {
+	int n = self.height - LIST_CHROME_ROWS;
+	return n < 1 ? 1 : n;
+}
+
 fn String List.view(&self) {
-	int available = self.height - 2;
-	if (available < 1) available = 1;
+	int available = self.visible_rows();
 
 	// Adjust scroll offset
 	if (self.cursor < self.scroll_offset) self.scroll_offset = self.cursor;
@@ -131,8 +142,7 @@ fn String List.view_with_pagination(&self) {
 	DString out = dstring::temp();
 	out.append_string(self.view());
 
-	int available = self.height - 2;
-	if (available < 1) available = 1;
+	int available = self.visible_rows();
 	int total_pages  = (self.item_count + available - 1) / available;
 	int current_page = self.scroll_offset / available;
 

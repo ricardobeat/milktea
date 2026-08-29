@@ -21,6 +21,9 @@ import xray;
 // Re-exports, so an app needs to import only milktea and glaze.
 alias Node           = xray::Node;
 alias Rect           = xray::Rect;
+// Content is aliased for reference and parameter types. Declaring that a
+// struct implements it still needs the xray name — `struct Foo (xray::Content)`
+// — because c3c 0.8.3 does not resolve an alias in an implements-list.
 alias Content        = xray::Content;
 alias ContentCursor  = xray::ContentCursor;
 alias Shadow         = xray::Shadow;

@@ -1,14 +1,16 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 
 // TextInput is a single-line text input component.
-struct TextInput {
+struct TextInput (xray::Content) {
 	char[512] buf;
 	sz len;
-	sz cursor;
+	// Byte offset of the caret within buf.
+	sz cursor_pos;
 	String placeholder;
 	bool focused;
 	bool is_password;
@@ -53,18 +55,18 @@ fn TextInput TextInput.with_styles(self, glaze::Style focused_s, glaze::Style bl
 // clear empties the input.
 fn void TextInput.clear(&self) {
 	self.len = 0;
-	self.cursor = 0;
+	self.cursor_pos = 0;
 }
 
 // insert inserts a character at the cursor position.
 fn void TextInput.insert(&self, char c) {
 	if (self.len >= self.buf.len - 1) return;
-	for (sz i = self.len; i > self.cursor; i--) {
+	for (sz i = self.len; i > self.cursor_pos; i--) {
 		self.buf[i] = self.buf[i - 1];
 	}
-	self.buf[self.cursor] = c;
+	self.buf[self.cursor_pos] = c;
 	self.len++;
-	self.cursor++;
+	self.cursor_pos++;
 }
 
 // insert_rune encodes a Unicode codepoint as UTF-8 and inserts it at the cursor.
@@ -89,21 +91,21 @@ fn void TextInput.insert_string(&self, String s) {
 // a multi-byte character leaves a dangling lead or continuation byte, which is
 // invalid UTF-8 and renders as garbage for the rest of the buffer.
 fn void TextInput.backspace(&self) {
-	if (self.cursor == 0) return;
-	sz start = utf8_prev_boundary(self.buf[:self.len], self.cursor);
-	sz n     = self.cursor - start;
-	for (sz i = self.cursor; i < self.len; i++) {
+	if (self.cursor_pos == 0) return;
+	sz start = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+	sz n     = self.cursor_pos - start;
+	for (sz i = self.cursor_pos; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
 	}
 	self.len -= n;
-	self.cursor = start;
+	self.cursor_pos = start;
 }
 
 // delete_char deletes the character at the cursor, sequence and all.
 fn void TextInput.delete_char(&self) {
-	if (self.cursor >= self.len) return;
-	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
-	sz n    = next - self.cursor;
+	if (self.cursor_pos >= self.len) return;
+	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+	sz n    = next - self.cursor_pos;
 	for (sz i = next; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
 	}
@@ -128,8 +130,8 @@ fn String TextInput.display_text(&self) {
 
 // cursor_col returns the column offset of the cursor within the input text.
 fn int TextInput.cursor_col(&self) {
-	if (self.len > 0 && self.cursor < self.len) {
-		return (int)self.cursor;
+	if (self.len > 0 && self.cursor_pos < self.len) {
+		return (int)self.cursor_pos;
 	}
 	return (int)self.len;
 }
@@ -140,16 +142,16 @@ fn bool TextInput.handle_key(&self, milktea::KeyMsg k) {
 		case milktea::KeyCode.LEFT:
 			// Step a whole codepoint: landing mid-sequence would make the
 			// next backspace or insert split a character.
-			self.cursor = utf8_prev_boundary(self.buf[:self.len], self.cursor);
+			self.cursor_pos = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
 			return true;
 		case milktea::KeyCode.RIGHT:
-			self.cursor = utf8_next_boundary(self.buf[:self.len], self.cursor);
+			self.cursor_pos = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
 			return true;
 		case milktea::KeyCode.HOME:
-			self.cursor = 0;
+			self.cursor_pos = 0;
 			return true;
 		case milktea::KeyCode.END:
-			self.cursor = self.len;
+			self.cursor_pos = self.len;
 			return true;
 		case milktea::KeyCode.BACKSPACE:
 			self.backspace();

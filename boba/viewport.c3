@@ -1,12 +1,13 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 import std::core::mem;
 import std::collections::list;
 
-struct Viewport {
+struct Viewport (xray::Content) {
 	int offset;
 	int width;
 	int height;

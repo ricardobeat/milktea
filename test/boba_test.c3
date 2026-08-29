@@ -51,7 +51,7 @@ fn void test_textinput_delete_removes_whole_codepoint() @test {
 	boba::TextInput ti = boba::new_text_input();
 	ti.insert_rune(0x65E5); // 日 — three bytes
 	ti.insert_rune('X');
-	ti.cursor = 0;
+	ti.cursor_pos = 0;
 
 	ti.delete_char();
 	assert(ti.text() == "X");
@@ -79,12 +79,12 @@ fn void test_textinput_arrows_step_whole_codepoints() @test {
 fn void test_textinput_right_steps_whole_codepoint() @test {
 	boba::TextInput ti = boba::new_text_input();
 	ti.insert_rune(0x65E5); // 日
-	ti.cursor = 0;
+	ti.cursor_pos = 0;
 
 	milktea::KeyMsg right = { .code = milktea::KeyCode.RIGHT };
 	ti.handle_key(right);
 
-	assert(ti.cursor == 3); // past the whole 3-byte sequence
+	assert(ti.cursor_pos == 3); // past the whole 3-byte sequence
 }
 
 // ============================================================
@@ -101,18 +101,18 @@ fn void test_textarea_backspace_removes_whole_codepoint() @test {
 }
 
 fn void test_textarea_end_sets_column_to_line_length() @test {
-	// cursor_col was computed from self.cursor *after* it had been assigned,
+	// cursor_col was computed from self.cursor_pos *after* it had been assigned,
 	// so it was always 0 and the rendered cursor jumped to the line start.
 	boba::Textarea ta = boba::new_textarea(40, 10);
 	ta.handle_paste("hello\nworld");
-	ta.cursor = 6;
+	ta.cursor_pos = 6;
 	ta.cursor_row = 1;
 	ta.cursor_col = 0;
 
 	milktea::KeyMsg end = { .code = milktea::KeyCode.END };
 	ta.handle_key(end);
 
-	assert(ta.cursor == 11);
+	assert(ta.cursor_pos == 11);
 	assert(ta.cursor_col == 5);
 }
 

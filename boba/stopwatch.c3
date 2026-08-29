@@ -1,13 +1,14 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 
 // Stopwatch is a count-up timer component.
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
 const int STOPWATCH_INTERVAL_MS = 10;
 
-struct Stopwatch {
+struct Stopwatch (xray::Content) {
 	long elapsed_ms;
 	bool running;
 	glaze::Style timer_style;

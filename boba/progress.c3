@@ -1,10 +1,11 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 
 // Progress is an animated progress bar component.
-struct Progress {
+struct Progress (xray::Content) {
 	int width; // total width in cells
 	double percent; // 0.0 - 100.0
 	String fill_char; // character for filled portion

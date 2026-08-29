@@ -1,6 +1,7 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 
@@ -23,7 +24,7 @@ struct TableRow {
 }
 
 // Table is a structured data display component.
-struct Table {
+struct Table (xray::Content) {
 	TableColumn[MAX_TABLE_COLUMNS] columns;
 	int col_count;
 	TableRow[MAX_TABLE_ROWS] rows;

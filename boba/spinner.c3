@@ -1,6 +1,7 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 
 // SpinnerKind selects the animation frame set.
@@ -32,7 +33,7 @@ fn SpinnerFrames spinner_frames(SpinnerKind kind) {
 // Spinner is a self-contained animated spinner component.
 // Embed it in your model; call tick() from init() and on each TICK message.
 // Call view() to get the current frame string to include in your view.
-struct Spinner {
+struct Spinner (xray::Content) {
 	SpinnerKind kind;
 	int frame;
 	glaze::Color fg;

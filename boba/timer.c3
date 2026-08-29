@@ -1,11 +1,12 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 
 // Timer is a countdown timer component.
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
-struct Timer {
+struct Timer (xray::Content) {
 	int total_seconds;
 	int elapsed_seconds;
 	bool running;

@@ -1,14 +1,16 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 
 // Textarea is a multi-line text input component.
-struct Textarea {
+struct Textarea (xray::Content) {
 	char[4096] buf;
 	sz len;
-	sz cursor;
+	// Byte offset of the caret within buf.
+	sz cursor_pos;
 	int width;
 	int height;
 	int cursor_row;
@@ -81,7 +83,7 @@ fn void Textarea.stop_blink(&self) {
 // clear empties the textarea.
 fn void Textarea.clear(&self) {
 	self.len = 0;
-	self.cursor = 0;
+	self.cursor_pos = 0;
 	self.cursor_row = 0;
 	self.cursor_col = 0;
 }
@@ -92,23 +94,23 @@ fn void Textarea.insert(&self, char c) {
 
 	if (c == '\n') {
 		// Insert newline: shift everything after cursor
-		for (sz i = self.len; i > self.cursor; i--) {
+		for (sz i = self.len; i > self.cursor_pos; i--) {
 			self.buf[i] = self.buf[i - 1];
 		}
-		self.buf[self.cursor] = '\n';
+		self.buf[self.cursor_pos] = '\n';
 		self.len++;
-		self.cursor++;
+		self.cursor_pos++;
 		self.cursor_row++;
 		self.cursor_col = 0;
 		return;
 	}
 
-	for (sz i = self.len; i > self.cursor; i--) {
+	for (sz i = self.len; i > self.cursor_pos; i--) {
 		self.buf[i] = self.buf[i - 1];
 	}
-	self.buf[self.cursor] = c;
+	self.buf[self.cursor_pos] = c;
 	self.len++;
-	self.cursor++;
+	self.cursor_pos++;
 	self.cursor_col++;
 }
 
@@ -134,21 +136,21 @@ fn sz Textarea.line_start_at(&self, sz pos) {
 // Removes the whole UTF-8 sequence: deleting a single byte of a multi-byte
 // character leaves invalid UTF-8 that renders as garbage from there on.
 fn void Textarea.backspace(&self) {
-	if (self.cursor == 0) return;
+	if (self.cursor_pos == 0) return;
 
-	char prev = self.buf[self.cursor - 1];
-	sz start  = utf8_prev_boundary(self.buf[:self.len], self.cursor);
-	sz n      = self.cursor - start;
-	for (sz i = self.cursor; i < self.len; i++) {
+	char prev = self.buf[self.cursor_pos - 1];
+	sz start  = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+	sz n      = self.cursor_pos - start;
+	for (sz i = self.cursor_pos; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
 	}
 	self.len -= n;
-	self.cursor = start;
+	self.cursor_pos = start;
 
 	if (prev == '\n') {
 		if (self.cursor_row > 0) self.cursor_row--;
 		// The joined line's column is the distance back to its start.
-		self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
+		self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 	} else {
 		self.cursor_col -= (int)n;
 		if (self.cursor_col < 0) self.cursor_col = 0;
@@ -157,9 +159,9 @@ fn void Textarea.backspace(&self) {
 
 // delete_char deletes the character at the cursor, sequence and all.
 fn void Textarea.delete_char(&self) {
-	if (self.cursor >= self.len) return;
-	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
-	sz n    = next - self.cursor;
+	if (self.cursor_pos >= self.len) return;
+	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+	sz n    = next - self.cursor_pos;
 	for (sz i = next; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
 	}
@@ -175,25 +177,25 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 	self.start_blink();
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
-			if (self.cursor > 0) {
+			if (self.cursor_pos > 0) {
 				// Step a whole codepoint, so the cursor never lands inside a
 				// multi-byte character and split it on the next edit.
-				sz prev = utf8_prev_boundary(self.buf[:self.len], self.cursor);
+				sz prev = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
 				if (self.buf[prev] == '\n' && self.cursor_row > 0) self.cursor_row--;
-				self.cursor = prev;
-				self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
+				self.cursor_pos = prev;
+				self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 			}
 			return true;
 		case milktea::KeyCode.RIGHT:
-			if (self.cursor < self.len) {
-				bool at_newline = self.buf[self.cursor] == '\n';
-				sz next = utf8_next_boundary(self.buf[:self.len], self.cursor);
-				self.cursor = next;
+			if (self.cursor_pos < self.len) {
+				bool at_newline = self.buf[self.cursor_pos] == '\n';
+				sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+				self.cursor_pos = next;
 				if (at_newline) {
 					self.cursor_row++;
 					self.cursor_col = 0;
 				} else {
-					self.cursor_col = (int)(self.cursor - self.line_start_at(self.cursor));
+					self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 				}
 			}
 			return true;
@@ -219,7 +221,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 					col++;
 					pos++;
 				}
-				self.cursor = pos;
+				self.cursor_pos = pos;
 				self.cursor_row = r;
 				self.cursor_col = col;
 			}
@@ -246,7 +248,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 					col++;
 					pos++;
 				}
-				self.cursor = pos;
+				self.cursor_pos = pos;
 				self.cursor_row = r;
 				self.cursor_col = col;
 			}
@@ -257,9 +259,9 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 
 
 			{
-				sz pos = self.cursor;
+				sz pos = self.cursor_pos;
 				while (pos > 0 && self.buf[pos - 1] != '\n') pos--;
-				self.cursor = pos;
+				self.cursor_pos = pos;
 				self.cursor_col = 0;
 			}
 			return true;
@@ -270,12 +272,12 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 
 			{
 				// Find the end of the line, then measure back to its start.
-				// This used to read self.cursor *after* assigning it, so the
+				// This used to read self.cursor_pos *after* assigning it, so the
 				// column was always computed as pos - pos == 0 and the
 				// rendered cursor jumped to the start of the line.
-				sz pos = self.cursor;
+				sz pos = self.cursor_pos;
 				while (pos < self.len && self.buf[pos] != '\n') pos++;
-				self.cursor = pos;
+				self.cursor_pos = pos;
 				self.cursor_col = (int)(pos - self.line_start_at(pos));
 			}
 			return true;
@@ -330,21 +332,31 @@ fn int Textarea.line_count(&self) {
 }
 
 // view returns the rendered textarea string.
+// gutter_width is how many columns the line-number column occupies, before
+// the trailing space. Zero when line numbers are off.
+fn int Textarea.gutter_width(&self) {
+	if (!self.show_line_numbers) return 0;
+	int lc = self.line_count();
+	if (lc >= 100) return 4;
+	if (lc >= 10) return 3;
+	return 2;
+}
+
+// text_offset is how far in from the left edge the text itself starts: the
+// gutter (digits plus one trailing space) and then the prompt. The cursor
+// sits this far right of the component's own rect, so view() and cursor()
+// both read it from here rather than each recomputing it.
+fn int Textarea.text_offset(&self) {
+	int gutter = self.gutter_width();
+	return (gutter > 0 ? gutter + 1 : 0) + (int)self.prompt.len;
+}
+
 fn String Textarea.view(&self) {
 	DString out = dstring::temp();
 	int lc      = self.line_count();
 
-	int gutter_width = 0;
-	if (self.show_line_numbers) {
-		gutter_width = 2;
-		if (lc >= 10) gutter_width = 3;
-		if (lc >= 100) gutter_width = 4;
-	}
-
-	// Gutter visual width: digits + one trailing space (e.g. " 1 " = gutter_width+1 chars).
-	int gutter_visual = self.show_line_numbers ? gutter_width + 1 : 0;
-
-	// Prompt visual width.
+	int gutter_width = self.gutter_width();
+	int gutter_visual = gutter_width > 0 ? gutter_width + 1 : 0;
 	int prompt_visual = (int)self.prompt.len;
 
 	// Content width is the space available for actual text on each visual row.

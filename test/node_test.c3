@@ -4,6 +4,7 @@ module node_test;
 import std::core::dstring;
 import std::core::mem;
 import xray;
+import boba;
 
 // Fixed is test content of a known size that records the rect it was rendered
 // at, so a test can assert on layout without parsing the painted output.
@@ -244,4 +245,66 @@ fn void test_gap_separates_children() @test {
 
 	assert(a.got.y == 0, "first child at the top");
 	assert(b.got.y == 5, "second child past the gap");
+}
+
+// Components in a tree. A component sizes itself from the rect the layout
+// gives it, so the app stops assigning widths and heights by hand.
+
+fn void test_component_is_sized_by_the_layout() @test {
+	boba::List lst = boba::new_list();
+	lst.add_item("one", "");
+	lst.add_item("two", "");
+
+	xray::Node* r = xray::vstack()
+		.add(xray::content_node(&lst).fill(1));
+	r.solve(xray::new_rect(0, 0, 30, 12));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 12);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.paint(r);
+
+	assert(lst.width == 30, "width taken from the rect");
+	assert(lst.height == 12, "height taken from the rect");
+}
+
+fn void test_focused_input_reports_its_cursor() @test {
+	boba::TextInput inp = boba::new_text_input();
+	inp.focused = true;
+	inp.insert('h');
+	inp.insert('i');
+
+	// Two rows above the input, so the cursor's row must be offset by them.
+	xray::Node* r = xray::vstack()
+		.add(xray::vstack().height(xray::cells(2)))
+		.add(xray::content_node(&inp).height(xray::cells(1)));
+	r.solve(xray::new_rect(0, 0, 20, 5));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 5);
+	defer { sb.destroy(); mem::free(sb); }
+	xray::PaintResult res = sb.paint(r);
+
+	assert(res.cursor.has_cursor, "focused input claims the cursor");
+	assert(res.cursor.y == 2, "row comes from the layout, not a hand count");
+	assert(res.cursor.x == 2, "column is the caret offset");
+}
+
+fn void test_unfocused_input_does_not_claim_the_cursor() @test {
+	boba::TextInput a = boba::new_text_input();
+	boba::TextInput b = boba::new_text_input();
+	a.focused = true;
+	b.focused = false;
+
+	// The unfocused input is painted last. Without each component reporting
+	// whether it owns the cursor, last-one-wins would put it in the wrong box.
+	xray::Node* r = xray::vstack()
+		.add(xray::content_node(&a).height(xray::cells(1)))
+		.add(xray::content_node(&b).height(xray::cells(1)));
+	r.solve(xray::new_rect(0, 0, 20, 2));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 2);
+	defer { sb.destroy(); mem::free(sb); }
+	xray::PaintResult res = sb.paint(r);
+
+	assert(res.cursor.has_cursor, "the focused one claims it");
+	assert(res.cursor.y == 0, "and it is the first input, not the last painted");
 }

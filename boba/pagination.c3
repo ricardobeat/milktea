@@ -1,6 +1,7 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::core::dstring;
 
@@ -12,7 +13,7 @@ enum PaginatorType {
 }
 
 // Pagination is a page navigation component.
-struct Pagination {
+struct Pagination (xray::Content) {
 	int page; // current page (0-indexed)
 	int per_page; // items per page
 	int total_items; // total number of items

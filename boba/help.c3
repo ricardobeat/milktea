@@ -1,5 +1,8 @@
 module boba;
 
+import milktea;
+import xray;
+
 import glaze;
 import std::core::dstring;
 
@@ -10,7 +13,7 @@ struct HelpEntry {
 }
 
 // Help is a help text rendering component.
-struct Help {
+struct Help (xray::Content) {
 	HelpEntry[16] entries;
 	int count;
 	glaze::Style key_style;

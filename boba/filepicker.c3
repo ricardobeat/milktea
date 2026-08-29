@@ -1,12 +1,13 @@
 module boba;
 
 import milktea;
+import xray;
 import glaze;
 import std::io;
 import std::core::dstring;
 
 // FilePicker is a file browser component.
-struct FilePicker {
+struct FilePicker (xray::Content) {
 	char[64][64] names;
 	int[64] name_lens;
 	bool[64] is_dirs;
