@@ -35,6 +35,17 @@ fn int frame_width(glaze::Style s) {
 	return n;
 }
 
+// to_cell_color converts a glaze color into the one xray paints with. An app
+// picks colors in glaze terms — that is where a palette lives — but effects
+// that xray draws, such as a node's drop shadow, take an xray color.
+//
+// Only a truecolor value carries rgb; anything else has no rgb to give, so it
+// becomes the default and lets the effect use its own.
+fn xray::Color to_cell_color(glaze::Color c) {
+	if (c.kind != glaze::ColorKind.TRUECOLOR) return {};
+	return xray::color_rgb(c.r, c.g, c.b);
+}
+
 // CursorStyle is re-exported so a component can hold one without naming xray.
 alias CursorStyle = xray::CursorStyle;
 alias place_cursor = xray::place_cursor;
