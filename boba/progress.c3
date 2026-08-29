@@ -76,3 +76,16 @@ fn String Progress.view_with_percent(&self) {
 	out.append_string(self.percent_style.render(string::tformat("%d%%", (int)self.percent)));
 	return out.str_view();
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+// A progress bar spans its rect — that is the whole point of one.
+fn String Progress.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	return self.view();
+}
+
+fn int Progress.measure(&self, int width) @dynamic => 1;
+fn int Progress.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::Node* Progress.node(&self) => xray::content_node(self);

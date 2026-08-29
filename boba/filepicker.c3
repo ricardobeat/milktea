@@ -166,3 +166,16 @@ fn String FilePicker.view(&self) {
 	out.append_string(self.hint_style.render("Enter: open | Backspace: parent | q: quit"));
 	return out.str_view();
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String FilePicker.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+fn int FilePicker.measure(&self, int width) @dynamic => self.height;
+fn int FilePicker.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::Node* FilePicker.node(&self) => xray::content_node(self);

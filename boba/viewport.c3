@@ -470,3 +470,16 @@ fn int Viewport.scroll_percent(&self) {
 	if (max_offset <= 0) return 100;
 	return (self.offset * 100) / max_offset;
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String Viewport.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+fn int Viewport.measure(&self, int width) @dynamic => self.height;
+fn int Viewport.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::Node* Viewport.node(&self) => xray::content_node(self);

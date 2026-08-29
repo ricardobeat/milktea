@@ -193,3 +193,16 @@ fn String Table.view(&self) {
 
 	return out.str_view();
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String Table.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+fn int Table.measure(&self, int width) @dynamic => self.height;
+fn int Table.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::Node* Table.node(&self) => xray::content_node(self);

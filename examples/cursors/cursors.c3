@@ -126,17 +126,16 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 
 fn void Model.add_drawn(&self, int i, String label, String bc, xray::DrawCursorFn draw, int blink_ms) {
 	self.entries[i] = { .label = label, .border_color = bc, .input = new_input(bc) };
-	self.entries[i].input.cursor_draw = draw;
-	self.entries[i].input.cursor_blink_ms = blink_ms;
+	self.entries[i].input.cursor_style = { .draw = draw, .blink_ms = blink_ms };
 }
 
 fn void Model.add_native(&self, int i, String label, String bc,
 	milktea::CursorShape shape, String color, bool blink)
 {
 	self.entries[i] = { .label = label, .border_color = bc, .input = new_input(bc) };
-	self.entries[i].input.cursor_shape = shape;
-	self.entries[i].input.cursor_color = color;
-	self.entries[i].input.cursor_blink = blink;
+	self.entries[i].input.cursor_style = {
+		.shape = (int)shape, .color = color, .blink = blink,
+	};
 }
 
 fn boba::TextInput new_input(String bc) {

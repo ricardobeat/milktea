@@ -94,3 +94,12 @@ fn Help default_help() {
 	h.add_entry("enter", "select");
 	return h;
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+// A help bar draws one line of its own width; the rect only bounds it.
+fn String Help.render(&self, xray::Rect r) @dynamic => self.view();
+fn int Help.measure(&self, int width) @dynamic => 1;
+fn int Help.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+
+fn xray::Node* Help.node(&self) => xray::content_node(self);

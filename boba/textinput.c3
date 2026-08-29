@@ -20,14 +20,8 @@ struct TextInput (xray::Content) {
 	// it solved so a bordered style is drawn at the size the layout chose.
 	int width;
 	int height;
-	// How this input's cursor is drawn while it is focused. Leaving draw null
-	// uses the real terminal cursor with the given shape, blink and color;
-	// setting it paints the cursor instead (see xray::DrawCursorFn).
-	milktea::CursorShape cursor_shape;
-	bool cursor_blink;
-	String cursor_color;
-	xray::DrawCursorFn cursor_draw;
-	int cursor_blink_ms;
+	// How this input's caret looks while it is focused.
+	milktea::CursorStyle cursor_style;
 	glaze::Style focused_style;
 	glaze::Style blurred_style;
 	// Only the foreground is taken from this style; the box is drawn by the
@@ -39,7 +33,7 @@ struct TextInput (xray::Content) {
 fn TextInput new_text_input() {
 	TextInput t = { };
 	t.max_width = 512;
-	t.cursor_blink = true;
+	t.cursor_style.blink = true;
 	t.focused_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
 	t.blurred_style = glaze::style().foreground(glaze::color_hex("#888888"));
 	t.placeholder_style = glaze::style().foreground(glaze::color_hex("#444444"));
@@ -203,16 +197,46 @@ fn void TextInput.handle_paste(&self, String s) {
 }
 
 // view returns the rendered text input string.
+// box_style is the style that frames this input: its border, padding and
+// size. The placeholder only ever contributes a foreground color, so an empty
+// field still draws its box.
+fn glaze::Style TextInput.box_style(&self) {
+	glaze::Style s = self.focused ? self.focused_style : self.blurred_style;
+	if (self.len == 0) s.fg = self.placeholder_style.fg;
+	return s;
+}
+
 fn String TextInput.view(&self) {
 	// The box comes from the focus state, so an empty input still draws the
 	// border and padding its style asks for. Only the text color changes when
 	// there is nothing to show but the placeholder — otherwise a field would
 	// have no frame until the first time it was focused and typed into.
-	glaze::Style s = self.focused ? self.focused_style : self.blurred_style;
-	if (self.len == 0) {
-		s.fg = self.placeholder_style.fg;
-	}
+	glaze::Style s = self.box_style();
 	if (self.width > 0) s = s.with_width(self.width);
 	if (self.height > 0) s = s.with_height(self.height);
 	return s.render(self.display_text());
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String TextInput.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+// One row of text, plus whatever the style frames it with.
+fn int TextInput.measure(&self, int width) @dynamic {
+	return 1 + milktea::frame_height(self.box_style());
+}
+
+fn int TextInput.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::ContentCursor TextInput.cursor(&self, xray::Rect r) @dynamic {
+	if (!self.focused) return {};
+	return milktea::place_cursor(
+		milktea::content_rect(self.box_style(), r),
+		self.cursor_col(), 0, self.cursor_style);
+}
+
+fn xray::Node* TextInput.node(&self) => xray::content_node(self);

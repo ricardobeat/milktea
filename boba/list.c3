@@ -157,3 +157,21 @@ fn String List.view_with_pagination(&self) {
 	}
 	return out.str_view();
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+// render takes the size the layout settled on and stores it before drawing.
+// That is impure, but the component already keeps its size as state and needs
+// it outside of rendering — handle_key scrolls by a page, before any render.
+fn String List.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+// A list fills whatever it is given rather than asking for a size, so it
+// reports what it was last laid out at.
+fn int List.measure(&self, int width) @dynamic => self.height;
+fn int List.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::Node* List.node(&self) => xray::content_node(self);

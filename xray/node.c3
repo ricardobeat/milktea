@@ -38,6 +38,41 @@ interface Content {
 // animates on its own clock can ignore it.
 alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
 
+// place_cursor puts a caret at a column and row inside a content area, which
+// is a node's rect less whatever frame its content draws around itself.
+//
+// col and row are relative to the text, so content passes its own caret
+// position and the layout supplies the origin. A caret scrolled out of view
+// reports no cursor rather than one clamped to the edge, which would sit on a
+// line it is not on.
+fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = {}) {
+	if (col < 0 || row < 0 || row >= text.h || col >= text.w) return {};
+	return {
+		.x = text.x + col,
+		.y = text.y + row,
+		.has_cursor = true,
+		.draw = cs.draw,
+		.blink_ms = cs.blink_ms,
+		.shape = cs.shape,
+		.blink = cs.blink,
+		.color = cs.color,
+	};
+}
+
+// CursorStyle is how a caret looks. Leaving draw null gives the terminal's own
+// cursor with the given shape, blink and color; setting it paints the cursor
+// into the grid instead, and the terminal cursor stays hidden.
+//
+// shape is an index into whatever shapes the host defines
+// (milktea::CursorShape); xray does not name them.
+struct CursorStyle {
+	int shape;
+	bool blink;
+	String color;
+	DrawCursorFn draw;
+	int blink_ms;
+}
+
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
 // coordinates. has_cursor = false means "not mine this frame".
 //

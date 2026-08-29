@@ -20,6 +20,10 @@ struct Textarea (xray::Content) {
 	String prompt; // prefix shown before each line (e.g. "> ")
 	bool show_line_numbers;
 	bool show_cursor;
+	// How the terminal caret looks while this field is focused. Distinct from
+	// cursor_style below, which colors the cell the caret sits on when the
+	// field paints its own block cursor into the text.
+	milktea::CursorStyle caret;
 	bool cursor_blink;
 	bool cursor_visible;
 	bool focused;
@@ -522,3 +526,31 @@ fn String Textarea.view(&self) {
 	if (s.len > 0 && s[s.len - 1] == '\n') s = s[:s.len - 1];
 	return s;
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String Textarea.render(&self, xray::Rect r) @dynamic {
+	self.width = r.w;
+	self.height = r.h;
+	return self.view();
+}
+
+fn int Textarea.measure(&self, int width) @dynamic {
+	int lc = self.line_count();
+	return lc < 1 ? 1 : lc;
+}
+
+fn int Textarea.measure_width(&self, int height) @dynamic => self.width;
+
+fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
+	if (!self.focused) return {};
+	// scroll_offset is the first visible line, so the caret's row on screen is
+	// its distance from there; text_offset() is the gutter and prompt drawn
+	// before the text itself.
+	return milktea::place_cursor(r,
+		self.text_offset() + self.cursor_col,
+		self.cursor_row - self.scroll_offset,
+		self.caret);
+}
+
+fn xray::Node* Textarea.node(&self) => xray::content_node(self);

@@ -84,7 +84,7 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 fn int StyledText.measure(&self, int width) @dynamic {
 	int lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
-	return lines + self.style.pad_top + self.style.pad_bottom + self.frame_v();
+	return lines + frame_height(self.style);
 }
 
 fn int StyledText.measure_width(&self, int height) @dynamic {
@@ -96,23 +96,7 @@ fn int StyledText.measure_width(&self, int height) @dynamic {
 		if (w > widest) widest = w;
 		start = i + 1;
 	}
-	return widest + self.style.pad_left + self.style.pad_right + self.frame_h();
-}
-
-// A border adds one cell on each side it is drawn on. The zero-value Border
-// has empty strings, which is how "no border" is spelled.
-fn int StyledText.frame_v(&self) {
-	int n = 0;
-	if (self.style.border.top.len > 0) n++;
-	if (self.style.border.bottom.len > 0) n++;
-	return n;
-}
-
-fn int StyledText.frame_h(&self) {
-	int n = 0;
-	if (self.style.border.left.len > 0) n++;
-	if (self.style.border.right.len > 0) n++;
-	return n;
+	return widest + frame_width(self.style);
 }
 
 // text puts a styled string in the tree.

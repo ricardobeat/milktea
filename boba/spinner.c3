@@ -86,3 +86,11 @@ fn String Spinner.current_frame(&self) {
 	SpinnerFrames fs = spinner_frames(self.kind);
 	return fs.frames[self.frame % fs.count];
 }
+
+// ── layout tree ──────────────────────────────────────────────────────────────
+
+fn String Spinner.render(&self, xray::Rect r) @dynamic => self.view();
+fn int Spinner.measure(&self, int width) @dynamic => 1;
+fn int Spinner.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+
+fn xray::Node* Spinner.node(&self) => xray::content_node(self);
