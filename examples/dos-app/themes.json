@@ -1,0 +1,48 @@
+{
+  "themes": [
+    {
+      "name": "DOS Classic",
+      "desktop": "#0000aa",
+      "bar": "#00aaaa",
+      "panel": "#000055",
+      "text": "#ffffff",
+      "dim": "#aaaaaa",
+      "accent": "#ffff55",
+      "ink": "#000000",
+      "shadow": "#111111"
+    },
+    {
+      "name": "Amber CRT",
+      "desktop": "#1a0f00",
+      "bar": "#5a3a00",
+      "panel": "#2a1a00",
+      "text": "#ffb000",
+      "dim": "#8a6000",
+      "accent": "#ffd060",
+      "ink": "#1a0f00",
+      "shadow": "#000000"
+    },
+    {
+      "name": "Green Screen",
+      "desktop": "#001a00",
+      "bar": "#004400",
+      "panel": "#002200",
+      "text": "#33ff33",
+      "dim": "#118811",
+      "accent": "#aaffaa",
+      "ink": "#001a00",
+      "shadow": "#000000"
+    },
+    {
+      "name": "Midnight",
+      "desktop": "#1a1b26",
+      "bar": "#414868",
+      "panel": "#24283b",
+      "text": "#c0caf5",
+      "dim": "#565f89",
+      "accent": "#7aa2f7",
+      "ink": "#1a1b26",
+      "shadow": "#0d0e14"
+    }
+  ]
+}

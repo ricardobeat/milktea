@@ -35,14 +35,20 @@ struct Button (xray::Content) {
 }
 
 fn Button new_button(String label) {
-	return {
-		.label = label,
-		.face = glaze::color_hex(C_GRAY),
-		.focused_face = glaze::color_hex(C_YELLOW),
-		.text = glaze::color_hex(C_BLACK),
-		.shadow = glaze::color_hex(C_SHADOW),
-		.surface = glaze::color_hex(C_DARK),
-	};
+	return { .label = label };
+}
+
+// themed gives this button the active theme's colors. A button is rebuilt each
+// frame from model state, so it takes its palette at that point rather than
+// storing one that a theme change would leave stale.
+fn Button Button.themed(self, Theme* th) {
+	Button b = self;
+	b.face = th.dim;
+	b.focused_face = th.accent;
+	b.text = th.ink;
+	b.shadow = th.shadow;
+	b.surface = th.panel;
+	return b;
 }
 
 fn Button Button.with_focus(self, bool on) {

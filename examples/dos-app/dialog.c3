@@ -65,20 +65,20 @@ fn Pressed Dialog.handle_key(&self, milktea::KeyMsg k) {
 
 // node returns the dialog, or null when it is closed, so the caller can add it
 // unconditionally.
-fn xray::Node* Dialog.node(&self) {
+fn xray::Node* Dialog.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
-		.bg = glaze::color_hex(C_DARK), .fg = glaze::color_hex(C_WHITE),
-		.border = glaze::DOUBLE, .border_color = glaze::color_hex(C_YELLOW),
+		.bg = th.panel, .fg = th.text,
+		.border = glaze::DOUBLE, .border_color = th.accent,
 		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
 		.align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
 	};
-	glaze::Style title_s = { .fg = glaze::color_hex(C_YELLOW), .bold = true };
+	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
 	String[DIALOG_BUTTONS] rendered;
 	for (int i = 0; i < DIALOG_BUTTONS; i++) {
-		rendered[i] = self.buttons[i].with_focus(i == self.focused).view();
+		rendered[i] = self.buttons[i].themed(th).with_focus(i == self.focused).view();
 	}
 	String buttons = glaze::join_horizontal_arr(glaze::Position.CENTER, rendered[..], 2);
 
@@ -91,5 +91,5 @@ fn xray::Node* Dialog.node(&self) {
 	return milktea::text(panel, inner)
 		.width(milktea::at_least(self.min_cols))
 		.center()
-		.shadow(milktea::shadow(2, 1));
+		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 }

@@ -11,16 +11,6 @@ import glaze;
 import xray;
 import std::io;
 
-const String C_BLUE    = "#0000aa";
-const String C_CYAN    = "#00aaaa";
-const String C_WHITE   = "#ffffff";
-const String C_GRAY    = "#aaaaaa";
-const String C_DARK    = "#000055";
-const String C_SHADOW  = "#111111";
-const String C_YELLOW  = "#ffff55";
-const String C_BLACK   = "#000000";
-const String C_RED     = "#aa0000";
-
 // Chrome the layout reserves: the menu bar and status bar are one row each,
 // and the content panel sits inside a one-row, two-column margin.
 const int BAR_ROWS       = 1;
@@ -31,16 +21,28 @@ const int TAB_COUNT = 3;
 struct DosModel {
 	Menu menu;
 	Dialog about;
+	Picker theme_picker;
+	ThemeSet themes;
 	int active_tab;
 	String status_msg;
 }
+
+// Every screen draws from this, so a theme change is picked up everywhere
+// without anything holding a stale copy.
+fn Theme* DosModel.theme(&self) => self.themes.current();
 
 fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 	self.menu = new_menu({ " File ", " Edit ", " View ", " Help " });
 	self.menu.set_items(0, { {"New", "Ctrl+N"}, {"Open...", "Ctrl+O"}, {"Save", "Ctrl+S"}, {"Exit", "Alt+F4"} });
 	self.menu.set_items(1, { {"Undo", "Ctrl+Z"}, {"Cut", "Ctrl+X"}, {"Copy", "Ctrl+C"}, {"Paste", "Ctrl+V"} });
-	self.menu.set_items(2, { {"Zoom In", "+"}, {"Zoom Out", "-"}, {"Full Screen", "F11"}, {"Refresh", "F5"} });
+	self.menu.set_items(2, { {"Color Theme...", "Ctrl+T"}, {"Zoom In", "+"}, {"Zoom Out", "-"}, {"Full Screen", "F11"} });
 	self.menu.set_items(3, { {"Help Topics", "F1"}, {"About milktea...", ""}, {"License", ""}, {"Diagnostics...", ""} });
+
+	self.themes = load_themes();
+	self.theme_picker = new_picker("Color Theme", "  OK  ", "Cancel");
+	for (int i = 0; i < self.themes.count; i++) {
+		self.theme_picker.add_choice(self.themes.themes[i].name);
+	}
 
 	self.about = new_dialog("About milktea",
 		"A TUI framework for the C3\nprogramming language.\n\nVersion 0.1.0  —  MIT License",
@@ -60,6 +62,7 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 	// Whichever layer is on top gets the key first. Only when nothing has one
 	// open do the app's own shortcuts apply.
+	if (self.theme_picker.open) return self.handle_theme_picker(k);
 	if (self.about.open) return self.handle_dialog(k);
 	if (self.menu.open) return self.handle_menu(k);
 	return self.handle_desktop(k);
@@ -72,6 +75,24 @@ fn milktea::Cmd DosModel.handle_dialog(&self, milktea::KeyMsg k) {
 			self.status_msg = self.about.focused == 0 ? "Confirmed" : "Cancelled";
 		case Pressed.DISMISSED:
 			self.status_msg = "Cancelled";
+		default:
+	}
+	return null;
+}
+
+// The picker previews as it moves: the highlighted theme is the active one, so
+// the whole screen recolors under the dialog while browsing. Cancel restores
+// the theme the picker opened on, which it reports by having already put its
+// selection back.
+fn milktea::Cmd DosModel.handle_theme_picker(&self, milktea::KeyMsg k) {
+	Pressed p = self.theme_picker.handle_key(k);
+	self.themes.active = self.theme_picker.selected;
+
+	switch (p) {
+		case Pressed.CONFIRMED:
+			self.status_msg = string::tformat("Theme: %s", self.theme().name);
+		case Pressed.DISMISSED:
+			self.status_msg = "Ready";
 		default:
 	}
 	return null;
@@ -96,6 +117,8 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 			return milktea::quit();
 		case "About milktea...":
 			self.about.show();
+		case "Color Theme...":
+			self.theme_picker.show(self.themes.active);
 		default:
 			self.status_msg = "Action: not implemented in demo";
 	}
@@ -120,25 +143,27 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	return milktea::draw(milktea::root()
 		.add(milktea::vstack()
-			.add(self.menu.bar())
+			.add(self.menu.bar(self.theme()))
 			.add(self.content()
 				.fill(1)
 				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2))
 			.add(self.statusbar()))
 		// Both return null when closed, and add() ignores a null child, so
 		// neither needs a condition here.
-		.add(self.menu.dropdown(BAR_ROWS))
-		.add(self.about.node()));
+		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
+		.add(self.about.node(self.theme()))
+		.add(self.theme_picker.node(self.theme())));
 }
 
 fn xray::Node* DosModel.content(&self) {
+	Theme* th = self.theme();
 	glaze::Style panel = {
-		.fg = glaze::color_hex(C_WHITE), .bg = glaze::color_hex(C_BLUE),
-		.border = glaze::DOUBLE, .border_color = glaze::color_hex(C_CYAN),
+		.fg = th.text, .bg = th.desktop,
+		.border = glaze::DOUBLE, .border_color = th.bar,
 		.pad_top = 1, .pad_right = 3, .pad_bottom = 1, .pad_left = 3,
 	};
-	glaze::Style title = { .fg = glaze::color_hex(C_YELLOW), .bold = true };
-	glaze::Style body  = { .fg = glaze::color_hex(C_WHITE) };
+	glaze::Style title = { .fg = th.accent, .bold = true };
+	glaze::Style body  = { .fg = th.text };
 
 	String[TAB_COUNT] tab_titles = { "Welcome", "System Info", "Settings" };
 	String[TAB_COUNT] tab_bodies = {
@@ -155,9 +180,10 @@ fn xray::Node* DosModel.content(&self) {
 }
 
 fn xray::Node* DosModel.statusbar(&self) {
-	glaze::Style bar  = { .bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK) };
-	glaze::Style key  = { .bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_WHITE), .bold = true };
-	glaze::Style info = { .bg = glaze::color_hex(C_DARK), .fg = glaze::color_hex(C_GRAY) };
+	Theme* th = self.theme();
+	glaze::Style bar  = { .bg = th.bar, .fg = th.ink };
+	glaze::Style key  = { .bg = th.ink, .fg = th.text, .bold = true };
+	glaze::Style info = { .bg = th.panel, .fg = th.dim };
 
 	String hints = string::tformat("  %s %s  menus    %s  tabs    %s  quit",
 		key.render("←→"), key.render("↵"), key.render("1-3"), key.render("q"));

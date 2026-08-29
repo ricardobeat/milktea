@@ -109,13 +109,9 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) @local {
 
 // ── view ─────────────────────────────────────────────────────────────────────
 
-fn xray::Node* Menu.bar(&self) {
-	glaze::Style bar = {
-		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
-	};
-	glaze::Style active = {
-		.bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_WHITE), .bold = true,
-	};
+fn xray::Node* Menu.bar(&self, Theme* th) {
+	glaze::Style bar = { .bg = th.bar, .fg = th.ink };
+	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
 
 	String[MENU_COLS] rendered;
 	for (int i = 0; i < MENU_COLS; i++) {
@@ -128,20 +124,16 @@ fn xray::Node* Menu.bar(&self) {
 
 // dropdown returns the open panel, or null when the menu is closed — so the
 // caller adds it unconditionally and an absent menu contributes nothing.
-fn xray::Node* Menu.dropdown(&self, int below) {
+fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
-		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
-		.border = glaze::NORMAL, .border_color = glaze::color_hex(C_WHITE),
+		.bg = th.bar, .fg = th.ink,
+		.border = glaze::NORMAL, .border_color = th.text,
 		.pad_left = 1, .pad_right = 1,
 	};
-	glaze::Style selected = {
-		.bg = glaze::color_hex(C_BLACK), .fg = glaze::color_hex(C_YELLOW), .bold = true,
-	};
-	glaze::Style item = {
-		.bg = glaze::color_hex(C_CYAN), .fg = glaze::color_hex(C_BLACK),
-	};
+	glaze::Style selected = { .bg = th.ink, .fg = th.accent, .bold = true };
+	glaze::Style item = { .bg = th.bar, .fg = th.ink };
 
 	String[MENU_ITEMS] rows;
 	for (int i = 0; i < MENU_ITEMS; i++) {
@@ -152,7 +144,7 @@ fn xray::Node* Menu.dropdown(&self, int below) {
 
 	return milktea::text(panel, content)
 		.at(self.title_x[self.selected], below)
-		.shadow(milktea::shadow(2, 1));
+		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 }
 
 // render_item lays a label against its shortcut key, the label left and the
