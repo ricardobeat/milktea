@@ -1,12 +1,27 @@
 # Tree layout
 
-Design notes for a tree-based layout API. None of it is built.
+Design notes for the tree layout API, written before it was built. It is built
+now; where the two differ, the code is right. The differences worth knowing:
 
-`milktea::screen_width()` and `screen_height()` are in and used across the
-examples. They remove the need to store the terminal size in a model, which is
-assumed below — no node or view code passes a size around.
+- `Content` gained `measure_width` alongside `measure`, because a leaf needs a
+  natural size on both axes for `center()` to fit it.
+- Sizing is stored per real axis (`size_w`, `size_h`), not per main/cross axis.
+  A node is built before it is added to anything, so `.width(6)` cannot know
+  whether it will land in a row or a column; the parent picks at solve time.
+- A struct must name the interface it implements — `struct Foo (xray::Content)`
+  — and c3c 0.8.3 does not accept an alias there, so the xray name is required
+  even though milktea re-exports the type.
+- `paint` takes a scratch buffer from its caller rather than owning one, and
+  takes the current time, since xray has no clock.
+- A drawn cursor (`DrawCursorFn`) moved into the library from the cursors
+  example, and `ContentCursor` carries either that or a terminal cursor.
+- `layout::vstack`/`hstack` were kept, not replaced. They are the sizing half
+  of the string API, which is still supported.
+- `Padding` was not added: the pad fields are already settable in a literal, so
+  a wrapper struct would have added a name and no capability. `pad`, `pad_x`
+  and `pad_y` cover the shorthand.
 
-## What's wrong now
+## What was wrong
 
 Views are built by solving a layout into rects, rendering a string per rect,
 then gluing the strings together:
