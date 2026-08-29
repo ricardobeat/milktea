@@ -61,12 +61,35 @@ fn String Stopwatch.render(&self, xray::Rect r) @dynamic => self.view();
 
 fn String Timer.render(&self, xray::Rect r) @dynamic => self.view();
 
+// All of these draw a single line, so their height is one and their width is
+// whatever that line comes to. Both are needed: a node under center() or
+// draw_inline() is sized from its content on both axes, and a component that
+// reported only a height would be one row tall and no columns wide.
 fn int Help.measure(&self, int width) @dynamic => 1;
 fn int Progress.measure(&self, int width) @dynamic => 1;
 fn int Pagination.measure(&self, int width) @dynamic => 1;
 fn int Spinner.measure(&self, int width) @dynamic => 1;
 fn int Stopwatch.measure(&self, int width) @dynamic => 1;
 fn int Timer.measure(&self, int width) @dynamic => 1;
+
+fn int Help.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn int Pagination.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn int Spinner.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn int Stopwatch.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn int Timer.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+
+// A progress bar spans whatever it is given rather than asking for a width.
+fn int Progress.measure_width(&self, int height) @dynamic => self.width;
+
+// The scrolling components fill the space they are given, so their natural
+// width is whatever they were last laid out at. Centring one is unusual — they
+// are normally the part of a screen that fills — but it should not collapse.
+fn int List.measure_width(&self, int height) @dynamic => self.width;
+fn int Table.measure_width(&self, int height) @dynamic => self.width;
+fn int Viewport.measure_width(&self, int height) @dynamic => self.width;
+fn int FilePicker.measure_width(&self, int height) @dynamic => self.width;
+fn int TextInput.measure_width(&self, int height) @dynamic => self.width;
+fn int Textarea.measure_width(&self, int height) @dynamic => self.width;
 
 // TextInput is one row, and its cursor sits at the caret offset within it.
 

@@ -308,3 +308,16 @@ fn void test_unfocused_input_does_not_claim_the_cursor() @test {
 	assert(res.cursor.has_cursor, "the focused one claims it");
 	assert(res.cursor.y == 0, "and it is the first input, not the last painted");
 }
+
+// A component under center() is sized from what it reports on both axes.
+// Reporting only a height leaves it one row tall and no columns wide, which
+// paints nothing.
+fn void test_centered_component_has_a_width() @test {
+	boba::Timer t = boba::new_timer(90);
+
+	xray::Node* n = xray::content_node(&t).center();
+	xray::root().add(n).solve(xray::new_rect(0, 0, 40, 10));
+
+	assert(n.rect().h == 1, "one row tall");
+	assert(n.rect().w > 0, "and wide enough to show the clock");
+}
