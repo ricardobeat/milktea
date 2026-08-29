@@ -116,7 +116,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 // choice_list draws the options one per row, the highlighted one marked and
 // inverted. Every row is padded to the widest label so the highlight is a
 // solid bar rather than ragged.
-fn String Picker.choice_list(&self, Theme* th) @local {
+fn String Picker.choice_list(&self, Theme* th) {
 	int widest = 0;
 	for (int i = 0; i < self.count; i++) {
 		int w = glaze::string_width(self.choices[i]);

@@ -92,7 +92,7 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 
 // handle_bar_key is the closed state: arrows move along the bar, and Enter or
 // Down opens the dropdown under the current title.
-fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) @local {
+fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
 			if (self.selected > 0) self.selected--;
@@ -162,7 +162,7 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 
 // render_item lays a label against its shortcut key, the label left and the
 // key pushed to the right edge of the item's width.
-fn String Menu.render_item(&self, MenuItem mi, glaze::Style base) @local {
+fn String Menu.render_item(&self, MenuItem mi, glaze::Style base) {
 	String label = glaze::style().align_horizontal(glaze::Position.LEFT).render(mi.label);
 	String key   = glaze::style()
 		.align_horizontal(glaze::Position.RIGHT)
