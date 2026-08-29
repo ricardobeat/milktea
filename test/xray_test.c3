@@ -1491,3 +1491,15 @@ fn void test_absolute_diff_column_accounts_for_wide_glyphs() @test {
 	String diff = sb.render_diff_str();
 	assert(diff.contains("\x1b[1;5H"));
 }
+
+fn void test_layout_min_alone_absorbs_leftover_space() @test {
+	// A lone at_least(n) with no fill/max sibling has nothing else to claim
+	// the leftover space, so it should grow to fill it — otherwise it just
+	// leaves a gap, which is what the old (broken) "CMIN is always fixed"
+	// semantics did.
+	Rect[1] out;
+	Constraint[1] constraints = { at_least(8) };
+	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
+
+	assert(out[0].w == 20);
+}

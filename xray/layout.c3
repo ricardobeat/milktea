@@ -152,6 +152,13 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 				fixed += len_val;
 
 			case ConstraintKind.CMIN:
+				// A floor a sibling fill() doesn't have to compete with: real
+				// flexbox/ratatui treat min-width and flex-grow as orthogonal
+				// — a min-width item with no grow factor of its own does not
+				// expand just because it has a floor, it only ever gets more
+				// than its minimum from space nothing else claims (see the
+				// remainder pass below, which offers leftovers to CMIN only
+				// when no CFILL sibling exists to take them first).
 				int min_val = cs[i].value;
 				if (min_val < 0) min_val = 0;
 				if (min_val > available) min_val = available;
@@ -187,7 +194,10 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 		}
 	}
 
-	// Pass 2: distribute remaining space among fill/max children
+	// Pass 2: distribute remaining space among fill/max children. CMIN sits
+	// this out — see the note in Pass 1 — so it never competes here, only
+	// CFILL and CMAX (a cap is still a kind of flexibility: it grows until
+	// it hits its ceiling).
 	for (int iter = 0; iter < 4; iter++) {
 		int remaining = available - fixed;
 		if (remaining <= 0 || fill_weight_total <= 0) break;
@@ -240,11 +250,20 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 		}
 	}
 
-	// Distribute any remainder to the last fill child
+	// Distribute any remainder to the last fill child — or, when nothing on
+	// the axis has a real grow factor at all, to the last CMIN child, so an
+	// at_least(n) row with no fill() sibling still absorbs slack instead of
+	// leaving a gap. Real flex-grow always wins when both are present: a
+	// min-width item does not expand just because it has a floor, only
+	// because nothing else claimed the space (same as CSS/ratatui).
 	int final_total = 0;
 	for (int i = 0; i < n; i++) {
 		if (sizes[i] < 0) sizes[i] = 0;
 		final_total += sizes[i];
+	}
+	bool has_fill_or_max = false;
+	foreach (c : cs) {
+		if (c.kind == ConstraintKind.CFILL || c.kind == ConstraintKind.CMAX) { has_fill_or_max = true; break; }
 	}
 	// Distribute integer-division leftovers to flexible children, last one
 	// first. A CMAX child only absorbs up to its cap, so we keep scanning
@@ -262,6 +281,9 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 			int take = room < remainder ? room : remainder;
 			sizes[i] += take;
 			remainder -= take;
+		} else if (cs[i].kind == ConstraintKind.CMIN && !has_fill_or_max) {
+			sizes[i] += remainder;
+			remainder = 0;
 		}
 	}
 
