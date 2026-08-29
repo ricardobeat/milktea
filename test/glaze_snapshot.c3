@@ -489,3 +489,51 @@ fn void test_partial_border_draws_only_its_sides() @test {
 	assert(lines == 2, "one content row and one bottom row, not four: %s", out);
 	assert(!out.starts_with("\n"), "no blank row where the top border is absent");
 }
+
+// height is the block's total height. Content taller than it used to overflow,
+// so a bordered box rendered one row past the size it was given — painting
+// over whatever the layout had put below it, including its own drop shadow.
+fn void test_height_clips_content_that_overflows() @test {
+	glaze::Style s = { .border = glaze::NORMAL, .height = 5 };
+
+	String out = s.render("a\nb\nc\nd\ne\nf\ng");
+
+	int lines = 1;
+	foreach (c : out) if (c == '\n') lines++;
+	assert(lines == 5, "five rows including the border, got %d", lines);
+}
+
+// A style re-applies itself after a reset inside its content, so the rest of
+// the line keeps its background. It must leave alone the channels the content
+// sets for itself immediately after that reset — otherwise nested styled
+// content, such as a border drawn in its own color, comes out in the outer
+// style's foreground.
+fn void test_outer_style_does_not_overwrite_inner_colors() @test {
+	glaze::Style inner = {
+		.border = { .right = "|" },
+		.border_color = glaze::color_hex("#111111"),
+	};
+	glaze::Style outer = { .fg = glaze::color_hex("#ffffff"), .bg = glaze::color_hex("#000055") };
+
+	String out = outer.render(inner.render("hi"));
+
+	// The border's own dark foreground must still be in the output.
+	assert(out.contains("38;2;17;17;17"), "inner border color survived: %s", out);
+}
+
+// A border normally sits on the block's own background, which is right for a
+// box drawn around its content. A border used as a drop shadow needs the
+// surface behind the block instead — otherwise the half of each half-block
+// cell the shadow does not cover shows the block's own face color.
+fn void test_border_bg_overrides_the_block_background() @test {
+	glaze::Style s = {
+		.bg = glaze::color_hex("#ffff55"),
+		.border = { .right = "▌" },
+		.border_color = glaze::color_hex("#111111"),
+		.border_bg = glaze::color_hex("#000055"),
+	};
+
+	String out = s.render("ok");
+
+	assert(out.contains("48;2;0;0;85"), "border drawn on the surface color: %s", out);
+}

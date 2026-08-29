@@ -354,3 +354,13 @@ fn void test_at_keeps_an_explicit_size() @test {
 	assert(box.got.w == 12, "explicit width survives at()");
 	assert(box.got.x == 3, "still pinned");
 }
+
+// Content that is sometimes hidden returns null rather than an empty node, so
+// the caller adds it unconditionally.
+fn void test_add_ignores_a_null_child() @test {
+	xray::Node* r = xray::root()
+		.add(xray::content_node(fixed(4, 1)))
+		.add(null);
+
+	assert(r.count() == 1, "the null child was not added");
+}

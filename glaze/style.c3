@@ -706,6 +706,11 @@ struct Style {
 	Color fg;
 	Color bg;
 	Color border_color;
+	// Background behind the border. Unset means the border sits on the block's
+	// own background, which is right for a box drawn around its content. A
+	// border used as a drop shadow wants the surface behind the block instead,
+	// so that the half of each cell the shadow does not cover shows it.
+	Color border_bg;
 	bool bold;
 	bool italic;
 	bool underline;
@@ -872,6 +877,43 @@ fn void color_whitespace(DString* buf, Color* bg, bool has_bg, int n) @local {
 	if (has_bg) buf.append_string("\x1b[0m");
 }
 
+// next_sgr_channels looks at the escape sequence starting at `pos`, if there
+// is one, and reports whether it sets a foreground and/or a background color.
+// A style re-applying itself after an inner reset uses this to leave alone
+// whatever the content is about to set for itself.
+fn void next_sgr_channels(String s, sz pos, bool* fg, bool* bg) @local {
+	*fg = false;
+	*bg = false;
+	if (pos + 2 >= s.len || s[pos] != '\x1b' || s[pos + 1] != '[') return;
+
+	sz i = pos + 2;
+	int code = 0;
+	bool have = false;
+	while (i < s.len && s[i] != 'm') {
+		if (s[i] >= '0' && s[i] <= '9') {
+			code = code * 10 + (s[i] - '0');
+			have = true;
+		} else if (s[i] == ';') {
+			if (have) mark_sgr_channel(code, fg, bg);
+			code = 0;
+			have = false;
+		} else {
+			// Not an SGR sequence.
+			return;
+		}
+		i++;
+	}
+	if (i < s.len && have) mark_sgr_channel(code, fg, bg);
+}
+
+// mark_sgr_channel records which channel one SGR parameter sets. 30-38 and
+// 90-97 are foreground, 40-48 and 100-107 background; 39 and 49 reset a
+// channel to the default, which still counts as the content deciding it.
+fn void mark_sgr_channel(int code, bool* fg, bool* bg) @local {
+	if ((code >= 30 && code <= 39) || (code >= 90 && code <= 97)) *fg = true;
+	if ((code >= 40 && code <= 49) || (code >= 100 && code <= 107)) *bg = true;
+}
+
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
@@ -1008,16 +1050,32 @@ fn String Style.render(self, String input) {
 						&& line[li] != 'J' && line[li] != 'K') li++;
 					if (li < line.len) li++;
 					body.append_string(line[esc_start:li - esc_start]);
-					// If it was a reset (starts with \x1b[0), re-apply outer style
+					// A reset inside the content drops this style along with the
+					// content's own, so re-apply it — but only the channels the
+					// content does not set for itself right after. Content that
+					// resets and immediately re-colors, as a nested border does,
+					// would otherwise have its color overwritten by this one.
 					if (line[esc_start + 2] == '0') {
-						bool rf = true;
-						if (self.bold)   { body.append_string(rf ? "\x1b[1m" : ""); rf = false; }
-						if (self.fg.kind != ColorKind.NONE) {
+						// The reset may carry its own colors — \x1b[0;38;2;..m
+						// is a reset and a foreground in one sequence — so look
+						// inside it as well as at whatever follows.
+						bool sets_fg;
+						bool sets_bg;
+						next_sgr_channels(line[esc_start:li - esc_start], 0, &sets_fg, &sets_bg);
+						if (!sets_fg || !sets_bg) {
+							bool nfg;
+							bool nbg;
+							next_sgr_channels(line, li, &nfg, &nbg);
+							sets_fg = sets_fg || nfg;
+							sets_bg = sets_bg || nbg;
+						}
+						if (self.bold && !sets_fg) body.append_string("\x1b[1m");
+						if (self.fg.kind != ColorKind.NONE && !sets_fg) {
 							body.append_string("\x1b[");
 							self.fg.write_sgr_params(&body, true);
 							body.append_string("m");
 						}
-						if (has_bg) {
+						if (has_bg && !sets_bg) {
 							body.append_string("\x1b[");
 							self.bg.write_sgr_params(&body, false);
 							body.append_string("m");
@@ -1083,8 +1141,17 @@ fn String Style.render(self, String input) {
 		rendered = rendered[:rendered.len - 1];
 	}
 
+	// height is the block's total height, so content taller than it is clipped
+	// rather than allowed to overflow. A block that grew past the size it was
+	// given would paint over whatever the layout put below it — including its
+	// own drop shadow.
+	if (height_target > 0 && total_lines > height_target) {
+		rendered = clip_lines(rendered, height_target);
+	}
+
 	if (!border_is_empty) {
-		return self.border.wrap_with_color(rendered, self.border_color, self.bg);
+		Color bbg = self.border_bg.kind != ColorKind.NONE ? self.border_bg : self.bg;
+		return self.border.wrap_with_color(rendered, self.border_color, bbg);
 	}
 	return rendered.tcopy();
 }

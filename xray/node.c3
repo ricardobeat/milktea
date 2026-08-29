@@ -201,6 +201,11 @@ fn Node* content_node(Content c) {
 	return n;
 }
 
+// add appends a child and returns this node, so the chained and statement
+// forms are the same call.
+//
+// A null child is ignored, which lets content that is sometimes hidden return
+// null from its node() and be added unconditionally.
 fn Node* Node.add(&self, Node* child) {
 	if (child != null && self.child_count < MAX_NODE_CHILDREN) {
 		self.children[self.child_count++] = child;
