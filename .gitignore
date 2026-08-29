@@ -8,3 +8,4 @@ tags.db*
 *.dSYM/
 .DS_Store
 .crush/
+*.c3l

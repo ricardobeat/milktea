@@ -93,6 +93,18 @@
       "opt": "Os",
       "strip-unused": true
     },
+    "examples/dos-app-gui": {
+      "type": "executable",
+      "sources": [
+        "milktea/**", "glaze/**", "xray/**", "milktea-gui/**",
+        "examples/dos-app/button.c3", "examples/dos-app/dialog.c3",
+        "examples/dos-app/menu.c3", "examples/dos-app/picker.c3",
+        "examples/dos-app/theme.c3", "examples/dos-app-gui/**"
+      ],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "O0",
+      "dependencies": ["raylib6"]
+    },
     "examples/pagination": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "examples/pagination/**"],
