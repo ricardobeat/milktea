@@ -1068,21 +1068,18 @@ struct Border {
 	String bottom_right;
 }
 
-fn Border rounded_border() {
-	return {
-		.top_left = "╭", .top = "─", .top_right = "╮",
-		.left = "│", .right = "│",
-		.bottom_left = "╰", .bottom = "─", .bottom_right = "╯",
-	};
-}
+// Border presets, usable directly in a literal.
+const Border ROUNDED = {
+	.top_left = "╭", .top = "─", .top_right = "╮",
+	.left = "│", .right = "│",
+	.bottom_left = "╰", .bottom = "─", .bottom_right = "╯",
+};
 
-fn Border normal_border() {
-	return {
-		.top_left = "┌", .top = "─", .top_right = "┐",
-		.left = "│", .right = "│",
-		.bottom_left = "└", .bottom = "─", .bottom_right = "┘",
-	};
-}
+const Border NORMAL = {
+	.top_left = "┌", .top = "─", .top_right = "┐",
+	.left = "│", .right = "│",
+	.bottom_left = "└", .bottom = "─", .bottom_right = "┘",
+};
 
 // draw_border draws border characters around rect r into the screen buffer
 // using the given style, and returns the inner rect (r inset by 1 on all sides).

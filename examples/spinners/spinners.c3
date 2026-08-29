@@ -77,14 +77,14 @@ fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
 		.count = 5
 	};
 
-	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(0, 0, 1, 0);
 
 	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
 
-	glaze::Style active = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	glaze::Style active = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 
-	glaze::Style box_style = glaze::style().border(glaze::rounded_border()).padding(1, 2, 1, 2);
+	glaze::Style box_style = glaze::style().with_border(glaze::ROUNDED).padding(1, 2, 1, 2);
 
 	DString content = dstring::temp();
 	content.append_string(title.render("Spinner Gallery"));

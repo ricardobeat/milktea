@@ -10,7 +10,7 @@ import xray;
 //   fn milktea::View Model.view(&self) @dynamic {
 //       return milktea::draw(milktea::root()
 //           .add(milktea::vstack()
-//               .add(milktea::text(title_s, "Title").height(1))
+//               .add(milktea::text(title_s, "Title").with_height(1))
 //               .add(milktea::text(body_s, self.body).fill(1))));
 //   }
 //
@@ -41,7 +41,7 @@ alias zstack  = xray::zstack;
 alias shadow  = xray::shadow;
 alias inner_shadow = xray::inner_shadow;
 
-// Sizing constraints, re-exported so .height(cells(1)) needs no xray prefix.
+// Sizing constraints, re-exported so .with_height(cells(1)) needs no xray prefix.
 alias cells    = xray::cells;
 alias fill     = xray::fill;
 alias percent  = xray::percent;
@@ -73,7 +73,7 @@ struct StyledText (xray::Content) {
 }
 
 fn String StyledText.render(&self, xray::Rect r) @dynamic {
-	return self.style.width(r.w).height(r.h).render(self.text);
+	return self.style.with_width(r.w).with_height(r.h).render(self.text);
 }
 
 // measure and measure_width report what the text needs before layout has
@@ -102,15 +102,15 @@ fn int StyledText.measure_width(&self, int height) @dynamic {
 // has empty strings, which is how "no border" is spelled.
 fn int StyledText.frame_v(&self) {
 	int n = 0;
-	if (self.style.border_style.top.len > 0) n++;
-	if (self.style.border_style.bottom.len > 0) n++;
+	if (self.style.border.top.len > 0) n++;
+	if (self.style.border.bottom.len > 0) n++;
 	return n;
 }
 
 fn int StyledText.frame_h(&self) {
 	int n = 0;
-	if (self.style.border_style.left.len > 0) n++;
-	if (self.style.border_style.right.len > 0) n++;
+	if (self.style.border.left.len > 0) n++;
+	if (self.style.border.right.len > 0) n++;
 	return n;
 }
 

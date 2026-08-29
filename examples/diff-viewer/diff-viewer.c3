@@ -188,7 +188,7 @@ fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 	}
 
 	if (is_cursor) {
-		style = style.background(glaze::color_hex("#444444")).bold(true);
+		style = style.background(glaze::color_hex("#444444")).with_bold(true);
 	}
 
 	String content = style.render(string::tformat("%s%s", prefix, line.content));

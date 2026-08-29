@@ -38,24 +38,24 @@ const String[3] TAB_CONTENTS = {
 fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
 	glaze::Style active_style = glaze::style()
 		.foreground(glaze::color_hex("#ffffff"))
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#874bfc"))
 		.padding(0, 1, 0, 1)
-		.bold(true);
+		.with_bold(true);
 
 	glaze::Style inactive_style = glaze::style()
 		.foreground(glaze::color_hex("#626262"))
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#3c3c3c"))
 		.padding(0, 1, 0, 1);
 
 	glaze::Style content_style = glaze::style()
 		.foreground(glaze::color_hex("#dddddd"))
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#874bfc"))
 		.padding(1, 2, 1, 2)
-		.width(50)
-		.height(8)
+		.with_width(50)
+		.with_height(8)
 		.align(glaze::Position.LEFT, glaze::Position.TOP);
 
 	String[3] tab_views;

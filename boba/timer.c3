@@ -22,9 +22,9 @@ fn Timer new_timer(int seconds) {
 	Timer t = { };
 	t.total_seconds = seconds;
 	t.running = true;
-	t.timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	t.timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 	t.paused_style = glaze::style().foreground(glaze::color_hex("#ffff00"));
-	t.done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).bold(true);
+	t.done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).with_bold(true);
 	t.subtle_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	return t;
 }

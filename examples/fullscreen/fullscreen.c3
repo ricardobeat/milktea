@@ -41,7 +41,7 @@ fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) 
 }
 
 fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
-	glaze::Style number = glaze::style().foreground(glaze::color_hex("#ff5555")).bold(true);
+	glaze::Style number = glaze::style().foreground(glaze::color_hex("#ff5555")).with_bold(true);
 
 	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
 

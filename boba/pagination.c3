@@ -29,7 +29,7 @@ fn Pagination new_pagination(int per_page, int total_items) {
 	p.per_page = per_page;
 	p.total_items = total_items;
 	p.kind = DOTS;
-	p.active_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	p.active_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	p.inactive_style = glaze::style().foreground(glaze::color_hex("#555555"));
 	p.subtle_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	return p;

@@ -73,7 +73,7 @@ const int SECTION_GAP = 1;
 const int LABEL_GAP = 1;
 
 fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
-	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style label_s = glaze::style().align(glaze::Position.LEFT, glaze::Position.TOP);
 	glaze::Style hint_s  = glaze::style().foreground(glaze::color_hex("#666666"));
 
@@ -89,7 +89,7 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 
 	glaze::Style btn_s = self.focus == 2
 		? glaze::style().foreground(glaze::color_hex("#ffffff"))
-			.background(glaze::color_hex("#00d7ff")).bold(true)
+			.background(glaze::color_hex("#00d7ff")).with_bold(true)
 		: glaze::style().foreground(glaze::color_hex("#888888"));
 
 	return milktea::draw(milktea::root()

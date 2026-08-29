@@ -394,7 +394,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	self.lst.cursor_style = glaze::style()
 		.foreground(glaze::color_hex("#ffffff"))
 		.background(glaze::color_hex("#874bfc"))
-		.bold(true);
+		.with_bold(true);
 	self.lst.item_style = glaze::style()
 		.foreground(glaze::color_hex("#a0a0b0"));
 	self.lst.dim_style = glaze::style()
@@ -418,8 +418,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String header = glaze::style()
 		.background(header_bg)
 		.foreground(glaze::color_hex("#ffffff"))
-		.bold(true)
-		.width(w)
+		.with_bold(true)
+		.with_width(w)
 		.padding(0, 0, 0, 1)
 		.render(string::tformat("%s %s", header_title, header_sub));
 
@@ -427,7 +427,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String sidebar_title = glaze::style()
 		.foreground(cyan)
 		.background(sidebar_bg)
-		.bold(true)
+		.with_bold(true)
 		.padding(1, 0, 1, 2)
 		.render("Components");
 
@@ -444,20 +444,20 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	String comp_name = glaze::style()
 		.foreground(accent2)
-		.bold(true)
+		.with_bold(true)
 		.render(component_name(self.preview.kind));
 	String comp_desc = glaze::style()
 		.foreground(text_dim)
 		.render(string::tformat(" — %s", component_desc(self.preview.kind)));
 	String focus_indicator = live
-		? glaze::style().foreground(glaze::color_hex("#50fa7b")).bold(true).render("  ● FOCUSED")
+		? glaze::style().foreground(glaze::color_hex("#50fa7b")).with_bold(true).render("  ● FOCUSED")
 		: "";
 
 	String preview_header = glaze::style()
 		.foreground(text_light)
 		.background(glaze::color_hex("#1e1e30"))
 		.padding(1, 0, 1, 2)
-		.width(preview_r.w)
+		.with_width(preview_r.w)
 		.render(string::tformat("%s%s%s", comp_name, comp_desc, focus_indicator));
 
 	// Size textarea/textinput to fill available preview space
@@ -491,10 +491,10 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// ── Footer ──
 	glaze::Style key_style = glaze::style()
 		.foreground(accent)
-		.bold(true);
+		.with_bold(true);
 	glaze::Style footer_style = glaze::style()
 		.foreground(subtle)
-		.width(w)
+		.with_width(w)
 		.align(glaze::Position.CENTER, glaze::Position.CENTER);
 
 	String footer_inner;

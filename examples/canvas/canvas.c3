@@ -61,11 +61,11 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	}
 
 	// Cards: Width(20) Height(10) with rounded border, centered content
-	glaze::Style card_style = glaze::style().width(20).height(10)
-		.border(glaze::rounded_border())
+	glaze::Style card_style = glaze::style().with_width(20).with_height(10)
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#7c3aed"))
 		.foreground(glaze::color_hex("#ffffff"))
-		.bold(true);
+		.with_bold(true);
 
 	String card_a_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Hello");
 	String card_b_content = glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye");

@@ -13,76 +13,67 @@ struct Border {
 	String bottom_right;
 }
 
-fn Border no_border() {
-	return { };
-}
+// Border presets. These are plain values, so they can be named directly in a
+// style literal: { .border = glaze::ROUNDED }. A custom shape fills in the
+// eight strings itself.
+const Border NONE = { };
 
-fn Border normal_border() {
-	return {
-		.top = "─",
-		.bottom = "─",
-		.left = "│",
-		.right = "│",
-		.top_left = "┌",
-		.top_right = "┐",
-		.bottom_left = "└",
-		.bottom_right = "┘"
-	};
-}
+const Border NORMAL = {
+	.top = "─",
+	.bottom = "─",
+	.left = "│",
+	.right = "│",
+	.top_left = "┌",
+	.top_right = "┐",
+	.bottom_left = "└",
+	.bottom_right = "┘"
+};
 
-fn Border rounded_border() {
-	return {
-		.top = "─",
-		.bottom = "─",
-		.left = "│",
-		.right = "│",
-		.top_left = "╭",
-		.top_right = "╮",
-		.bottom_left = "╰",
-		.bottom_right = "╯"
-	};
-}
+const Border ROUNDED = {
+	.top = "─",
+	.bottom = "─",
+	.left = "│",
+	.right = "│",
+	.top_left = "╭",
+	.top_right = "╮",
+	.bottom_left = "╰",
+	.bottom_right = "╯"
+};
 
-// hidden_border occupies the same space as rounded_border but renders
-// with spaces — content shifts are avoided when switching focus.
-fn Border hidden_border() {
-	return {
-		.top = " ",
-		.bottom = " ",
-		.left = " ",
-		.right = " ",
-		.top_left = " ",
-		.top_right = " ",
-		.bottom_left = " ",
-		.bottom_right = " "
-	};
-}
+// HIDDEN occupies the same space as ROUNDED but renders with spaces, so
+// content does not shift when a border is switched on and off with focus.
+const Border HIDDEN = {
+	.top = " ",
+	.bottom = " ",
+	.left = " ",
+	.right = " ",
+	.top_left = " ",
+	.top_right = " ",
+	.bottom_left = " ",
+	.bottom_right = " "
+};
 
-fn Border thick_border() {
-	return {
-		.top = "━",
-		.bottom = "━",
-		.left = "┃",
-		.right = "┃",
-		.top_left = "┏",
-		.top_right = "┓",
-		.bottom_left = "┗",
-		.bottom_right = "┛"
-	};
-}
+const Border THICK = {
+	.top = "━",
+	.bottom = "━",
+	.left = "┃",
+	.right = "┃",
+	.top_left = "┏",
+	.top_right = "┓",
+	.bottom_left = "┗",
+	.bottom_right = "┛"
+};
 
-fn Border double_border() {
-	return {
-		.top = "═",
-		.bottom = "═",
-		.left = "║",
-		.right = "║",
-		.top_left = "╔",
-		.top_right = "╗",
-		.bottom_left = "╚",
-		.bottom_right = "╝"
-	};
-}
+const Border DOUBLE = {
+	.top = "═",
+	.bottom = "═",
+	.left = "║",
+	.right = "║",
+	.top_left = "╔",
+	.top_right = "╗",
+	.bottom_left = "╚",
+	.bottom_right = "╝"
+};
 
 // Wrap input lines (split by '\n') with this border.
 // If border_fg is not NONE, border characters are wrapped in SGR.

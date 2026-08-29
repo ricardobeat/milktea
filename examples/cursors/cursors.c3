@@ -79,7 +79,7 @@ struct Entry {
 // style_input returns a bordered text-input style for the given border color.
 fn glaze::Style style_input(String bc, bool focused) {
 	glaze::Style s = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex(bc))
 		.align(glaze::Position.LEFT, glaze::Position.CENTER);
 	return focused ? s.foreground(glaze::color_hex("#ffffff")) : s.foreground(glaze::color_hex("#555555"));

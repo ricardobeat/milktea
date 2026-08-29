@@ -277,7 +277,7 @@ fn bool get_prop_bool(Runtime* rt, void* obj, String name) @local {
 // width/height props are treated as outer (layout) dimensions; border overhead is subtracted
 // so that the rendered block exactly fits the allocated rect.
 fn glaze::Style props_to_style(Runtime* rt, void* props) @local {
-	glaze::Style s = glaze::new_style();
+	glaze::Style s = glaze::style();
 	if (!props || rt.is_null(props)) return s;
 
 	String fg = get_prop_string(rt, props, "fg");
@@ -286,40 +286,40 @@ fn glaze::Style props_to_style(Runtime* rt, void* props) @local {
 	String bg = get_prop_string(rt, props, "bg");
 	if (bg.len > 0) s = s.background(glaze::color_hex(bg));
 
-	if (get_prop_bool(rt, props, "bold")) s = s.set_bold(true);
-	if (get_prop_bool(rt, props, "italic")) s = s.set_italic(true);
-	if (get_prop_bool(rt, props, "underline")) s = s.set_underline(true);
+	if (get_prop_bool(rt, props, "bold")) s = s.with_bold(true);
+	if (get_prop_bool(rt, props, "italic")) s = s.with_italic(true);
+	if (get_prop_bool(rt, props, "underline")) s = s.with_underline(true);
 
 	String border   = get_prop_string(rt, props, "border");
 	bool has_border = false;
 	if (border == "rounded") {
-		s = s.set_border(glaze::rounded_border());
+		s = s.with_border(glaze::ROUNDED);
 		has_border = true;
 	} else if (border == "normal" || border == "single") {
-		s = s.set_border(glaze::normal_border());
+		s = s.with_border(glaze::NORMAL);
 		has_border = true;
 	} else if (border == "thick") {
-		s = s.set_border(glaze::thick_border());
+		s = s.with_border(glaze::THICK);
 		has_border = true;
 	} else if (border == "double") {
-		s = s.set_border(glaze::double_border());
+		s = s.with_border(glaze::DOUBLE);
 		has_border = true;
 	}
 
 	String border_color = get_prop_string(rt, props, "borderColor");
-	if (border_color.len > 0) s = s.set_border_fg(glaze::color_hex(border_color));
+	if (border_color.len > 0) s = s.border_fg(glaze::color_hex(border_color));
 
 	String border_anim = get_prop_string(rt, props, "borderAnimation");
 	if (border_anim == "pulse") {
-		s = s.set_border_anim(glaze::BorderAnimation.PULSE);
+		s = s.border_anim(glaze::BorderAnimation.PULSE);
 	} else if (border_anim == "rainbow") {
-		s = s.set_border_anim(glaze::BorderAnimation.RAINBOW);
+		s = s.border_anim(glaze::BorderAnimation.RAINBOW);
 	} else if (border_anim == "race") {
-		s = s.set_border_anim(glaze::BorderAnimation.RACE);
+		s = s.border_anim(glaze::BorderAnimation.RACE);
 	}
 
 	int anim_speed = get_prop_int(rt, props, "borderAnimSpeed", 0);
-	if (anim_speed > 0) s = s.set_border_anim_speed(anim_speed);
+	if (anim_speed > 0) s = s.border_anim_speed(anim_speed);
 
 	int pad   = get_prop_int(rt, props, "pad", 0);
 	int pad_x = get_prop_int(rt, props, "pad_x", pad);
@@ -331,10 +331,10 @@ fn glaze::Style props_to_style(Runtime* rt, void* props) @local {
 	// set_width/set_height in our glaze mean total outer size (border + padding + content),
 	// matching Go glaze Width(N) semantics — render() subtracts border and padding internally.
 	int w = get_prop_int(rt, props, "width", 0);
-	if (w > 0) s = s.set_width(w);
+	if (w > 0) s = s.with_width(w);
 
 	int h = get_prop_int(rt, props, "height", 0);
-	if (h > 0) s = s.set_height(h);
+	if (h > 0) s = s.with_height(h);
 
 	return s;
 }
@@ -708,12 +708,12 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			int inner_h  = area.h - border_pad - pad_y * 2;
 			if (inner_w < 1) inner_w = 1;
 			if (inner_h < 1) inner_h = 1;
-			style = style.set_width(area.w).set_height(area.h);
+			style = style.with_width(area.w).with_height(area.h);
 			String frame = style.render("");
 			screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
 			// Animated border overlay (if borderAnimation is set)
 			if (has_border && style.border_animation != glaze::BorderAnimation.NONE) {
-				String anim_frame = style.border_style.wrap_animated(
+				String anim_frame = style.border.wrap_animated(
 					area.w - border_pad,
 					area.h - border_pad,
 					style.border_animation,
@@ -764,13 +764,13 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			if (has_border && style.border_animation != glaze::BorderAnimation.NONE) {
 				// Animated: render content without border, then wrap with animated border.
 				if (get_prop_int(rt, props, "width", 0) == 0) {
-					style = style.set_width(area.w);
+					style = style.with_width(area.w);
 				}
 				if (get_prop_int(rt, props, "height", 0) == 0) {
-					style = style.set_height(area.h);
+					style = style.with_height(area.h);
 				}
 				String content_rendered = style.render_content_only(content);
-				String anim_border = style.border_style.wrap_animated(
+				String anim_border = style.border.wrap_animated(
 					content_w,
 					content_h,
 					style.border_animation,
@@ -795,10 +795,10 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				request_render_tick((long)glaze::border_anim_tick_ms(style.border_animation));
 			} else {
 				if (get_prop_int(rt, props, "width", 0) == 0) {
-					style = style.set_width(area.w);
+					style = style.with_width(area.w);
 				}
 				if (get_prop_int(rt, props, "height", 0) == 0) {
-					style = style.set_height(area.h);
+					style = style.with_height(area.h);
 				}
 				String rendered = style.render(content);
 				screen.render_ansi_string(
@@ -828,7 +828,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		int frame                = (int)((taro_now_ms() / (long)fs.interval_ms) % (long)fs.count);
 		String frame_str         = fs.frames[frame];
 		if (fg.kind != glaze::ColorKind.NONE) {
-			frame_str = glaze::new_style().foreground(fg).render(frame_str);
+			frame_str = glaze::style().foreground(fg).render(frame_str);
 		}
 		screen.render_ansi_string((sz)area.x, (sz)area.y, frame_str, xray::default_style());
 		request_render_tick((long)fs.interval_ms);
@@ -869,15 +869,15 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				String fg_str = get_prop_string(rt, props, "fg");
 				if (fg_str.len > 0) {
 					glaze::Color fg_col = glaze::color_hex(fg_str);
-					ta.focused_style = glaze::new_style().foreground(fg_col);
-					ta.prompt_style = glaze::new_style().foreground(fg_col);
+					ta.focused_style = glaze::style().foreground(fg_col);
+					ta.prompt_style = glaze::style().foreground(fg_col);
 				}
 
 				// Fake cursor style: cursorBg / cursorFg props override defaults
 				String cursor_bg = get_prop_string(rt, props, "cursorBg");
 				String cursor_fg = get_prop_string(rt, props, "cursorFg");
 				if (cursor_bg.len > 0 || cursor_fg.len > 0) {
-					glaze::Style cs = glaze::new_style();
+					glaze::Style cs = glaze::style();
 					if (cursor_bg.len > 0) cs = cs.background(glaze::color_hex(cursor_bg));
 					if (cursor_fg.len > 0) cs = cs.foreground(glaze::color_hex(cursor_fg));
 					ta.cursor_style = cs;
@@ -889,11 +889,11 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			// so the content height is exactly what ta.view() produces (no padding/clipping issues).
 			if (has_border || pad_x > 0 || pad_y > 0) {
 				glaze::Style frame_style = props_to_style(rt, props);
-				frame_style = frame_style.set_width(area.w).set_height(area.h);
+				frame_style = frame_style.with_width(area.w).with_height(area.h);
 				String frame = frame_style.render("");
 				screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
 				if (has_border && frame_style.border_animation != glaze::BorderAnimation.NONE) {
-					String anim_frame = frame_style.border_style.wrap_animated(
+					String anim_frame = frame_style.border.wrap_animated(
 						area.w - border_pad,
 						area.h - border_pad,
 						frame_style.border_animation,
@@ -1087,11 +1087,11 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			// Draw border frame
 			if (has_border || pad_x > 0 || pad_y > 0) {
 				glaze::Style frame_style = props_to_style(rt, props);
-				frame_style = frame_style.set_width(area.w).set_height(area.h);
+				frame_style = frame_style.with_width(area.w).with_height(area.h);
 				String frame = frame_style.render("");
 				screen.render_ansi_string((sz)area.x, (sz)area.y, frame, xray::default_style(), (sz)(area.y + area.h));
 				if (has_border && frame_style.border_animation != glaze::BorderAnimation.NONE) {
-					String anim_frame = frame_style.border_style.wrap_animated(
+					String anim_frame = frame_style.border.wrap_animated(
 						area.w - border_pad,
 						area.h - border_pad,
 						frame_style.border_animation,
@@ -1125,12 +1125,12 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				sz line_end = pos;
 				while (line_end < content.len && content[line_end] != '\n') line_end++;
 				String line                = content[pos:line_end - pos];
-				glaze::Style line_style = glaze::new_style();
+				glaze::Style line_style = glaze::style();
 				if (props) {
 					String fg_str = get_prop_string(rt, props, "fg");
 					if (fg_str.len > 0) line_style = line_style.foreground(glaze::color_hex(fg_str));
 				}
-				line_style = line_style.set_width(inner_w);
+				line_style = line_style.with_width(inner_w);
 				String rendered_line = line_style.render(line);
 				screen.render_ansi_string(
 					(sz)inner.x,

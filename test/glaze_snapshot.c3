@@ -53,28 +53,28 @@ fn void test_snap_style_fg_bg() @test {
 
 fn void test_snap_style_bold() @test {
 	String out = glaze::style()
-		.bold(true)
+		.with_bold(true)
 		.render("bold");
 	snapshot::assert_snapshot(SNAP, "style_bold", out);
 }
 
 fn void test_snap_style_italic() @test {
 	String out = glaze::style()
-		.italic(true)
+		.with_italic(true)
 		.render("italic");
 	snapshot::assert_snapshot(SNAP, "style_italic", out);
 }
 
 fn void test_snap_style_underline() @test {
 	String out = glaze::style()
-		.underline(true)
+		.with_underline(true)
 		.render("underline");
 	snapshot::assert_snapshot(SNAP, "style_underline", out);
 }
 
 fn void test_snap_style_bold_fg() @test {
 	String out = glaze::style()
-		.bold(true)
+		.with_bold(true)
 		.foreground(glaze::color_ansi(2))
 		.render("bold green");
 	snapshot::assert_snapshot(SNAP, "style_bold_fg", out);
@@ -86,22 +86,22 @@ fn void test_snap_style_bold_fg() @test {
 
 fn void test_snap_style_width() @test {
 	String out = glaze::style()
-		.width(20)
+		.with_width(20)
 		.render("wide");
 	snapshot::assert_snapshot(SNAP, "style_width", out);
 }
 
 fn void test_snap_style_height() @test {
 	String out = glaze::style()
-		.height(3)
+		.with_height(3)
 		.render("tall");
 	snapshot::assert_snapshot(SNAP, "style_height", out);
 }
 
 fn void test_snap_style_width_height() @test {
 	String out = glaze::style()
-		.width(12)
-		.height(4)
+		.with_width(12)
+		.with_height(4)
 		.render("box");
 	snapshot::assert_snapshot(SNAP, "style_width_height", out);
 }
@@ -131,7 +131,7 @@ fn void test_snap_style_padding_fg() @test {
 
 fn void test_snap_style_align_center() @test {
 	String out = glaze::style()
-		.width(20)
+		.with_width(20)
 		.align(glaze::Position.CENTER, glaze::Position.CENTER)
 		.render("centered");
 	snapshot::assert_snapshot(SNAP, "style_align_center", out);
@@ -139,7 +139,7 @@ fn void test_snap_style_align_center() @test {
 
 fn void test_snap_style_align_right() @test {
 	String out = glaze::style()
-		.width(20)
+		.with_width(20)
 		.align_horizontal(glaze::Position.RIGHT)
 		.render("right");
 	snapshot::assert_snapshot(SNAP, "style_align_right", out);
@@ -147,7 +147,7 @@ fn void test_snap_style_align_right() @test {
 
 fn void test_snap_style_align_bottom() @test {
 	String out = glaze::style()
-		.height(5)
+		.with_height(5)
 		.align_vertical(glaze::Position.BOTTOM)
 		.render("bottom");
 	snapshot::assert_snapshot(SNAP, "style_align_bottom", out);
@@ -159,35 +159,35 @@ fn void test_snap_style_align_bottom() @test {
 
 fn void test_snap_style_border_rounded() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.render("rounded");
 	snapshot::assert_snapshot(SNAP, "style_border_rounded", out);
 }
 
 fn void test_snap_style_border_thick() @test {
 	String out = glaze::style()
-		.border(glaze::thick_border())
+		.with_border(glaze::THICK)
 		.render("thick");
 	snapshot::assert_snapshot(SNAP, "style_border_thick", out);
 }
 
 fn void test_snap_style_border_double() @test {
 	String out = glaze::style()
-		.border(glaze::double_border())
+		.with_border(glaze::DOUBLE)
 		.render("double");
 	snapshot::assert_snapshot(SNAP, "style_border_double", out);
 }
 
 fn void test_snap_style_border_normal() @test {
 	String out = glaze::style()
-		.border(glaze::normal_border())
+		.with_border(glaze::NORMAL)
 		.render("normal");
 	snapshot::assert_snapshot(SNAP, "style_border_normal", out);
 }
 
 fn void test_snap_style_border_colored() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#ff5fd7"))
 		.render("pink border");
 	snapshot::assert_snapshot(SNAP, "style_border_colored", out);
@@ -195,7 +195,7 @@ fn void test_snap_style_border_colored() @test {
 
 fn void test_snap_style_border_fg() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.foreground(glaze::color_ansi(3))
 		.border_fg(glaze::color_ansi(6))
 		.render("yellow text, cyan border");
@@ -204,7 +204,7 @@ fn void test_snap_style_border_fg() @test {
 
 fn void test_snap_style_border_padding() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.padding(1, 2, 1, 2)
 		.render("border + padding");
 	snapshot::assert_snapshot(SNAP, "style_border_padding", out);
@@ -212,8 +212,8 @@ fn void test_snap_style_border_padding() @test {
 
 fn void test_snap_style_border_width() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
-		.width(20)
+		.with_border(glaze::ROUNDED)
+		.with_width(20)
 		.render("fixed width");
 	snapshot::assert_snapshot(SNAP, "style_border_width", out);
 }
@@ -224,15 +224,15 @@ fn void test_snap_style_border_width() @test {
 
 fn void test_snap_style_multiline() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
+		.with_border(glaze::ROUNDED)
 		.render("line one\nline two\nline three");
 	snapshot::assert_snapshot(SNAP, "style_multiline", out);
 }
 
 fn void test_snap_style_multiline_border_width() @test {
 	String out = glaze::style()
-		.border(glaze::rounded_border())
-		.width(20)
+		.with_border(glaze::ROUNDED)
+		.with_width(20)
 		.render("short\na much longer line here\nmid");
 	snapshot::assert_snapshot(SNAP, "style_multiline_border_width", out);
 }
@@ -245,11 +245,11 @@ fn void test_snap_style_full() @test {
 	String out = glaze::style()
 		.foreground(glaze::color_hex("#ffaf00"))
 		.background(glaze::color_hex("#1c1c1c"))
-		.bold(true)
-		.border(glaze::rounded_border())
+		.with_bold(true)
+		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#87afaf"))
 		.padding(1, 2, 1, 2)
-		.width(24)
+		.with_width(24)
 		.align_horizontal(glaze::Position.CENTER)
 		.render("full style");
 	snapshot::assert_snapshot(SNAP, "style_full", out);
@@ -260,12 +260,12 @@ fn void test_snap_style_full() @test {
 // ============================================================
 
 fn void test_snap_border_wrap_rounded() @test {
-	String out = glaze::rounded_border().wrap("box");
+	String out = glaze::ROUNDED.wrap("box");
 	snapshot::assert_snapshot(SNAP, "border_wrap_rounded", out);
 }
 
 fn void test_snap_border_wrap_multiline() @test {
-	String out = glaze::thick_border().wrap("top\nbottom");
+	String out = glaze::THICK.wrap("top\nbottom");
 	snapshot::assert_snapshot(SNAP, "border_wrap_multiline", out);
 }
 

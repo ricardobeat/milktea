@@ -40,10 +40,10 @@ struct List (xray::Content) {
 fn List new_list() {
 	List l = { };
 	l.selected = -1;
-	l.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	l.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 	l.selected_style = glaze::style().foreground(glaze::color_hex("#00ff00"));
 	l.item_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
-	l.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	l.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	l.dim_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	l.cursor_prefix = "▌ ";
 	l.item_prefix = "  ";

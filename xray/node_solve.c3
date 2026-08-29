@@ -182,7 +182,7 @@ fn void Node.solve(&self, Rect area) {
 		int main_size = row ? child_rects[i].w : child_rects[i].h;
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
-		// for a specific cross size still gets it — otherwise .width(30)
+		// for a specific cross size still gets it — otherwise .with_width(30)
 		// inside a vstack would be silently ignored, since stretch is the
 		// default alignment.
 		int size = cross_total;

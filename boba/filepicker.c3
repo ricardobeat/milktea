@@ -30,10 +30,10 @@ struct FilePicker (xray::Content) {
 fn FilePicker new_file_picker(String start_dir) {
 	FilePicker fp = { };
 	fp.current_dir = start_dir;
-	fp.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	fp.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 	fp.dir_style = glaze::style().foreground(glaze::color_hex("#00d7ff"));
 	fp.file_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
-	fp.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	fp.title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	fp.hint_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	fp.error_style = glaze::style().foreground(glaze::color_hex("#ff0000"));
 	return fp;

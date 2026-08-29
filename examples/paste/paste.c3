@@ -103,18 +103,18 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	glaze::Style status_style = glaze::style()
 		.foreground(glaze::color_hex("#aaaaaa"))
 		.background(glaze::color_hex("#1e1e30"))
-		.width(w);
+		.with_width(w);
 
 	glaze::Style hint_style = glaze::style()
 		.foreground(glaze::color_hex("#555566"))
-		.bold(false);
+		.with_bold(false);
 
 	// The status line: show paste result or the idle hint.
 	String status_text;
 	if (self.status_len > 0) {
 		glaze::Style ok_style = glaze::style()
 			.foreground(glaze::color_hex("#50fa7b"))
-			.bold(true);
+			.with_bold(true);
 		status_text = status_style.render(
 			string::tformat(" %s", ok_style.render(self.status())));
 	} else {

@@ -258,7 +258,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			add_log(self, hr.status);
 			if (hr.ok) {
 				if (self.show_thinking && hr.reasoning.len() > 0) {
-					glaze::Style think_s = glaze::style().foreground(glaze::color_hex("#666666")).italic(true);
+					glaze::Style think_s = glaze::style().foreground(glaze::color_hex("#666666")).with_italic(true);
 					self.output.append_string("\n");
 					self.output.append_string(think_s.render(hr.reasoning.str_view()));
 					self.output.append_string("\n\n");
@@ -297,7 +297,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 
 				self.output.append_char('\n');
 				String cmd = (String)self.bash_pending[:self.bash_pending_len];
-				glaze::Style run_s  = glaze::style().foreground(glaze::color_hex("#7cf68e")).bold(true);
+				glaze::Style run_s  = glaze::style().foreground(glaze::color_hex("#7cf68e")).with_bold(true);
 				glaze::Style deny_s = glaze::style().foreground(glaze::color_hex("#ff5555"));
 				DString cline = dstring::new(mem);
 				if (yes) {
@@ -499,7 +499,7 @@ fn String slice_lines(String s, int start, int count) {
 
 fn DString md_render(String md) {
 	glaze::Style base   = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
-	glaze::Style header = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);
+	glaze::Style header = glaze::style().foreground(glaze::color_hex("#00ffcc")).with_bold(true);
 	glaze::Style code   = glaze::style().foreground(glaze::color_hex("#ffcc00"));
 	glaze::Style quote  = glaze::style().foreground(glaze::color_hex("#7f7f7f"));
 
@@ -616,10 +616,10 @@ fn milktea::View Model.view(&self) @dynamic {
 		layout::slot(layout::cells(1),    &hint_r),
 	});
 
-	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);
+	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).with_bold(true);
 	glaze::Style output_s = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
 	glaze::Style input_s  = glaze::style().foreground(glaze::color_hex("#ffff00"))
-		.border(glaze::rounded_border()).padding(0, 1, 0, 1);
+		.with_border(glaze::ROUNDED).padding(0, 1, 0, 1);
 	glaze::Style hint_s   = glaze::style().foreground(glaze::color_hex("#555555"));
 
 	DString out_content = dstring::new(mem);
@@ -640,7 +640,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		glaze::Style bstyle = glaze::style()
 			.foreground(glaze::color_hex("#ffcc00"))
 			.background(glaze::color_hex("#3d2f00"))
-			.bold(true);
+			.with_bold(true);
 		out_content.append_string(bstyle.render(block.str_view()));
 		block.free();
 	} else if (self.loading) {
@@ -672,7 +672,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		v = v.draw(sb, sb_bg, "");
 
 		glaze::Style hdr = glaze::style()
-			.foreground(glaze::color_hex("#00ffcc")).bold(true).background(glaze::color_hex("#151515"));
+			.foreground(glaze::color_hex("#00ffcc")).with_bold(true).background(glaze::color_hex("#151515"));
 		v = v.draw({ .x = sb.x, .y = sb.y, .w = sb.w, .h = 1 }, hdr, " REQUESTS");
 
 		int rows = self.log_count;
@@ -693,7 +693,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		glaze::Style modal_s = glaze::style()
 			.foreground(glaze::color_hex("#ff7777"))
 			.background(glaze::color_hex("#1a1a1a"))
-			.border(glaze::rounded_border()).padding(1, 2, 1, 2);
+			.with_border(glaze::ROUNDED).padding(1, 2, 1, 2);
 		v = draw_dialog(v, output_r, w, (String)self.modal_msg[:self.modal_msg_len], modal_s);
 	}
 

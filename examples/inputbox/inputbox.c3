@@ -66,10 +66,10 @@ fn milktea::View Model.view(&self) @dynamic {
 		layout::slot(layout::cells(1),    &hint_r),
 	});
 
-	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).bold(true);
+	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).with_bold(true);
 	glaze::Style output_s = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
 	glaze::Style input_s  = glaze::style().foreground(glaze::color_hex("#ffff00"))
-		.border(glaze::rounded_border()).padding(0, 1, 0, 1);
+		.with_border(glaze::ROUNDED).padding(0, 1, 0, 1);
 	glaze::Style hint_s   = glaze::style().foreground(glaze::color_hex("#555555"));
 
 	String title_v  = title_r.render(title_s,  "  INPUTBOX TEST");

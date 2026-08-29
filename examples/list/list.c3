@@ -56,7 +56,7 @@ fn milktea::Cmd ListModel.update(ListModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View ListModel.view(ListModel* self) @dynamic {
-	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style hint_style  = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();

@@ -12,7 +12,7 @@ fn milktea::Cmd Mod.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 fn milktea::View Mod.view(&self) @dynamic {
-	glaze::Style box = glaze::style().with_border(glaze::rounded_border());
+	glaze::Style box = glaze::style().with_border(glaze::ROUNDED);
 	glaze::Style nm = glaze::style().align(glaze::Position.RIGHT, glaze::Position.CENTER);
 	milktea::Node* col = milktea::vstack().with_gap(1);
 	col.add(milktea::hstack().height(milktea::cells(3)).with_gap(1)
@@ -34,7 +34,7 @@ fn bool contains_seq(String h, String n) {
 // and the caret lands inside the border without the app computing an offset.
 fn void test_bordered_input_places_its_own_cursor() @test {
 	Mod m;
-	glaze::Style bx = glaze::style().with_border(glaze::rounded_border());
+	glaze::Style bx = glaze::style().with_border(glaze::ROUNDED);
 	m.a = boba::new_text_input().with_styles(bx, bx);
 	m.b = boba::new_text_input().with_styles(bx, bx);
 	m.a.placeholder_style = bx;
@@ -61,7 +61,7 @@ fn void test_bordered_input_places_its_own_cursor() @test {
 // from placeholder_style, which carries only a color, so a field had no
 // border until it had been focused and typed into.
 fn void test_empty_unfocused_input_still_draws_its_border() @test {
-	glaze::Style bx = glaze::style().with_border(glaze::rounded_border());
+	glaze::Style bx = glaze::style().with_border(glaze::ROUNDED);
 	boba::TextInput inp = boba::new_text_input().with_styles(bx, bx);
 	inp.focused = false;
 	inp.width = 12;

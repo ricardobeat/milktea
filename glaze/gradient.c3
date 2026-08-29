@@ -332,7 +332,7 @@ fn String gradient_text(String text, Color from, Color to, bool bold = true) {
 		double t = width > 1 ? (double)col / (double)(width - 1) : 0.0;
 		Color c = blend_luv(from, to, t);
 		Style s = style().foreground(c);
-		if (bold) s = s.bold(true);
+		if (bold) s = s.with_bold(true);
 		out.append_string(s.render(ch));
 
 		col += ch_w > 0 ? ch_w : 1;

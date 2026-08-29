@@ -58,7 +58,7 @@ fn Style Style.set_bg(self, Color c) {
 	return s;
 }
 
-fn Style Style.set_bold(self, bool on) {
+fn Style Style.with_bold(self, bool on) {
 	Style s = self;
 	s.attrs.bold = on;
 	return s;
@@ -70,13 +70,13 @@ fn Style Style.set_dim(self, bool on) {
 	return s;
 }
 
-fn Style Style.set_italic(self, bool on) {
+fn Style Style.with_italic(self, bool on) {
 	Style s = self;
 	s.attrs.italic = on;
 	return s;
 }
 
-fn Style Style.set_underline(self, bool on) {
+fn Style Style.with_underline(self, bool on) {
 	Style s = self;
 	s.attrs.underline = on;
 	return s;

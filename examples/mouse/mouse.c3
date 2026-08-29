@@ -68,7 +68,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
-	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 
 	glaze::Style info_style = glaze::style().foreground(glaze::color_hex("#ff00ff"));
 

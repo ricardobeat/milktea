@@ -43,11 +43,11 @@ fn String Editor.text(Editor* self) {
 }
 
 fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor) {
-	glaze::Style focused = glaze::style().border(glaze::rounded_border())
+	glaze::Style focused = glaze::style().with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#3b82f6"))
-		.width(pane_width)
+		.with_width(pane_width)
 		.padding(0, 1, 0, 1);
-	glaze::Style unfocused = glaze::style().border(glaze::hidden_border()).width(pane_width)
+	glaze::Style unfocused = glaze::style().with_border(glaze::HIDDEN).with_width(pane_width)
 		.padding(0, 1, 0, 1);
 
 	glaze::Style s = self.focused ? focused : unfocused;

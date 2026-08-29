@@ -60,7 +60,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	int mins         = self.seconds / 60;
 	int secs         = self.seconds % 60;
 
-	glaze::Border active_border = glaze::rounded_border();
+	glaze::Border active_border = glaze::ROUNDED;
 	glaze::Border inactive_border = {
 		.top = " ",
 		.bottom = " ",
@@ -75,13 +75,13 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	glaze::Border timer_border = (self.focus == 0) ? active_border : inactive_border;
 	glaze::Border spin_border  = (self.focus == 1) ? active_border : inactive_border;
 
-	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
+	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true)
 		.padding(1, 2, 1, 2)
-		.border(timer_border);
+		.with_border(timer_border);
 
-	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
+	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(1, 2, 1, 2)
-		.border(spin_border);
+		.with_border(spin_border);
 
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 

@@ -80,8 +80,8 @@ fn String TextInput.render(&self, xray::Rect r) @dynamic {
 fn int TextInput.measure(&self, int width) @dynamic {
 	glaze::Style s = self.focused ? self.focused_style : self.blurred_style;
 	int frame = 0;
-	if (s.border_style.top.len > 0) frame++;
-	if (s.border_style.bottom.len > 0) frame++;
+	if (s.border.top.len > 0) frame++;
+	if (s.border.bottom.len > 0) frame++;
 	return 1 + s.pad_top + s.pad_bottom + frame;
 }
 
@@ -91,8 +91,8 @@ fn xray::ContentCursor TextInput.cursor(&self, xray::Rect r) @dynamic {
 	// padding rather than at the rect's own corner. Reading it from the style
 	// means changing the border cannot move the cursor off the text.
 	glaze::Style s = self.focused_style;
-	int inset_x = s.pad_left + (s.border_style.left.len > 0 ? 1 : 0);
-	int inset_y = s.pad_top + (s.border_style.top.len > 0 ? 1 : 0);
+	int inset_x = s.pad_left + (s.border.left.len > 0 ? 1 : 0);
+	int inset_y = s.pad_top + (s.border.top.len > 0 ? 1 : 0);
 	return {
 		.x = r.x + inset_x + self.cursor_col(),
 		.y = r.y + inset_y,

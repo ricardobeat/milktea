@@ -75,9 +75,9 @@ fn milktea::View Model.view(&self) @dynamic {
 	int w = milktea::screen_width();
 	int h = milktea::screen_height();
 
-	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#ffffff")).bold(true);
+	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#ffffff")).with_bold(true);
 	glaze::Style label_s = glaze::style().foreground(glaze::color_hex("#888888"));
-	glaze::Style label_hi = glaze::style().foreground(glaze::color_hex("#cccccc")).bold(true);
+	glaze::Style label_hi = glaze::style().foreground(glaze::color_hex("#cccccc")).with_bold(true);
 
 	glaze::Color red  = glaze::color_hex("#ff0000");
 	glaze::Color blue = glaze::color_hex("#0000ff");

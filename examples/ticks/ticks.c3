@@ -71,17 +71,17 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
 	String spin      = frames[self.spin_frame % 8];
 
-	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
+	glaze::Style spin_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(1, 2, 1, 2)
-		.border(glaze::rounded_border());
+		.with_border(glaze::ROUNDED);
 
-	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
+	glaze::Style timer_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true)
 		.padding(1, 2, 1, 2)
-		.border(glaze::rounded_border());
+		.with_border(glaze::ROUNDED);
 
-	glaze::Style step_style = glaze::style().foreground(glaze::color_hex("#00ff88")).bold(true)
+	glaze::Style step_style = glaze::style().foreground(glaze::color_hex("#00ff88")).with_bold(true)
 		.padding(1, 2, 1, 2)
-		.border(glaze::rounded_border());
+		.with_border(glaze::ROUNDED);
 
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 

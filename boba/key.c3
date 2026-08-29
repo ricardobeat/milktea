@@ -93,7 +93,7 @@ fn bool KeyMap.has_binding(&self, String action) {
 // view returns the bindings as a two-column string.
 fn String KeyMap.view(&self) {
 	DString out = dstring::temp();
-	glaze::Style key_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style key_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style act_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
 	for (int i = 0; i < self.count; i++) {
 		out.append_string(string::tformat("  %-7s  ", key_style.render(self.bindings[i].key)));

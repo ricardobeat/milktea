@@ -37,17 +37,17 @@ struct Table (xray::Content) {
 	glaze::Style header_style;
 	glaze::Style cursor_style;
 	glaze::Style row_style;
-	glaze::Style border_style;
+	glaze::Style border;
 }
 
 // new_table creates an empty table.
 fn Table new_table() {
 	Table t = { };
 	t.has_header = true;
-	t.header_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
-	t.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	t.header_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
+	t.cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 	t.row_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
-	t.border_style = glaze::style().foreground(glaze::color_hex("#444444"));
+	t.border = glaze::style().foreground(glaze::color_hex("#444444"));
 	return t;
 }
 

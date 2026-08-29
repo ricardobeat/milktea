@@ -386,8 +386,8 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	DString out = dstring::temp();
-	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
-	glaze::Style cursor_style = glaze::style().foreground(glaze::color_hex("#ffffff")).bold(true)
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
+	glaze::Style cursor_style = glaze::style().foreground(glaze::color_hex("#ffffff")).with_bold(true)
 		.background(glaze::color_hex("#444444"));
 	glaze::Style normal_style = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
 	glaze::Style error_style  = glaze::style().foreground(glaze::color_hex("#ff5555"));

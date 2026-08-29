@@ -30,9 +30,9 @@ fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Counter.view(Counter* self) @dynamic {
-	glaze::Style box = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
+	glaze::Style box = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(1, 3, 1, 3)
-		.border(glaze::rounded_border());
+		.with_border(glaze::ROUNDED);
 
 	String label   = string::tformat("Counter: %d", self.value);
 	String hint    = "\nUse ↑↓ to change, q to quit";

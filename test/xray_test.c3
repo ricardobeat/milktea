@@ -106,7 +106,7 @@ fn void test_style_set_fg() @test {
 }
 
 fn void test_style_full_sgr() @test {
-	Style s    = default_style().set_fg(color_ansi(1)).set_bg(color_ansi(4)).set_bold(true);
+	Style s    = default_style().set_fg(color_ansi(1)).set_bg(color_ansi(4)).with_bold(true);
 	String sgr = s.to_sgr();
 	// Should contain reset, bold, red fg, blue bg
 
@@ -117,8 +117,8 @@ fn void test_style_full_sgr() @test {
 }
 
 fn void test_style_diff_no_change() @test {
-	Style a = default_style().set_bold(true);
-	Style b = default_style().set_bold(true);
+	Style a = default_style().with_bold(true);
+	Style b = default_style().with_bold(true);
 	assert(a.diff_sgr(b) == "");
 }
 
@@ -134,7 +134,7 @@ fn void test_style_diff_fg_change() @test {
 }
 
 fn void test_style_diff_bold_off() @test {
-	Style prev = default_style().set_bold(true);
+	Style prev = default_style().with_bold(true);
 	Style next = default_style();
 	String sgr = next.diff_sgr(prev);
 	// Should emit \x1b[0m (reset clears bold)
@@ -178,7 +178,7 @@ fn void test_cell_neq_content() @test {
 
 fn void test_cell_neq_style() @test {
 	Cell a = new_cell("A", 1, default_style());
-	Cell b = new_cell("A", 1, default_style().set_bold(true));
+	Cell b = new_cell("A", 1, default_style().with_bold(true));
 	assert(!a.eq(b));
 }
 
@@ -708,7 +708,7 @@ fn void test_fill_rect() @test {
 		mem::free(sb);
 	}
 
-	sb.fill_rect(new_rect(2, 1, 4, 3), default_style().set_bold(true));
+	sb.fill_rect(new_rect(2, 1, 4, 3), default_style().with_bold(true));
 
 	// Check top-left of filled rect
 	Cell* c = sb.cell_at(2, 1);

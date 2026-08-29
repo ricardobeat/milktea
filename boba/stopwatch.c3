@@ -20,7 +20,7 @@ struct Stopwatch (xray::Content) {
 fn Stopwatch new_stopwatch() {
 	Stopwatch s = { };
 	s.running = true;
-	s.timer_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	s.timer_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	s.paused_style = glaze::style().foreground(glaze::color_hex("#ffff00"));
 	s.subtle_style = glaze::style().foreground(glaze::color_hex("#666666"));
 	return s;

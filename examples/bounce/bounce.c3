@@ -94,7 +94,7 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 	}
 
 	glaze::Style border = glaze::style()
-		.border(
+		.with_border(
 			{
 				.top = "═",
 				.bottom = "═",

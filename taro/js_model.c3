@@ -247,11 +247,11 @@ fn void render_debug_overlay(xray::ScreenBuffer* screen, int screen_w, int scree
 	}
 
 	String content = body.str_view();
-	glaze::Style panel = glaze::new_style()
-		.set_border(glaze::rounded_border())
-		.set_border_fg(glaze::color_hex("#444444"))
+	glaze::Style panel = glaze::style()
+		.with_border(glaze::ROUNDED)
+		.border_fg(glaze::color_hex("#444444"))
 		.foreground(glaze::color_hex("#aaaaaa"))
-		.set_width(26);
+		.with_width(26);
 	String rendered = panel.render(content);
 
 	// Count rendered lines to size the overlay
@@ -454,10 +454,10 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	ZString err = taro_last_error();
 	if (err) {
 		String err_str = err.str_view();
-		glaze::Style err_style = glaze::new_style().set_border(glaze::rounded_border())
-			.set_border_fg(glaze::color_hex("#ff0000"))
+		glaze::Style err_style = glaze::style().with_border(glaze::ROUNDED)
+			.border_fg(glaze::color_hex("#ff0000"))
 			.foreground(glaze::color_hex("#ff6666"))
-			.set_width(w - 2);
+			.with_width(w - 2);
 		String rendered = err_style.render(err_str);
 		int line_count  = 1;
 		for (sz i = 0; i < rendered.len; i++) {

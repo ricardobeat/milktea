@@ -38,9 +38,9 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	glaze::Style box_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true)
+	glaze::Style box_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true)
 		.padding(2, 4, 2, 4)
-		.border(glaze::rounded_border());
+		.with_border(glaze::ROUNDED);
 
 	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
@@ -52,7 +52,7 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 	out.append_char('\n');
 
 	if (self.timer.done) {
-		glaze::Style done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).bold(true);
+		glaze::Style done_style = glaze::style().foreground(glaze::color_hex("#00ff00")).with_bold(true);
 		out.append_string(done_style.render("Time's up!"));
 	} else if (self.timer.running) {
 		out.append_string(subtle.render("SPACE to pause"));

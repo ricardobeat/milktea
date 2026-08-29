@@ -81,12 +81,12 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
-	glaze::Style you_style   = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style you_style   = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style sys_style   = glaze::style().foreground(glaze::color_hex("#888888"));
 	glaze::Style input_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
 	glaze::Style hint_style  = glaze::style().foreground(glaze::color_hex("#444444"));
-	glaze::Style border_style = glaze::style()
-		.border(
+	glaze::Style border = glaze::style()
+		.with_border(
 			{
 				.top = "-",
 				.bottom = "-",
@@ -98,7 +98,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 				.bottom_right = "+"
 			}
 		);
-	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 
 	int msg_area_h = milktea::screen_height() - 5;
 	if (msg_area_h < 3) msg_area_h = 3;
@@ -160,7 +160,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	if (self.cursor_blink != 0) {
 		input_line.append_string("▎");
 	}
-	out.append_string(border_style.render(input_line.str_view()));
+	out.append_string(border.render(input_line.str_view()));
 	out.append_char('\n');
 	out.append_string(hint_style.render("ENTER send | ESC quit"));
 	return milktea::new_alt_screen_view(out.str_view());

@@ -127,15 +127,15 @@ fn milktea::View Model.view(&self) @dynamic {
 	// 3. Styles.
 	glaze::Style title_s = glaze::style()
 		.foreground(glaze::color_hex("#4a3f35")).background(accent)
-		.bold(true).padding(0, 1, 0, 1);
+		.with_bold(true).padding(0, 1, 0, 1);
 
 	glaze::Style side_s = glaze::style()
 		.foreground(dim)
-		.border(glaze::rounded_border()).border_fg(dim).padding(1, 2, 1, 2);
+		.with_border(glaze::ROUNDED).border_fg(dim).padding(1, 2, 1, 2);
 
 	glaze::Style timer_s = glaze::style()
-		.foreground(accent).bold(true)
-		.border(glaze::rounded_border()).border_fg(accent)
+		.foreground(accent).with_bold(true)
+		.with_border(glaze::ROUNDED).border_fg(accent)
 		.padding(1, 2, 1, 2)
 		.align(glaze::Position.CENTER, glaze::Position.CENTER);
 
