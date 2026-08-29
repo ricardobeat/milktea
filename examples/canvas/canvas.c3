@@ -8,8 +8,6 @@ import std::core::dstring;
 
 struct CanvasModel {
 	bool flip;
-	int width;
-	int height;
 	// Compositor and layers are created once and reused every frame —
 	// creating them inside view() would leak heap memory on every render.
 	milktea::Compositor* comp;
@@ -23,11 +21,6 @@ fn milktea::Cmd CanvasModel.init(CanvasModel* self) @dynamic {
 }
 
 fn milktea::Cmd CanvasModel.update(CanvasModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
@@ -61,7 +54,7 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 		self.card_a = milktea::new_layer("").set_opaque();
 		self.card_b = milktea::new_layer("").set_x(10).set_y(2).set_opaque();
 		self.footer = milktea::new_layer("");
-		self.comp = milktea::new_compositor(self.width, self.height);
+		self.comp = milktea::new_compositor(milktea::screen_width(), milktea::screen_height());
 		self.comp.add_layer(self.footer);
 		self.comp.add_layer(self.card_a);
 		self.comp.add_layer(self.card_b);
@@ -86,12 +79,12 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	// Footer sits on the bottom row, below both cards.
 	glaze::Style footer_style = glaze::style().foreground(glaze::color_hex("#a0a0a0"));
 	self.footer.content = footer_style.render("Press any key to swap the cards, or q to quit.");
-	self.footer.y = self.height > 1 ? self.height - 1 : 0;
+	self.footer.y = milktea::screen_height() > 1 ? milktea::screen_height() - 1 : 0;
 	self.footer.z = 2;
 
 	// Track terminal size and re-sort layers after the z changes.
-	self.comp.width = self.width;
-	self.comp.height = self.height;
+	self.comp.width = milktea::screen_width();
+	self.comp.height = milktea::screen_height();
 	self.comp.refresh();
 
 	return self.comp.render();

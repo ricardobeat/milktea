@@ -10,8 +10,6 @@ const int MSG_SPIN = 1;
 
 struct SpinnerModel {
 	int frame;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {
@@ -24,12 +22,6 @@ fn milktea::Msg on_spin() {
 }
 
 fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
 		self.frame++;
 		return milktea::tick(80, &on_spin);

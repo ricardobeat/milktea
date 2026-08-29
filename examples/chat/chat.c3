@@ -16,8 +16,6 @@ struct ChatModel {
 	String[64] senders;
 	int msg_count;
 	int scroll;
-	int width;
-	int height;
 	int cursor_blink;
 }
 
@@ -33,11 +31,6 @@ fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
 
 
 fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
 		return milktea::tick(500);
@@ -107,7 +100,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 		);
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).bold(true);
 
-	int msg_area_h = self.height - 5;
+	int msg_area_h = milktea::screen_height() - 5;
 	if (msg_area_h < 3) msg_area_h = 3;
 
 	DString out = dstring::temp();
@@ -115,7 +108,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	out.append_char('\n');
 
 	// Show messages (bottom-aligned) with word wrapping
-	int wrap_width = self.width - 6; // "You: " or "system: " prefix
+	int wrap_width = milktea::screen_width() - 6; // "You: " or "system: " prefix
 	if (wrap_width < 10) wrap_width = 10;
 	int start = self.msg_count - msg_area_h;
 	if (start < 0) start = 0;

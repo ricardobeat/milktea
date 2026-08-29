@@ -314,29 +314,32 @@ return milktea::tick(100, &produce_msg);
 
 ## Window size
 
-The runtime sends a `WINDOW_SIZE` message on startup and whenever the terminal is resized. Track it in your model:
+The runtime tracks the terminal size for you. Read it anywhere inside `init`, `update`, `view` or `on_mount`:
 
 ```c3
-struct Model { int width; int height; /* ... */ }
+int w = milktea::screen_width();
+int h = milktea::screen_height();
+```
 
+The size is set before your first `view` and refreshed on every resize, so there is no startup gap to guard against. Outside a running program the accessors return `80x24`. They read unsynchronized state, so call them from the main thread only.
+
+You do **not** need to store the size in your model to read it back.
+
+### Reacting to a resize
+
+`WINDOW_SIZE` is still delivered, for models that must do work when the size *changes* — reallocate a cell grid, resize a canvas, reflow cached text:
+
+```c3
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-        self.width  = msg.window_size.width;
-        self.height = msg.window_size.height;
+        self.grid.resize(msg.window_size.width, msg.window_size.height);
         return null;
     }
     // ...
 }
 ```
 
-Then use it in `view`:
-
-```c3
-int w = self.width > 0 ? self.width : 80;
-int h = self.height > 0 ? self.height : 24;
-```
-
-The fallback handles the brief moment before the first size message arrives.
+If all you do in that handler is copy the size into two fields, delete it and call the accessors instead.
 
 ---
 

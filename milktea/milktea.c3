@@ -516,6 +516,27 @@ fn int input_reader_fn(void* arg) {
 // Safe because only one program can run at a time (one terminal).
 Program* g_program = null;
 
+// screen_width and screen_height report the terminal size currently tracked by
+// the running program, so models do not need to store it themselves. The size
+// is refreshed on startup and on every WINDOW_SIZE change.
+//
+// Valid only while a program is running — that is, inside init(), update(),
+// view() and on_mount(). Called before run() (or after it returns) they fall
+// back to 80x24. Main thread only: the value is read without synchronization.
+//
+// Models that need to *react* to a resize (recompute a cached layout, reflow
+// text) should still handle MsgKind.WINDOW_SIZE; these accessors only remove
+// the need to store the size in order to read it back.
+fn int screen_width() {
+	if (g_program == null) return 80;
+	return (int)g_program.cached_ws.ws_col;
+}
+
+fn int screen_height() {
+	if (g_program == null) return 24;
+	return (int)g_program.cached_ws.ws_row;
+}
+
 // debug_warn appends a timestamped line to milktea-debug.log.
 // Only writes when the running program has debug=true; silently swallows all
 // I/O errors so a logging failure never disrupts the TUI surface.

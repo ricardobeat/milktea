@@ -546,3 +546,56 @@ fn void test_send_survives_concurrent_shutdown() @test {
 		t2.join()!!;
 	}
 }
+
+// ============================================================
+// screen_width / screen_height
+// ============================================================
+
+// ScreenSizeModel records what the accessors report from inside the
+// program callbacks, so the test can assert on them after run() returns.
+struct ScreenSizeModel {
+	int w_in_update;
+	int h_in_update;
+	int w_in_view;
+	int h_in_view;
+}
+
+fn milktea::Cmd ScreenSizeModel.init(ScreenSizeModel* self) @dynamic {
+	return null;
+}
+
+fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) @dynamic {
+	self.w_in_update = milktea::screen_width();
+	self.h_in_update = milktea::screen_height();
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
+	self.w_in_view = milktea::screen_width();
+	self.h_in_view = milktea::screen_height();
+	return milktea::new_view("size");
+}
+
+// The accessors report the program's injected size from inside update/view,
+// so a model never has to store WINDOW_SIZE just to read it back.
+fn void test_screen_size_accessors_report_injected_size() @test {
+	ScreenSizeModel m  = { };
+	DString out        = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 100, 40, (char[]) { 'q' });
+
+	p.run()!!;
+
+	assert(m.w_in_update == 100);
+	assert(m.h_in_update == 40);
+	assert(m.w_in_view == 100);
+	assert(m.h_in_view == 40);
+}
+
+// Outside a running program there is no size to report, so the accessors
+// fall back to 80x24 rather than dereferencing a null g_program.
+fn void test_screen_size_accessors_fall_back_when_not_running() @test {
+	assert(milktea::screen_width() == 80);
+	assert(milktea::screen_height() == 24);
+}
+

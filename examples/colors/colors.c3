@@ -6,9 +6,11 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
+// The model is stateless: the palette is drawn from the terminal size, which
+// milktea tracks internally (see milktea::screen_width/screen_height).
+// C3 does not permit zero-sized structs, hence the placeholder field.
 struct ColorsModel {
-	int width;
-	int height;
+	char _unused;
 }
 
 fn milktea::Cmd ColorsModel.init(ColorsModel* self) @dynamic {
@@ -16,12 +18,6 @@ fn milktea::Cmd ColorsModel.init(ColorsModel* self) @dynamic {
 }
 
 fn milktea::Cmd ColorsModel.update(ColorsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -57,8 +53,8 @@ fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 		"#FFFFFF" // Bright White
 		};
 
-	int block_width  = self.width / 4;
-	int block_height = self.height / 4;
+	int block_width  = milktea::screen_width() / 4;
+	int block_height = milktea::screen_height() / 4;
 
 	DString out = dstring::temp();
 

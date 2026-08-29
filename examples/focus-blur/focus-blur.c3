@@ -9,8 +9,6 @@ import std::core::dstring;
 struct FocusModel {
 	bool focused;
 	bool reporting;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd FocusModel.init(FocusModel* self) @dynamic {
@@ -26,11 +24,6 @@ fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
 	}
 	if (msg.kind == milktea::MsgKind.BLUR) {
 		self.focused = false;
-		return null;
-	}
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
 		return null;
 	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;

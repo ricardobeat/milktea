@@ -180,8 +180,6 @@ struct SplitModel {
 	Editor[4] editors;
 	int count;
 	int focus;
-	int height;
-	int width;
 	int cursor_blink;
 }
 
@@ -200,11 +198,6 @@ fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 
 
 fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
 		return milktea::tick(500);
@@ -264,13 +257,13 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	bool show_cursor     = self.cursor_blink != 0;
 
-	int edit_h = self.height - 3;
+	int edit_h = milktea::screen_height() - 3;
 	if (edit_h < 5) edit_h = 5;
 
 	xray::Constraint[4] pane_cs;
 	for (int i = 0; i < self.count; i++) pane_cs[i] = xray::constraint_fill(1);
 	xray::Rect[4] pane_rects;
-	xray::layout_h(xray::new_rect(0, 0, self.width, edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
+	xray::layout_h(xray::new_rect(0, 0, milktea::screen_width(), edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
 
 	DString out = dstring::temp();
 	String[4] views;

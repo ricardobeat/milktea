@@ -36,8 +36,6 @@ struct Model {
 	sz input_len;
 	sz input_cursor;
 	DString output;
-	int width;
-	int height;
 	int loading;
 	int cursor_blink;
 	boba::Spinner thinking;
@@ -225,12 +223,6 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	// Incoming messages from the llm background thread.
 	if (msg.kind == milktea::MsgKind.USER) {
 		if (msg.tag == MSG_STREAM) {
@@ -595,8 +587,8 @@ fn milktea::View draw_dialog(milktea::View v, xray::Rect area, int w, String bod
 }
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = self.width > 0 ? self.width : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width();
+	int h = milktea::screen_height();
 
 	String inp_content = string::tformat("> %s", (String)self.input_buf[:self.input_len]);
 	if (self.cursor_blink != 0 && !self.loading) {

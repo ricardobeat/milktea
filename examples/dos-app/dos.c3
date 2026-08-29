@@ -47,11 +47,6 @@ fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 }
 
 fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width  = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -261,8 +256,8 @@ fn String render_menu_item(MenuItem mi, glaze::Style base_style, int inner_w) {
 // ─── View ────────────────────────────────────────────────────────────────────
 
 fn milktea::View DosModel.view(DosModel* self) @dynamic {
-	int w = self.width;
-	int h = self.height;
+	int w = milktea::screen_width();
+	int h = milktea::screen_height();
 	if (w < 40) w = 80;
 	if (h < 10) h = 24;
 

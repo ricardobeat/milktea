@@ -25,8 +25,6 @@ struct Model {
 	int   remaining;   // seconds left in the current phase
 	bool  running;
 	int   completed;   // focus sessions finished
-	int   width;
-	int   height;
 }
 
 // Phase lengths, in seconds. Short for demoing; bump to 25*60 / 5*60 for real use.
@@ -52,11 +50,6 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
-		case milktea::MsgKind.WINDOW_SIZE:
-			self.width  = msg.window_size.width;
-			self.height = msg.window_size.height;
-			return null;
-
 		case milktea::MsgKind.TICK:
 			if (self.running && self.remaining > 0) {
 				self.remaining--;
@@ -105,8 +98,8 @@ fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
 // ── view ─────────────────────────────────────────────────────────────────────
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = self.width  > 0 ? self.width  : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
+	int h = milktea::screen_height();
 
 	bool focus = self.phase == Phase.FOCUS;
 

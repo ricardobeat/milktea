@@ -62,8 +62,6 @@ struct Model {
     int   remaining;   // seconds left in the current phase
     bool  running;
     int   completed;   // focus sessions finished
-    int   width;
-    int   height;
 }
 
 const int FOCUS_SECS = 25 * 60;
@@ -114,11 +112,6 @@ presses all arrive as a `Msg`. We `switch` on `msg.kind`.
 ```c3
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     switch (msg.kind) {
-        case milktea::MsgKind.WINDOW_SIZE:
-            self.width  = msg.window_size.width;
-            self.height = msg.window_size.height;
-            return null;
-
         case milktea::MsgKind.TICK:
             if (self.running && self.remaining > 0) {
                 self.remaining--;
@@ -196,18 +189,22 @@ Printable characters arrive as `KeyCode.RUNE`, with the actual character in
 This is the fun part, and where layout and styling come together. The view runs
 after every update and returns a `View`.
 
-### Step 1 — fall back to a sane size
+### Step 1 — ask the runtime for the size
 
-Before the first `WINDOW_SIZE` arrives, width and height are `0`. Guard against
-that:
+milktea tracks the terminal size, so the model does not carry it. It is already
+set before the first `view`, so there is nothing to guard against:
 
 ```c3
 fn milktea::View Model.view(&self) @dynamic {
-    int w = self.width  > 0 ? self.width  : 80;
-    int h = self.height > 0 ? self.height : 24;
+    int w = milktea::screen_width();
+    int h = milktea::screen_height();
 
     bool focus = self.phase == Phase.FOCUS;
 ```
+
+A model only needs to handle `MsgKind.WINDOW_SIZE` when a resize requires actual
+work — reallocating a grid, reflowing cached text. Ours just reads the numbers,
+so it can skip that entirely.
 
 ### Step 2 — pick colors
 

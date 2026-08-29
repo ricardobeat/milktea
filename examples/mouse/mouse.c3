@@ -7,8 +7,6 @@ import std::core::string;
 import std::core::dstring;
 
 struct Model {
-	int width;
-	int height;
 	int mouse_row;
 	int mouse_col;
 	milktea::MouseButton last_button;
@@ -29,12 +27,6 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.MOUSE) {
 		self.mouse_row = msg.mouse.row;
 		self.mouse_col = msg.mouse.col;

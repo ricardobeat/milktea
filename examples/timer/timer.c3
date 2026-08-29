@@ -9,8 +9,6 @@ import std::core::dstring;
 
 struct TimerModel {
 	boba::Timer timer;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd TimerModel.init(TimerModel* self) @dynamic {
@@ -19,12 +17,6 @@ fn milktea::Cmd TimerModel.init(TimerModel* self) @dynamic {
 }
 
 fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	self.timer.update(msg);
 
 	if (msg.kind != milktea::MsgKind.KEY) return null;

@@ -9,8 +9,6 @@ import std::core::dstring;
 
 struct FullscreenModel {
 	int countdown;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
@@ -19,12 +17,6 @@ fn milktea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
 
 
 fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.countdown--;
 		if (self.countdown <= 0) {

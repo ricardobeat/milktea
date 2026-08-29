@@ -18,8 +18,6 @@ import std::core::dstring;
 
 struct PasteModel {
 	boba::Textarea ta;
-	int width;
-	int height;
 	// Status message shown in the footer bar.
 	// Stored as a fixed char buffer so we never heap-allocate in update.
 	char[128] status_buf;
@@ -49,11 +47,6 @@ fn milktea::Cmd PasteModel.init(PasteModel* self) @dynamic {
 
 fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
-		case milktea::MsgKind.WINDOW_SIZE:
-			self.width  = msg.window_size.width;
-			self.height = msg.window_size.height;
-			return null;
-
 		case milktea::MsgKind.PASTE:
 			// msg.paste is only valid during this dispatch call.
 			// Capture byte count and line count before calling handle_paste,
@@ -88,8 +81,8 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
-	int w = self.width  > 0 ? self.width  : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
+	int h = milktea::screen_height();
 
 	// Layout: textarea area (fill) + one-line status bar.
 	xray::Rect editor_r, status_r;

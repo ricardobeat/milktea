@@ -14,8 +14,6 @@ struct Model {
 	int spin_frame;
 	int seconds;
 	int step;
-	int width;
-	int height;
 }
 
 fn milktea::Msg on_spin() {
@@ -41,12 +39,6 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
 		self.spin_frame++;
 		return milktea::tick(80, &on_spin);

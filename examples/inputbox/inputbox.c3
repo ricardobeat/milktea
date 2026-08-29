@@ -12,8 +12,6 @@ import std::core::dstring;
 struct Model {
 	DString input;
 	DString output;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
@@ -25,11 +23,6 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 
 	milktea::KeyMsg k = msg.key;
@@ -59,8 +52,8 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = self.width > 0 ? self.width : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width();
+	int h = milktea::screen_height();
 
 	String inp_content = string::tformat("> %s█", self.input.str_view());
 	String help_text   = string::tformat("  input len: %d chars", (int)self.input.len());

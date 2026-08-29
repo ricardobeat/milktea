@@ -24,16 +24,12 @@ struct DiffModel {
 	DiffLine[256] lines;
 	int line_count;
 	int scroll_offset;
-	int width;
-	int height;
 	int cursor;
 }
 
 fn milktea::Cmd DiffModel.init(DiffModel* self) @dynamic {
 	self.scroll_offset = 0;
 	self.cursor = 0;
-	self.width = 80;
-	self.height = 24;
 	self.line_count = 0;
 
 	parse_sample_diff(self);
@@ -79,12 +75,6 @@ fn void parse_sample_diff(DiffModel* self) {
 }
 
 fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -116,11 +106,11 @@ fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
 				adjust_scroll(self);
 			}
 		case milktea::KeyCode.PAGE_DOWN:
-			self.cursor = self.cursor + self.height - 3;
+			self.cursor = self.cursor + milktea::screen_height() - 3;
 			if (self.cursor >= self.line_count) self.cursor = self.line_count - 1;
 			adjust_scroll(self);
 		case milktea::KeyCode.PAGE_UP:
-			self.cursor = self.cursor - self.height + 3;
+			self.cursor = self.cursor - milktea::screen_height() + 3;
 			if (self.cursor < 0) self.cursor = 0;
 			adjust_scroll(self);
 		case milktea::KeyCode.HOME:
@@ -136,7 +126,7 @@ fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn void adjust_scroll(DiffModel* self) {
-	int visible_height = self.height - 3;
+	int visible_height = milktea::screen_height() - 3;
 
 	if (self.cursor < self.scroll_offset) {
 		self.scroll_offset = self.cursor;
@@ -154,7 +144,7 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	out.append_string(header);
 	out.append_char('\n');
 
-	int visible_height = self.height - 3;
+	int visible_height = milktea::screen_height() - 3;
 	int end_idx        = self.scroll_offset + visible_height;
 	if (end_idx > self.line_count) end_idx = self.line_count;
 

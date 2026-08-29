@@ -11,8 +11,6 @@ struct InputsModel {
 	boba::TextInput[3] inputs;
 	int focus;
 	bool submitted;
-	int width;
-	int height;
 	int cursor_blink;
 }
 
@@ -29,11 +27,6 @@ fn milktea::Msg on_blink() {
 }
 
 fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == 10) {
 		self.cursor_blink = 1 - self.cursor_blink;
 		return milktea::tick(500, &on_blink);

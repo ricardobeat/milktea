@@ -22,8 +22,6 @@ struct Particle {
 }
 
 struct Model {
-	int width;
-	int height;
 	Particle[MAX_GLITTER] glitter;
 	int glitter_count;
 	int spawn_idx; // round-robin index
@@ -40,11 +38,6 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
 	if (msg.kind == milktea::MsgKind.TICK) {
 		for (int i = 0; i < MAX_GLITTER; i++) {
 			if (self.glitter[i].active) {
@@ -79,8 +72,8 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = self.width > 0 ? self.width : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width();
+	int h = milktea::screen_height();
 
 	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#ffffff")).bold(true);
 	glaze::Style label_s = glaze::style().foreground(glaze::color_hex("#888888"));

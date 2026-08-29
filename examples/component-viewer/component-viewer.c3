@@ -288,8 +288,6 @@ struct Model {
 	boba::List lst;
 	Preview preview;
 	bool preview_focused;
-	int width;
-	int height;
 	int vp_screen_row;
 	int vp_screen_col;
 	boba::Toast toast;
@@ -308,12 +306,6 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width  = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.preview.update(msg);
 		self.toast.update(msg);
@@ -382,8 +374,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
-	int w = self.width  > 0 ? self.width  : 80;
-	int h = self.height > 0 ? self.height : 24;
+	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
+	int h = milktea::screen_height();
 
 	xray::Rect header_r, body_r, footer_r;
 	layout::vstack(layout::screen(w, h), {

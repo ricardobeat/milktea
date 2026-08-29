@@ -11,8 +11,6 @@ struct BounceModel {
 	int ball_y;
 	int dx;
 	int dy;
-	int width;
-	int height;
 	int ticks;
 }
 
@@ -26,18 +24,12 @@ fn milktea::Cmd BounceModel.init(BounceModel* self) @dynamic {
 
 
 fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.ticks++;
 
 		// Bounce area is smaller than the terminal
-		int arena_w = self.width - 4;
-		int arena_h = self.height - 6;
+		int arena_w = milktea::screen_width() - 4;
+		int arena_h = milktea::screen_height() - 6;
 		if (arena_w < 5) arena_w = 5;
 		if (arena_h < 3) arena_h = 3;
 
@@ -74,8 +66,8 @@ fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic
 }
 
 fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
-	int arena_w = self.width - 4;
-	int arena_h = self.height - 6;
+	int arena_w = milktea::screen_width() - 4;
+	int arena_h = milktea::screen_height() - 6;
 	if (arena_w < 5) arena_w = 5;
 	if (arena_h < 3) arena_h = 3;
 

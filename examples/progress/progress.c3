@@ -12,8 +12,6 @@ struct ProgressModel {
 	int progress;
 	int speed;
 	bool done;
-	int width;
-	int height;
 }
 
 fn milktea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
@@ -23,12 +21,6 @@ fn milktea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
 
 
 fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.TICK) {
 		if (!self.done) {
 			self.progress += self.speed;

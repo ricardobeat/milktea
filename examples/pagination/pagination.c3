@@ -12,8 +12,6 @@ const int TOTAL_ITEMS = 50;
 struct PaginationModel {
 	boba::Pagination pg;
 	int cursor;
-	int width;
-	int height;
 	bool[1000] selected;
 }
 
@@ -23,12 +21,6 @@ fn milktea::Cmd PaginationModel.init(PaginationModel* self) @dynamic {
 }
 
 fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
