@@ -11,7 +11,6 @@ struct InputsModel {
 	boba::TextInput[3] inputs;
 	int focus;
 	bool submitted;
-	int cursor_blink;
 }
 
 fn milktea::Cmd InputsModel.init(InputsModel* self) @dynamic {
@@ -19,19 +18,12 @@ fn milktea::Cmd InputsModel.init(InputsModel* self) @dynamic {
 	self.inputs[0].focused = true;
 	self.inputs[1] = boba::new_text_input().with_placeholder("Email");
 	self.inputs[2] = boba::new_text_input().with_placeholder("Password").with_password();
-	return milktea::tick(500, &on_blink);
-}
-
-fn milktea::Msg on_blink() {
-	return { .kind = milktea::MsgKind.USER, .tag = 10 };
+	// No blink timer: the terminal blinks its own cursor, and the layout
+	// tells it where to sit.
+	return null;
 }
 
 fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == 10) {
-		self.cursor_blink = 1 - self.cursor_blink;
-		return milktea::tick(500, &on_blink);
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -72,57 +64,53 @@ fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
+const String[3] LABELS = { "Nickname:", "Email:", "Password:" };
+
+// Rows the form leaves between its parts: after the title, before the button,
+// and before the hint line.
+const int SECTION_GAP = 1;
+// Columns between a label and its input.
+const int LABEL_GAP = 1;
+
 fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
-	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true)
-		.padding(0, 0, 1, 0);
-	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
+	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).bold(true);
+	glaze::Style label_s = glaze::style().align(glaze::Position.LEFT, glaze::Position.TOP);
+	glaze::Style hint_s  = glaze::style().foreground(glaze::color_hex("#666666"));
 
-	DString out = dstring::temp();
-	out.append_string(title.render("Sign Up"));
-	out.append_char('\n');
-	out.append_char('\n');
-
-	String[3] labels  = { "Nickname:", "Email:", "Password:" };
-	int[3] label_cols = { 10, 7, 10 };
-
-	int base_row = 3;
-
-	int cursor_x = 0;
-	int cursor_y = 0;
-
+	milktea::Node* form = milktea::vstack();
 	for (int i = 0; i < 3; i++) {
-		out.append_string(labels[i]);
-		out.append_char(' ');
-
-		if (i == self.focus) {
-			cursor_y = base_row + i;
-			cursor_x = label_cols[i] + self.inputs[i].cursor_col();
-		}
-
-		out.append_string(self.inputs[i].view());
-		out.append_char('\n');
+		self.inputs[i].focused = i == self.focus;
+		form.add(milktea::hstack()
+			.height(milktea::cells(1))
+			.with_gap(LABEL_GAP)
+			.add(milktea::text(label_s, LABELS[i]).width(milktea::cells(label_cols())))
+			.add(milktea::component(&self.inputs[i]).fill(1)));
 	}
 
-	out.append_char('\n');
+	glaze::Style btn_s = self.focus == 2
+		? glaze::style().foreground(glaze::color_hex("#ffffff"))
+			.background(glaze::color_hex("#00d7ff")).bold(true)
+		: glaze::style().foreground(glaze::color_hex("#888888"));
 
-	if (self.focus == 2) {
-		glaze::Style btn = glaze::style().foreground(glaze::color_hex("#ffffff"))
-			.background(glaze::color_hex("#00d7ff"))
-			.padding(0, 2, 0, 2)
-			.bold(true);
-		out.append_string(btn.render(" Submit "));
-	} else {
-		glaze::Style btn = glaze::style().foreground(glaze::color_hex("#888888")).padding(0, 2, 0, 2);
-		out.append_string(btn.render(" Submit "));
+	return milktea::draw(milktea::root()
+		.add(milktea::vstack()
+			.with_gap(SECTION_GAP)
+			.add(milktea::text(title_s, "Sign Up").height(milktea::cells(1)))
+			.add(form.height(milktea::cells(3)))
+			.add(milktea::text(btn_s, "  Submit  ").height(milktea::cells(1)))
+			.add(milktea::text(hint_s, "TAB/Shift+TAB switch | ENTER submit | ESC quit")
+				.height(milktea::cells(1)))));
+}
+
+// label_cols is the width of the label column: the longest label, so the
+// inputs line up without anyone counting characters.
+fn int label_cols() {
+	int widest = 0;
+	foreach (l : LABELS) {
+		int w = glaze::string_width(l);
+		if (w > widest) widest = w;
 	}
-	out.append_char('\n');
-	out.append_char('\n');
-	out.append_string(hint.render("TAB/Shift+TAB switch | ENTER submit | ESC quit"));
-
-	milktea::View v = milktea::new_alt_screen_view(out.str_view());
-	v.has_cursor = true;
-	v.cursor = milktea::new_cursor(cursor_x, cursor_y);
-	return v;
+	return widest;
 }
 
 fn int main() {
