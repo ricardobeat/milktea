@@ -43,9 +43,15 @@ alias MeasureFn = fn int(void* ctx, int cross);
 
 struct Constraint {
 	ConstraintKind kind;
-	int value;
+	int value; // CLEN/CMIN/CMAX/CPERCENT/CFILL's one number; unused by CFIT
 	MeasureFn measure; // only used when kind == CFIT
 	void* ctx; // passed to measure
+	// CFIT's own bounds — 0 means unbounded on that side, so a bare fit()
+	// (fit_min = fit_max = 0) measures freely. Kept separate from `value`
+	// so a CFIT constraint can be floored, capped, or both without a field
+	// whose meaning silently changes with `kind`.
+	int fit_min;
+	int fit_max;
 }
 
 fn Constraint cells(int n) {
@@ -70,6 +76,45 @@ fn Constraint fill(int weight) {
 
 fn Constraint fit(MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .measure = measure, .ctx = ctx };
+}
+
+// min_fit is fit(), floored: content grows the size past n, but never below
+// it. Where at_least(n) has no content to grow toward at all — a bare
+// number can only ever fall back to whatever leftover space nothing else
+// on the axis claims — this measures a real Content/child tree (the same
+// machinery fit() uses) and floors that measurement, the CSS min-width
+// idiom: a short child gets n, a long one gets its own natural size.
+fn Constraint min_fit(int n, MeasureFn measure, void* ctx) {
+	return { .kind = ConstraintKind.CFIT, .fit_min = n, .measure = measure, .ctx = ctx };
+}
+
+// max_fit is fit(), capped: content shrinks the measured size only if it
+// exceeds n — the mirror of min_fit, for a node that should hug its content
+// but never grow past some ceiling (a tooltip, a sidebar that must not
+// swallow the screen).
+fn Constraint max_fit(int n, MeasureFn measure, void* ctx) {
+	return { .kind = ConstraintKind.CFIT, .fit_max = n, .measure = measure, .ctx = ctx };
+}
+
+// range_fit combines both: content sizes the node between lo and hi.
+fn Constraint range_fit(int lo, int hi, MeasureFn measure, void* ctx) {
+	return { .kind = ConstraintKind.CFIT, .fit_min = lo, .fit_max = hi, .measure = measure, .ctx = ctx };
+}
+
+// resolve_fit runs a CFIT constraint's measure callback and applies its
+// fit_min/fit_max bounds — the one place that logic lives, so min_fit/
+// max_fit/range_fit behave identically everywhere a CFIT constraint is
+// resolved (layout_axis_cross's two passes, node_solve's resolve_axis).
+// fit_max = 0 means unbounded, matching fit_min = 0 meaning no floor.
+// no_measure is what a constraint with no measure callback falls back to —
+// callers differ (0 for the flex-distribution passes, the full available
+// span for a lone stack child) so it isn't baked in here.
+fn int resolve_fit(Constraint c, int cross, int no_measure = 0) {
+	int size = c.measure ? c.measure(c.ctx, cross) : no_measure;
+	if (size < 0) size = 0;
+	if (size < c.fit_min) size = c.fit_min;
+	if (c.fit_max > 0 && size > c.fit_max) size = c.fit_max;
+	return size;
 }
 
 fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] out_sizes) @local {
@@ -119,8 +164,7 @@ fn int layout_axis_cross(int total, int gap, int cross, Constraint[] cs, int[] o
 				fixed += pct_sz;
 
 			case ConstraintKind.CFIT:
-				int fit_sz = cs[i].measure ? cs[i].measure(cs[i].ctx, cross) : 0;
-				if (fit_sz < 0) fit_sz = 0;
+				int fit_sz = resolve_fit(cs[i], cross);
 				if (fit_sz > available) fit_sz = available;
 				sizes[i] = fit_sz;
 				fixed += fit_sz;

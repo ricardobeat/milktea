@@ -27,7 +27,7 @@ fn int constraint_natural(Constraint c, int other, int fallback) @local {
 			// what the content wants.
 			return fallback;
 		case ConstraintKind.CFIT:
-			return c.measure ? c.measure(c.ctx, other) : fallback;
+			return resolve_fit(c, other, fallback);
 		default:
 			return fallback;
 	}
@@ -244,7 +244,7 @@ fn int resolve_axis(Constraint c, int avail, int other) @local {
 		case ConstraintKind.CPERCENT:
 			return avail * c.value / 100;
 		case ConstraintKind.CFIT:
-			return c.measure ? c.measure(c.ctx, other) : avail;
+			return resolve_fit(c, other, avail);
 		default:
 			return avail;
 	}

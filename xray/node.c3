@@ -249,6 +249,21 @@ fn Node* Node.height(&self, Constraint c) {
 	return self;
 }
 
+// min_width sets a floor that still grows for content wider than it — the
+// axis measures this node's own children/content (same machinery .center()
+// uses) and only falls back to n when that comes out smaller. Meant for a
+// panel whose natural size should usually win but that would look cramped
+// below some width — a modal with a one-word body, say.
+fn Node* Node.min_width(&self, int n) {
+	self.size_w = min_fit(n, &node_measure_w, self);
+	return self;
+}
+
+fn Node* Node.min_height(&self, int n) {
+	self.size_h = min_fit(n, &node_measure_h, self);
+	return self;
+}
+
 // fill gives this node a share of whatever space is left over on its parent's
 // main axis, weighted against its siblings. Which axis that is depends on the
 // parent, so it sets both and the parent uses the one it lays out along.
