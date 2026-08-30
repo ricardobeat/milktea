@@ -369,7 +369,7 @@
     },
     "examples/modal": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/modal/**"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/modal/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true

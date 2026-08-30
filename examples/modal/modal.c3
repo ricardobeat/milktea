@@ -2,6 +2,8 @@ module modal;
 
 import milktea;
 import glaze;
+import xray;
+import xray::layout;
 import std::core::string;
 import std::core::dstring;
 
@@ -94,16 +96,20 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 fn milktea::View Model.view(Model* self) @dynamic {
 	// The running program tracks the terminal size, so the model does not
 	// have to store it or handle WINDOW_SIZE just to read it back.
-	int width  = milktea::screen_width();
-	int height = milktea::screen_height();
+	xray::Rect screen = layout::screen(milktea::screen_width(), milktea::screen_height());
+
+	// Split the screen into the backdrop and a one-line hint at the bottom.
+	xray::Rect body_r;
+	xray::Rect hint_r;
+	layout::vstack(screen, { layout::slot(layout::fill(1), &body_r), layout::slot(layout::cells(1), &hint_r), });
 
 	// A patterned backdrop, so the fade has something to blend against.
 	glaze::Style dim = glaze::style().foreground(glaze::color_hex("#2a2a3a"));
 	DString bg       = dstring::temp();
-	for (int y = 0; y < height - 1; y++) {
+	for (int y = 0; y < body_r.h; y++) {
 		if (y > 0) bg.append_char('\n');
 		DString row = dstring::temp();
-		for (int x = 0; x < width; x++) row.append_string("·");
+		for (int x = 0; x < body_r.w; x++) row.append_string("·");
 		bg.append_string(dim.render(row.str_view()));
 	}
 	bg.append_char('\n');
@@ -114,9 +120,30 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	milktea::View v = milktea::new_alt_screen_view(bg.str_view());
 	if (self.phase == Phase.HIDDEN) return v;
 
-	int target_y = (height - MODAL_H) / 2;
-	int y        = self.anim.lerp(target_y - SLIDE_ROWS, target_y);
-	int x        = (width - MODAL_W) / 2;
+	// Centre the modal by letting the solver divide the leftover space:
+	// fill(1) on either side of a fixed-size middle slot. The vertical solve
+	// gives the modal's resting row, which the tween slides it down onto.
+	xray::Rect row_r;
+	layout::vstack(
+		screen,
+		{
+			layout::slot(layout::fill(1), null),
+			layout::slot(layout::cells(MODAL_H), &row_r),
+			layout::slot(layout::fill(1), null),
+		}
+	);
+
+	xray::Rect modal_r;
+	layout::hstack(
+		row_r,
+		{
+			layout::slot(layout::fill(1), null),
+			layout::slot(layout::cells(MODAL_W), &modal_r),
+			layout::slot(layout::fill(1), null),
+		}
+	);
+
+	int y = self.anim.lerp(modal_r.y - SLIDE_ROWS, modal_r.y);
 
 	String body = glaze::style().with_width(MODAL_W - 4).align_horizontal(glaze::Position.CENTER).padding(1, 1, 1, 1)
 		.background(glaze::color_hex("#1e1e2e"))
@@ -125,7 +152,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.with_border(glaze::ROUNDED)
 		.render("Animated Modal\n\nfade + slide, driven by a Tween");
 
-	return v.add_overlay(x, y, MODAL_W, MODAL_H, body, self.anim.alpha());
+	return v.add_overlay(modal_r.x, y, modal_r.w, modal_r.h, body, self.anim.alpha());
 }
 
 fn int main() {

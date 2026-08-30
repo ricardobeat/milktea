@@ -61,6 +61,7 @@ OVERRIDES = {
         "optsize": "tiny",
     },
     "component-viewer": {"extra_dirs": ["boba", "xray"]},
+    "modal": {"extra_dirs": ["xray"]},
     "paste": {"extra_dirs": ["boba", "xray"]},
     "split-editors": {"extra_dirs": ["xray"]},
     "clock": {"extra_dirs": ["xray"]},
