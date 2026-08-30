@@ -174,3 +174,57 @@ fn void test_lerp_color_interpolates() @test {
 	dye::Color at_end = tw.lerp_color(red, blue);
 	assert(at_end.b == 255 && at_end.r == 0, "ends at to");
 }
+// ── clock-driven tweens ─────────────────────────────────────────────────────
+
+fn void test_tween_at_reads_progress_from_the_clock() @test {
+	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
+	assert_near(tw.value(), 0.0, 0.0001, "not started");
+
+	assert(tw.advance_to(1050), "still running halfway");
+	assert_near(tw.value(), 0.5, 0.0001, "halfway by the clock");
+
+	assert(!tw.advance_to(1100), "finished at the duration");
+	assert(tw.done(), "done");
+	assert_near(tw.value(), 1.0, 0.0001, "ends at 1");
+}
+
+fn void test_tween_at_clamps_a_late_frame() @test {
+	// A frame that arrives long after the end must not overrun.
+	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
+	tw.advance_to(9999);
+	assert(tw.elapsed_ms == 100, "clamped, got %d", tw.elapsed_ms);
+	assert_near(tw.value(), 1.0, 0.0001, "settled");
+}
+
+fn void test_tween_at_survives_a_backwards_clock() @test {
+	// Reading a time before the start must not wrap the unsigned elapsed.
+	Tween tw = milktea::tween_at(5000, 100, Easing.LINEAR);
+	tw.advance_to(4000);
+	assert(tw.elapsed_ms == 0, "reads as not begun, got %d", tw.elapsed_ms);
+	assert_near(tw.value(), 0.0, 0.0001, "still at the start");
+}
+
+fn void test_tween_at_zero_clock_is_still_clock_driven() @test {
+	// started_ms == 0 is the "not clock-driven" sentinel, so a caller whose
+	// clock genuinely reads 0 must not be silently ignored.
+	Tween tw = milktea::tween_at(0, 100, Easing.LINEAR);
+	assert(tw.started_ms != 0, "start nudged off the sentinel");
+	tw.advance_to(51);
+	assert(tw.elapsed_ms > 0, "advances rather than sitting at zero");
+}
+
+fn void test_advance_to_leaves_a_step_driven_tween_alone() @test {
+	// A tween built with tween() has no clock; advance_to must not reset the
+	// progress step() has accumulated.
+	Tween tw = milktea::tween(100, Easing.LINEAR);
+	tw.step(50);
+	tw.advance_to(999999);
+	assert(tw.elapsed_ms == 50, "step progress preserved, got %d", tw.elapsed_ms);
+}
+
+fn void test_tween_at_reverse_runs_backwards() @test {
+	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR, true);
+	assert_near(tw.value(), 1.0, 0.0001, "starts at the target");
+	tw.advance_to(1100);
+	assert_near(tw.value(), 0.0, 0.0001, "ends at the start");
+}

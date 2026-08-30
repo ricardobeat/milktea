@@ -3,11 +3,21 @@ module milktea;
 import dye;
 
 // Animation helpers: an easing curve plus a Tween that maps elapsed time onto
-// a value. Animation in milktea is driven by the ordinary timer/message loop —
-// a model arms `tick(FRAME_MS, &on_frame)`, advances its Tween on each frame
-// message, and derives position/alpha/colour from it in `view()`. Nothing here
-// touches the renderer or holds a clock of its own; a Tween is plain data the
-// model owns, so it stays testable and costs nothing when no timer is armed.
+// a value. A Tween is plain data the model owns — nothing here touches the
+// renderer — and it runs in one of two modes.
+//
+// Clock-driven is the usual one, and needs no frame messages at all: build it
+// with `tween_at(time_ms(), ms)` and hand it to `milktea::animate` in view()
+// (see animate.c3), which reads it against the paint clock and lets the node
+// tree ask for its own repaints.
+//
+// Step-driven is for a model that wants the frames itself: build it with
+// `tween()`, advance it with `step()` on each frame message, and re-arm
+// `tick()` while step() reports the animation is still running. The two modes
+// do not mix — advance_to() leaves a step-driven tween alone.
+//
+// Either way a settled tween stops asking for frames, so an idle animation
+// costs nothing.
 
 // A frame budget of 16ms is ~60fps, matching the default of `tick()`.
 const sz FRAME_MS = 16;
@@ -78,6 +88,9 @@ struct Tween {
 	sz duration_ms;
 	Easing easing;
 	bool reverse; // play from the target back to the start
+	// Wall-clock start, for a tween driven by the paint clock rather than by
+	// step(). Zero means "not clock-driven"; see tween_at.
+	long started_ms;
 }
 
 // tween builds a Tween that runs forward over `duration_ms`.
@@ -89,6 +102,36 @@ fn Tween tween(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
 // for dismissing whatever `tween()` presented.
 fn Tween tween_reversed(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
 	return { .elapsed_ms = 0, .duration_ms = duration_ms, .easing = easing, .reverse = true };
+}
+
+// tween_at builds a Tween that reads its progress from the clock, starting at
+// `now`. Pass milktea::time_ms() from update() when the animation begins; the
+// tween then needs no frame messages at all, because `animate` re-reads it
+// against the paint clock on every frame:
+// 
+//     self.anim = tween_at(milktea::time_ms(), 260);
+// 
+// A clock-driven tween ignores step(). The two modes are deliberately
+// separate: a model that wants to drive frames itself keeps step(), and one
+// that wants the tree to drive them uses this.
+fn Tween tween_at(long now, sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC, bool reverse = false) {
+	// A start of 0 is the sentinel for "not clock-driven", so a caller whose
+	// clock genuinely reads 0 is nudged to 1 rather than silently ignored.
+	if (now == 0) now = 1;
+	return { .elapsed_ms = 0, .duration_ms = duration_ms, .easing = easing, .reverse = reverse, .started_ms = now, };
+}
+
+// advance_to sets a clock-driven tween's progress from the current time, and
+// reports whether it is still running. Called by `animate` on every paint; a
+// tween that is not clock-driven is left alone.
+fn bool Tween.advance_to(&self, long now) {
+	if (self.started_ms == 0) return !self.done();
+	long delta = now - self.started_ms;
+	// A clock that goes backwards (or a tween started in the future) reads as
+	// "not begun" rather than wrapping the unsigned elapsed.
+	self.elapsed_ms = delta <= 0 ? 0 : (sz)delta;
+	if (self.elapsed_ms > self.duration_ms) self.elapsed_ms = self.duration_ms;
+	return !self.done();
 }
 
 // step advances the tween by `dt_ms` and reports whether it is still running.
@@ -141,9 +184,10 @@ fn dye::Color Tween.lerp_color(&self, dye::Color from, dye::Color to) {
 	return dye::blend_luv(from, to, self.value());
 }
 
-// alpha maps the tween onto the 1..255 range an Overlay wants for a fade.
-// Overlay treats alpha 0 as "opaque" rather than "invisible", so a fade-in
-// must never emit 0 on its first frame; this clamps into 1..255 for you.
+// alpha maps the tween onto the 1..255 range a fade wants. Both an Overlay's
+// alpha and xray::Node.alpha read 0 as "opaque" rather than "invisible", so a
+// fade-in must never emit 0 on its first frame; this clamps into 1..255 for
+// you, which also keeps EASE_OUT_BACK's overshoot from wrapping past 255.
 fn char Tween.alpha(&self) {
 	double v = self.value();
 	if (v < 0.0) v = 0.0;
