@@ -127,6 +127,12 @@ const String HALF_BLOCK_UPPER = "▀";
 // units. That also makes the blur radius physically round rather than an
 // ellipse stretched down the screen: `blur` cells sideways covers the same
 // distance as `blur` rows, which are twice as tall.
+// 
+// Beyond a corner both axes are non-zero and the result is their diagonal
+// length, which rounds the fringe off. Taking the larger of the two instead
+// would hold a corner cell at the same alpha as the cells straight out from
+// each edge, drawing the fringe as nested rectangles with a visible X where
+// their diagonals meet.
 fn int shadow_edge_dist_half(int col, int half_row, int rx, int ry, int rw, int rh) {
 	int dx = 0;
 	if (col < rx) {
@@ -145,7 +151,24 @@ fn int shadow_edge_dist_half(int col, int half_row, int rx, int ry, int rw, int 
 	}
 
 	dx *= 2;
-	return dx > dy ? dx : dy;
+	if (dx == 0) return dy;
+	if (dy == 0) return dx;
+	return isqrt(dx * dx + dy * dy);
+}
+
+// isqrt is the integer square root, rounded to nearest. Newton's method; the
+// arguments here are a few hundred at most, so it converges in a handful of
+// iterations.
+fn int isqrt(int n) {
+	if (n <= 0) return 0;
+	int x = n;
+	int y = (x + 1) / 2;
+	while (y < x) {
+		x = y;
+		y = (x + n / x) / 2;
+	}
+	// x is the floor; round up when the true root is nearer the next integer.
+	return (x + 1) * (x + 1) <= n + x ? x + 1 : x;
 }
 
 // shadow_alpha_at is the fringe falloff, in half-cell units. blend_over is
@@ -242,8 +265,9 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 
 	// offset_x is in double columns (see Shadow): one unit right is two cells,
 	// which is the same physical distance as one row down.
-	int sx         = x + s.offset_x * 2;
+	int sx = x + s.offset_x * 2;
 	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
+
 
 	// leftover half-row is carried into the sampling below, the only place that
 

@@ -651,3 +651,30 @@ fn void test_shadow_leaves_glyphs_alone_by_default() @test {
 	for (sz x = 2; x < 7; x++) got.append_string(sb.cell_at(x, 5).content_str());
 	assert(got.str_view() == "AB CD", "text survives the shadow, got '%s'", got.str_view());
 }
+// The fringe fades diagonally around a corner. Measuring distance as the larger
+// of the two axes would hold a corner cell at the same alpha as the cells
+// straight out from each edge, which draws the fringe as nested rectangles.
+fn void test_shadow_corners_are_rounded() @test {
+	Fixed* f = fixed(8, 3);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(8)).height(xray::cells(3)).at(4, 3)
+			.shadow(xray::shadow(1, 1, 200, 4).with_color(xray::color_rgb(0, 0, 0))));
+	r.solve(xray::new_rect(0, 0, 26, 16));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(26, 16);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	for (sz y = 0; y < 16; y++) {
+		for (sz x = 0; x < 26; x++) sb.cell_at(x, y).style.bg = xray::color_rgb(255, 255, 255);
+	}
+	sb.paint(r);
+
+	// The shadow's rect is x6..13, y4..6. Two cells out from the bottom edge is
+	// darker than two cells out diagonally past the corner.
+	int below  = 255 - (int)sb.cell_at(10, 8).style.bg.r;
+	int corner = 255 - (int)sb.cell_at(15, 8).style.bg.r;
+	assert(below > 0, "the fringe reaches below the shadow, got %d", below);
+	assert(corner < below, "the corner fades faster than the edge: corner=%d edge=%d", corner, below);
+}
