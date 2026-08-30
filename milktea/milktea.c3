@@ -1596,27 +1596,43 @@ fn void Program.render_current_view(Program* self) {
 				if (v.cells.ptr != null) {
 					// Direct cell path — write cells straight into the screen buffer.
 					// No string building, no CSI parsing. The diff engine handles the rest.
-					sz cols = v.cells_width;
-					if (cols > r.screen.width) cols = r.screen.width;
-					sz rows = v.cells_height;
+					// cells_width/cells_height travel in the View separately from
+					// the cells slice, so they can overstate it — a resize that
+					// reallocates the grid between building a View and rendering
+					// it is enough. The per-cell loop this replaced indexed
+					// through bounds-checked slice access, so a stale pair was
+					// survivable; mem::copy takes raw pointers and a byte count,
+					// so the same staleness walks off the allocation. Bound every
+					// extent by what the slices actually hold.
+					sz src_w = v.cells_width;
+					sz cols  = src_w > r.screen.width ? r.screen.width : src_w;
+					sz rows  = v.cells_height;
 					if (rows > r.screen.height) rows = r.screen.height;
+					sz src_rows = src_w > 0 ? v.cells.len / src_w : 0;
+					if (rows > src_rows) rows = src_rows;
+					sz dst_rows = r.screen.width > 0 ? r.screen.cells.len / r.screen.width : 0;
+					if (rows > dst_rows) rows = dst_rows;
+					if (rows > (sz)r.screen.dirty_lines.len) rows = (sz)r.screen.dirty_lines.len;
 
-					if (cols == r.screen.width && v.cells_width == r.screen.width) {
-						// Fast path: contiguous grid, single bulk memory copy.
-						mem::copy(r.screen.cells.ptr, v.cells.ptr, rows * cols * xray::Cell::size);
-						for (sz row = 0; row < rows; row++) {
-							r.screen.dirty_lines[row] = true;
-						}
-					} else {
-						// Strided copy row-by-row
-						sz row_bytes = cols * xray::Cell::size;
-						xray::Cell empty = xray::empty_cell();
-						for (sz row = 0; row < rows; row++) {
-							mem::copy(r.screen.cells.ptr + row * r.screen.width, v.cells.ptr + row * v.cells_width, row_bytes);
-							for (sz col = cols; col < r.screen.width; col++) {
-								r.screen.cells[row * r.screen.width + col] = empty;
+					if (rows > 0 && cols > 0) {
+						if (cols == r.screen.width && src_w == r.screen.width) {
+							// Fast path: identical stride on both sides, so the
+							// region is contiguous and copies in one go.
+							mem::copy(r.screen.cells.ptr, v.cells.ptr, rows * cols * xray::Cell::size);
+							for (sz row = 0; row < rows; row++) {
+								r.screen.dirty_lines[row] = true;
 							}
-							r.screen.dirty_lines[row] = true;
+						} else {
+							// Strided copy row-by-row
+							sz row_bytes = cols * xray::Cell::size;
+							xray::Cell empty = xray::empty_cell();
+							for (sz row = 0; row < rows; row++) {
+								mem::copy(r.screen.cells.ptr + row * r.screen.width, v.cells.ptr + row * src_w, row_bytes);
+								for (sz col = cols; col < r.screen.width; col++) {
+									r.screen.cells[row * r.screen.width + col] = empty;
+								}
+								r.screen.dirty_lines[row] = true;
+							}
 						}
 					}
 

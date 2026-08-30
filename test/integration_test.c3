@@ -705,3 +705,60 @@ fn void test_manual_alt_screen_cleared_allows_run() @test {
 	milktea::exit_alt_screen();
 	assert(!milktea::g_manual_alt_screen);
 }
+
+// CellModel renders a direct cell View whose declared extent may deliberately
+// overstate the backing slice, to exercise the renderer's clamping.
+struct CellModel {
+	xray::Cell[] cells;
+	sz w;
+	sz h;
+}
+
+fn milktea::Cmd CellModel.init(CellModel* self) @dynamic { return null; }
+
+fn milktea::Cmd CellModel.update(CellModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View CellModel.view(CellModel* self) @dynamic {
+	return milktea::new_alt_cell_view(self.cells, self.w, self.h);
+}
+
+// A View carries cells_width/cells_height separately from the cells slice, so
+// the two can disagree — a resize that reallocates the grid between building a
+// View and rendering it is enough. The bulk-memcpy cell path takes raw pointers
+// and a byte count, so an overstated extent used to memmove straight off the
+// end of the allocation (SIGSEGV in _platform_memmove). The renderer must clamp
+// to what the slices actually hold instead of trusting the fields.
+fn void test_cell_view_extent_overstated_is_clamped() @test {
+	// Four real cells, but the View claims a 40x20 grid.
+	xray::Cell[4] backing;
+	for (int i = 0; i < 4; i++) backing[i] = xray::empty_cell();
+
+	CellModel m = { .cells = backing[..], .w = 40, .h = 20 };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x03 });
+
+	// Must render and exit rather than fault on the oversized copy.
+	if (catch err = p.run()) {
+		unreachable("renderer must clamp an overstated cell extent, got a fault");
+	}
+}
+
+// The strided path takes the source row stride from cells_width. An overstated
+// stride walks the source pointer off the buffer well before the row counter
+// reaches the claimed height, so it needs the same clamp as the fast path.
+fn void test_cell_view_overstated_stride_is_clamped() @test {
+	xray::Cell[16] backing;
+	for (int i = 0; i < 16; i++) backing[i] = xray::empty_cell();
+
+	// Stride 8 over 16 cells is 2 real rows; the View claims 9.
+	CellModel m = { .cells = backing[..], .w = 8, .h = 9 };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x03 });
+
+	if (catch err = p.run()) {
+		unreachable("renderer must clamp an overstated cell stride, got a fault");
+	}
+}

@@ -59,10 +59,17 @@ fn String cells_to_string(View v) {
 	DString out = dstring::temp();
 	xray::Style pen = xray::default_style();
 
-	for (sz row = 0; row < v.cells_height; row++) {
+	// cells_width/cells_height are carried separately from the cells slice and
+	// can overstate it, so bound the walk by what the slice actually holds
+	// rather than by the declared extent.
+	sz stride = v.cells_width;
+	sz rows   = stride > 0 ? v.cells.len / stride : 0;
+	if (rows > v.cells_height) rows = v.cells_height;
+
+	for (sz row = 0; row < rows; row++) {
 		if (row > 0) out.append_char('\n');
-		sz line_start = row * v.cells_width;
-		for (sz col = 0; col < v.cells_width; col++) {
+		sz line_start = row * stride;
+		for (sz col = 0; col < stride; col++) {
 			xray::Cell cell = v.cells[line_start + col];
 			String sgr = cell.style.diff_sgr(pen);
 			if (sgr.len > 0) out.append_string(sgr);
