@@ -21,3 +21,6 @@ alias palette_256 = dye::palette_256;
 alias downsample_truecolor_to_256 = dye::downsample_truecolor_to_256;
 alias downsample_256_to_ansi = dye::downsample_256_to_ansi;
 alias downsample_truecolor_to_ansi = dye::downsample_truecolor_to_ansi;
+
+alias BlendSpace = dye::BlendSpace;
+alias blend_gradient = dye::blend_gradient;

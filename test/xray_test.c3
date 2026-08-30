@@ -1503,3 +1503,231 @@ fn void test_layout_min_alone_absorbs_leftover_space() @test {
 
 	assert(out[0].w == 20);
 }
+
+// ============================================================
+// PixelBuffer tests
+// ============================================================
+
+fn void test_pixel_buffer_new() @test {
+	PixelBuffer* pb = new_pixel_buffer(10, 5);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	assert(pb.width == 10);
+	assert(pb.height == 5);
+	assert(pb.pixels.len == 50);
+	assert(pb.get_pixel(0, 0).is_none());
+}
+
+fn void test_pixel_buffer_set_get() @test {
+	PixelBuffer* pb = new_pixel_buffer(4, 3);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color red = color_rgb(200, 30, 40);
+	pb.set_pixel(1, 2, red);
+	assert(pb.get_pixel(1, 2).eq(red));
+
+	// Out-of-bounds writes are ignored; reads return none.
+	pb.set_pixel(9, 9, red);
+	assert(pb.get_pixel(9, 9).is_none());
+	assert(pb.get_pixel(0, 0).is_none());
+}
+
+fn void test_pixel_buffer_clear() @test {
+	PixelBuffer* pb = new_pixel_buffer(4, 3);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color c = color_rgb(10, 20, 30);
+	pb.set_pixel(1, 1, c);
+	pb.clear(color_rgb(1, 2, 3));
+	assert(pb.get_pixel(1, 1).eq(color_rgb(1, 2, 3)));
+	assert(pb.get_pixel(3, 2).eq(color_rgb(1, 2, 3)));
+}
+
+fn void test_pixel_buffer_fill_rect() @test {
+	PixelBuffer* pb = new_pixel_buffer(6, 6);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color c = color_rgb(10, 20, 30);
+	pb.fill_rect(new_rect(2, 1, 3, 2), c);
+	assert(pb.get_pixel(2, 1).eq(c));
+	assert(pb.get_pixel(4, 2).eq(c));
+	assert(pb.get_pixel(1, 1).is_none());
+	assert(pb.get_pixel(5, 1).is_none());
+
+	// Negative origins and overflow edges are clipped to the grid.
+	pb.fill_rect(new_rect(-1, -1, 4, 4), c);
+	assert(pb.get_pixel(0, 0).eq(c));
+	assert(pb.get_pixel(2, 2).eq(c));
+	assert(pb.get_pixel(3, 3).is_none());
+}
+
+fn void test_pixel_buffer_blend() @test {
+	PixelBuffer* pb = new_pixel_buffer(2, 1);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	// color_rgba with a=0 is opaque (effective alpha 255).
+	pb.set_pixel(0, 0, color_rgb(0, 0, 0));
+	pb.blend_pixel(0, 0, color_rgba(255, 255, 255, 0));
+	assert(pb.get_pixel(0, 0).eq(color_rgb(255, 255, 255)));
+
+	// Half-transparent white over black stays halfway.
+	Color half = color_rgba(200, 0, 0, 128);
+	pb.set_pixel(1, 0, color_rgb(0, 0, 0));
+	pb.blend_pixel(1, 0, half);
+	Color got = pb.get_pixel(1, 0);
+	assert(got.r == 100);
+	assert(got.g == 0);
+	assert(got.b == 0);
+}
+
+fn void test_pixel_buffer_to_cells() @test {
+	PixelBuffer* pb = new_pixel_buffer(3, 2);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color red = color_rgb(255, 0, 0);
+	Color blue = color_rgb(0, 0, 255);
+	pb.set_pixel(0, 0, red);
+	pb.set_pixel(2, 1, blue);
+
+	Cell[] cells = mem::new_array(Cell, 6); // 3 wide x 2 tall
+	defer mem::free(cells.ptr);
+	pb.to_cells(cells, 3, default_style());
+
+	assert(cells[0].content[0] == ' ');
+	assert(cells[0].width == 1);
+	assert(cells[0].style.bg.eq(red));
+	assert(cells[1].style.bg.is_none());
+	assert(cells[5].style.bg.eq(blue));
+}
+
+fn void test_pixel_buffer_to_cells_clips() @test {
+	PixelBuffer* pb = new_pixel_buffer(5, 4);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color c = color_rgb(9, 9, 9);
+	pb.set_pixel(4, 3, c);
+	pb.set_pixel(0, 0, c);
+
+	// Cell grid is narrower and shorter than the buffer: only the
+	// overlapping region is written.
+	Cell[] cells = mem::new_array(Cell, 6); // 3 wide x 2 tall
+	defer mem::free(cells.ptr);
+	pb.to_cells(cells, 3, default_style());
+
+	assert(cells[0].style.bg.eq(c));
+	// The pixel at (4, 3) falls outside the cell grid.
+	assert(cells[5].style.bg.is_none());
+}
+
+fn void test_pixel_buffer_fill_ellipse() @test {
+	PixelBuffer* pb = new_pixel_buffer(11, 9);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color c = color_rgb(200, 200, 200);
+	pb.fill_ellipse(5, 4, 3, 2, c);
+
+	assert(pb.get_pixel(5, 4).eq(c));  // centre
+	assert(pb.get_pixel(8, 4).eq(c));  // right edge of bbox
+	assert(pb.get_pixel(5, 2).eq(c));  // top edge of bbox
+	// Bbox corners lie outside the ellipse equation.
+	assert(pb.get_pixel(2, 2).is_none());
+	assert(pb.get_pixel(8, 6).is_none());
+	// Unrelated pixels are untouched.
+	assert(pb.get_pixel(0, 0).is_none());
+}
+
+fn void test_pixel_buffer_fill_ellipse_clips() @test {
+	PixelBuffer* pb = new_pixel_buffer(8, 6);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	Color c = color_rgb(10, 90, 10);
+	// Ellipse hangs off all four edges of the 8x6 grid.
+	pb.fill_ellipse(4, 3, 10, 8, c);
+
+	assert(pb.get_pixel(0, 0).eq(c));
+	assert(pb.get_pixel(7, 0).eq(c));
+	assert(pb.get_pixel(7, 5).eq(c));
+	assert(pb.get_pixel(0, 5).eq(c));
+	assert(pb.get_pixel(4, 3).eq(c));
+}
+
+fn void test_pixel_buffer_fill_rect_gradient() @test {
+	PixelBuffer* pb = new_pixel_buffer(3, 3);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	pb.fill_rect(new_rect(0, 0, 3, 3), color_rgb(0, 0, 0), to: color_rgb(255, 255, 255));
+
+	assert(pb.get_pixel(0, 0).eq(color_rgb(0, 0, 0)));
+	assert(pb.get_pixel(0, 2).eq(color_rgb(255, 255, 255)));
+	int mr = (int)pb.get_pixel(0, 1).r;
+	assert(mr > 0 && mr < 255);
+}
+
+fn void test_pixel_buffer_fill_ellipse_gradient() @test {
+	PixelBuffer* pb = new_pixel_buffer(9, 5);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	pb.fill_ellipse(4, 2, 3, 2, color_rgb(255, 0, 0), to: color_rgb(0, 0, 255));
+
+	Color center = pb.get_pixel(4, 2);
+	assert(center.r == 255 && center.b == 0);
+	Color rim = pb.get_pixel(7, 2);
+	assert(rim.r == 0 && rim.b == 255);
+	// Halfway along the horizontal axis is a mix of both ends.
+	Color midway = pb.get_pixel(6, 2);
+	assert(midway.r > 0 && midway.b > 0);
+}
+
+fn void test_pixel_buffer_draw_line_gradient() @test {
+	PixelBuffer* pb = new_pixel_buffer(6, 1);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	pb.draw_line(0, 0, 5, 0, color_rgb(0, 0, 0), to: color_rgb(255, 255, 255));
+
+	assert(pb.get_pixel(0, 0).r == 0);
+	assert(pb.get_pixel(5, 0).r == 255);
+	int c2 = (int)pb.get_pixel(2, 0).r;
+	int c3 = (int)pb.get_pixel(3, 0).r;
+	assert(c2 < c3);
+}
+
+fn void test_pixel_buffer_gradient_hcl_space() @test {
+	PixelBuffer* pb = new_pixel_buffer(1, 5);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	// HCL path should produce a gradient — top and bottom differ.
+	pb.fill_rect(new_rect(0, 0, 1, 5), color_rgb(255, 0, 0), to: color_rgb(0, 0, 255), space: BlendSpace.HCL);
+
+	Color top = pb.get_pixel(0, 0);
+	Color bottom = pb.get_pixel(0, 4);
+	assert(!top.eq(bottom));
+	// Midpoint should differ from both endpoints.
+	Color mid = pb.get_pixel(0, 2);
+	assert(!mid.eq(top) && !mid.eq(bottom));
+}
