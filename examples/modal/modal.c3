@@ -3,73 +3,31 @@ module modal;
 import milktea;
 import glaze;
 import xray;
-import xray::layout;
-import std::core::string;
-import std::core::dstring;
 
 // A modal that fades in and slides down into place, and reverses back out on
-// dismiss. The animation is driven entirely by the ordinary timer loop: a
-// milktea::Tween holds the progress, `update` advances it on each frame
-// message, and `view` derives the overlay's y position and alpha from it.
+// dismiss.
 // 
-// The frame timer only re-arms while the tween is still running, so an idle
-// modal costs nothing — the event loop goes back to blocking on input.
-
-const int MSG_FRAME = 1;
+// The model owns a Tween and nothing else: no frame messages, no timer to
+// re-arm, no phase tracking. milktea::animate reads the tween against the
+// paint clock, writes the node's offset and alpha, and asks for the next frame
+// through the node itself -- so the timer stops on its own when the animation
+// settles, and an idle modal costs nothing.
 
 const sz OPEN_MS  = 260;
 const sz CLOSE_MS = 180; // dismissing reads better slightly faster than opening
 
-const int MODAL_W    = 40;
-const int MODAL_H    = 7;
 const int SLIDE_ROWS = 6; // how far above its resting row the modal starts
 
-enum Phase : int {
-	HIDDEN,
-	OPENING,
-	OPEN,
-	CLOSING,
-}
-
 struct Model {
-	Phase phase;
+	bool open;
 	milktea::Tween anim;
 }
 
-fn milktea::Msg on_frame() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_FRAME };
-}
-
 fn milktea::Cmd Model.init(Model* self) @dynamic {
-	self.phase = Phase.HIDDEN;
 	return null;
 }
 
-fn milktea::Cmd Model.open(Model* self) {
-	self.phase = Phase.OPENING;
-	// EASE_OUT_CUBIC decelerates into the target and settles on it directly,
-	// with no overshoot.
-	self.anim = milktea::tween(OPEN_MS, milktea::Easing.EASE_OUT_CUBIC);
-	return milktea::tick(milktea::FRAME_MS, &on_frame);
-}
-
-fn milktea::Cmd Model.close(Model* self) {
-	self.phase = Phase.CLOSING;
-	self.anim = milktea::tween_reversed(CLOSE_MS, milktea::Easing.EASE_IN_CUBIC);
-	return milktea::tick(milktea::FRAME_MS, &on_frame);
-}
-
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_FRAME) {
-		// step() reports whether the animation is still running; when it
-		// settles we stop re-arming the timer and let the loop go idle.
-		if (self.anim.step(milktea::FRAME_MS)) {
-			return milktea::tick(milktea::FRAME_MS, &on_frame);
-		}
-		self.phase = self.phase == Phase.OPENING ? Phase.OPEN : Phase.HIDDEN;
-		return null;
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -77,82 +35,55 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		case milktea::KeyCode.CTRL_C:
 			return milktea::quit();
 		case milktea::KeyCode.ESC:
-			if (self.phase == Phase.OPEN) return self.close();
+			if (self.open) self.dismiss();
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
+			// Starting a tween is the whole of the animation bookkeeping.
 			if (k.rune == ' ') {
-				// Space toggles, and is allowed to interrupt an animation in
-				// flight so the modal always answers the key.
-				if (self.phase == Phase.OPEN || self.phase == Phase.OPENING) {
-					return self.close();
+				if (self.open) {
+					self.dismiss();
+				} else {
+					self.open = true;
+					self.anim = milktea::tween_at(milktea::time_ms(), OPEN_MS);
 				}
-				return self.open();
 			}
 		default:
 	}
 	return null;
 }
 
+fn void Model.dismiss(Model* self) {
+	self.open = false;
+	self.anim = milktea::tween_at(milktea::time_ms(), CLOSE_MS, milktea::Easing.EASE_IN_CUBIC, true);
+}
+
 fn milktea::View Model.view(Model* self) @dynamic {
-	// The running program tracks the terminal size, so the model does not
-	// have to store it or handle WINDOW_SIZE just to read it back.
-	xray::Rect screen = layout::screen(milktea::screen_width(), milktea::screen_height());
+	glaze::Style backdrop = { .bg = glaze::color_hex("#1b2a4a"), .bg_gradient = glaze::color_hex("#4a2b52"), };
+	glaze::Style hint = { .fg = glaze::color_hex("#8a8aa0"), .bg = glaze::color_hex("#4a2b52") };
+	glaze::Style panel = {
+		.bg = glaze::color_hex("#1e1e2e"),
+		.fg = glaze::color_hex("#e8e8f0"),
+		.border = glaze::ROUNDED,
+		.border_color = glaze::color_hex("#7aa2f7"),
+		.pad_top = 1,
+		.pad_right = 3,
+		.pad_bottom = 1,
+		.pad_left = 3,
+	};
 
-	// Split the screen into the backdrop and a one-line hint at the bottom.
-	xray::Rect body_r;
-	xray::Rect hint_r;
-	layout::vstack(screen, { layout::slot(layout::fill(1), &body_r), layout::slot(layout::cells(1), &hint_r), });
-
-	// A patterned backdrop, so the fade has something to blend against.
-	glaze::Style dim = glaze::style().foreground(glaze::color_hex("#2a2a3a"));
-	DString bg       = dstring::temp();
-	for (int y = 0; y < body_r.h; y++) {
-		if (y > 0) bg.append_char('\n');
-		DString row = dstring::temp();
-		for (int x = 0; x < body_r.w; x++) row.append_string("·");
-		bg.append_string(dim.render(row.str_view()));
+	// The modal is a child of the root stack, centred by the solver and
+	// displaced by the animation. A dismissed-and-settled modal is dropped
+	// from the tree entirely; add() ignores the null.
+	xray::Node* dialog = null;
+	if (self.open || !self.anim.done()) {
+		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween")
+			.center(), milktea::slide_down(SLIDE_ROWS).fade(), &self.anim);
 	}
-	bg.append_char('\n');
 
-	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
-	bg.append_string(hint.render("space toggles the modal · esc dismisses · q quits"));
-
-	milktea::View v = milktea::new_alt_screen_view(bg.str_view());
-	if (self.phase == Phase.HIDDEN) return v;
-
-	// Centre the modal by letting the solver divide the leftover space:
-	// fill(1) on either side of a fixed-size middle slot. The vertical solve
-	// gives the modal's resting row, which the tween slides it down onto.
-	xray::Rect row_r;
-	layout::vstack(
-		screen,
-		{
-			layout::slot(layout::fill(1), null),
-			layout::slot(layout::cells(MODAL_H), &row_r),
-			layout::slot(layout::fill(1), null),
-		}
-	);
-
-	xray::Rect modal_r;
-	layout::hstack(
-		row_r,
-		{
-			layout::slot(layout::fill(1), null),
-			layout::slot(layout::cells(MODAL_W), &modal_r),
-			layout::slot(layout::fill(1), null),
-		}
-	);
-
-	int y = self.anim.lerp(modal_r.y - SLIDE_ROWS, modal_r.y);
-
-	String body = glaze::style().with_width(MODAL_W - 4).align_horizontal(glaze::Position.CENTER).padding(1, 1, 1, 1)
-		.background(glaze::color_hex("#1e1e2e"))
-		.foreground(glaze::color_hex("#e8e8f0"))
-		.border_fg(glaze::color_hex("#7aa2f7"))
-		.with_border(glaze::ROUNDED)
-		.render("Animated Modal\n\nfade + slide, driven by a Tween");
-
-	return v.add_overlay(modal_r.x, y, modal_r.w, modal_r.h, body, self.anim.alpha());
+	return milktea::draw(milktea::root()
+		.add(milktea::vstack().add(milktea::text(backdrop, "").fill(1))
+			.add(milktea::text(hint, "space toggles the modal · esc dismisses · q quits").height(xray::cells(1))))
+		.add(dialog));
 }
 
 fn int main() {
