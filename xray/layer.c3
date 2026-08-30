@@ -1,52 +1,46 @@
 module xray;
 
 struct Shadow {
-	// Offsets are in square units, not cells. A terminal cell is about twice as
-	// tall as it is wide, so offset_x counts double columns and offset_y counts
-	// rows: shadow(1, 1) puts the shadow two columns right and one row down,
-	// the same physical distance on each axis.
-	int offset_x;
-	// Vertical offset, counted in half-rows: 2 is one row, 1 half of one.
-	// shadow() takes the same offset in whole rows and converts.
+	// Offsets are in square units rather than cells, so one unit covers the
+	// same distance on each axis: a terminal cell is about twice as tall as it
+	// is wide. What a unit measures depends on the grid the shadow is drawn on.
 	// 
-	// Only the half-block path can place a shadow on a half-row boundary; with
-	// half_blocks off, shadow() rounds an odd value out to a whole row.
+	// With half_blocks off the grid is whole cells, and a unit is two columns
+	// or one row. With it on the grid is half-cells, and a unit is one column
+	// or one half-row: shadow(1, 1) then sits one column right and half a row
+	// down.
+	int offset_x;
 	int offset_y;
 	char opacity;
 	Color color;
 	bool enabled;
 	int blur; // blur radius in cells (0 = hard edge)
 	// Draw the fringe with half blocks, doubling its vertical resolution and
-	// allowing half-row offsets. Safe only over blank space; see shadow().
+	// halving the offset grid. Safe only over blank space; see shadow().
 	bool half_blocks;
 }
 
-// shadow builds a drop shadow. offset_x is in double columns and offset_y in
-// rows, so the two cover the same physical distance (see Shadow).
+// shadow builds a drop shadow. Both offsets are in square units, whose size
+// depends on half_blocks (see Shadow):
+// 
+//     shadow(1, 1)                            // two columns right, one row down
+//     shadow(1, 1, 128, 3, half_blocks: true) // one column right, half a row down
 // 
 // half_blocks draws each blank fringe cell as ▀, one colour above and another
-// below, which doubles the vertical resolution of the gradient and lets
-// offset_y take halves:
-// 
-//     shadow(1, 1)                               // two columns right, one row down
-//     shadow(1, 0.5, 128, 3, half_blocks: true)  // half a row down
+// below. That doubles the vertical resolution of the gradient and halves the
+// offset grid, since a shadow can then land on a half-row boundary.
 // 
 // A half block claims the cell's foreground, and a space painted by content is
 // indistinguishable from a blank cell, so a shadow with this on will replace
 // the spaces in text that an earlier node drew underneath it. Use it where the
 // shadow falls on empty background. With it off the fringe tints backgrounds
 // only, and text under the shadow darkens.
-fn Shadow shadow(int offset_x = 1, double offset_y = 1.0, char opacity = 128, int blur = 0, bool half_blocks = false) {
-	// Round to the nearest half-row, so 0.5 lands on a half-step and 0.7 on the
-	// nearer one.
-	double halves = offset_y * 2.0;
-	int half_off  = (int)(halves < 0.0 ? halves - 0.5 : halves + 0.5);
-	// Only the half-block path can draw a half-step, so without it round out to
-	// a whole row.
-	if (!half_blocks && (half_off & 1) != 0) half_off += half_off < 0 ? -1 : 1;
+fn Shadow shadow(int offset_x = 1, int offset_y = 1, char opacity = 128, int blur = 0, bool half_blocks = false) {
+	// offset_y is stored in half-rows whichever grid the caller used, so the
+	// renderer has one vertical unit to work in.
 	return {
 		.offset_x = offset_x,
-		.offset_y = half_off,
+		.offset_y = half_blocks ? offset_y : offset_y * 2,
 		.opacity = opacity,
 		.color = color_rgb(0, 0, 0),
 		.enabled = true,
@@ -263,11 +257,10 @@ fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, Inne
 fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
-	// offset_x is in double columns (see Shadow): one unit right is two cells,
-	// which is the same physical distance as one row down.
-	int sx = x + s.offset_x * 2;
+	// offset_x is in double columns on the whole-cell grid and single columns on
+	// the half-cell one (see Shadow).
+	int sx         = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
 	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
-
 
 	// leftover half-row is carried into the sampling below, the only place that
 
