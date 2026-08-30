@@ -224,7 +224,7 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 		.height(milktea::cells(MENU_ITEMS + 2))
 		.with_padding(1, 1, 1, 1)
 		.at(self.title_x[self.selected], below)
-		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+		.shadow(milktea::shadow(1, 1).with_color(th.shadow));
 	panel_node.on_click_outside(&dropdown_dismissed, self);
 
 	for (int i = 0; i < MENU_ITEMS; i++) {

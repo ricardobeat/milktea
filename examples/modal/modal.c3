@@ -4,30 +4,6 @@ import milktea;
 import glaze;
 import xray;
 
-// A modal that fades in and slides down into place, and reverses back out on
-// dismiss.
-// 
-// The model owns a Tween and nothing else: no frame messages, no timer to
-// re-arm, no phase tracking. milktea::animate reads the tween against the
-// paint clock, writes the node's offset and alpha, and asks for the next frame
-// through the node itself -- so the timer stops on its own when the animation
-// settles, and an idle modal costs nothing.
-
-const sz OPEN_MS  = 180;
-const sz CLOSE_MS = 180; // dismissing reads better slightly faster than opening
-
-const int SLIDE_ROWS = 5; // how far above its resting row the modal starts
-
-// Shadow: down and to the right with a soft edge, dark enough to lift the panel
-// off the gradient backdrop without reading as a black smear. paint_node scales
-// it by the node's alpha, so it fades in with the modal.
-// 
-// Half blocks are safe here because the shadow falls on the backdrop, which is
-// blank cells with a background colour. A shadow cast over text would need them
-// off, or it would take the spaces out of the text.
-const char SHADOW_OPACITY = 190;
-const int SHADOW_BLUR     = 1;
-
 struct Model {
 	bool open;
 	milktea::Tween anim;
@@ -48,13 +24,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			if (self.open) self.dismiss();
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
-			// Starting a tween is the whole of the animation bookkeeping.
 			if (k.rune == ' ') {
 				if (self.open) {
 					self.dismiss();
 				} else {
 					self.open = true;
-					self.anim = milktea::tween_at(milktea::time_ms(), OPEN_MS, milktea::Easing.EASE_OUT_CUBIC);
+					self.anim = milktea::tween_at(milktea::time_ms(), 180, milktea::Easing.EASE_OUT_CUBIC);
 				}
 			}
 		default:
@@ -64,7 +39,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 fn void Model.dismiss(Model* self) {
 	self.open = false;
-	self.anim = milktea::tween_at(milktea::time_ms(), CLOSE_MS, milktea::Easing.EASE_IN_CUBIC, true);
+	self.anim = milktea::tween_at(milktea::time_ms(), 150, milktea::Easing.EASE_IN_CUBIC, true);
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
@@ -81,16 +56,11 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.pad_left = 3,
 	};
 
-	// The modal is a child of the root stack, centred by the solver and
-	// displaced by the animation. A dismissed-and-settled modal is dropped
-	// from the tree entirely; add() ignores the null.
 	xray::Node* dialog = null;
 	if (self.open || !self.anim.done()) {
-		// The shadow needs no animating of its own: paint_node scales it by the
-		// node's alpha, so it fades in with the panel that casts it.
 		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
-			.shadow(milktea::shadow(1, 1, SHADOW_OPACITY, SHADOW_BLUR, half_blocks: true)
-				.with_color(glaze::color_hex("#05050c"))), milktea::slide_down(SLIDE_ROWS).fade(), &self.anim);
+			.shadow(milktea::shadow(1, 1, 160, blur: 2, half_blocks: true)
+				.with_color(glaze::color_hex("#05050c"))), milktea::slide_down(5).fade(), &self.anim);
 	}
 
 	return milktea::draw(milktea::root()
