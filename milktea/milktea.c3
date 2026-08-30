@@ -838,9 +838,17 @@ fn void? Program.run(Program* self) {
 	// manually beforehand desynchronizes that — in_alt_screen stays false, so
 	// the view never triggers an entry and the exit path never pops back to the
 	// normal buffer, stranding the terminal in the alt screen after quit.
-	// An alt-screen view is all that is needed; reject the manual call instead
-	// of silently leaving the terminal wedged.
-	if (g_manual_alt_screen) return ALT_SCREEN_ALREADY_ENTERED~;
+	// An alt-screen view is all that is needed, so the manual call is always
+	// redundant: reject it rather than start and wedge the terminal.
+	//
+	// The caller already wrote the alt-screen entry before we got here, so
+	// refusing on its own would strand the terminal just as surely. Pop back to
+	// the normal buffer first, so the fault surfaces on a usable terminal.
+	if (g_manual_alt_screen) {
+		if (!self.test_mode) exit_alt_screen();
+		g_manual_alt_screen = false;
+		return ALT_SCREEN_ALREADY_ENTERED~;
+	}
 
 	g_program = self;
 	self.pending_len = 0;

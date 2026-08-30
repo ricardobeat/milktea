@@ -688,6 +688,11 @@ fn void test_manual_alt_screen_before_run_is_rejected() @test {
 
 	if (catch err = p.run()) {
 		assert(err == milktea::ALT_SCREEN_ALREADY_ENTERED);
+		// Rejecting is not enough on its own: the caller already wrote the
+		// alt-screen entry, so run() must also pop back to the normal buffer or
+		// the fault surfaces on a terminal that is still stranded in the alt
+		// screen — exactly the breakage the guard exists to prevent.
+		assert(!milktea::g_manual_alt_screen);
 		return;
 	}
 	unreachable("run() must reject a manually entered alt screen");
