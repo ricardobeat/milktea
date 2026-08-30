@@ -1,6 +1,7 @@
 {
 	"provides": "xray",
-	"sources": ["*.c3", "layout/*.c3"],
+	"sources": ["*"],
+	"dependencies": ["dye", "glaze"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},

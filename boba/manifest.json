@@ -1,7 +1,7 @@
 {
 	"provides": "boba",
-	"sources": ["*.c3"],
-	"dependencies": ["milktea", "glaze", "xray"],
+	"sources": ["*"],
+	"dependencies": ["dye", "glaze", "xray", "milktea"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},

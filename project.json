@@ -394,6 +394,20 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/tetris": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/tetris/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/undertea": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/undertea/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }
