@@ -18,11 +18,15 @@ const sz CLOSE_MS = 180; // dismissing reads better slightly faster than opening
 
 const int SLIDE_ROWS = 5; // how far above its resting row the modal starts
 
-// Shadow: offset down and right with a soft edge, dark enough to lift the panel
+// Shadow: down and to the right with a soft edge, dark enough to lift the panel
 // off the gradient backdrop without reading as a black smear. paint_node scales
 // it by the node's alpha, so it fades in with the modal.
-const char SHADOW_OPACITY = 150;
-const int SHADOW_BLUR     = 2;
+// 
+// Half blocks are safe here because the shadow falls on the backdrop, which is
+// blank cells with a background colour. A shadow cast over text would need them
+// off, or it would take the spaces out of the text.
+const char SHADOW_OPACITY = 190;
+const int SHADOW_BLUR     = 1;
 
 struct Model {
 	bool open;
@@ -85,7 +89,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		// The shadow needs no animating of its own: paint_node scales it by the
 		// node's alpha, so it fades in with the panel that casts it.
 		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
-			.shadow(milktea::shadow(2, 1, SHADOW_OPACITY, SHADOW_BLUR)
+			.shadow(milktea::shadow(1, 1, SHADOW_OPACITY, SHADOW_BLUR, half_blocks: true)
 				.with_color(glaze::color_hex("#05050c"))), milktea::slide_down(SLIDE_ROWS).fade(), &self.anim);
 	}
 
