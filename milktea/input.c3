@@ -235,6 +235,20 @@ fn KeyMods decode_xterm_mods(int mod) {
 	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0 };
 }
 
+// decode_kitty_event maps the ':'-separated event subparameter of a CSI
+// modifier param to a KeyAction. 1=press, 2=repeat, 3=release; absent defaults
+// to press. Under kitty flag 2 the legacy CSI forms (arrows, Home/End, the
+// tilde keys) carry this subparam too — decoding it only in the 'u' path made
+// every one of those keys fire twice per stroke, once on press and again on
+// release.
+fn KeyAction decode_kitty_event(CSIParse csi, int idx) {
+	switch (csi_subparam(csi, idx, 1)) {
+		case 2: return KEY_REPEAT;
+		case 3: return KEY_RELEASE;
+		default: return KEY_PRESS;
+	}
+}
+
 fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
 	return {
 		MsgKind.KEY,
@@ -448,14 +462,14 @@ fn ParseResult parse_key(char[] buf) {
 				}
 
 				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
-				return make_key(code, 0, mods.ctrl, mods.alt, mods.shift, total);
+				return make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total);
 			}
 
 			// Home / End — xterm sends ESC [ 1 ; <mod> H/F, same modifier layout as arrows
 			if (fb == 'H' || fb == 'F') {
 				KeyCode code = (fb == 'H') ? HOME : END;
 				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
-				return make_key(code, 0, mods.ctrl, mods.alt, mods.shift, total);
+				return make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total);
 			}
 
 			// Focus in / Focus out (xterm focus reporting: ESC [ I / ESC [ O)
@@ -483,23 +497,24 @@ fn ParseResult parse_key(char[] buf) {
 				// ESC[3;5~ for Ctrl+Delete. These used to be parsed and then
 				// thrown away, making Ctrl+Delete indistinguishable from Delete.
 				KeyMods tm = decode_xterm_mods(csi_param(csi, 1, 1));
+				KeyAction ta = decode_kitty_event(csi, 1);
 				switch (p1) {
-					case 2: return make_key(INSERT, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 3: return make_key(DELETE, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 5: return make_key(PAGE_UP, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 6: return make_key(PAGE_DOWN, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 11: return make_key(F1, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 12: return make_key(F2, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 13: return make_key(F3, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 14: return make_key(F4, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 15: return make_key(F5, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 17: return make_key(F6, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 18: return make_key(F7, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 19: return make_key(F8, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 20: return make_key(F9, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 21: return make_key(F10, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 23: return make_key(F11, 0, tm.ctrl, tm.alt, tm.shift, total);
-					case 24: return make_key(F12, 0, tm.ctrl, tm.alt, tm.shift, total);
+					case 2: return make_key_action(INSERT, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 3: return make_key_action(DELETE, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 5: return make_key_action(PAGE_UP, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 6: return make_key_action(PAGE_DOWN, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 11: return make_key_action(F1, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 12: return make_key_action(F2, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 13: return make_key_action(F3, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 14: return make_key_action(F4, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 15: return make_key_action(F5, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 17: return make_key_action(F6, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 18: return make_key_action(F7, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 19: return make_key_action(F8, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 20: return make_key_action(F9, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 21: return make_key_action(F10, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 23: return make_key_action(F11, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
+					case 24: return make_key_action(F12, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
 					// Bracketed paste markers — returned as internal sentinels consumed
 					// by Program.run(); never forwarded to model.update().
 					case 200: {
