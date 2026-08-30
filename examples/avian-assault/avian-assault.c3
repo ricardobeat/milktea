@@ -104,68 +104,7 @@ struct ActiveBird {
 	bool alive;
 }
 
-struct PixelBuffer {
-	int width;
-	int height;
-	xray::Color[] pixels;
-}
 
-fn void PixelBuffer.init(&self, int w, int h) {
-	self.width = w > 0 ? w : 1;
-	self.height = h > 0 ? h : 1;
-	sz total = (sz)self.width * (sz)self.height;
-	if (self.pixels.ptr != null) mem::free(self.pixels.ptr);
-	self.pixels = mem::new_array(xray::Color, total);
-	self.clear(xray::color_rgb(20, 24, 40));
-}
-
-fn void PixelBuffer.clear(&self, xray::Color c) {
-	sz total = (sz)self.width * (sz)self.height;
-	for (sz i = 0; i < total; i++) {
-		self.pixels[i] = c;
-	}
-}
-
-fn void PixelBuffer.set_pixel(&self, int x, int y, xray::Color c) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
-	self.pixels[(sz)y * (sz)self.width + (sz)x] = c;
-}
-
-fn void PixelBuffer.blend_pixel(&self, int x, int y, xray::Color c) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
-	sz idx = (sz)y * (sz)self.width + (sz)x;
-	self.pixels[idx] = c.blend_over(self.pixels[idx]);
-}
-
-fn xray::Color PixelBuffer.get_pixel(&self, int x, int y) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return xray::color_rgb(0, 0, 0);
-	return self.pixels[(sz)y * (sz)self.width + (sz)x];
-}
-
-fn void PixelBuffer.fill_rect(&self, int rx, int ry, int rw, int rh, xray::Color c) {
-	int x0 = rx < 0 ? 0 : rx;
-	int y0 = ry < 0 ? 0 : ry;
-	int x1 = rx + rw > self.width ? self.width : rx + rw;
-	int y1 = ry + rh > self.height ? self.height : ry + rh;
-	for (int y = y0; y < y1; y++) {
-		sz row_off = (sz)y * (sz)self.width;
-		for (int x = x0; x < x1; x++) {
-			self.pixels[row_off + (sz)x] = c;
-		}
-	}
-}
-
-fn void PixelBuffer.draw_line(&self, int x0, int y0, int x1, int y1, xray::Color c) {
-	int dx = x1 - x0;
-	int dy = y1 - y0;
-	int steps = dx < 0 ? -dx : dx;
-	int dy_abs = dy < 0 ? -dy : dy;
-	if (steps < dy_abs) steps = dy_abs;
-	if (steps < 1) steps = 1;
-	for (int i = 0; i <= steps; i++) {
-		self.set_pixel(x0 + (dx * i) / steps, y0 + (dy * i) / steps, c);
-	}
-}
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -207,7 +146,7 @@ struct AvianAssaultModel {
 	int settle_timer;
 	int flash_timer;
 
-	PixelBuffer vbuf;
+	xray::PixelBuffer* vbuf;
 	xray::Cell[] view_cells;
 }
 
@@ -301,7 +240,7 @@ fn void AvianAssaultModel.load_level(&self, int lvl) {
 	for (sz i = 0; i < MAX_BLOCKS; i++) self.blocks[i].alive = false;
 	for (sz i = 0; i < MAX_PIGS; i++) self.pigs[i].alive = false;
 
-	int ground_y = self.vbuf.height - 10;
+	int ground_y = (int)self.vbuf.height - 10;
 	self.sling_x = 24.0f;
 	self.sling_y = (float)(ground_y - 18);
 	self.drag_x = self.sling_x;
@@ -325,7 +264,7 @@ fn void AvianAssaultModel.load_level(&self, int lvl) {
 	}
 	self.prepare_next_bird();
 
-	int target_x = self.vbuf.width - 45;
+	int target_x = (int)self.vbuf.width - 45;
 	if (target_x < 65) target_x = 65;
 
 	// Construct structures
@@ -505,7 +444,7 @@ fn void AvianAssaultModel.trigger_bomb_explosion(&self, float cx, float cy) {
 // ── Physics Simulation ────────────────────────────────────────────────────────
 
 fn void AvianAssaultModel.update_physics(&self) {
-	int ground_y = self.vbuf.height - 10;
+	int ground_y = (int)self.vbuf.height - 10;
 	float gravity = 0.32f;
 
 	// 1. Update Bird
@@ -577,7 +516,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 		}
 
 		// Bird stopped or out of bounds
-		if (self.bird.x > (float)(self.vbuf.width + 10) || self.bird.x < -20.0f ||
+		if (self.bird.x > (float)((int)self.vbuf.width + 10) || self.bird.x < -20.0f ||
 			(math::abs(self.bird.vx) < 0.15f && math::abs(self.bird.vy) < 0.2f && self.bird.y >= (float)(ground_y - 6))) {
 			self.state = GameState.SETTLING;
 			self.settle_timer = 40;
@@ -728,7 +667,9 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.term_w = msg.window_size.width;
 		self.term_h = msg.window_size.height;
-		self.vbuf.init(self.term_w, self.term_h * 2);
+		if (self.vbuf != null) { self.vbuf.destroy(); mem::free(self.vbuf); }
+		self.vbuf = xray::new_pixel_buffer((sz)self.term_w, (sz)(self.term_h * 2));
+		self.vbuf.clear(xray::color_rgb(20, 24, 40));
 
 		mem::free(self.view_cells.ptr);
 		sz total = (sz)self.term_w * (sz)self.term_h;
@@ -904,8 +845,8 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 // ── Rendering: Background, Entities, Slingshot & UI ───────────────────────────
 
 fn void AvianAssaultModel.draw_background(&self) {
-	int pw = self.vbuf.width;
-	int ph = self.vbuf.height;
+	int pw = (int)self.vbuf.width;
+	int ph = (int)self.vbuf.height;
 	int ground_y = ph - 10;
 
 	// Sky gradient
@@ -946,12 +887,12 @@ fn void AvianAssaultModel.draw_background(&self) {
 	// Ground / Dirt & Grass
 	xray::Color grass_c = xray::color_rgb(120, 205, 55);
 	xray::Color dirt_c = xray::color_rgb(160, 100, 50);
-	self.vbuf.fill_rect(0, ground_y, pw, 3, grass_c);
-	self.vbuf.fill_rect(0, ground_y + 3, pw, ph - (ground_y + 3), dirt_c);
+	self.vbuf.fill_rect(xray::new_rect(0, ground_y, pw, 3), grass_c);
+	self.vbuf.fill_rect(xray::new_rect(0, ground_y + 3, pw, ph - (ground_y + 3)), dirt_c);
 }
 
 fn void AvianAssaultModel.draw_slingshot(&self) {
-	int ground_y = self.vbuf.height - 10;
+	int ground_y = (int)self.vbuf.height - 10;
 	int sx = (int)self.sling_x;
 	int sy = (int)self.sling_y;
 
@@ -960,12 +901,12 @@ fn void AvianAssaultModel.draw_slingshot(&self) {
 	xray::Color rubber_c = xray::color_rgb(50, 30, 20);
 
 	// Main post
-	self.vbuf.fill_rect(sx - 2, sy, 4, ground_y - sy, wood_c);
+	self.vbuf.fill_rect(xray::new_rect(sx - 2, sy, 4, ground_y - sy), wood_c);
 	self.vbuf.set_pixel(sx - 2, sy, wood_dark);
 
 	// Y-fork branches
-	self.vbuf.fill_rect(sx - 7, sy - 8, 3, 9, wood_c);
-	self.vbuf.fill_rect(sx + 4, sy - 8, 3, 9, wood_c);
+	self.vbuf.fill_rect(xray::new_rect(sx - 7, sy - 8, 3, 9), wood_c);
+	self.vbuf.fill_rect(xray::new_rect(sx + 4, sy - 8, 3, 9), wood_c);
 
 	// Rubber bands
 	float bird_x = self.is_dragging ? self.drag_x : (self.state == GameState.AIMING ? self.sling_x : self.sling_x);
@@ -1084,7 +1025,7 @@ fn void AvianAssaultModel.draw_pig_sprite(&self, Pig* p) {
 	}
 
 	// Snout
-	self.vbuf.fill_rect(cx - 2, cy, 4, 3, snout_c);
+	self.vbuf.fill_rect(xray::new_rect(cx - 2, cy, 4, 3), snout_c);
 	self.vbuf.set_pixel(cx - 1, cy + 1, pupil_c);
 	self.vbuf.set_pixel(cx + 1, cy + 1, pupil_c);
 
@@ -1121,7 +1062,7 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 			border_c = xray::color_rgb(130, 20, 15);
 		}
 
-		self.vbuf.fill_rect(bx, by, bw, bh, col);
+		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), col);
 
 		// Dark border
 		for (int x = 0; x < bw; x++) {
@@ -1135,7 +1076,7 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 
 		// TNT label
 		if (b.mat == BlockMaterial.TNT && bw >= 8 && bh >= 8) {
-			self.vbuf.fill_rect(bx + 1, by + bh / 2 - 1, bw - 2, 3, xray::color_rgb(255, 255, 255));
+			self.vbuf.fill_rect(xray::new_rect(bx + 1, by + bh / 2 - 1, bw - 2, 3), xray::color_rgb(255, 255, 255));
 			self.vbuf.set_pixel(bx + bw / 2 - 2, by + bh / 2, xray::color_rgb(0, 0, 0));
 			self.vbuf.set_pixel(bx + bw / 2, by + bh / 2, xray::color_rgb(0, 0, 0));
 			self.vbuf.set_pixel(bx + bw / 2 + 2, by + bh / 2, xray::color_rgb(0, 0, 0));
@@ -1182,7 +1123,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		}
 
 		// Draw Birds queue on ground
-		int ground_y = self.vbuf.height - 10;
+		int ground_y = (int)self.vbuf.height - 10;
 		for (int b = 0; b < self.birds_left - 1; b++) {
 			int idx = 3 - (self.birds_left - 1 - b);
 			if (idx >= 0 && idx < 3) {

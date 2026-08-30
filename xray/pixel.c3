@@ -48,21 +48,21 @@ fn void PixelBuffer.clear(&self, Color c) {
 }
 
 // set_pixel writes a pixel, ignoring out-of-bounds coordinates.
-fn void PixelBuffer.set_pixel(&self, sz col, sz row, Color c) {
-	if (!self.in_bounds(col, row)) return;
-	self.pixels[row * self.width + col] = c;
+fn void PixelBuffer.set_pixel(&self, int col, int row, Color c) {
+	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return;
+	self.pixels[(sz)row * self.width + (sz)col] = c;
 }
 
 // get_pixel returns the pixel at (col, row), or none if out of bounds.
-fn Color PixelBuffer.get_pixel(&self, sz col, sz row) {
-	if (!self.in_bounds(col, row)) return color_none();
-	return self.pixels[row * self.width + col];
+fn Color PixelBuffer.get_pixel(&self, int col, int row) {
+	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return color_none();
+	return self.pixels[(sz)row * self.width + (sz)col];
 }
 
 // blend_pixel alpha-blends `c` over the pixel already at (col, row).
-fn void PixelBuffer.blend_pixel(&self, sz col, sz row, Color c) {
-	if (!self.in_bounds(col, row)) return;
-	sz idx = row * self.width + col;
+fn void PixelBuffer.blend_pixel(&self, int col, int row, Color c) {
+	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return;
+	sz idx = (sz)row * self.width + (sz)col;
 	self.pixels[idx] = c.blend_over(self.pixels[idx]);
 }
 
@@ -135,7 +135,7 @@ fn void PixelBuffer.draw_line(&self, int x0, int y0, int x1, int y1, Color c, Co
 	if (steps < 1) steps = 1;
 	for (int i = 0; i <= steps; i++) {
 		Color col = _gradient_color(c, to, space, i, steps);
-		self.set_pixel((sz)(x0 + (dx * i) / steps), (sz)(y0 + (dy * i) / steps), col);
+		self.set_pixel(x0 + (dx * i) / steps, y0 + (dy * i) / steps, col);
 	}
 }
 
