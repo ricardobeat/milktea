@@ -32,8 +32,6 @@ enum Phase : int {
 struct Model {
 	Phase phase;
 	milktea::Tween anim;
-	int width;
-	int height;
 }
 
 fn milktea::Msg on_frame() {
@@ -60,12 +58,6 @@ fn milktea::Cmd Model.close(Model* self) {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		self.width = msg.window_size.width;
-		self.height = msg.window_size.height;
-		return null;
-	}
-
 	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_FRAME) {
 		// step() reports whether the animation is still running; when it
 		// settles we stop re-arming the timer and let the loop go idle.
@@ -100,13 +92,18 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
+	// The running program tracks the terminal size, so the model does not
+	// have to store it or handle WINDOW_SIZE just to read it back.
+	int width  = milktea::screen_width();
+	int height = milktea::screen_height();
+
 	// A patterned backdrop, so the fade has something to blend against.
 	glaze::Style dim = glaze::style().foreground(glaze::color_hex("#2a2a3a"));
 	DString bg       = dstring::temp();
-	for (int y = 0; y < self.height - 1; y++) {
+	for (int y = 0; y < height - 1; y++) {
 		if (y > 0) bg.append_char('\n');
 		DString row = dstring::temp();
-		for (int x = 0; x < self.width; x++) row.append_string("·");
+		for (int x = 0; x < width; x++) row.append_string("·");
 		bg.append_string(dim.render(row.str_view()));
 	}
 	bg.append_char('\n');
@@ -117,9 +114,9 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	milktea::View v = milktea::new_alt_screen_view(bg.str_view());
 	if (self.phase == Phase.HIDDEN) return v;
 
-	int target_y = (self.height - MODAL_H) / 2;
+	int target_y = (height - MODAL_H) / 2;
 	int y        = self.anim.lerp(target_y - SLIDE_ROWS, target_y);
-	int x        = (self.width - MODAL_W) / 2;
+	int x        = (width - MODAL_W) / 2;
 
 	String body = glaze::style().with_width(MODAL_W - 4).align_horizontal(glaze::Position.CENTER).padding(1, 1, 1, 1)
 		.background(glaze::color_hex("#1e1e2e"))
