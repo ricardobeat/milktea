@@ -13,10 +13,16 @@ import xray;
 // through the node itself -- so the timer stops on its own when the animation
 // settles, and an idle modal costs nothing.
 
-const sz OPEN_MS  = 260;
+const sz OPEN_MS  = 180;
 const sz CLOSE_MS = 180; // dismissing reads better slightly faster than opening
 
-const int SLIDE_ROWS = 6; // how far above its resting row the modal starts
+const int SLIDE_ROWS = 5; // how far above its resting row the modal starts
+
+// Shadow: offset down and right with a soft edge, dark enough to lift the panel
+// off the gradient backdrop without reading as a black smear. paint_node scales
+// it by the node's alpha, so it fades in with the modal.
+const char SHADOW_OPACITY = 150;
+const int SHADOW_BLUR     = 2;
 
 struct Model {
 	bool open;
@@ -44,7 +50,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 					self.dismiss();
 				} else {
 					self.open = true;
-					self.anim = milktea::tween_at(milktea::time_ms(), OPEN_MS);
+					self.anim = milktea::tween_at(milktea::time_ms(), OPEN_MS, milktea::Easing.EASE_OUT_CUBIC);
 				}
 			}
 		default:
@@ -59,7 +65,7 @@ fn void Model.dismiss(Model* self) {
 
 fn milktea::View Model.view(Model* self) @dynamic {
 	glaze::Style backdrop = { .bg = glaze::color_hex("#1b2a4a"), .bg_gradient = glaze::color_hex("#4a2b52"), };
-	glaze::Style hint = { .fg = glaze::color_hex("#8a8aa0"), .bg = glaze::color_hex("#4a2b52") };
+	glaze::Style hint     = { .fg = glaze::color_hex("#8a8aa0"), .bg = glaze::color_hex("#4a2b52") };
 	glaze::Style panel = {
 		.bg = glaze::color_hex("#1e1e2e"),
 		.fg = glaze::color_hex("#e8e8f0"),
@@ -76,8 +82,11 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// from the tree entirely; add() ignores the null.
 	xray::Node* dialog = null;
 	if (self.open || !self.anim.done()) {
-		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween")
-			.center(), milktea::slide_down(SLIDE_ROWS).fade(), &self.anim);
+		// The shadow needs no animating of its own: paint_node scales it by the
+		// node's alpha, so it fades in with the panel that casts it.
+		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
+			.shadow(milktea::shadow(2, 1, SHADOW_OPACITY, SHADOW_BLUR)
+				.with_color(glaze::color_hex("#05050c"))), milktea::slide_down(SLIDE_ROWS).fade(), &self.anim);
 	}
 
 	return milktea::draw(milktea::root()
