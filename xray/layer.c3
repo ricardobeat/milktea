@@ -63,12 +63,18 @@ struct LayerStyle {
 // Returns 0 if inside, positive distance if outside.
 fn int shadow_edge_dist(int col, int row, int rx, int ry, int rw, int rh) {
 	int dx = 0;
-	if (col < rx) { dx = rx - col; }
-	else if (col >= rx + rw) { dx = col - (rx + rw) + 1; }
+	if (col < rx) {
+		dx = rx - col;
+	} else if (col >= rx + rw) {
+		dx = col - (rx + rw) + 1;
+	}
 
 	int dy = 0;
-	if (row < ry) { dy = ry - row; }
-	else if (row >= ry + rh) { dy = row - (ry + rh) + 1; }
+	if (row < ry) {
+		dy = ry - row;
+	} else if (row >= ry + rh) {
+		dy = row - (ry + rh) + 1;
+	}
 
 	return dx > dy ? dx : dy;
 }
@@ -107,12 +113,12 @@ fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, Inne
 
 			if (min_dist >= max_edge) continue;
 
-			int t = max_edge - min_dist;
+			int t     = max_edge - min_dist;
 			int alpha = (int)s.opacity * t * t / (max_edge * max_edge);
 			if (alpha <= 0) continue;
 
 			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
-			Color c = s.color;
+			Color c   = s.color;
 			c.a = (char)alpha;
 			dst.style.bg = c.blend_over(dst.style.bg);
 			dst.style.fg = c.blend_over(dst.style.fg);
@@ -150,10 +156,10 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 	int blur = s.blur;
 
 	// Extended region: core shadow + blur margin on all sides
-	int ext_top = sy - blur;
+	int ext_top    = sy - blur;
 	int ext_bottom = sy + h + blur;
-	int ext_left = sx - blur;
-	int ext_right = sx + w + blur;
+	int ext_left   = sx - blur;
+	int ext_right  = sx + w + blur;
 
 	for (int row = ext_top; row < ext_bottom; row++) {
 		if (row < 0 || row >= (int)self.height) continue;
@@ -169,10 +175,15 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 			if (dist <= 0) {
 				alpha = (int)s.opacity;
 			} else if (dist <= blur) {
-				// Quadratic falloff: darker near core, fades faster at edges
-				int t = (blur - dist + 1);
+				// Linear falloff. blend_over is linear in alpha, so an evenly
+				// spaced alpha ramp is what produces evenly spaced luminance —
+				// which is what the eye reads as smooth. The quadratic this
+				// replaced dropped 44% of the opacity in the first step and
+				// spent its last step nearly invisible, so the fringe banded at
+				// the core edge and wasted its far end.
+				int t     = blur - dist + 1;
 				int range = blur + 1;
-				alpha = (int)s.opacity * t * t / (range * range);
+				alpha = (int)s.opacity * t / range;
 			} else {
 				continue;
 			}
@@ -180,7 +191,7 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 			if (alpha <= 0) continue;
 
 			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
-			Color c = s.color;
+			Color c   = s.color;
 			c.a = (char)alpha;
 			dst.style.bg = c.blend_over(dst.style.bg);
 			dst.style.fg = c.blend_over(dst.style.fg);

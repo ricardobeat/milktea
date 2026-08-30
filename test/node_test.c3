@@ -548,3 +548,43 @@ fn void test_shadow_unaffected_by_zero_alpha() @test {
 	xray::Cell* shade = sb.cell_at(7, 3);
 	assert(shade.style.bg.r < 100, "unset alpha leaves the shadow at full strength, got r=%d", (int)shade.style.bg.r);
 }
+// A blurred shadow's fringe should step evenly. blend_over is linear in alpha,
+// so an even alpha ramp is what the eye reads as a smooth gradient; the
+// quadratic falloff this replaced dropped most of its opacity in the first
+// step and banded there.
+fn void test_blurred_shadow_falls_off_evenly() @test {
+	Fixed* f = fixed(8, 2);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(8)).height(xray::cells(2)).at(2, 2)
+			.shadow(xray::shadow(1, 1, 200, 3).with_color(xray::color_rgb(0, 0, 0))));
+	r.solve(xray::new_rect(0, 0, 20, 14));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 14);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	for (sz y = 0; y < 14; y++) {
+		for (sz x = 0; x < 20; x++) sb.cell_at(x, y).style.bg = xray::color_rgb(200, 200, 200);
+	}
+	sb.paint(r);
+
+	// Walk down out of the shadow core and collect the luminance steps.
+	int prev     = -1;
+	int min_step =  999;
+	int max_step =  0;
+	for (sz y = 4; y <= 8; y++) {
+		int v = (int)sb.cell_at(6, y).style.bg.r;
+		if (prev >= 0) {
+			int step = v - prev;
+			if (step < min_step) min_step = step;
+			if (step > max_step) max_step = step;
+		}
+		prev = v;
+	}
+
+	assert(min_step > 0, "the fringe lightens monotonically, got a step of %d", min_step);
+	// Even steps: the largest and smallest should be within a rounding cell of
+	// each other, not the 2x spread a quadratic ramp gives.
+	assert(max_step - min_step <= 2, "steps are even: min=%d max=%d", min_step, max_step);
+}
