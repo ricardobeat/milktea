@@ -157,7 +157,8 @@ struct Node {
 
 	// Effects applied when this node paints. shadow lands under the content,
 	// inner_shadow over it, and alpha blends the content's colors into
-	// whatever is already on screen.
+	// whatever is already on screen. alpha_value is 255 (opaque) by default;
+	// paint skips a node whose alpha is 0.
 	LayerStyle layer_style;
 	char alpha_value;
 
@@ -192,6 +193,7 @@ struct Node {
 
 fn Node* new_node(NodeDirection dir) @local {
 	Node* n = mem::tnew(Node);
+	n.alpha_value = 255; // opaque is the default; 0 means fully invisible
 	n.size_w = fill(1);
 	n.size_h = fill(1);
 	n.direction = dir;
@@ -371,8 +373,8 @@ fn Node* Node.with_inner_shadow(&self, InnerShadow s) {
 }
 
 // alpha blends this node's colors over what is already painted beneath it.
-// 0 is opaque; 1-254 blend; the underlying characters always show through
-// where this node paints a blank.
+// 255 is opaque (the default); 1-254 blend; 0 skips painting entirely, which
+// is how a completed fade-out leaves no trace on screen.
 fn Node* Node.alpha(&self, char a) {
 	self.alpha_value = a;
 	return self;

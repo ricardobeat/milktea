@@ -184,15 +184,15 @@ fn dye::Color Tween.lerp_color(&self, dye::Color from, dye::Color to) {
 	return dye::blend_luv(from, to, self.value());
 }
 
-// alpha maps the tween onto the 1..255 range a fade wants. Both an Overlay's
-// alpha and xray::Node.alpha read 0 as "opaque" rather than "invisible", so a
-// fade-in must never emit 0 on its first frame; this clamps into 1..255 for
-// you, which also keeps EASE_OUT_BACK's overshoot from wrapping past 255.
+// alpha maps the tween onto 0..255, where 0 is fully invisible and 255 fully
+// opaque. A fade's end state lands on exactly 0 — paint skips a node at alpha
+// 0, so a fade-out's final frame leaves no trace behind rather than a
+// near-invisible 1/255 remnant. Values in between round to nearest, and
+// EASE_OUT_BACK's overshoot past 1 is clamped to 255 so it cannot wrap.
 fn char Tween.alpha(&self) {
 	double v = self.value();
-	if (v < 0.0) v = 0.0;
-	if (v > 1.0) v = 1.0;
+	if (v <= 0.0) return 0;
+	if (v >= 1.0) return 255;
 	int a = 1 + (int)(254.0 * v + 0.5);
-	if (a > 255) a = 255;
 	return (char)a;
 }

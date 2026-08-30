@@ -80,6 +80,13 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		res.repaint_ms = n.repaint_ms;
 	}
 
+	// alpha 0 is "fully invisible": skip the node, its effects, and its
+	// subtree. A fade-out's final frame reaches value exactly 0, so this is
+	// what keeps that last painted frame from leaving a ghost behind. The
+	// repaint request is collected above first: a fade-in's opening frame
+	// also sits at alpha 0, and it must still ask for the next frame.
+	if (n.alpha_value == 0) return;
+
 	// The shadow goes down first so the content lands on top of it. A node's
 	// alpha scales the shadow along with the content: they are one object, so
 	// a half-faded panel casting a solid shadow would read as two.
@@ -92,7 +99,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	if (n.content != null && r.w > 0 && r.h > 0) {
 		String s = n.content.render(r);
 		if (s.len > 0) {
-			if (n.alpha_value != 0 && n.alpha_value < 255 && scratch != null) {
+			if (n.alpha_value < 255 && scratch != null) {
 				self.paint_blended(r, s, n.alpha_value, scratch);
 			} else {
 				self.render_ansi_string((sz)r.x, (sz)r.y, s, default_style());
@@ -122,12 +129,12 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 // scale_opacity dims an effect's opacity by a node's alpha, so shadows fade
 // with the node that casts them.
 // 
-// alpha 0 means "opaque" rather than "invisible" (it is the unset default, and
-// the same convention Overlay uses), so it leaves the opacity untouched. Every
-// other value scales proportionally, rounding to nearest so a nearly-opaque
-// node does not lose its shadow to truncation.
+// 255 — the opaque default — leaves the opacity untouched, and every other
+// value scales proportionally, rounding to nearest so a nearly-opaque node
+// does not lose its shadow to truncation. (Alpha 0 never reaches here: paint
+// skips such a node's subtree entirely.)
 fn char scale_opacity(char opacity, char alpha) @local {
-	if (alpha == 0 || alpha == 255) return opacity;
+	if (alpha == 255) return opacity;
 	return (char)(((int)opacity * (int)alpha + 127) / 255);
 }
 

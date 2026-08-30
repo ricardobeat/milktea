@@ -186,6 +186,27 @@ fn void test_repaint_interval_is_the_smallest_requested() @test {
 	assert(sb.paint(r).repaint_ms == 80, "fastest node wins");
 }
 
+// An alpha-0 node is skipped by paint, but its repaint request must still be
+// collected: the first frame of a fade-in is exactly such a node, and dropping
+// the request would freeze the animation before it ever becomes visible.
+fn void test_invisible_node_still_requests_repaint() @test {
+	xray::Node* r = xray::root()
+		.add(xray::content_node(fixed(2, 1)).width(xray::cells(2)).height(xray::cells(1)).at(1, 1)
+			.alpha(0).repaint_after(16));
+	r.solve(xray::new_rect(0, 0, 10, 5));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 5);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	xray::PaintResult res = sb.paint(r);
+	assert(res.repaint_ms == 16, "invisible node's repaint survives, got %d", res.repaint_ms);
+	xray::Cell* c = sb.cell_at(1, 1);
+	assert(c.content[0] == ' ' && c.style.bg.kind != xray::ColorKind.TRUECOLOR,
+		"alpha 0 painted nothing, bg=%d", (int)c.style.bg.kind);
+}
+
 fn void test_natural_height_sums_children() @test {
 	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 2))).add(xray::content_node(fixed(0, 3)));
 	assert(r.natural_height(20) == 5, "2 + 3");
@@ -488,14 +509,14 @@ fn void test_offset_in_a_column_leaves_siblings_alone() @test {
 fn void test_shadow_fades_with_node_alpha() @test {
 	// Same tree twice, once opaque and once half-faded, comparing the shadow
 	// cell just outside the node's own rect.
-	int[2] alphas = { 0, 128 };
+	int[2] alphas = { 255, 128 };
 	int[2] darkness;
 
 	for (int k = 0; k < 2; k++) {
 		Fixed* f = fixed(6, 2);
 		xray::Node* n = xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(1, 1)
 			.shadow(xray::shadow(1, 1, 255, 0).with_color(xray::color_rgb(0, 0, 0)));
-		if (alphas[k] != 0) n.alpha((char)alphas[k]);
+		if (alphas[k] < 255) n.alpha((char)alphas[k]);
 		xray::Node* r = xray::root().add(n);
 		r.solve(xray::new_rect(0, 0, 20, 10));
 
@@ -524,9 +545,9 @@ fn void test_shadow_fades_with_node_alpha() @test {
 	assert(darkness[1] < darkness[0], "a half-faded node casts a lighter shadow: %d vs %d", darkness[1], darkness[0]);
 }
 
-// alpha 0 is the unset default and means "opaque", so it must not wipe out a
-// shadow on every node that never calls .alpha().
-fn void test_shadow_unaffected_by_zero_alpha() @test {
+// Nodes default to alpha 255 (opaque), so a node that never calls .alpha()
+// must cast its shadow at full strength.
+fn void test_shadow_unaffected_by_unset_alpha() @test {
 	Fixed* f = fixed(6, 2);
 	xray::Node* r = xray::root()
 		.add(xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(1, 1)

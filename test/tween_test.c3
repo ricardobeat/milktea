@@ -143,23 +143,33 @@ fn void test_lerp_handles_descending_range() @test {
 	assert(tw.lerp(9, 3) == 3, "descending ends low");
 }
 
-fn void test_alpha_never_emits_zero() @test {
-	// Overlay reads alpha 0 as "opaque", so a fade-in that emits 0 on frame
-	// one flashes fully visible. The first frame must be 1.
+fn void test_alpha_bounds_a_fade() @test {
+	// A fade's end states are exact: value 0 is fully invisible, value 1
+	// fully opaque. Paint skips alpha-0 nodes, so a fade-out's final frame
+	// clears the screen instead of leaving a 1/255 ghost.
 	Tween tw = milktea::tween(100, Easing.LINEAR);
-	assert(tw.alpha() == 1, "first frame alpha is 1, got %d", (int)tw.alpha());
+	assert(tw.alpha() == 0, "first frame alpha is 0, got %d", (int)tw.alpha());
 	tw.step(100);
 	assert(tw.alpha() == 255, "final alpha is 255, got %d", (int)tw.alpha());
+
+	Tween rev = milktea::tween_reversed(100, Easing.LINEAR);
+	assert(rev.alpha() == 255, "reverse starts opaque, got %d", (int)rev.alpha());
+	rev.step(100);
+	assert(rev.alpha() == 0, "reverse ends invisible, got %d", (int)rev.alpha());
 }
 
 fn void test_alpha_clamps_overshoot() @test {
-	// EASE_OUT_BACK exceeds 1.0 mid-flight; alpha must not wrap past 255.
+	// EASE_OUT_BACK exceeds 1.0 mid-flight; alpha must clamp to 255 rather
+	// than wrapping. The sweep starts past the first frame: at 0 the value is
+	// exactly 0, the invisible end state of a fade.
 	Tween tw = milktea::tween(100, Easing.EASE_OUT_BACK);
-	for (sz i = 0; i <= 100; i += 5) {
+	for (sz i = 5; i <= 100; i += 5) {
 		tw.elapsed_ms = i;
 		char a = tw.alpha();
-		assert(a >= 1, "alpha stays >= 1, got %d at %d", (int)a, i);
+		assert(a >= 1 && a <= 255, "alpha stays in 1..255, got %d at %d", (int)a, i);
 	}
+	tw.elapsed_ms = 0;
+	assert(tw.alpha() == 0, "value 0 is invisible, got %d", (int)tw.alpha());
 }
 
 fn void test_lerp_color_interpolates() @test {
