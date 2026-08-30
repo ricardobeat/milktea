@@ -137,10 +137,24 @@ fn void render_view(View v) {
 	write_stdout((char[])out.str_view());
 }
 
+// g_manual_alt_screen records that enter_alt_screen() was called outside of a
+// running Program. Program.run() starts from the assumption that it owns the
+// alt screen and that the terminal is not in it yet; a manual entry beforehand
+// breaks that, leaving in_alt_screen false forever so the exit path never pops
+// back to the normal buffer. run() checks this flag and refuses to start.
+bool g_manual_alt_screen = false;
+
+// enter_alt_screen switches the terminal to the alternate screen buffer.
+//
+// A Program with an alt-screen view enters and exits the alt screen on its own
+// — do not call this before @run_program/run(); doing so is an error and run()
+// will reject it. This is for direct rendering without a Program.
 fn void enter_alt_screen() {
+	g_manual_alt_screen = true;
 	write_stdout((char[])SGR_ALT_ON);
 }
 fn void exit_alt_screen() {
+	g_manual_alt_screen = false;
 	write_stdout((char[])SGR_ALT_OFF);
 }
 fn void show_cursor() {

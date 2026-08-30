@@ -833,6 +833,15 @@ fn void cancel(void* owner) {
 
 // run executes the event loop for the program.
 fn void? Program.run(Program* self) {
+	// run() owns the alt screen: it enters when a view asks for it and exits on
+	// the way out, tracking that in in_alt_screen. Entering the alt screen
+	// manually beforehand desynchronizes that — in_alt_screen stays false, so
+	// the view never triggers an entry and the exit path never pops back to the
+	// normal buffer, stranding the terminal in the alt screen after quit.
+	// An alt-screen view is all that is needed; reject the manual call instead
+	// of silently leaving the terminal wedged.
+	if (g_manual_alt_screen) return ALT_SCREEN_ALREADY_ENTERED~;
+
 	g_program = self;
 	self.pending_len = 0;
 	self.in_alt_screen = false;

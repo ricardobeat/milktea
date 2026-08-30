@@ -673,3 +673,30 @@ fn void test_draw_inline_sizes_the_block_to_its_content() @test {
 	// Alt screen is never entered for an inline view.
 	assert(!contains(s, "\x1b[?1049h"));
 }
+
+// Program.run() owns the alt screen. Entering it manually beforehand leaves
+// in_alt_screen false, so the exit path never pops back to the normal buffer
+// and the terminal is stranded in the alt screen after quit. run() must reject
+// that up front rather than start and wedge the terminal.
+fn void test_manual_alt_screen_before_run_is_rejected() @test {
+	TestModel m = { };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+
+	milktea::g_manual_alt_screen = true;
+	defer milktea::g_manual_alt_screen = false;
+
+	if (catch err = p.run()) {
+		assert(err == milktea::ALT_SCREEN_ALREADY_ENTERED);
+		return;
+	}
+	unreachable("run() must reject a manually entered alt screen");
+}
+
+// exit_alt_screen() clears the flag, so a program that renders directly and
+// cleans up after itself can still hand off to run() afterwards.
+fn void test_manual_alt_screen_cleared_allows_run() @test {
+	milktea::g_manual_alt_screen = true;
+	milktea::exit_alt_screen();
+	assert(!milktea::g_manual_alt_screen);
+}

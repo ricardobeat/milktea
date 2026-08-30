@@ -1,7 +1,7 @@
 module milktea;
 import std::atomic;
 
-faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED;
+faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;
 
 const int STDIN_FILENO  = 0;
 const int STDOUT_FILENO = 1;
