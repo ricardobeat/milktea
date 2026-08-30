@@ -3,12 +3,12 @@ module xray;
 import std::core::mem;
 
 // Content is anything that can fill a solved rect with text.
-//
+// 
 // render is called after layout, so the rect it receives is the size the
 // solver chose. Implementations return a string sized to that rect; it may
 // carry ANSI escapes, which paint decodes with render_ansi_string. xray does
 // not know how those escapes are produced — milktea builds them with glaze.
-//
+// 
 // measure reports how tall the content wants to be at a given width, and
 // measure_width how wide it wants to be at a given height. Both are consulted
 // only when nothing else fixes that axis — CFIT sizing, which is what place()
@@ -16,7 +16,7 @@ import std::core::mem;
 // leave either unimplemented; an unimplemented axis measures 0, which for a
 // leaf under center() means it collapses on that axis, so implement the ones
 // that matter.
-//
+// 
 // cursor reports where the terminal cursor belongs, in screen coordinates,
 // given the node's solved rect. Content that does not own a cursor leaves it
 // unimplemented. Content that owns one only when focused should return
@@ -33,7 +33,7 @@ interface Content {
 // the character already at that cell — a crosshair or a matrix rain effect
 // can show it through rather than hiding it. Returning an empty string
 // leaves the cell as it was.
-//
+// 
 // blink alternates on the interval the cursor asked for; a callback that
 // animates on its own clock can ignore it.
 alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
@@ -46,13 +46,13 @@ alias ClickFn = fn void(void* ctx, int col, int row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
-//
+// 
 // col and row are relative to the text, so content passes its own caret
 // position and the layout supplies the origin. A caret scrolled out of view
 // reports no cursor rather than one clamped to the edge, which would sit on a
 // line it is not on.
-fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = {}) {
-	if (col < 0 || row < 0 || row >= text.h || col >= text.w) return {};
+fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = { }) {
+	if (col < 0 || row < 0 || row >= text.h || col >= text.w) return { };
 	return {
 		.x = text.x + col,
 		.y = text.y + row,
@@ -68,7 +68,7 @@ fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = {}) 
 // CursorStyle is how a caret looks. Leaving draw null gives the terminal's own
 // cursor with the given shape, blink and color; setting it paints the cursor
 // into the grid instead, and the terminal cursor stays hidden.
-//
+// 
 // shape is an index into whatever shapes the host defines
 // (milktea::CursorShape); xray does not name them.
 struct CursorStyle {
@@ -81,7 +81,7 @@ struct CursorStyle {
 
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
 // coordinates. has_cursor = false means "not mine this frame".
-//
+// 
 // Leaving draw null gives the real terminal cursor at that position, with
 // the given shape and blink. Setting it paints the cursor into the grid
 // instead, and the terminal cursor stays hidden.
@@ -132,7 +132,7 @@ const int MAX_NODE_CHILDREN = 32;
 // Node is one box in a layout tree. It is either a container (children, a
 // direction) or a leaf (content), never usefully both — a node with content
 // and children paints its content first and its children on top.
-//
+// 
 // Nodes are temp-allocated: a tree lives for one frame and is rebuilt by the
 // next view() call. Do not store a Node* across frames.
 struct Node {
@@ -164,6 +164,13 @@ struct Node {
 	// Fixed offset inside the parent, used only when pinned (see at()).
 	int offset_x, offset_y;
 	bool pinned;
+
+	// Displacement applied *after* placement, whether that placement came
+	// from justify/align or from a pin (see offset()). Unlike padding it does
+	// not change the node's size, so shifting a node does not stretch its
+	// background — which is what makes it the right primitive for animating
+	// position.
+	int shift_x, shift_y;
 
 	// Milliseconds until this node wants to be painted again, or 0 for
 	// "never on my account". paint collects the smallest non-zero value in
@@ -219,7 +226,7 @@ fn Node* content_node(Content c) {
 
 // add appends a child and returns this node, so the chained and statement
 // forms are the same call.
-//
+// 
 // A null child is ignored, which lets content that is sometimes hidden return
 // null from its node() and be added unconditionally.
 fn Node* Node.add(&self, Node* child) {
@@ -315,7 +322,7 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 // unless a width or height was given. It is for content whose position is
 // known rather than solved — a dropdown under the menu title that opened it,
 // a tooltip beside its anchor.
-//
+// 
 // Only meaningful in a stack, where every child gets the parent's whole rect
 // to place itself in; a row or column decides its children's offsets itself.
 fn Node* Node.at(&self, int x, int y) {
@@ -330,6 +337,25 @@ fn Node* Node.at(&self, int x, int y) {
 // center places this node in the middle of its parent, sized to its content.
 fn Node* Node.center(&self) {
 	return self.place(JustifyContent.JUSTIFY_CENTER, AlignItems.ALIGN_CENTER);
+}
+
+// offset displaces this node by (dx, dy) from wherever it was placed, without
+// resizing it. It composes with placement rather than replacing it, so a node
+// can stay centred on one axis while being displaced on the other:
+// 
+//     panel.center().offset(0, -4)   // centred, then lifted four rows
+// 
+// That is the difference from at(), which names an absolute position and
+// discards justify/align entirely, and from padding, which grows the node so
+// its background paints over the displaced area. Sliding a node is a matter of
+// animating this, which is what milktea::animate does.
+// 
+// The displacement is applied after the child's rect is solved, so it can push
+// a node past its parent's edge; the painter clips whatever lands outside.
+fn Node* Node.offset(&self, int dx, int dy) {
+	self.shift_x = dx;
+	self.shift_y = dy;
+	return self;
 }
 
 fn Node* Node.shadow(&self, Shadow s) {
@@ -382,7 +408,7 @@ fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
 fn Rect Node.rect(&self) => self.computed_rect;
 
 fn Rect Node.child_rect(&self, int idx) {
-	if (idx < 0 || idx >= self.child_count) return {};
+	if (idx < 0 || idx >= self.child_count) return { };
 	return self.children[idx].computed_rect;
 }
 

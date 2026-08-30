@@ -1,15 +1,15 @@
 module xray;
 
 // Natural sizing.
-//
+// 
 // A node's natural size is what it wants when nothing constrains it: for a
 // leaf, whatever its Content reports; for a column, the sum of its children's
 // heights and the width of its widest child; for a row, the other way around.
-//
+// 
 // It is used in two places — CFIT sizing, which is what place() and center()
 // produce, and draw_inline, which has to know how tall a tree is before it
 // can pick a rect to solve against.
-//
+// 
 // A fill child has no natural size of its own, so it contributes what its
 // content needs instead of expanding. That is what makes fill degrade to
 // fit-to-content in a container with no fixed size: there is no leftover
@@ -46,7 +46,7 @@ fn int Node.natural_height(&self, int width) {
 // content_width measures what is inside this node, ignoring the node's own
 // width constraint.
 fn int Node.content_width(&self, int height) {
-	int pad_x = self.pad_left + self.pad_right;
+	int pad_x   = self.pad_left + self.pad_right;
 	int inner_h = height - self.pad_top - self.pad_bottom;
 	if (inner_h < 0) inner_h = 0;
 
@@ -78,7 +78,7 @@ fn int Node.content_width(&self, int height) {
 // content_height measures what is inside this node, ignoring the node's own
 // height constraint.
 fn int Node.content_height(&self, int width) {
-	int pad_y = self.pad_top + self.pad_bottom;
+	int pad_y   = self.pad_top + self.pad_bottom;
 	int inner_w = width - self.pad_left - self.pad_right;
 	if (inner_w < 0) inner_w = 0;
 
@@ -136,7 +136,7 @@ fn void Node.solve(&self, Rect area) {
 	}
 
 	bool row = self.direction == NodeDirection.ROW;
-	int cc = self.child_count;
+	int cc   = self.child_count;
 
 	Constraint[MAX_NODE_CHILDREN] constraints;
 	Rect[MAX_NODE_CHILDREN] child_rects;
@@ -179,7 +179,7 @@ fn void Node.solve(&self, Rect area) {
 
 	for (int i = 0; i < cc; i++) {
 		Constraint cross = row ? self.children[i].size_h : self.children[i].size_w;
-		int main_size = row ? child_rects[i].w : child_rects[i].h;
+		int main_size    = row ? child_rects[i].w : child_rects[i].h;
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
 		// for a specific cross size still gets it — otherwise .with_width(30)
@@ -203,6 +203,14 @@ fn void Node.solve(&self, Rect area) {
 		}
 	}
 
+	// offset() displaces a child from where the row/column put it, after both
+	// axes are settled, so an animated child does not disturb its siblings'
+	// positions the way changing its size would.
+	for (int i = 0; i < cc; i++) {
+		child_rects[i].x += self.children[i].shift_x;
+		child_rects[i].y += self.children[i].shift_y;
+	}
+
 	for (int i = 0; i < cc; i++) {
 		self.children[i].solve(child_rects[i]);
 	}
@@ -222,12 +230,13 @@ fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
 
 	// A pinned child names its own offset; everything else is placed by its
 	// justify and align within the space it did not fill.
-	int x = child.pinned
-		? child.offset_x
-		: justify_offset(child.justify, area.w - w, 0, 1);
-	int y = child.pinned
-		? child.offset_y
-		: align_offset(child.align, area.h - h);
+	int x = child.pinned ? child.offset_x : justify_offset(child.justify, area.w - w, 0, 1);
+	int y = child.pinned ? child.offset_y : align_offset(child.align, area.h - h);
+
+	// offset() displaces the child from wherever it landed, pinned or placed,
+	// without having resized it.
+	x += child.shift_x;
+	y += child.shift_y;
 
 	return { .x = area.x + x, .y = area.y + y, .w = w, .h = h };
 }

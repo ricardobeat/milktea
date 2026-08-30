@@ -29,7 +29,7 @@ fn int Fixed.measure(&self, int width) @dynamic => self.h;
 fn int Fixed.measure_width(&self, int height) @dynamic => self.w;
 
 fn xray::ContentCursor Fixed.cursor(&self, xray::Rect r) @dynamic {
-	if (!self.want_cursor) return {};
+	if (!self.want_cursor) return { };
 	return { .x = r.x + 1, .y = r.y + 2, .has_cursor = true };
 }
 
@@ -46,14 +46,16 @@ fn void test_vstack_divides_main_axis() @test {
 	Fixed* mid = fixed(0, 0);
 	Fixed* bot = fixed(0, 1);
 
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(top).height(xray::cells(1)))
+	xray::Node* r = xray::vstack().add(xray::content_node(top).height(xray::cells(1)))
 		.add(xray::content_node(mid).fill(1))
 		.add(xray::content_node(bot).height(xray::cells(1)));
 	r.solve(xray::new_rect(0, 0, 20, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(top.got.y == 0 && top.got.h == 1, "top row");
@@ -67,13 +69,15 @@ fn void test_hstack_divides_cross_axis() @test {
 	Fixed* left  = fixed(0, 0);
 	Fixed* right = fixed(0, 0);
 
-	xray::Node* r = xray::hstack()
-		.add(xray::content_node(left).width(xray::cells(6)))
+	xray::Node* r = xray::hstack().add(xray::content_node(left).width(xray::cells(6)))
 		.add(xray::content_node(right).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 4));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 4);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(left.got.x == 0 && left.got.w == 6, "fixed left column");
@@ -84,16 +88,15 @@ fn void test_hstack_divides_cross_axis() @test {
 fn void test_nested_stacks_solve_through() @test {
 	Fixed* body = fixed(0, 0);
 
-	xray::Node* r = xray::vstack()
-		.add(xray::vstack().height(xray::cells(2)))
-		.add(xray::hstack()
-			.fill(1)
-			.add(xray::vstack().width(xray::cells(4)))
-			.add(xray::content_node(body).fill(1)));
+	xray::Node* r = xray::vstack().add(xray::vstack().height(xray::cells(2)))
+		.add(xray::hstack().fill(1).add(xray::vstack().width(xray::cells(4))).add(xray::content_node(body).fill(1)));
 	r.solve(xray::new_rect(0, 0, 30, 12));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 12);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(body.got.x == 4, "past the sidebar");
@@ -104,12 +107,14 @@ fn void test_nested_stacks_solve_through() @test {
 fn void test_centered_node_fits_content() @test {
 	Fixed* modal = fixed(0, 3);
 
-	xray::Node* r = xray::root()
-		.add(xray::content_node(modal).width(xray::cells(10)).center());
+	xray::Node* r = xray::root().add(xray::content_node(modal).width(xray::cells(10)).center());
 	r.solve(xray::new_rect(0, 0, 40, 20));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	// Height comes from measure(), width from the explicit constraint.
@@ -120,13 +125,15 @@ fn void test_centered_node_fits_content() @test {
 }
 
 fn void test_zstack_paints_later_children_on_top() @test {
-	xray::Node* r = xray::root()
-		.add(xray::content_node(fixed(0, 0, "a")))
+	xray::Node* r = xray::root().add(xray::content_node(fixed(0, 0, "a")))
 		.add(xray::content_node(fixed(2, 1, "b")).width(xray::cells(2)).center());
 	r.solve(xray::new_rect(0, 0, 6, 3));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(6, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(sb.cell_at(0, 0).content[0] == 'a', "base layer");
@@ -137,13 +144,14 @@ fn void test_cursor_reported_in_screen_coordinates() @test {
 	Fixed* input = fixed(0, 1);
 	input.want_cursor = true;
 
-	xray::Node* r = xray::vstack()
-		.add(xray::vstack().height(xray::cells(4)))
-		.add(xray::content_node(input).fill(1));
+	xray::Node* r = xray::vstack().add(xray::vstack().height(xray::cells(4))).add(xray::content_node(input).fill(1));
 	r.solve(xray::new_rect(0, 0, 10, 8));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 8);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	xray::PaintResult res = sb.paint(r);
 
 	assert(res.cursor.has_cursor, "cursor claimed");
@@ -157,34 +165,34 @@ fn void test_content_that_declines_the_cursor_is_ignored() @test {
 	r.solve(xray::new_rect(0, 0, 10, 2));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 2);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	assert(!sb.paint(r).cursor.has_cursor, "no cursor claimed");
 }
 
 fn void test_repaint_interval_is_the_smallest_requested() @test {
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(fixed(0, 1)).repaint_after(500))
+	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).repaint_after(500))
 		.add(xray::content_node(fixed(0, 1)).repaint_after(80))
 		.add(xray::content_node(fixed(0, 1)));
 	r.solve(xray::new_rect(0, 0, 10, 3));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 3);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	assert(sb.paint(r).repaint_ms == 80, "fastest node wins");
 }
 
 fn void test_natural_height_sums_children() @test {
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(fixed(0, 2)))
-		.add(xray::content_node(fixed(0, 3)));
+	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 2))).add(xray::content_node(fixed(0, 3)));
 	assert(r.natural_height(20) == 5, "2 + 3");
 }
 
 fn void test_natural_height_counts_gap_and_padding() @test {
-	xray::Node* r = xray::vstack()
-		.with_gap(1)
-		.with_padding(2, 0, 1, 0)
-		.add(xray::content_node(fixed(0, 2)))
+	xray::Node* r = xray::vstack().with_gap(1).with_padding(2, 0, 1, 0).add(xray::content_node(fixed(0, 2)))
 		.add(xray::content_node(fixed(0, 3)));
 	assert(r.natural_height(20) == 9, "2 + 3 + 1 gap + 3 padding");
 }
@@ -192,8 +200,7 @@ fn void test_natural_height_counts_gap_and_padding() @test {
 fn void test_fill_fits_content_when_the_parent_has_no_fixed_height() @test {
 	// Inline mode: nothing constrains the column, so a fill child reports
 	// what its content needs rather than expanding.
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
+	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
 		.add(xray::content_node(fixed(0, 4)).fill(1));
 	assert(r.natural_height(20) == 5, "1 + 4");
 }
@@ -201,14 +208,15 @@ fn void test_fill_fits_content_when_the_parent_has_no_fixed_height() @test {
 fn void test_fill_divides_when_the_parent_has_a_fixed_height() @test {
 	Fixed* body = fixed(0, 4);
 
-	xray::Node* r = xray::vstack()
-		.height(xray::cells(10))
-		.add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
+	xray::Node* r = xray::vstack().height(xray::cells(10)).add(xray::content_node(fixed(0, 1)).height(xray::cells(1)))
 		.add(xray::content_node(body).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(body.got.h == 9, "takes the leftover, not its content height");
@@ -217,13 +225,14 @@ fn void test_fill_divides_when_the_parent_has_a_fixed_height() @test {
 fn void test_padding_insets_children() @test {
 	Fixed* inner = fixed(0, 0);
 
-	xray::Node* r = xray::vstack()
-		.with_padding(1, 2, 1, 2)
-		.add(xray::content_node(inner).fill(1));
+	xray::Node* r = xray::vstack().with_padding(1, 2, 1, 2).add(xray::content_node(inner).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(inner.got.x == 2 && inner.got.y == 1, "inset origin");
@@ -234,14 +243,15 @@ fn void test_gap_separates_children() @test {
 	Fixed* a = fixed(0, 0);
 	Fixed* b = fixed(0, 0);
 
-	xray::Node* r = xray::vstack()
-		.with_gap(2)
-		.add(xray::content_node(a).height(xray::cells(3)))
+	xray::Node* r = xray::vstack().with_gap(2).add(xray::content_node(a).height(xray::cells(3)))
 		.add(xray::content_node(b).height(xray::cells(3)));
 	r.solve(xray::new_rect(0, 0, 10, 10));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 10);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(a.got.y == 0, "first child at the top");
@@ -256,12 +266,14 @@ fn void test_component_is_sized_by_the_layout() @test {
 	lst.add_item("one", "");
 	lst.add_item("two", "");
 
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(&lst).fill(1));
+	xray::Node* r = xray::vstack().add(xray::content_node(&lst).fill(1));
 	r.solve(xray::new_rect(0, 0, 30, 12));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 12);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(lst.width == 30, "width taken from the rect");
@@ -275,13 +287,15 @@ fn void test_focused_input_reports_its_cursor() @test {
 	inp.insert('i');
 
 	// Two rows above the input, so the cursor's row must be offset by them.
-	xray::Node* r = xray::vstack()
-		.add(xray::vstack().height(xray::cells(2)))
+	xray::Node* r = xray::vstack().add(xray::vstack().height(xray::cells(2)))
 		.add(xray::content_node(&inp).height(xray::cells(1)));
 	r.solve(xray::new_rect(0, 0, 20, 5));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 5);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	xray::PaintResult res = sb.paint(r);
 
 	assert(res.cursor.has_cursor, "focused input claims the cursor");
@@ -297,13 +311,15 @@ fn void test_unfocused_input_does_not_claim_the_cursor() @test {
 
 	// The unfocused input is painted last. Without each component reporting
 	// whether it owns the cursor, last-one-wins would put it in the wrong box.
-	xray::Node* r = xray::vstack()
-		.add(xray::content_node(&a).height(xray::cells(1)))
+	xray::Node* r = xray::vstack().add(xray::content_node(&a).height(xray::cells(1)))
 		.add(xray::content_node(&b).height(xray::cells(1)));
 	r.solve(xray::new_rect(0, 0, 20, 2));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 2);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	xray::PaintResult res = sb.paint(r);
 
 	assert(res.cursor.has_cursor, "the focused one claims it");
@@ -333,7 +349,10 @@ fn void test_at_pins_a_node_and_fits_it() @test {
 	r.solve(xray::new_rect(0, 0, 40, 20));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(menu.got.x == 8 && menu.got.y == 1, "pinned where asked");
@@ -343,12 +362,14 @@ fn void test_at_pins_a_node_and_fits_it() @test {
 fn void test_at_keeps_an_explicit_size() @test {
 	Fixed* box = fixed(0, 4);
 
-	xray::Node* r = xray::root()
-		.add(xray::content_node(box).width(xray::cells(12)).at(3, 2));
+	xray::Node* r = xray::root().add(xray::content_node(box).width(xray::cells(12)).at(3, 2));
 	r.solve(xray::new_rect(0, 0, 40, 20));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(40, 20);
-	defer { sb.destroy(); mem::free(sb); }
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
 	sb.paint(r);
 
 	assert(box.got.w == 12, "explicit width survives at()");
@@ -358,9 +379,105 @@ fn void test_at_keeps_an_explicit_size() @test {
 // Content that is sometimes hidden returns null rather than an empty node, so
 // the caller adds it unconditionally.
 fn void test_add_ignores_a_null_child() @test {
-	xray::Node* r = xray::root()
-		.add(xray::content_node(fixed(4, 1)))
-		.add(null);
+	xray::Node* r = xray::root().add(xray::content_node(fixed(4, 1))).add(null);
 
 	assert(r.count() == 1, "the null child was not added");
+}
+
+// ── offset() ────────────────────────────────────────────────────────────────
+
+// offset displaces a node from where it was placed, without resizing it.
+fn void test_offset_shifts_a_centred_node() @test {
+	Fixed* f = fixed(10, 4);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(10)).height(xray::cells(4)).center().offset(0, -3));
+	r.solve(xray::new_rect(0, 0, 30, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 20);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+
+	// Centred would be x=10, y=8; the offset lifts it three rows.
+	assert(f.got.x == 10, "x stays centred, got %d", f.got.x);
+	assert(f.got.y == 5, "y lifted by 3, got %d", f.got.y);
+}
+
+// The point of offset over padding: the node keeps its size, so its background
+// does not stretch to cover the displacement.
+fn void test_offset_does_not_resize() @test {
+	Fixed* f = fixed(10, 4);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(10)).height(xray::cells(4)).center().offset(4, 2));
+	r.solve(xray::new_rect(0, 0, 30, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 20);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+
+	assert(f.got.w == 10 && f.got.h == 4, "size unchanged, got %dx%d", f.got.w, f.got.h);
+}
+
+// offset composes with a pin too, rather than being an alternative to it.
+fn void test_offset_composes_with_at() @test {
+	Fixed* f = fixed(6, 2);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(3, 4).offset(2, 1));
+	r.solve(xray::new_rect(0, 0, 30, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 20);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+
+	assert(f.got.x == 5, "pinned x plus offset, got %d", f.got.x);
+	assert(f.got.y == 5, "pinned y plus offset, got %d", f.got.y);
+}
+
+// A zero offset must leave placement exactly as it was, so the field is
+// invisible to every node that does not use it.
+fn void test_zero_offset_changes_nothing() @test {
+	Fixed* f = fixed(10, 4);
+	xray::Node* r = xray::root().add(xray::content_node(f).width(xray::cells(10)).height(xray::cells(4)).center());
+	r.solve(xray::new_rect(0, 0, 30, 20));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(30, 20);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+
+	assert(f.got.x == 10 && f.got.y == 8, "centred as before, got %d,%d", f.got.x, f.got.y);
+}
+
+// In a column, offsetting one child must not move its siblings -- that is the
+// difference from changing its size.
+fn void test_offset_in_a_column_leaves_siblings_alone() @test {
+	Fixed* top = fixed(0, 1);
+	Fixed* mid = fixed(0, 1);
+	Fixed* bot = fixed(0, 1);
+
+	xray::Node* r = xray::vstack().add(xray::content_node(top).height(xray::cells(1)))
+		.add(xray::content_node(mid).height(xray::cells(1)).offset(3, 0))
+		.add(xray::content_node(bot).height(xray::cells(1)));
+	r.solve(xray::new_rect(0, 0, 20, 10));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+
+	assert(mid.got.x == 3, "offset child moved, got %d", mid.got.x);
+	assert(top.got.x == 0 && bot.got.x == 0, "siblings unmoved");
+	assert(top.got.y == 0 && mid.got.y == 1 && bot.got.y == 2, "rows unchanged");
 }
