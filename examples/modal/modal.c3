@@ -47,8 +47,9 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 
 fn milktea::Cmd Model.open(Model* self) {
 	self.phase = Phase.OPENING;
-	// EASE_OUT_BACK gives the modal a slight overshoot as it lands.
-	self.anim = milktea::tween(OPEN_MS, milktea::Easing.EASE_OUT_BACK);
+	// EASE_OUT_CUBIC decelerates into the target and settles on it directly,
+	// with no overshoot.
+	self.anim = milktea::tween(OPEN_MS, milktea::Easing.EASE_OUT_CUBIC);
 	return milktea::tick(milktea::FRAME_MS, &on_frame);
 }
 
