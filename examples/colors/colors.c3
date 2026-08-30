@@ -2,13 +2,7 @@ module colors;
 
 import milktea;
 import glaze;
-import std::io;
-import std::core::string;
-import std::core::dstring;
 
-// The model is stateless: the palette is drawn from the terminal size, which
-// milktea tracks internally (see milktea::screen_width/screen_height).
-// C3 does not permit zero-sized structs, hence the placeholder field.
 struct ColorsModel {
 	char _unused;
 }
@@ -50,34 +44,20 @@ fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 		"#5555FF", // Bright Blue
 		"#FF55FF", // Bright Magenta
 		"#55FFFF", // Bright Cyan
-		"#FFFFFF" // Bright White
+		"#FFFFFF"  // Bright White
 		};
 
-	int block_width  = milktea::screen_width() / 4;
-	int block_height = milktea::screen_height() / 4;
-
-	DString out = dstring::temp();
-
+	milktea::Node* grid = milktea::vstack();
 	for (int row = 0; row < 4; row++) {
-		for (int line = 0; line < block_height; line++) {
-			for (int col = 0; col < 4; col++) {
-				int idx      = row * 4 + col;
-				String color = colors[idx];
-
-				glaze::Style block = glaze::style().background(glaze::color_hex(color));
-
-				DString filler = dstring::temp();
-				for (int i = 0; i < block_width; i++) {
-					filler.append_char(' ');
-				}
-
-				out.append_string(block.render(filler.str_view()));
-			}
-			out.append_char('\n');
+		milktea::Node* r = milktea::hstack().fill(1);
+		for (int col = 0; col < 4; col++) {
+			glaze::Style block = glaze::style().background(glaze::color_hex(colors[row * 4 + col]));
+			r.add(milktea::text(block, "").fill(1));
 		}
+		grid.add(r);
 	}
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::draw(milktea::root().add(grid));
 }
 
 fn int main() {
