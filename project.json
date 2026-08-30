@@ -373,6 +373,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/flappybird": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/flappybird/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }
