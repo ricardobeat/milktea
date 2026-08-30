@@ -98,6 +98,7 @@ struct App {
 	float vel_pitch;
 	float vel_pan;
 	bool auto_rotate;
+	float bob_phase;
 	// mouse state
 	bool dragging;
 	int drag_start_x;
@@ -116,6 +117,18 @@ struct App {
 	int key_up;
 	int key_down;
 	int tick_count;
+}
+
+const float BOB_AMPLITUDE = 0.6f;
+const float BOB_SPEED = 0.005f;
+
+// Pick the bob phase whose pitch matches the model's current pose, so resuming
+// auto-rotation continues the swing from here instead of snapping.
+fn void App.sync_bob_phase(App* self) {
+	float ratio = self.model_pitch / BOB_AMPLITUDE;
+	if (ratio > 1.0f) ratio = 1.0f;
+	if (ratio < -1.0f) ratio = -1.0f;
+	self.bob_phase = (float)math::asin(ratio);
 }
 
 fn void App.free_model(App* self) {
@@ -150,6 +163,7 @@ fn void App.load_file(App* self, String path) {
 	self.vel_yaw = 0.0f;
 	self.vel_pan = 0.0f;
 	self.auto_rotate = true;
+	self.bob_phase = 0.0f;
 	self.mode = VIEWING;
 }
 
@@ -188,6 +202,7 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 	self.vel_yaw = 0.0f;
 	self.vel_pan = 0.0f;
 	self.auto_rotate = true;
+	self.bob_phase = 0.0f;
 	self.dragging = false;
 	scan_glb_files(self, ".");
 	return null;
@@ -251,6 +266,11 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 			if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
 				return milktea::quit();
 			}
+			if (k.code == milktea::KeyCode.RUNE && k.rune == ' ') {
+				self.auto_rotate = !self.auto_rotate;
+				if (self.auto_rotate) self.sync_bob_phase();
+				return null;
+			}
 			if (k.code == milktea::KeyCode.RUNE) {
 				switch (k.rune) {
 					case 'w': self.key_w = self.tick_count; self.auto_rotate = false;
@@ -282,8 +302,11 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 			if (self.model != null) {
 				self.model.frame++;
 				if (self.auto_rotate) {
-					self.model_yaw   = (float)self.model.frame * 0.01f;
-					self.model_pitch = (float)math::sin((float)self.model.frame * 0.003) * 0.15f;
+					// yaw carries on from the current pose, but pitch is absolute so
+					// the bob always swings around level rather than a dragged offset
+					self.model_yaw += 0.01f;
+					self.bob_phase += BOB_SPEED;
+					self.model_pitch = (float)math::sin(self.bob_phase) * BOB_AMPLITUDE;
 				}
 
 				float accel_fwd   = 0.04f;
