@@ -64,6 +64,7 @@ OVERRIDES = {
     "modal": {"extra_dirs": ["xray"]},
     "paste": {"extra_dirs": ["boba", "xray"]},
     "split-editors": {"extra_dirs": ["xray"]},
+    "avian-assault": {"extra_dirs": ["xray"]},
     "clock": {"extra_dirs": ["xray"]},
     "flappybird": {"extra_dirs": ["xray"]},
     "nanobots": {"extra_dirs": ["xray"]},
