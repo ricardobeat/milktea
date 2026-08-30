@@ -68,57 +68,7 @@ struct Bird {
 	int flap_frame;
 }
 
-// Virtual pixel canvas (each terminal character cell = 1 col x 2 rows)
-struct PixelBuffer {
-	int width;      // in pixels (same as term width)
-	int height;     // in pixels (term height * 2)
-	xray::Color[] pixels;
-}
 
-fn void PixelBuffer.init(&self, int w, int h) {
-	self.width = w > 0 ? w : 1;
-	self.height = h > 0 ? h : 1;
-	sz total = (sz)self.width * (sz)self.height;
-	if (self.pixels.ptr != null) mem::free(self.pixels.ptr);
-	self.pixels = mem::new_array(xray::Color, total);
-	self.clear(xray::color_rgb(20, 24, 40));
-}
-
-fn void PixelBuffer.clear(&self, xray::Color c) {
-	sz total = (sz)self.width * (sz)self.height;
-	for (sz i = 0; i < total; i++) {
-		self.pixels[i] = c;
-	}
-}
-
-fn void PixelBuffer.set_pixel(&self, int x, int y, xray::Color c) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
-	self.pixels[(sz)y * (sz)self.width + (sz)x] = c;
-}
-
-fn void PixelBuffer.blend_pixel(&self, int x, int y, xray::Color c) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
-	sz idx = (sz)y * (sz)self.width + (sz)x;
-	self.pixels[idx] = c.blend_over(self.pixels[idx]);
-}
-
-fn xray::Color PixelBuffer.get_pixel(&self, int x, int y) {
-	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return xray::color_rgb(0, 0, 0);
-	return self.pixels[(sz)y * (sz)self.width + (sz)x];
-}
-
-fn void PixelBuffer.fill_rect(&self, int rx, int ry, int rw, int rh, xray::Color c) {
-	int x0 = rx < 0 ? 0 : rx;
-	int y0 = ry < 0 ? 0 : ry;
-	int x1 = rx + rw > self.width ? self.width : rx + rw;
-	int y1 = ry + rh > self.height ? self.height : ry + rh;
-	for (int y = y0; y < y1; y++) {
-		sz row_off = (sz)y * (sz)self.width;
-		for (int x = x0; x < x1; x++) {
-			self.pixels[row_off + (sz)x] = c;
-		}
-	}
-}
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -145,7 +95,7 @@ struct FlappyModel {
 	int flash_timer;
 
 	// Graphics buffer
-	PixelBuffer vbuf;
+	xray::PixelBuffer* vbuf;
 	xray::Cell[] view_cells;
 }
 
@@ -222,7 +172,7 @@ fn void FlappyModel.start_game(&self) {
 	self.flash_timer = 0;
 	self.world_scroll = 0.0f;
 
-	int py = self.vbuf.height > 0 ? self.vbuf.height / 2 : 25;
+	int py = self.vbuf.height > 0 ? (int)self.vbuf.height / 2 : 25;
 	self.bird = (Bird){
 		.x = 18.0f,
 		.y = (float)py,
@@ -242,10 +192,10 @@ fn void FlappyModel.start_game(&self) {
 	if (self.difficulty == Difficulty.HARD) gap = 13;
 
 	// Reset pipes
-	float start_x = (float)(self.vbuf.width + 10);
+	float start_x = (float)((int)self.vbuf.width + 10);
 	for (sz i = 0; i < MAX_PIPES; i++) {
 		int min_y = 12;
-		int max_y = self.vbuf.height - 20;
+		int max_y = (int)self.vbuf.height - 20;
 		if (max_y <= min_y) max_y = min_y + 10;
 		int gy = rnd_int(min_y, max_y);
 
@@ -282,7 +232,9 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.term_w = msg.window_size.width;
 		self.term_h = msg.window_size.height;
-		self.vbuf.init(self.term_w, self.term_h * 2);
+		if (self.vbuf != null) { self.vbuf.destroy(); mem::free(self.vbuf); }
+		self.vbuf = xray::new_pixel_buffer((sz)self.term_w, (sz)(self.term_h * 2));
+		self.vbuf.clear(xray::color_rgb(20, 24, 40));
 
 		mem::free(self.view_cells.ptr);
 		sz total = (sz)self.term_w * (sz)self.term_h;
@@ -327,7 +279,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 				self.bird.flap_frame = (self.bird.vy < 0.0f) ? (self.ticks / 3) % 3 : 1;
 
 				// Bounds collision (floor/ceiling)
-				int ground_y = self.vbuf.height - 8;
+				int ground_y = (int)self.vbuf.height - 8;
 				if (self.bird.y >= (float)(ground_y - 2) || self.bird.y <= 1.0f) {
 					self.trigger_death();
 				}
@@ -365,7 +317,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 						}
 						self.pipes[i].x = max_x + (float)PIPE_SPACING;
 						int min_y = 12;
-						int max_y = self.vbuf.height - 20;
+						int max_y = (int)self.vbuf.height - 20;
 						if (max_y <= min_y) max_y = min_y + 10;
 						self.pipes[i].gap_y = rnd_int(min_y, max_y);
 						self.pipes[i].scored = false;
@@ -507,8 +459,8 @@ fn void FlappyModel.trigger_death(&self) {
 
 // Draw dynamic procedural background with city skyline, clouds, hills, and ground
 fn void FlappyModel.draw_background(&self) {
-	int pw = self.vbuf.width;
-	int ph = self.vbuf.height;
+	int pw = (int)self.vbuf.width;
+	int ph = (int)self.vbuf.height;
 	int ground_y = ph - 8;
 
 	// Sky gradient (day to sunset tones based on difficulty/mode)
@@ -557,7 +509,7 @@ fn void FlappyModel.draw_background(&self) {
 		if (bx < -30) bx += pw + 30;
 		int by = ground_y - bh;
 
-		self.vbuf.fill_rect(bx, by, bw, bh, bldg_c);
+		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), bldg_c);
 
 		// Windows
 		for (int wy = by + 2; wy < ground_y - 2; wy += 4) {
@@ -585,8 +537,8 @@ fn void FlappyModel.draw_background(&self) {
 	xray::Color dirt_c = xray::color_rgb(190, 130, 70);
 	xray::Color dirt_dark = xray::color_rgb(140, 90, 45);
 
-	self.vbuf.fill_rect(0, ground_y, pw, 2, grass_c);
-	self.vbuf.fill_rect(0, ground_y + 2, pw, ph - (ground_y + 2), dirt_c);
+	self.vbuf.fill_rect(xray::new_rect(0, ground_y, pw, 2), grass_c);
+	self.vbuf.fill_rect(xray::new_rect(0, ground_y + 2, pw, ph - (ground_y + 2)), dirt_c);
 
 	// Ground moving chevron pattern
 	int g_offset = (int)self.world_scroll % 8;
@@ -607,7 +559,7 @@ fn void FlappyModel.draw_pipe(&self, Pipe* p) {
 	int top_bottom = gy - gs / 2;
 	int bot_top = gy + gs / 2;
 	int pw = PIPE_WIDTH;
-	int ground_y = self.vbuf.height - 8;
+	int ground_y = (int)self.vbuf.height - 8;
 
 	xray::Color c_dark = xray::color_rgb(25, 100, 30);
 	xray::Color c_mid = xray::color_rgb(60, 185, 45);
@@ -783,7 +735,7 @@ fn void FlappyModel.draw_score_hud(&self) {
 	}
 
 	int total_w = count * 4 - 1;
-	int start_x = (self.vbuf.width - total_w) / 2;
+	int start_x = ((int)self.vbuf.width - total_w) / 2;
 	int y = 4;
 
 	xray::Color fg = xray::color_rgb(255, 255, 255);
