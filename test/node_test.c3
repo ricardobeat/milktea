@@ -444,7 +444,7 @@ fn void test_offset_composes_with_at() @test {
 // A zero offset must leave placement exactly as it was, so the field is
 // invisible to every node that does not use it.
 fn void test_zero_offset_changes_nothing() @test {
-	Fixed* f = fixed(10, 4);
+	Fixed* f      = fixed(10, 4);
 	xray::Node* r = xray::root().add(xray::content_node(f).width(xray::cells(10)).height(xray::cells(4)).center());
 	r.solve(xray::new_rect(0, 0, 30, 20));
 
@@ -480,4 +480,71 @@ fn void test_offset_in_a_column_leaves_siblings_alone() @test {
 	assert(mid.got.x == 3, "offset child moved, got %d", mid.got.x);
 	assert(top.got.x == 0 && bot.got.x == 0, "siblings unmoved");
 	assert(top.got.y == 0 && mid.got.y == 1 && bot.got.y == 2, "rows unchanged");
+}
+// ── shadows and alpha ───────────────────────────────────────────────────────
+
+// A shadow is cast by the node, so it fades with it. Without this a modal
+// animating in would show a solid shadow under translucent content.
+fn void test_shadow_fades_with_node_alpha() @test {
+	// Same tree twice, once opaque and once half-faded, comparing the shadow
+	// cell just outside the node's own rect.
+	int[2] alphas = { 0, 128 };
+	int[2] darkness;
+
+	for (int k = 0; k < 2; k++) {
+		Fixed* f = fixed(6, 2);
+		xray::Node* n = xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(1, 1)
+			.shadow(xray::shadow(1, 1, 255, 0).with_color(xray::color_rgb(0, 0, 0)));
+		if (alphas[k] != 0) n.alpha((char)alphas[k]);
+		xray::Node* r = xray::root().add(n);
+		r.solve(xray::new_rect(0, 0, 20, 10));
+
+		xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
+		defer {
+			sb.destroy();
+			mem::free(sb);
+		}
+		// Start from white so a black shadow is visible as a drop in value.
+		for (sz y = 0; y < 10; y++) {
+			for (sz x = 0; x < 20; x++) {
+				xray::Cell* c = sb.cell_at(x, y);
+				c.style.bg = xray::color_rgb(255, 255, 255);
+			}
+		}
+		sb.paint(r);
+
+		// (7,3) is inside the shadow (node spans x 1..6, y 1..2; shadow is
+		// offset by 1) and outside the node itself.
+		xray::Cell* shade = sb.cell_at(7, 3);
+		darkness[k] = 255 - (int)shade.style.bg.r;
+	}
+
+	assert(darkness[0] > 0, "opaque node casts a shadow (got %d)", darkness[0]);
+	assert(darkness[1] > 0, "faded node still casts one (got %d)", darkness[1]);
+	assert(darkness[1] < darkness[0], "a half-faded node casts a lighter shadow: %d vs %d", darkness[1], darkness[0]);
+}
+
+// alpha 0 is the unset default and means "opaque", so it must not wipe out a
+// shadow on every node that never calls .alpha().
+fn void test_shadow_unaffected_by_zero_alpha() @test {
+	Fixed* f = fixed(6, 2);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(1, 1)
+			.shadow(xray::shadow(1, 1, 200, 0).with_color(xray::color_rgb(0, 0, 0))));
+	r.solve(xray::new_rect(0, 0, 20, 10));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	for (sz y = 0; y < 10; y++) {
+		for (sz x = 0; x < 20; x++) {
+			sb.cell_at(x, y).style.bg = xray::color_rgb(255, 255, 255);
+		}
+	}
+	sb.paint(r);
+
+	xray::Cell* shade = sb.cell_at(7, 3);
+	assert(shade.style.bg.r < 100, "unset alpha leaves the shadow at full strength, got r=%d", (int)shade.style.bg.r);
 }
