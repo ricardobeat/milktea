@@ -166,7 +166,14 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	// doubles as the owner token — one draw tree, one repaint timer.
 	cancel(buf);
 	if (res.repaint_ms > 0) {
-		tick((sz)res.repaint_ms, &tick_msg, buf);
+		// every(), not tick(): the deadline is snapped to the next multiple of
+		// the interval in absolute time, so the frame this arms lands on the
+		// same grid as the last one. tick() would wait the full interval from
+		// *now*, adding however long this frame took to every period — a rate
+		// that sags under load and drifts out of step with the terminal's own
+		// refresh. The repaint is re-armed from scratch each frame, so the
+		// snapping is what keeps successive frames evenly spaced.
+		every((sz)res.repaint_ms, &tick_msg, buf);
 	}
 	return v;
 }
