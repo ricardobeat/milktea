@@ -1,22 +1,57 @@
 module xray;
 
 struct Shadow {
+	// Offsets are in square units, not cells. A terminal cell is about twice as
+	// tall as it is wide, so offset_x counts double columns and offset_y counts
+	// rows: shadow(1, 1) puts the shadow two columns right and one row down,
+	// the same physical distance on each axis.
 	int offset_x;
+	// Vertical offset, counted in half-rows: 2 is one row, 1 half of one.
+	// shadow() takes the same offset in whole rows and converts.
+	// 
+	// Only the half-block path can place a shadow on a half-row boundary; with
+	// half_blocks off, shadow() rounds an odd value out to a whole row.
 	int offset_y;
 	char opacity;
 	Color color;
 	bool enabled;
 	int blur; // blur radius in cells (0 = hard edge)
+	// Draw the fringe with half blocks, doubling its vertical resolution and
+	// allowing half-row offsets. Safe only over blank space; see shadow().
+	bool half_blocks;
 }
 
-fn Shadow shadow(int offset_x = 1, int offset_y = 1, char opacity = 128, int blur = 0) {
+// shadow builds a drop shadow. offset_x is in double columns and offset_y in
+// rows, so the two cover the same physical distance (see Shadow).
+// 
+// half_blocks draws each blank fringe cell as ▀, one colour above and another
+// below, which doubles the vertical resolution of the gradient and lets
+// offset_y take halves:
+// 
+//     shadow(1, 1)                               // two columns right, one row down
+//     shadow(1, 0.5, 128, 3, half_blocks: true)  // half a row down
+// 
+// A half block claims the cell's foreground, and a space painted by content is
+// indistinguishable from a blank cell, so a shadow with this on will replace
+// the spaces in text that an earlier node drew underneath it. Use it where the
+// shadow falls on empty background. With it off the fringe tints backgrounds
+// only, and text under the shadow darkens.
+fn Shadow shadow(int offset_x = 1, double offset_y = 1.0, char opacity = 128, int blur = 0, bool half_blocks = false) {
+	// Round to the nearest half-row, so 0.5 lands on a half-step and 0.7 on the
+	// nearer one.
+	double halves = offset_y * 2.0;
+	int half_off  = (int)(halves < 0.0 ? halves - 0.5 : halves + 0.5);
+	// Only the half-block path can draw a half-step, so without it round out to
+	// a whole row.
+	if (!half_blocks && (half_off & 1) != 0) half_off += half_off < 0 ? -1 : 1;
 	return {
 		.offset_x = offset_x,
-		.offset_y = offset_y,
+		.offset_y = half_off,
 		.opacity = opacity,
 		.color = color_rgb(0, 0, 0),
 		.enabled = true,
 		.blur = blur,
+		.half_blocks = half_blocks,
 	};
 }
 
@@ -79,6 +114,81 @@ fn int shadow_edge_dist(int col, int row, int rx, int ry, int rw, int rh) {
 	return dx > dy ? dx : dy;
 }
 
+// Upper half block. Its foreground paints the top half of the cell and its
+// background the bottom, giving a shadow two vertical samples per cell.
+const String HALF_BLOCK_UPPER = "▀";
+
+// shadow_edge_dist_half is shadow_edge_dist measured in half-rows vertically.
+// `half_row` counts half-cells from the top of the buffer (row*2, row*2+1), and
+// the rect's vertical bounds are doubled to match, so a vertical distance of 1
+// means half a cell rather than a whole one.
+// 
+// Horizontal distance is in whole cells, doubled so both axes are in half-cell
+// units. That also makes the blur radius physically round rather than an
+// ellipse stretched down the screen: `blur` cells sideways covers the same
+// distance as `blur` rows, which are twice as tall.
+fn int shadow_edge_dist_half(int col, int half_row, int rx, int ry, int rw, int rh) {
+	int dx = 0;
+	if (col < rx) {
+		dx = rx - col;
+	} else if (col >= rx + rw) {
+		dx = col - (rx + rw) + 1;
+	}
+
+	int top    = ry * 2;
+	int bottom = (ry + rh) * 2;
+	int dy     = 0;
+	if (half_row < top) {
+		dy = top - half_row;
+	} else if (half_row >= bottom) {
+		dy = half_row - bottom + 1;
+	}
+
+	dx *= 2;
+	return dx > dy ? dx : dy;
+}
+
+// shadow_alpha_at is the fringe falloff, in half-cell units. blend_over is
+// linear in alpha, so an evenly spaced alpha ramp gives evenly spaced
+// luminance.
+fn int shadow_alpha_at(int dist_half, int blur, int opacity) {
+	if (dist_half <= 0) return opacity;
+	int span = blur * 2;
+	if (dist_half > span) return 0;
+	return opacity * (span - dist_half + 1) / (span + 1);
+}
+
+// shadow_half blends one half of a half-block cell over what is under it.
+// 
+// A zero alpha means the fringe has run out, and the surface underneath is
+// returned untouched: blend_over reads Color.a == 0 as opaque (see
+// effective_alpha), so blending would paint the shadow at full strength.
+fn Color shadow_half(Color shade, int alpha, Color under) {
+	if (alpha <= 0) return under;
+	Color c = shade;
+	c.a = (char)alpha;
+	return c.blend_over(under);
+}
+
+// can_half_block reports whether a cell may be replaced by a half block. Only a
+// blank, unstyled cell qualifies: the half block occupies the foreground, so
+// writing one into a cell that holds a character erases it. Every other cell
+// gets its background tinted instead, and the text in it darkens.
+fn bool Cell.can_half_block(&self) {
+	if (self.content_len != 1 || self.content[0] != ' ') return false;
+	// A wide cell's second half is a zero-width continuation; splitting it
+	// would desynchronise the pair.
+	if (self.width != 1) return false;
+	// A space with a foreground of its own was written by content — the gap
+	// between two words in a rendered string, say — and the run may style it
+	// (underline, a background it shares with its neighbours). Taking the cell
+	// for a half block would put a ▀ in the middle of that text, so only an
+	// untouched cell qualifies.
+	if (!self.style.fg.is_none()) return false;
+	Attrs none;
+	return self.style.attrs == none;
+}
+
 fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, InnerShadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
@@ -130,8 +240,17 @@ fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, Inne
 fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
-	int sx = x + s.offset_x;
-	int sy = y + s.offset_y;
+	// offset_x is in double columns (see Shadow): one unit right is two cells,
+	// which is the same physical distance as one row down.
+	int sx         = x + s.offset_x * 2;
+	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
+
+	// leftover half-row is carried into the sampling below, the only place that
+
+	// can express it.
+
+	int sy         = y + s.offset_y / 2;
+	int extra_half = s.offset_y - (s.offset_y / 2) * 2;
 
 	if (s.blur == 0) {
 		Color blend_color = s.color;
@@ -155,9 +274,10 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 	// falls off over `blur` cells beyond the core edges.
 	int blur = s.blur;
 
-	// Extended region: core shadow + blur margin on all sides
+	// Core shadow plus the blur margin on all sides, and one more row at the
+	// bottom when a half-row offset pushes the fringe into it.
 	int ext_top    = sy - blur;
-	int ext_bottom = sy + h + blur;
+	int ext_bottom = sy + h + blur + extra_half;
 	int ext_left   = sx - blur;
 	int ext_right  = sx + w + blur;
 
@@ -168,31 +288,53 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 			// Skip cells inside the content overlay region
 			if (col >= x && col < x + w && row >= y && row < y + h) continue;
 
-			// Distance from core shadow rect (0 = inside core, >0 = in blur fringe)
-			int dist = shadow_edge_dist(col, row, sx, sy, w, h);
+			// Sample the falloff at both halves of the cell. A cell is about
+			// twice as tall as it is wide, so the vertical fringe is the one
+			// that bands, and a half block gives it twice the resolution.
+			// 
+			// A leftover half-row shifts the sample point up half a cell, which
+			// slides the shadow down by the same amount.
+			int top_a = shadow_alpha_at(
+				shadow_edge_dist_half(col, row * 2 - extra_half, sx, sy, w, h),
+				blur,
+				(int)s.opacity
+			);
+			int bot_a = shadow_alpha_at(
+				shadow_edge_dist_half(col, row * 2 + 1 - extra_half, sx, sy, w, h),
+				blur,
+				(int)s.opacity
+			);
 
-			int alpha;
-			if (dist <= 0) {
-				alpha = (int)s.opacity;
-			} else if (dist <= blur) {
-				// Linear falloff. blend_over is linear in alpha, so an evenly
-				// spaced alpha ramp is what produces evenly spaced luminance —
-				// which is what the eye reads as smooth. The quadratic this
-				// replaced dropped 44% of the opacity in the first step and
-				// spent its last step nearly invisible, so the fringe banded at
-				// the core edge and wasted its far end.
-				int t     = blur - dist + 1;
-				int range = blur + 1;
-				alpha = (int)s.opacity * t / range;
-			} else {
+			if (top_a <= 0 && bot_a <= 0) continue;
+
+			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
+
+			// Two different halves and a cell with nothing to lose: draw the
+			// gradient inside it. A half block's foreground is its top half and
+			// its background the bottom.
+			if (s.half_blocks && top_a != bot_a && dst.can_half_block()) {
+				Color under = dst.style.bg;
+				dst.content[0] = HALF_BLOCK_UPPER[0];
+				dst.content[1] = HALF_BLOCK_UPPER[1];
+				dst.content[2] = HALF_BLOCK_UPPER[2];
+				dst.content_len = 3;
+				dst.width = 1;
+				// shadow_half returns the surface untouched where the fringe
+				// has run out, rather than blending a zero alpha.
+				dst.style.fg = shadow_half(s.color, top_a, under);
+				dst.style.bg = shadow_half(s.color, bot_a, under);
+				self.dirty_lines[(sz)row] = true;
 				continue;
 			}
 
-			if (alpha <= 0) continue;
+			// Otherwise tint the whole cell. A cell holding a glyph takes this
+			// path, so the character survives with a darker background.
+			int flat = top_a > bot_a ? top_a : bot_a;
+			if (top_a > 0 && bot_a > 0) flat = (top_a + bot_a) / 2;
+			if (flat <= 0) continue;
 
-			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
-			Color c   = s.color;
-			c.a = (char)alpha;
+			Color c = s.color;
+			c.a = (char)flat;
 			dst.style.bg = c.blend_over(dst.style.bg);
 			dst.style.fg = c.blend_over(dst.style.fg);
 			self.dirty_lines[(sz)row] = true;

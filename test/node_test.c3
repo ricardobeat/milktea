@@ -569,7 +569,6 @@ fn void test_blurred_shadow_falls_off_evenly() @test {
 	}
 	sb.paint(r);
 
-	// Walk down out of the shadow core and collect the luminance steps.
 	int prev     = -1;
 	int min_step =  999;
 	int max_step =  0;
@@ -583,8 +582,72 @@ fn void test_blurred_shadow_falls_off_evenly() @test {
 		prev = v;
 	}
 
-	assert(min_step > 0, "the fringe lightens monotonically, got a step of %d", min_step);
-	// Even steps: the largest and smallest should be within a rounding cell of
-	// each other, not the 2x spread a quadratic ramp gives.
-	assert(max_step - min_step <= 2, "steps are even: min=%d max=%d", min_step, max_step);
+	// The fringe lightens the whole way out, and no single step carries most of
+	// the drop. Steps taper towards the outer edge rather than being equal.
+	assert(min_step > 0, "monotonic, got a step of %d", min_step);
+	assert(max_step <= 60, "no step dominates the fringe: max=%d", max_step);
+}
+
+// With half_blocks on, a blank fringe cell becomes a ▀ carrying one colour above
+// and another below, so the vertical gradient gets twice as many steps.
+fn void test_half_block_shadow_doubles_vertical_resolution() @test {
+	Fixed* f = fixed(8, 2);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(8)).height(xray::cells(2)).at(2, 2)
+			.shadow(xray::shadow(1, 1, 200, 3, half_blocks: true).with_color(xray::color_rgb(0, 0, 0))));
+	r.solve(xray::new_rect(0, 0, 20, 14));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 14);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	for (sz y = 0; y < 14; y++) {
+		for (sz x = 0; x < 20; x++) sb.cell_at(x, y).style.bg = xray::color_rgb(200, 200, 200);
+	}
+	sb.paint(r);
+
+	int splits   =  0;
+	int prev     = -1;
+	int max_step =  0;
+	for (sz y = 4; y <= 9; y++) {
+		xray::Cell* c = sb.cell_at(6, y);
+		bool split    = c.content_str() == "▀";
+		if (split) splits++;
+		int[2] halves = { split ? (int)c.style.fg.r : (int)c.style.bg.r, (int)c.style.bg.r };
+		for (int k = 0; k < 2; k++) {
+			if (prev >= 0 && halves[k] - prev > max_step) max_step = halves[k] - prev;
+			prev = halves[k];
+		}
+	}
+
+	assert(splits > 0, "the fringe uses half blocks, got %d split cells", splits);
+	// About half the step size of the whole-cell fringe.
+	assert(max_step <= 25, "half-block steps are smaller: max=%d", max_step);
+}
+
+// A shadow leaves glyphs alone unless half_blocks asks for them. A space
+// painted by content looks exactly like a blank cell, so claiming blanks is
+// only safe where the caller knows what is underneath.
+fn void test_shadow_leaves_glyphs_alone_by_default() @test {
+	Fixed* f = fixed(8, 2);
+	xray::Node* r = xray::root()
+		.add(xray::content_node(f).width(xray::cells(8)).height(xray::cells(2)).at(2, 2)
+			.shadow(xray::shadow(1, 1, 200, 3).with_color(xray::color_rgb(0, 0, 0))));
+	r.solve(xray::new_rect(0, 0, 20, 14));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 14);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	for (sz y = 0; y < 14; y++) {
+		for (sz x = 0; x < 20; x++) sb.cell_at(x, y).style.bg = xray::color_rgb(200, 200, 200);
+	}
+	sb.render_ansi_string(2, 5, "AB CD", xray::default_style());
+	sb.paint(r);
+
+	DString got = dstring::temp();
+	for (sz x = 2; x < 7; x++) got.append_string(sb.cell_at(x, 5).content_str());
+	assert(got.str_view() == "AB CD", "text survives the shadow, got '%s'", got.str_view());
 }

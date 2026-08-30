@@ -380,7 +380,8 @@ fn void test_add_overlay_transparent_and_shadow() @test {
 	assert(o.transparent);
 	assert(o.layer_style.shadow.enabled);
 	assert(o.layer_style.shadow.offset_x == 1);
-	assert(o.layer_style.shadow.offset_y == 1);
+	// offset_y is stored in half-rows, so one row is 2.
+	assert(o.layer_style.shadow.offset_y == 2);
 	assert(o.layer_style.shadow.opacity == 128);
 	assert(o.layer_style.shadow.blur == 2);
 	// Inner shadow untouched when only shadow was set.
