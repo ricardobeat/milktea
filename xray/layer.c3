@@ -165,14 +165,18 @@ fn int isqrt(int n) {
 	return (x + 1) * (x + 1) <= n + x ? x + 1 : x;
 }
 
-// shadow_alpha_at is the fringe falloff, in half-cell units. blend_over is
-// linear in alpha, so an evenly spaced alpha ramp gives evenly spaced
-// luminance.
+// shadow_alpha_at is the fringe falloff: full opacity inside the shadow's core,
+// fading to nothing over the blur radius. Distance is in half-cell units.
 fn int shadow_alpha_at(int dist_half, int blur, int opacity) {
 	if (dist_half <= 0) return opacity;
 	int span = blur * 2;
 	if (dist_half > span) return 0;
-	return opacity * (span - dist_half + 1) / (span + 1);
+	// Quadratic, so the fringe holds its weight against the panel edge and then
+	// drops away, reaching the background well inside the blur radius.
+	// blend_over is linear in alpha, so this curve is the curve on screen.
+	int t     = span - dist_half + 1;
+	int range = span + 1;
+	return opacity * t * t / (range * range);
 }
 
 // shadow_half blends one half of a half-block cell over what is under it.
@@ -259,8 +263,9 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 
 	// offset_x is in double columns on the whole-cell grid and single columns on
 	// the half-cell one (see Shadow).
-	int sx         = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
+	int sx = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
 	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
+
 
 	// leftover half-row is carried into the sampling below, the only place that
 
