@@ -1,6 +1,6 @@
 {
 	"provides": "dye",
-	"sources": ["*"],
+	"sources": ["**"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},

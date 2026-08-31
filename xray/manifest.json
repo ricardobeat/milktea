@@ -1,6 +1,6 @@
 {
 	"provides": "xray",
-	"sources": ["*"],
+	"sources": ["**"],
 	"dependencies": ["dye", "glaze"],
 	"targets": {
 		"macos-aarch64": {},

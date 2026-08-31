@@ -1,6 +1,6 @@
 {
 	"provides": "glaze",
-	"sources": ["*"],
+	"sources": ["**"],
 	"dependencies": ["dye"],
 	"targets": {
 		"macos-aarch64": {},
