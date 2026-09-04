@@ -69,6 +69,7 @@ OVERRIDES = {
     "spinners": {"extra_dirs": ["tgp"]},
     "rounded": {"extra_dirs": ["tgp"]},
     "nineslice": {"extra_dirs": ["tgp"]},
+    "squiggle": {"extra_dirs": ["tgp"]},
     "flappybird": {"extra_dirs": ["xray"]},
     "undertea": {"extra_dirs": ["xray"]},
     "nanobots": {"extra_dirs": ["xray"]},
