@@ -32,6 +32,15 @@ import std::core::mem;
 
 faultdef SESSION_FULL, INVALID_GLYPH, NO_SUCH_INSTANCE;
 
+// zlib. The protocol accepts a deflate-compressed payload with o=z, which the
+// terminal inflates. RGBA tiles are mostly flat fill and smooth ramps, so this
+// is worth an order of magnitude on the wire -- measured ~11x on antialiased
+// rounded-box tiles, far more on flat ones. Compression is optional: if it
+// fails or does not help, the raw bytes go out instead.
+extern fn int compress2(char* dest, sz* dest_len, char* src, sz src_len, int level);
+const int Z_OK = 0;
+const int Z_LEVEL = 6;
+
 const sz MAX_GLYPHS = 32;
 const sz MAX_INSTANCES = 128;
 // Base64 payload bytes per transmission chunk. MUST stay a multiple of 4:
@@ -125,6 +134,9 @@ struct Session {
 	Glyph[MAX_GLYPHS] glyphs;
 	GlyphDef[MAX_GLYPHS] defs;
 	bool[MAX_GLYPHS] transmitted;
+	// A released slot is reusable by register(); its images are already
+	// deleted from the terminal.
+	bool[MAX_GLYPHS] freed;
 	int glyph_count;
 	Placement[MAX_INSTANCES] placements;
 	int placement_count;
@@ -211,9 +223,17 @@ fn void Session.destroy(&self) {
 fn Glyph? Session.register(&self, GlyphDef def) {
 	if (def.width <= 0 || def.height <= 0 || def.count <= 0) return INVALID_GLYPH~;
 	if (def.draw == null && def.frames.len == 0) return INVALID_GLYPH~;
-	if (self.glyph_count >= MAX_GLYPHS) return SESSION_FULL~;
-
-	int idx = self.glyph_count++;
+	// Reuse a released slot before growing: an app whose glyphs are one point
+	// in a style space (radius x border x fill x ...) cycles through far more
+	// glyphs than MAX_GLYPHS over a run, but holds only a few at a time.
+	int idx = -1;
+	for (int i = 0; i < self.glyph_count; i++) {
+		if (self.freed[i]) { idx = i; break; }
+	}
+	if (idx < 0) {
+		if (self.glyph_count >= MAX_GLYPHS) return SESSION_FULL~;
+		idx = self.glyph_count++;
+	}
 	Glyph g = {
 		.session = self,
 		.base_id = self.next_id,
@@ -227,7 +247,28 @@ fn Glyph? Session.register(&self, GlyphDef def) {
 	self.glyphs[idx] = g;
 	self.defs[idx] = def;
 	self.transmitted[idx] = false;
+	self.freed[idx] = false;
 	return g;
+}
+
+// release deletes a glyph's images from the terminal and frees its slot for a
+// later register(). Any placement still referencing it must be removed first;
+// inline placeholders for it simply stop resolving. Use it when a glyph leaves
+// the screen for good -- a style the user navigated away from, say -- rather
+// than holding every variant a session ever showed.
+fn void Session.release(&self, Glyph g) {
+	for (int i = 0; i < self.glyph_count; i++) {
+		if (self.glyphs[i].base_id != g.base_id || self.freed[i]) continue;
+		if (self.transmitted[i] && supported()) {
+			for (int f = 0; f < self.glyphs[i].count; f++) {
+				emit(string::tformat(
+					"\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", self.glyphs[i].base_id + (uint)f));
+			}
+		}
+		self.transmitted[i] = false;
+		self.freed[i] = true;
+		return;
+	}
 }
 
 // ---- Animation clock ----
@@ -278,7 +319,17 @@ fn String base64_encode(char[] input) {
 }
 
 fn void base64_emit_chunks(uint id, char[] rgba, int w, int h) {
-	String b64 = base64_encode(rgba);
+	// Try deflate first; fall back to raw on any failure or if it does not
+	// actually shrink the payload.
+	sz cap = rgba.len + rgba.len / 100 + 64;
+	char* zbuf = mem::talloc_array(char, cap);
+	sz zlen = cap;
+	bool compressed = false;
+	if (compress2(zbuf, &zlen, &rgba[0], rgba.len, Z_LEVEL) == Z_OK && zlen < rgba.len) {
+		compressed = true;
+	}
+
+	String b64 = compressed ? base64_encode(zbuf[:zlen]) : base64_encode(rgba);
 	DString cmd = dstring::temp();
 
 	sz pos = 0;
@@ -288,8 +339,13 @@ fn void base64_emit_chunks(uint id, char[] rgba, int w, int h) {
 		if (n > CHUNK) n = CHUNK;
 		bool more = pos + n < b64.len;
 		if (first) {
-			cmd.append_string(string::tformat(
-				"\x1b_Ga=t,f=32,q=2,i=%d,s=%d,v=%d,m=%d;", id, w, h, more ? 1 : 0));
+			// o=z marks the payload as deflate-compressed; s/v stay the
+			// IMAGE dimensions, not the compressed byte count.
+			cmd.append_string(compressed
+				? string::tformat(
+					"\x1b_Ga=t,f=32,o=z,q=2,i=%d,s=%d,v=%d,m=%d;", id, w, h, more ? 1 : 0)
+				: string::tformat(
+					"\x1b_Ga=t,f=32,q=2,i=%d,s=%d,v=%d,m=%d;", id, w, h, more ? 1 : 0));
 		} else {
 			cmd.append_string(string::tformat("\x1b_Gm=%d;", more ? 1 : 0));
 		}
@@ -337,7 +393,7 @@ fn bool Session.flush(&self) {
 
 	bool sent = false;
 	for (int i = 0; i < self.glyph_count; i++) {
-		if (self.transmitted[i]) continue;
+		if (self.transmitted[i] || self.freed[i]) continue;
 		@pool() {
 			self.transmit_glyph(i);
 		};
@@ -348,41 +404,103 @@ fn bool Session.flush(&self) {
 
 // ---- Inline drawing (unicode placeholders) ----
 
-// Row/column diacritics for placeholder cells. A placeholder cell that
-// carries no diacritics inherits its row from the cell to its left and
-// INCREMENTS the column, so N identical cells resolve to columns 0..N-1 of
-// the image. Each tile is a 1x1 image, so only column 0 exists and every
-// cell after the first would render empty. Stamping an explicit
-// (row 0, col 0) on every cell pins them all to the image's only cell.
-const uint DIACRITIC_0 = 0x0305; // encodes row/column index 0
+// Row/column diacritics. The Nth entry encodes the number N; the table is
+// kitty's rowcolumn-diacritics.txt (combining class 230, no decomposition
+// mappings, so normalization cannot fuse them into the base character).
+//
+// A placeholder cell is <U+10EEEE><row><column>[<high id byte>]. Omitting the
+// diacritics makes a cell inherit its row from the left neighbour and
+// INCREMENT the column, which is convenient for a single run but silently
+// wrong anywhere else -- so every cell here is explicit.
+const uint[297] DIACRITICS = {
+	0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F,
+	0x0346, 0x034A, 0x034B, 0x034C, 0x0350, 0x0351, 0x0352, 0x0357,
+	0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369,
+	0x036A, 0x036B, 0x036C, 0x036D, 0x036E, 0x036F, 0x0483, 0x0484,
+	0x0485, 0x0486, 0x0487, 0x0592, 0x0593, 0x0594, 0x0595, 0x0597,
+	0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1,
+	0x05A8, 0x05A9, 0x05AB, 0x05AC, 0x05AF, 0x05C4, 0x0610, 0x0611,
+	0x0612, 0x0613, 0x0614, 0x0615, 0x0616, 0x0617, 0x0657, 0x0658,
+	0x0659, 0x065A, 0x065B, 0x065D, 0x065E, 0x06D6, 0x06D7, 0x06D8,
+	0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0, 0x06E1, 0x06E2,
+	0x06E4, 0x06E7, 0x06E8, 0x06EB, 0x06EC, 0x0730, 0x0732, 0x0733,
+	0x0735, 0x0736, 0x073A, 0x073D, 0x073F, 0x0740, 0x0741, 0x0743,
+	0x0745, 0x0747, 0x0749, 0x074A, 0x07EB, 0x07EC, 0x07ED, 0x07EE,
+	0x07EF, 0x07F0, 0x07F1, 0x07F3, 0x0816, 0x0817, 0x0818, 0x0819,
+	0x081B, 0x081C, 0x081D, 0x081E, 0x081F, 0x0820, 0x0821, 0x0822,
+	0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C,
+	0x082D, 0x0951, 0x0953, 0x0954, 0x0F82, 0x0F83, 0x0F86, 0x0F87,
+	0x135D, 0x135E, 0x135F, 0x17DD, 0x193A, 0x1A17, 0x1A75, 0x1A76,
+	0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C, 0x1B6B, 0x1B6D,
+	0x1B6E, 0x1B6F, 0x1B70, 0x1B71, 0x1B72, 0x1B73, 0x1CD0, 0x1CD1,
+	0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4,
+	0x1DC5, 0x1DC6, 0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1,
+	0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5, 0x1DD6, 0x1DD7, 0x1DD8, 0x1DD9,
+	0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF, 0x1DE0, 0x1DE1,
+	0x1DE2, 0x1DE3, 0x1DE4, 0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1,
+	0x20D4, 0x20D5, 0x20D6, 0x20D7, 0x20DB, 0x20DC, 0x20E1, 0x20E7,
+	0x20E9, 0x20F0, 0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2,
+	0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6, 0x2DE7, 0x2DE8, 0x2DE9, 0x2DEA,
+	0x2DEB, 0x2DEC, 0x2DED, 0x2DEE, 0x2DEF, 0x2DF0, 0x2DF1, 0x2DF2,
+	0x2DF3, 0x2DF4, 0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA,
+	0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C, 0xA67D,
+	0xA6F0, 0xA6F1, 0xA8E0, 0xA8E1, 0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5,
+	0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9, 0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED,
+	0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2, 0xAAB3, 0xAAB7,
+	0xAAB8, 0xAABE, 0xAABF, 0xAAC1, 0xFE20, 0xFE21, 0xFE22, 0xFE23,
+	0xFE24, 0xFE25, 0xFE26, 0x10A0F, 0x10A38, 0x1D185, 0x1D186, 0x1D187,
+	0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243,
+	0x1D244,
+};
 
-// placeholder_run encodes one image id across n consecutive cells, all
-// resolving to the image's cell (0, 0). The id-carrying foreground color is
-// set once for the whole run and reset at the end: a terminal joins adjacent
-// placeholder cells into one run only while that color stays set, so
-// repeating a self-resetting single-cell placeholder breaks the run apart.
-fn String placeholder_run(uint id, int n) {
-	if (n <= 0) return "";
+// placeholder_cell encodes one cell of an image: the codepoint, then the
+// row and column of the cell within the image's c x r grid. The image id
+// travels in the foreground colour, which the caller sets around a run of
+// these.
+fn void append_placeholder_cell(DString* d, int row, int col) {
 	char[4] cp;
 	sz cp_len = milktea::utf8_encode(PLACEHOLDER_CP, cp[..]);
-	char[4] d0;
-	sz d0_len = milktea::utf8_encode(DIACRITIC_0, d0[..]);
+	d.append_string((String)cp[:cp_len]);
+	char[4] enc;
+	sz n = milktea::utf8_encode(DIACRITICS[row % 297], enc[..]);
+	d.append_string((String)enc[:n]);
+	n = milktea::utf8_encode(DIACRITICS[col % 297], enc[..]);
+	d.append_string((String)enc[:n]);
+}
+
+// placeholder_row renders one row of an image that spans several cells: cells
+// (row, col0) through (row, col0 + n - 1). This is how a multi-cell image is
+// displayed -- the terminal fits the image to the whole c x r grid declared by
+// its virtual placement, and each cell shows its own portion.
+//
+// The id-carrying foreground colour is set once for the run and reset after:
+// the terminal only joins adjacent placeholder cells while that colour holds.
+fn String placeholder_row(uint id, int row, int col0, int n) {
+	if (n <= 0) return "";
 	DString d = dstring::temp();
 	d.append_string(string::tformat(
 		"\x1b[38;2;%d;%d;%dm", (id >> 16) & 0xff, (id >> 8) & 0xff, id & 0xff));
-	for (int i = 0; i < n; i++) {
-		d.append_string((String)cp[:cp_len]);
-		// row 0, then column 0 -- explicit, so nothing is inherited.
-		d.append_string((String)d0[:d0_len]);
-		d.append_string((String)d0[:d0_len]);
-	}
+	for (int i = 0; i < n; i++) append_placeholder_cell(&d, row, col0 + i);
+	d.append_string("\x1b[39m");
+	return d.str_view();
+}
+
+// placeholder_run encodes one image id across n consecutive cells that all
+// show the image's cell (0, 0) -- the right call when each tile is its own
+// 1x1 image. For one image spanning many cells use placeholder_row.
+fn String placeholder_run(uint id, int n) {
+	if (n <= 0) return "";
+	DString d = dstring::temp();
+	d.append_string(string::tformat(
+		"\x1b[38;2;%d;%d;%dm", (id >> 16) & 0xff, (id >> 8) & 0xff, id & 0xff));
+	for (int i = 0; i < n; i++) append_placeholder_cell(&d, 0, 0);
 	d.append_string("\x1b[39m");
 	return d.str_view();
 }
 
 // placeholder_string encodes one image id as a single placeholder cell.
-// Shorthand for placeholder_run(id, 1) -- one encoder, so the diacritic
-// rules cannot drift between the single-cell and run cases.
+// Shorthand for placeholder_run(id, 1) -- one encoder, so the diacritic rules
+// cannot drift between the single-cell and run cases.
 fn String placeholder_string(uint id) {
 	return placeholder_run(id, 1);
 }

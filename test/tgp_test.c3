@@ -202,3 +202,35 @@ fn void test_place_scaled_under_text() @test {
 		assert(count_occurrences(out, "a=d,") == 0);
 	};
 }
+
+// Transmission must go out deflate-compressed: RGBA tiles are mostly flat
+// fill and smooth ramps, and the uncompressed payload dominates startup time.
+// A flat tile should shrink enormously; the o=z flag must accompany it.
+fn void test_transmit_is_compressed() @test {
+	@pool() {
+		g_captured_buf = dstring::temp();
+		tgp::set_sink(&capture);
+		defer tgp::set_sink(null);
+		tgp::set_supported_override(true);
+		defer tgp::set_supported_override(false);
+
+		tgp::Session s = tgp::new_session();
+		// A 32x32 flat-red tile: highly compressible.
+		char[] px = mem::new_array(char, 32 * 32 * 4);
+		defer mem::free(&px[0]);
+		for (sz i = 0; i < px.len; i += 4) {
+			px[i] = (char)200; px[i+1] = (char)30; px[i+2] = (char)30; px[i+3] = (char)255;
+		}
+		tgp::Glyph g = s.register({
+			.frames = px,
+			.count = 1, .width = 32, .height = 32,
+			.fps = 0, .fallback = "c",
+		})!!;
+		s.transmit_glyph(0);
+
+		String out = g_captured_buf.str_view();
+		assert(count_occurrences(out, "o=z") == 1, "payload was not compressed");
+		// 4KB raw -> base64 would be ~5.5KB; compressed must be far smaller.
+		assert(out.len < 2048, "compressed transmit still %d bytes", (int)out.len);
+	};
+}
