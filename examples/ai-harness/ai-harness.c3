@@ -617,9 +617,14 @@ fn milktea::View Model.view(&self) @dynamic {
 	});
 
 	glaze::Style title_s  = glaze::style().foreground(glaze::color_hex("#00ffcc")).with_bold(true);
-	glaze::Style output_s = glaze::style().foreground(glaze::color_hex("#aaaaaa"));
+	glaze::Style output_s = glaze::style().foreground(glaze::color_hex("#aaaaaa"))
+		.with_border(glaze::SQUARE).padding(0, 1, 0, 1)
+		.border_fg(glaze::color_hex("#444444"))
+		.corner_fg(glaze::color_hex("#00ffcc"));
 	glaze::Style input_s  = glaze::style().foreground(glaze::color_hex("#ffff00"))
-		.with_border(glaze::ROUNDED).padding(0, 1, 0, 1);
+		.with_border(glaze::SQUARE).padding(0, 1, 0, 1)
+		.border_fg(glaze::color_hex("#444444"))
+		.corner_fg(glaze::color_hex("#00ffcc"));
 	glaze::Style hint_s   = glaze::style().foreground(glaze::color_hex("#555555"));
 
 	DString out_content = dstring::new(mem);
@@ -649,14 +654,14 @@ fn milktea::View Model.view(&self) @dynamic {
 		out_content.append_string(string::tformat("Thought for %.1fs", self.last_think_sec));
 	}
 
-	self.output_view.width = output_r.w;
-	self.output_view.height = output_r.h;
+	self.output_view.width = output_r.w - 2;
+	self.output_view.height = output_r.h - 2;
 	String log_view = out_content.str_view();
 	self.output_view.set_content(count_lines(log_view));
 	if (self.output_follow != 0) {
 		self.output_view.scroll_to_bottom();
 	}
-	String visible = slice_lines(log_view, self.output_view.offset, (int)output_r.h);
+	String visible = slice_lines(log_view, self.output_view.offset, output_r.h - 2);
 
 	milktea::View v = milktea::new_cell_view(w, h)
 		.draw(title_r, title_s, "  AI HARNESS")

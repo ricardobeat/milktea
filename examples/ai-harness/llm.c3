@@ -6,6 +6,7 @@ import std::thread;
 import std::atomic;
 import std::encoding::json;
 import std::collections::object;
+import std::io;
 import std::io::file;
 import http_shim;
 
@@ -56,6 +57,7 @@ struct Job {
 
 struct StreamCtx {
 	DString accumulated;
+	DString line_buf;
 	Atomic{int}* cancel;
 	StreamCb on_stream;
 	void* ctx;
@@ -359,12 +361,13 @@ fn bool parse_tool_calls(char* resp_body, int resp_len,
 
 // ── Streaming callback ─────────────────────────────────────────────────────
 
-fn int stream_chunk_cb(char* data, int len, void* user) {
-	StreamCtx* sctx = (StreamCtx*)user;
-	sctx.accumulated.append_string((String)data[:len]);
-
+fn void emit_sse_line(StreamCtx* sctx, String line) {
+	if (!line.starts_with("data: ")) return;
+	String payload = line.strip_prefix("data: ");
+	if (payload == "[DONE]") return;
+	sctx.accumulated.append_string(payload);
 	@pool() {
-		if (try obj = json::parse(tmem, (String)data[:len])) {
+		if (try obj = json::parse(tmem, payload)) {
 			Object* choices = obj.get("choices") ?? null;
 			if (choices && choices.len() > 0) {
 				Object* delta = choices.get_at(0).get("delta") ?? null;
@@ -377,17 +380,57 @@ fn int stream_chunk_cb(char* data, int len, void* user) {
 			}
 		}
 	};
+}
+
+// Raw byte callback from libcurl. Chunk boundaries fall anywhere -- mid-line,
+// mid-UTF-8 -- so bytes are buffered and only complete lines are parsed. The
+// data pointer belongs to curl and is valid only for this call, so it is
+// copied into line_buf before anything else touches it.
+//
+// Returns 0 to continue, non-zero to cancel the transfer.
+fn int stream_raw_cb(char* data, int len, void* user) {
+	StreamCtx* sctx = (StreamCtx*)user;
+	if (len > 0) sctx.line_buf.append_string((String)data[:len]);
+
+	// Drain every complete line, leaving any trailing partial in the buffer.
+	while (true) {
+		String buf = sctx.line_buf.str_view();
+		usz nl = buf.len;
+		for (usz i = 0; i < buf.len; i++) {
+			if (buf[i] == '\n') { nl = i; break; }
+		}
+		if (nl == buf.len) break;
+
+		String line = buf[:nl];
+		// Tolerate CRLF: SSE allows either terminator.
+		if (line.len > 0 && line[line.len - 1] == '\r') line = line[:line.len - 1];
+		if (line.len > 0) emit_sse_line(sctx, line);
+
+		// Consume the line and its newline.
+		String rest = buf[nl + 1..];
+		DString next = dstring::new(mem);
+		next.append_string(rest);
+		sctx.line_buf.free();
+		sctx.line_buf = next;
+	}
 
 	return sctx.cancel.load() != 0 ? 1 : 0;
 }
 
 // ── Agent loop ─────────────────────────────────────────────────────────────
 
+// agent_loop is the direct-call entry used by tests; the detached thread
+// goes through agent_loop_trampoline below so the thread entry frame stays
+// tiny (the 128-message array lives one call down, not on the new stack).
 fn int agent_loop(void* arg) {
-	@pool_init(mem, 1 * 1024 * 1024) {
 	Job* job = (Job*)arg;
+	agent_loop_real(job);
+	mem::free(job);
+	return 0;
+}
 
-	DString[128] local_msgs;
+fn void agent_loop_real(Job* job) {
+	DString* local_msgs = mem::new_array(DString, 128);
 	int local_count = 0;
 
 	for (int i = 0; i < job.history_count && i < 128; i++) {
@@ -406,20 +449,24 @@ fn int agent_loop(void* arg) {
 
 		DString body_str = build_request_body(
 			cbuf_str(&job.config.model[0]), &local_msgs[0], local_count);
-		String body_view = body_str.str_view();
 
 		StreamCtx sctx = {};
 		sctx.accumulated = dstring::new(mem);
+		sctx.line_buf = dstring::new(mem);
 		sctx.cancel = job.cancel;
 		sctx.on_stream = job.on_stream;
 		sctx.ctx = job.ctx;
 
 		int status = 0;
 		int ok = http_shim::mimo_http_post_stream(
-			&job.config.url[0], &job.config.api_key[0],
-			body_view.ptr, job.config.timeout_ms,
-			&stream_chunk_cb, &sctx, &status);
+			((ZString)&job.config.url[0]).str_view().zstr_copy(mem),
+			((ZString)&job.config.api_key[0]).str_view().zstr_copy(mem),
+			body_str.zstr_view(),
+			job.config.timeout_ms,
+			&stream_raw_cb, &sctx, &status);
 		body_str.free();
+		// Any trailing partial line is incomplete; drop it with the buffer.
+		sctx.line_buf.free();
 
 		if (!ok) {
 			last_status = -1;
@@ -454,6 +501,7 @@ fn int agent_loop(void* arg) {
 	for (int i = 0; i < local_count; i++) {
 		local_msgs[i].free();
 	}
+	mem::free(local_msgs);
 
 	Result* result = mem::new(Result);
 	result.status = last_status;
@@ -473,9 +521,6 @@ fn int agent_loop(void* arg) {
 	}
 
 	job.on_done(job.ctx, result);
-	mem::free(job);
-	return 0;
-	};
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -496,6 +541,23 @@ fn void start(Config config, HistoryEntry* history, int history_count,
 	job.on_done = on_done;
 	job.ctx = ctx;
 
-	thread::Thread t;
-	thread::Thread.create(&t, &agent_loop, job)!!;
+	// Heap-box the thread handle. NativeThread.create passes `thread` itself
+	// as the pthread arg (thread_posix.c3: callback reads thread_fn/arg out
+	// of it), so a stack-local Thread is a use-after-return the moment
+	// start() returns on a detached thread. The milktea reader thread gets
+	// away with it only because Program outlives the thread.
+	thread::Thread* t = mem::new(thread::Thread);
+	thread::Thread.create(t, &agent_loop_trampoline, job)!!;
+	t.detach()!!;
+	return;
+}
+
+// agent_loop_trampoline is the thread entry. It must stay tiny: it runs on
+// the new thread's stack, so the heavy body (128 DStrings of stack frame)
+// lives one call down in agent_loop.
+fn int agent_loop_trampoline(void* arg) @export {
+	Job* job = (Job*)arg;
+	agent_loop_real(job);
+	mem::free(job);
+	return 0;
 }
