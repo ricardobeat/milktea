@@ -161,3 +161,44 @@ fn void test_glyph_render_and_place_sugar() @test {
 		assert(count_occurrences(out, "\x1b[3;2H") == 1);
 	};
 }
+
+// A scaled, z-ordered placement: c/r stretch the image into a cell rectangle
+// and a negative z puts it under the text layer, so text written over those
+// cells shows through with the image behind it. Resizing must replace the
+// placement without retransmitting the image.
+fn void test_place_scaled_under_text() @test {
+	@pool() {
+		g_captured_buf = dstring::temp();
+		tgp::set_sink(&capture);
+		defer tgp::set_sink(null);
+		tgp::set_supported_override(true);
+		defer tgp::set_supported_override(false);
+
+		tgp::Session s = tgp::new_session();
+		char[16] pixels;
+		tgp::Glyph g = s.register({
+			.frames = pixels[..],
+			.count = 1, .width = 2, .height = 2,
+			.fps = 0, .fallback = "g",
+		})!!;
+		s.transmit_glyph(0);
+
+		tgp::InstId id = s.place(g, 2, 3, tgp::Z_UNDER_TEXT, 10, 4);
+		assert(id != tgp::NO_INSTANCE);
+		s.sync();
+		String out = g_captured_buf.str_view();
+		assert(count_occurrences(out, "\x1b[4;3H") == 1);   // row 3, col 2 -> 1-based
+		assert(count_occurrences(out, "z=-1") == 1);
+		assert(count_occurrences(out, "c=10") == 1);
+		assert(count_occurrences(out, "r=4") == 1);
+
+		// Resize: one replacement put, and no new transmit.
+		int transmits_before = count_occurrences(out, "\x1b_Ga=t,");
+		s.resize(id, 20, 6);
+		s.sync();
+		out = g_captured_buf.str_view();
+		assert(count_occurrences(out, "c=20") == 1);
+		assert(count_occurrences(out, "\x1b_Ga=t,") == transmits_before);
+		assert(count_occurrences(out, "a=d,") == 0);
+	};
+}

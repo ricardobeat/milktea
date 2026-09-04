@@ -88,13 +88,37 @@ struct Placement {
 	int glyph;
 	int col;
 	int row;
+	// Target size in cells. 0 means "natural size": the terminal shows the
+	// image at its own pixel dimensions. Non-zero scales the image to exactly
+	// that many columns/rows, which is how a small gradient strip stretches to
+	// fill a box of any size -- a resize is then just a replacement placement,
+	// with no image data retransmitted.
+	int cols;
+	int rows;
+	// Vertical stacking order. Negative values draw the image UNDER the text
+	// layer, so ordinary text written over those cells shows through with the
+	// image behind it -- the only way to get text on top of an image, since a
+	// unicode-placeholder cell is consumed by the placeholder itself and
+	// cannot also carry a glyph. Below Z_UNDER_BG the image also goes under
+	// cells with a non-default background.
+	int z;
 	// Terminal-side state, tracked for the diff in sync():
 	bool shown;
 	int shown_col;
 	int shown_row;
+	int shown_z;
+	int shown_cols;
+	int shown_rows;
 	int frame;
 	uint pid;
 }
+
+// Z_UNDER_TEXT puts an image beneath the text layer while staying above the
+// default background: text drawn over it shows through.
+const int Z_UNDER_TEXT = -1;
+// Z_UNDER_BG additionally puts it under cells that set their own background
+// colour (the protocol's INT32_MIN/2 threshold).
+const int Z_UNDER_BG = -1073741825;
 
 struct Session {
 	uint next_id;
@@ -385,8 +409,8 @@ fn String Glyph.render(&self) {
 // place registers an absolute placement of the glyph at a cell coordinate;
 // see Session.place(). The placement reaches the terminal on the next
 // session tick(). Returns the instance id for move/remove, or NO_INSTANCE.
-fn InstId Glyph.place(&self, int col, int row) {
-	return self.session.place(*self, col, row);
+fn InstId Glyph.place(&self, int col, int row, int z = 0, int cols = 0, int rows = 0) {
+	return self.session.place(*self, col, row, z, cols, rows);
 }
 
 // ---- Absolute placements ----
@@ -395,7 +419,7 @@ fn InstId Glyph.place(&self, int col, int row) {
 // reaches the terminal on the next tick()/sync(). Returns the instance id
 // for move/remove, or NO_INSTANCE if the session is full or the glyph is
 // unknown.
-fn InstId Session.place(&self, Glyph g, int col, int row) {
+fn InstId Session.place(&self, Glyph g, int col, int row, int z = 0, int cols = 0, int rows = 0) {
 	if (!supported()) return NO_INSTANCE;
 	int glyph_idx = -1;	for (int i = 0; i < self.glyph_count; i++) {
 		if (self.glyphs[i].base_id == g.base_id) {
@@ -412,6 +436,9 @@ fn InstId Session.place(&self, Glyph g, int col, int row) {
 		.glyph = glyph_idx,
 		.col = col,
 		.row = row,
+		.z = z,
+		.cols = cols,
+		.rows = rows,
 		.shown = false,
 		.frame = 0,
 		.pid = self.next_pid++,
@@ -424,6 +451,15 @@ fn void Session.move(&self, InstId id, int col, int row) {
 	if (!self.placements[id].active) return;
 	self.placements[id].col = col;
 	self.placements[id].row = row;
+}
+
+// resize changes a placement's target size in cells. The image itself is not
+// retransmitted: the next sync() replaces the placement at the new size.
+fn void Session.resize(&self, InstId id, int cols, int rows) {
+	if (id < 0 || id >= self.placement_count) return;
+	if (!self.placements[id].active) return;
+	self.placements[id].cols = cols;
+	self.placements[id].rows = rows;
 }
 
 fn void Session.remove(&self, InstId id) {
@@ -466,7 +502,9 @@ fn void Session.sync(&self) {
 		}
 
 		bool unchanged = place.shown && place.frame == frame
-			&& place.shown_col == place.col && place.shown_row == place.row;
+			&& place.shown_col == place.col && place.shown_row == place.row
+			&& place.shown_z == place.z
+			&& place.shown_cols == place.cols && place.shown_rows == place.rows;
 		if (unchanged) continue;
 
 		// Only a frame change needs the old placement gone: a same-image move
@@ -480,11 +518,22 @@ fn void Session.sync(&self) {
 		// size, which keeps the aspect ratio right without knowing the cell's
 		// pixel dimensions.
 		emit(string::tformat("\x1b[%d;%dH", place.row + 1, place.col + 1));
-		emit(string::tformat(
-			"\x1b_Ga=p,i=%d,p=%d,q=2\x1b\\", g.base_id + (uint)frame, place.pid));
+		DString put = dstring::temp();
+		put.append_string(string::tformat(
+			"\x1b_Ga=p,i=%d,p=%d,q=2", g.base_id + (uint)frame, place.pid));
+		if (place.z != 0) put.append_string(string::tformat(",z=%d", place.z));
+		// c/r omitted means natural pixel size, which keeps the aspect ratio
+		// right without knowing the cell's pixel dimensions.
+		if (place.cols > 0) put.append_string(string::tformat(",c=%d", place.cols));
+		if (place.rows > 0) put.append_string(string::tformat(",r=%d", place.rows));
+		put.append_string("\x1b\\");
+		emit(put.str_view());
 		self.placements[p].shown = true;
 		self.placements[p].shown_col = place.col;
 		self.placements[p].shown_row = place.row;
+		self.placements[p].shown_z = place.z;
+		self.placements[p].shown_cols = place.cols;
+		self.placements[p].shown_rows = place.rows;
 		self.placements[p].frame = frame;
 	}
 }
