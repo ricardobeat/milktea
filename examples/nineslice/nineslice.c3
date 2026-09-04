@@ -81,19 +81,19 @@ const BoxDef[BOX_COUNT] BOX_DEFS = {
 
 const int MSG_GFX = 1;
 
-// One glyph per box, not one per (box, radius): a session holds MAX_GLYPHS
-// (32) glyphs, and 9 boxes x 10 radii would be 90 registrations, silently
-// exhausting the session and leaving later boxes pointing at earlier boxes'
-// images. The frame axis carries radius * MAX_TILES + tile, so every radius
-// of a box lives in one glyph at a fixed stride.
+// One glyph per box, holding only the radius currently on screen.
+//
+// Radius is just one axis of a box's style -- border width, inset, fill,
+// shadow are others -- so pre-building the cross-product does not scale: even
+// radius alone was 9 boxes x 8 radii = 4.3MB of RGBA transmitted at startup,
+// visible as a staggered fade-in, for eight variants of which one is ever
+// shown. Each box now registers its current radius and releases the previous
+// one, so the wire cost is what is displayed, not what could be.
 struct Model {
 	tgp::Session gfx;
 	tgp::Glyph[BOX_COUNT] rings;
-	// Gradient boxes place a stretched interior strip under the text layer,
-	// so the ramp shows through between the glyphs. Flat boxes leave these
-	// unset and draw their interior as ordinary tiles.
-	tgp::Glyph[BOX_COUNT] strips;
-	tgp::InstId[BOX_COUNT] strip_ids;
+	// Radius each ring was built for; -1 means nothing registered yet.
+	int[BOX_COUNT] ring_radius;
 	int[BOX_COUNT] radius;
 	int selected;
 	bool tgp_ok;   // terminal capability
@@ -165,59 +165,66 @@ fn int body_rows(int k) {
 }
 
 fn int ring_frame(int rad, int k, int slot, int ox, int oy) {
-	return rad * FRAMES_PER_RADIUS + tile_index(k, slot, ox, oy);
+	return tile_index(k, slot, ox, oy);
 }
 
 // Frame of one body-row tile (which: 0 left, 1 centre, 2 right).
 fn int ring_row_frame(int rad, int k, int row, int which) {
-	return rad * FRAMES_PER_RADIUS + row_tile_index(k, row, which);
+	return row_tile_index(k, row, which);
 }
 
 fn bool Model.gfx_active(Model* self) => self.tgp_ok && self.tgp_on;
+
+// sync_ring makes box b's glyph match its current radius, building and
+// registering the tiles if it does not already hold them. The previous radius
+// is released, which deletes its images from the terminal and frees the
+// session slot -- without that, cycling through radii would exhaust
+// MAX_GLYPHS.
+// effective_radius is the radius a box can actually draw: a corner block
+// cannot exceed half the box height, so a larger radius is walked down until
+// it fits. The builder and the emitter MUST agree on this -- they index the
+// same glyph, and a k=1 layout and a k=2 layout put different tiles at the
+// same index.
+fn int effective_radius(int rad, int box_h) {
+	int kmax = (box_h - BODY_ROWS) / 2;
+	if (kmax < 1) kmax = 1;
+	while (rad > 0 && radius_cells(radius_px(rad)) > kmax) rad--;
+	return rad;
+}
+
+fn void Model.sync_ring(Model* self, int b) {
+	if (!self.tgp_ok) return;
+	int rad = effective_radius(self.radius[b], BODY_ROWS + 2);
+	if (self.ring_radius[b] == rad) return;
+
+	if (self.ring_radius[b] >= 0) self.gfx.release(self.rings[b]);
+
+	int r = radius_px(rad);
+	int k = radius_cells(r);
+	int n = tile_count_rows(k, body_rows(k));
+	char[] frames = mem::new_array(char, (sz)n * TILE_BYTES);
+	// Full-height slice: the gradient must be continuous down the whole box,
+	// so every body row is cut from its own surface row rather than tiling
+	// one row's slice.
+	slice_box_rows(frames, k, body_rows(k), r, style_of(b));
+	self.rings[b] = self.gfx.register({
+		.frames = frames,
+		.count = n, .width = GX, .height = GY,
+		.fps = 0, .fallback = " ",
+	})!!;
+	self.ring_radius[b] = rad;
+}
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.tgp_ok = milktea::kitty_graphics_supported();
 	self.tgp_on = true;
 	for (int b = 0; b < BOX_COUNT; b++) {
 		self.radius[b] = RADII - 1;
-		self.strip_ids[b] = tgp::NO_INSTANCE;
+		self.ring_radius[b] = -1;
 	}
 	if (self.tgp_ok) {
 		self.gfx = tgp::new_session();
-		for (int b = 0; b < BOX_COUNT; b++) {
-			BoxStyle st = style_of(b);
-			// All radii in one buffer, each at a MAX_TILES-frame stride.
-			char[] frames = mem::new_array(char, (sz)(RADII * FRAMES_PER_RADIUS) * TILE_BYTES);
-			for (int rad = 0; rad < RADII; rad++) {
-				int r = radius_px(rad);
-				int k = radius_cells(r);
-				sz base = (sz)(rad * FRAMES_PER_RADIUS) * TILE_BYTES;
-				sz span = (sz)tile_count_rows(k, body_rows(k)) * TILE_BYTES;
-				// Full-height slice: the gradient must be continuous down the
-				// whole box, so every body row is cut from its own surface row
-				// rather than tiling one row's slice.
-				slice_box_rows(frames[base:span], k, body_rows(k), r, st);
-			}
-			// Gradient boxes also get a 1x256 ramp strip, stretched with c/r
-			// to the interior at placement time.
-			if (BOX_DEFS[b].grad_fill) {
-				char[] strip = mem::new_array(char, STRIP_BYTES);
-				render_gradient_strip(strip, st);
-				self.strips[b] = self.gfx.register({
-					.frames = strip,
-					.count = 1, .width = STRIP_W, .height = STRIP_H,
-					.fps = 0, .fallback = " ",
-				})!!;
-			}
-			// A full session returns SESSION_FULL; registering per (box,
-			// radius) used to blow past MAX_GLYPHS here and leave later boxes
-			// pointing at earlier boxes' images.
-			self.rings[b] = self.gfx.register({
-				.frames = frames,
-				.count = RADII * FRAMES_PER_RADIUS, .width = GX, .height = GY,
-				.fps = 0, .fallback = " ",
-			})!!;
-		}
+		for (int b = 0; b < BOX_COUNT; b++) self.sync_ring(b);
 	}
 	// tgp transmits lazily on the first tick after the alt screen is active;
 	// view() alone runs before that flag is set, so prod it once.
@@ -233,6 +240,7 @@ fn void Model.adjust_radius(Model* self, int delta) {
 	if (r < 0) r = 0;
 	if (r > RADII - 1) r = RADII - 1;
 	self.radius[self.selected] = r;
+	self.sync_ring(self.selected);
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
@@ -240,7 +248,6 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		if (self.tgp_ok) self.gfx.tick();
 		return null;
 	}
-	// Any state change can move a strip, so reconcile placements after it.
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -254,17 +261,9 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			if (k.rune == 't') {
 				// Toggling graphics off leaves images on screen until the
 				// next full repaint, so clear the placements right away. The
-				// strip instances go with them and are re-placed on the way
 				// back, since destroy() invalidates what the terminal holds.
 				self.tgp_on = !self.tgp_on;
 				if (self.tgp_ok) {
-					for (int i = 0; i < BOX_COUNT; i++) {
-						if (self.strip_ids[i] != tgp::NO_INSTANCE) {
-							self.gfx.remove(self.strip_ids[i]);
-							self.strip_ids[i] = tgp::NO_INSTANCE;
-						}
-					}
-					self.gfx.sync();
 					if (!self.tgp_on) self.gfx.destroy();
 				}
 				return milktea::tick(1, &on_gfx);
@@ -312,7 +311,7 @@ fn String tile_cell(Model* m, int b, int rad, int k, int slot, int ox, int oy) {
 fn String hrun_run(Model* m, int b, int rad, int k, int oy, bool bottom, int n) {
 	tgp::Glyph g = m.rings[b];
 	return tgp::placeholder_run(
-		g.base_id + (uint)(rad * FRAMES_PER_RADIUS + hrun_tile_index(k, oy, bottom)), n);
+		g.base_id + (uint)hrun_tile_index(k, oy, bottom), n);
 }
 
 // row_run emits n cells of one body-row tile (0 left, 1 centre, 2 right).
@@ -451,30 +450,6 @@ fn void solve_grid(xray::Rect area, xray::Rect[] rects) {
 	for (int r = 0; r < ROWS; r++) {
 		xray::Node* row = grid.children[r];
 		for (int c = 0; c < COLS; c++) rects[r * COLS + c] = row.child_rect(c);
-	}
-}
-
-// place_strip puts (or moves) a gradient box's interior strip under the text
-// layer, stretched to the interior rectangle. Because c/r scale the image,
-// a size change is a replacement placement -- the ramp itself is never
-// retransmitted.
-fn void Model.place_strip(Model* self, int b, xray::Rect rect) {
-	int rad = self.radius[b];
-	int k = radius_cells(radius_px(rad));
-	int kmax = (rect.h - BODY_ROWS) / 2;
-	if (kmax < 1) kmax = 1;
-	if (k > kmax) k = kmax;
-
-	int cols = rect.w - 2 * k;
-	int rows = body_rows(k);
-	if (cols < 1 || rows < 1) return;
-
-	if (self.strip_ids[b] == tgp::NO_INSTANCE) {
-		self.strip_ids[b] = self.strips[b].place(
-			rect.x + k, rect.y + k, tgp::Z_UNDER_TEXT, cols, rows);
-	} else {
-		self.gfx.move(self.strip_ids[b], rect.x + k, rect.y + k);
-		self.gfx.resize(self.strip_ids[b], cols, rows);
 	}
 }
 
