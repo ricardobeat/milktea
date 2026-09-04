@@ -37,7 +37,7 @@ const int GRID_GAP = 1;
 
 // The drop shadow darkens whatever is under it, so it is invisible on a black
 // terminal. Paint a lighter backdrop behind everything.
-const String SCREEN_BG = "#2a2a33";
+const String SCREEN_BG = "#212136";
 
 struct BoxDef {
 	String name;
