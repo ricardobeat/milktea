@@ -2,7 +2,8 @@
   "langrev": "1",
   "warnings": ["no-unused-parameter", "no-unused-import"],
   "macos-min-version": "27.0",
-  "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "xray/**", "src/**", "test/**"],
+  "linked-libraries": ["z"],
+  "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "tgp/**", "xray/**", "src/**", "test/**", "examples/rounded/rounded.c3", "examples/rounded/gfx.c3", "examples/nineslice/nineslice.c3", "examples/nineslice/slice.c3"],
   "targets": {
     "milktea": {
       "type": "static-lib",
@@ -109,7 +110,7 @@
     },
     "examples/spinners": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/spinners/**"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/spinners/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
@@ -354,11 +355,12 @@
     },
     "examples/ai-harness": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "xray/**", "examples/lib/http_shim.c3", "examples/ai-harness/**"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/http_shim.c"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "xray/**", "examples/ai-harness/**"],
+      "c-sources": ["milktea/tty_winsize.c", "examples/ai-harness/http_shim.c"],
       "opt": "Os",
       "optsize": "tiny",
-      "strip-unused": true
+      "strip-unused": true,
+      "linked-libraries": ["curl"]
     },
     "examples/nanobots": {
       "type": "executable",
@@ -405,6 +407,27 @@
     "examples/undertea": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/undertea/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/nineslice": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/nineslice/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/rounded": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/rounded/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/squiggle": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/squiggle/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
