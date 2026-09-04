@@ -595,6 +595,62 @@ fn Cmd quit() {
 	return &make_quit_msg;
 }
 
+// emit writes raw terminal bytes through the same tty path the renderer uses,
+// so user escapes (kitty graphics, mode sets, ...) interleave correctly with
+// frame output instead of racing io::print's buffering. In test mode the
+// bytes are appended to the captured output buffer like any other render.
+// Must be called from the main thread (init/update/view/on_* hooks) — not
+// from arbitrary threads.
+fn void emit(String escape) {
+	if (g_program != null && g_program.test_mode && g_program.output_buf != null) {
+		g_program.output_buf.append_string(escape);
+		return;
+	}
+	write_stdout(escape);
+}
+
+// in_alt_screen reports whether the terminal is currently showing the
+// alternate screen buffer. False during init() even for alt-screen programs:
+// the alt screen is entered when the first alt view is rendered, not at
+// program start. Useful for gating writes that are tied to the current
+// screen (kitty-graphics images die on a screen switch) and for
+// direct-rendering code that does not run under a Program.
+fn bool in_alt_screen() {
+	if (g_program != null) return g_program.in_alt_screen;
+	return g_manual_alt_screen;
+}
+
+// monotonic_ms exposes the runtime's monotonic clock to models — the same
+// time base timers use. Immune to wall-clock steps (NTP, DST).
+fn sz monotonic_ms() {
+	return time_ms();
+}
+
+// Cell-size accessors — the pixel size of one character cell, discovered via
+// the startup probe (CSI 16 t / OSC 1337) and refreshed by runtime replies.
+// 0 + cell_size_known() == false means the terminal never answered (e.g.
+// alacritty, GNU Screen); callers should fall back to a guess like 10x20.
+// Refreshed on WINDOW_SIZE by a fresh CSI 16 t query.
+fn int cell_width_px() {
+	return (int)g_cell_w_px;
+}
+
+fn int cell_height_px() {
+	return (int)g_cell_h_px;
+}
+
+fn bool cell_size_known() {
+	return g_cell_px_known;
+}
+
+// kitty_graphics_supported reports whether the terminal answered the kitty
+// graphics protocol capability query (a=q) during the startup probe.
+// Terminals that implement the protocol always reply; silence means no
+// support. True as soon as any ESC_G APC reply is seen.
+fn bool kitty_graphics_supported() {
+	return g_tgp_replied;
+}
+
 // ============================================================
 // Program options — configure a Program before run()
 // ============================================================
@@ -926,6 +982,9 @@ fn void? Program.run(Program* self) {
 			disable_kitty_keyboard();
 			disable_focus();
 			show_cursor();
+			// Registered cleanups (e.g. kitty-graphics tile deletion) run while
+			// the terminal is still usable, before raw mode is restored.
+			if (g_cleanup_fn != null) g_cleanup_fn();
 			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
 			write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 			// For inline (non-alt-screen) mode the cursor is parked at the
@@ -951,6 +1010,13 @@ fn void? Program.run(Program* self) {
 		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
 		// Terminals that don't support it ignore the sequence — safe to push always.
 		enable_kitty_keyboard();
+
+		// Probe cell pixel size + kitty graphics support. Runs before the
+		// reader thread so it owns stdin; keystrokes typed during the probe
+		// are preserved by re-injecting the leftovers into the pending buffer.
+		char[64] probe_leftover;
+		sz probe_leftover_len = probe_terminal_caps(probe_leftover[..]);
+
 		setup_signals(saved, &self.in_alt_screen);
 
 		// Start the reader thread so stdin reads never block the event loop.
@@ -958,6 +1024,10 @@ fn void? Program.run(Program* self) {
 		queue_created = true;
 		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
 		reader_running = true;
+
+		for (sz i = 0; i < probe_leftover_len; i++) {
+			self.pending[self.pending_len++] = probe_leftover[i];
+		}
 	}
 
 	// Defers live at function scope so they run after the event loop exits,
@@ -1099,6 +1169,10 @@ fn void? Program.run(Program* self) {
 			g_win_resized.store(false, RELAXED);
 			WinSize ws = get_window_size();
 			self.cached_ws = ws;
+			// Cell pixels may change independently of the row/col count (font
+			// zoom). CSI 16 t is answered asynchronously and lands in the shared
+			// cell-size state via the key parser.
+			if (ws.ws_col > 0) write_stdout((char[])"\x1b[16t");
 			if (self.renderer != null) {
 				self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
 			}

@@ -540,6 +540,16 @@ fn ParseResult parse_key(char[] buf) {
 			// Shift+Tab: ESC [ Z
 			if (fb == 'Z') return make_key(TAB, 0, false, false, true, total);
 
+			// XTWINOPS cell-size report: CSI 6 ; <height> ; <width> t
+			// Arrives asynchronously after a CSI 16 t query (initial probe or
+			// refresh). Route to the tty layer's shared cell-size state and
+			// produce no key event.
+			if (fb == 't' && csi.private_prefix == 0 && csi.param_count == 3
+				&& csi.params[0] == 6) {
+				report_cell_size_reply(csi.params[1], csi.params[2]);
+				return make_key(NONE, 0, false, false, false, total);
+			}
+
 			// Kitty keyboard protocol: CSI <codepoint> [;<mods>] u
 			//
 			// Final byte 'u', no private prefix. Param 0 = Unicode codepoint;
