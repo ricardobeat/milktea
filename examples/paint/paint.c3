@@ -379,7 +379,6 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	milktea::enter_alt_screen();
 	milktea::enable_mouse();
 	defer {
 		milktea::disable_mouse();

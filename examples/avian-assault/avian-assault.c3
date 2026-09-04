@@ -1482,7 +1482,6 @@ fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 fn int main() {
 	AvianAssaultModel* m = mem::new(AvianAssaultModel);
-	milktea::enter_alt_screen();
 	milktea::enable_mouse();
 	defer {
 		milktea::disable_mouse();
