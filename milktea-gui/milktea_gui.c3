@@ -82,18 +82,55 @@ fn String[] font_candidates() {
 	return out[:n];
 }
 
-// Glyphs a milktea app is likely to draw beyond plain ASCII: box-drawing
-// (single and double line — U+2500-U+257F covers both), arrows, the
-// "enter" glyph and a common bullet triangle. Apps drawing other Unicode
-// (e.g. block-shading gradients, emoji) will need a wider set — this
-// covers the widgets in boba/glaze out of the box.
+// Contiguous codepoint ranges to rasterize into the font atlas, beyond
+// plain ASCII. Chosen by surveying what boba, glaze and examples/ actually
+// draw — every range here is in real use:
+//
+//   Latin-1 punctuation  ° ± · × and accented letters
+//   general punctuation  – — • (em-dash alone appears ~380 times)
+//   arrows               ← ↑ → ↓ and the diagonals the spinners cycle
+//   box-drawing          single and double line borders
+//   BLOCK ELEMENTS       █ ░ ▒ ▓ ▀ ▄ ▌ and the eighth-width bars — the
+//                        single biggest gap before this: doom-fire, paint,
+//                        voxel-renderer, nanobots, progress bars and
+//                        cursors are all built out of them
+//   geometric shapes     ■ □ ● ◆ ◉ ▸
+//   braille              the ⠋⠙⠹ spinner frames
+//
+// Emoji and CJK are deliberately left out: they need a color/fallback font
+// and are wide glyphs this fixed-cell renderer would misalign anyway.
+struct CpRange {
+	int lo;
+	int hi;
+}
+
+const CpRange[*] CP_RANGES = {
+	{ 0x0020, 0x007e }, // printable ASCII
+	{ 0x00a0, 0x00ff }, // Latin-1 supplement: ° ± ² · × and accented letters
+	{ 0x2010, 0x203a }, // general punctuation: – — ' ' " " •
+	{ 0x2190, 0x21bb }, // arrows, including ↵ and the diagonal spinner frames
+	{ 0x2217, 0x2219 }, // ∗ ∘ ∙ — the spinners' dot frames
+	{ 0x2248, 0x2248 }, // ≈
+	{ 0x2500, 0x257f }, // box-drawing, single and double line
+	{ 0x2580, 0x259f }, // block elements
+	{ 0x25a0, 0x25ff }, // geometric shapes
+	{ 0x2713, 0x2727 }, // check marks and sparkles: ✓ ✛ ✦ ✧
+	// Braille, kept to the 2x4-dot subset boba's spinners cycle rather than
+	// the whole 256-glyph block: most monospace fonts (JetBrains Mono
+	// included) carry no braille at all, and raylib rasterizes nothing for
+	// a codepoint the font lacks.
+	{ 0x2807, 0x283c },
+};
+
 fn int[] build_codepoints() {
-	int[] cps = mem::new_array(int, (95) + (0x257f - 0x2500 + 1) + 6);
+	int total = 0;
+	foreach (r : CP_RANGES) { total += r.hi - r.lo + 1; }
+
+	int[] cps = mem::new_array(int, total);
 	int n = 0;
-	for (int c = 32; c <= 126; c++) { cps[n++] = c; }
-	for (int c = 0x2500; c <= 0x257f; c++) { cps[n++] = c; }
-	int[6] extra = { 0x2190, 0x2191, 0x2192, 0x2193, 0x21b5, 0x25b8 }; // ← ↑ → ↓ ↵ ▸
-	foreach (e : extra) { cps[n++] = e; }
+	foreach (r : CP_RANGES) {
+		for (int c = r.lo; c <= r.hi; c++) { cps[n++] = c; }
+	}
 	return cps[:n];
 }
 
