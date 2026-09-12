@@ -32,10 +32,55 @@ fn GuiOptions default_options() {
 	};
 }
 
+extern fn char* getenv(char* name);
+
+// Monospace fonts to try, in order, when MILKTEA_FONT is unset. A leading
+// "~/" expands against $HOME. These are candidates, not requirements —
+// every one is allowed to be missing, and load_mono_font() falls back to
+// raylib's built-in bitmap font if none resolve.
 const String[*] FONT_PATHS = {
-	"/Users/rtomasi/Library/Fonts/JetBrainsMono[wght].ttf",
+	"~/Library/Fonts/JetBrainsMono[wght].ttf",
 	"/System/Library/Fonts/SFNSMono.ttf",
+	"/System/Library/Fonts/Menlo.ttc",
+	"/Library/Fonts/JetBrainsMono-Regular.ttf",
+	// Common Linux locations, so a GUI build is not macOS-only.
+	"/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Regular.ttf",
+	"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+	"/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+	"/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
 };
+
+// expand_home rewrites a leading "~/" to $HOME. Returns the path unchanged
+// if it has no tilde, and skips it (empty) if $HOME is unset — an
+// unexpanded "~" would otherwise be probed as a literal directory name.
+fn String expand_home(String path) {
+	if (!path.starts_with("~/")) return path;
+	char* home = getenv("HOME");
+	if (home == null) return "";
+	return string::tformat("%s%s", ((ZString)home).str_view(), path[1..]);
+}
+
+// font_candidates returns the paths to try in order. MILKTEA_FONT, when
+// set, wins outright and is the only candidate: someone who named a font
+// explicitly wants to know it failed, not to silently get a different one.
+fn String[] font_candidates() {
+	char* override = getenv("MILKTEA_FONT");
+	if (override != null) {
+		String p = ((ZString)override).str_view();
+		if (p.len > 0) {
+			String[] one = mem::new_array(String, 1);
+			one[0] = expand_home(p);
+			return one;
+		}
+	}
+	String[] out = mem::new_array(String, FONT_PATHS.len);
+	int n = 0;
+	foreach (p : FONT_PATHS) {
+		String e = expand_home(p);
+		if (e.len > 0) out[n++] = e;
+	}
+	return out[:n];
+}
 
 // Glyphs a milktea app is likely to draw beyond plain ASCII: box-drawing
 // (single and double line — U+2500-U+257F covers both), arrows, the
@@ -175,7 +220,7 @@ fn rl::RLFont load_mono_font(int font_size) {
 	int atlas_size = (int)((float)font_size * dpi_scale);
 
 	int[] cps = build_codepoints();
-	foreach (path : FONT_PATHS) {
+	foreach (path : font_candidates()) {
 		if (file::exists(path)) {
 			rl::RLFont f = rl::load_font_ex((ZString)path.zstr_tcopy(), atlas_size, cps.ptr, (int)cps.len);
 			if (f.glyph_count > 0) {
