@@ -81,11 +81,47 @@ fn RLColor to_rl(xray::Color c, RLColor fallback) {
 
 faultdef NO_KEY;
 
-fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, bool ctrl) {
+// Mods carries the modifier state raylib reports as held this frame.
+// raylib has no per-event modifier record — get_key_pressed() returns a bare
+// keycode — so these are sampled once per frame and applied to every key
+// dequeued in it. A modifier pressed or released mid-frame (within ~16ms of
+// the keypress) can therefore attach to the wrong event; the terminal path,
+// which reads modifiers out of the escape sequence itself, has no such race.
+struct Mods {
+	bool ctrl;
+	bool alt;
+	bool shift;
+}
+
+fn Mods read_mods() {
+	return {
+		.ctrl = rl::is_key_down(rl::RLKeyboardKey.LEFT_CONTROL) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_CONTROL),
+		.alt = rl::is_key_down(rl::RLKeyboardKey.LEFT_ALT) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_ALT),
+		.shift = rl::is_key_down(rl::RLKeyboardKey.LEFT_SHIFT) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_SHIFT),
+	};
+}
+
+// translate_key maps a raylib keycode to a milktea KeyMsg, or NO_KEY for a
+// key milktea has no code for (the modifier keys themselves included —
+// they're state, not events).
+//
+// Letters are the subtle case. Unmodified, they arrive as text through
+// get_char_pressed() and are skipped here, so that typing stays
+// layout-correct. With ctrl held they produce no text at all, so this
+// synthesizes the RUNE milktea's terminal path emits for ctrl+letter:
+// lowercase codepoint, ctrl set — with ctrl+c narrowed to KeyCode.CTRL_C,
+// matching input.c3's kitty-protocol branch exactly so a model sees the
+// same message on both backends.
+fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 	milktea::KeyMsg k;
-	k.ctrl = ctrl;
+	k.ctrl = mods.ctrl;
+	k.alt = mods.alt;
+	k.shift = mods.shift;
+
 	switch (key) {
-		case rl::RLKeyboardKey.ENTER: k.code = milktea::KeyCode.ENTER;
+		case rl::RLKeyboardKey.ENTER:
+		case rl::RLKeyboardKey.KP_ENTER:
+			k.code = milktea::KeyCode.ENTER;
 		case rl::RLKeyboardKey.BACKSPACE: k.code = milktea::KeyCode.BACKSPACE;
 		case rl::RLKeyboardKey.ESCAPE: k.code = milktea::KeyCode.ESC;
 		case rl::RLKeyboardKey.TAB: k.code = milktea::KeyCode.TAB;
@@ -96,12 +132,36 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, bool ctrl) {
 		case rl::RLKeyboardKey.HOME: k.code = milktea::KeyCode.HOME;
 		case rl::RLKeyboardKey.END: k.code = milktea::KeyCode.END;
 		case rl::RLKeyboardKey.DELETE: k.code = milktea::KeyCode.DELETE;
+		case rl::RLKeyboardKey.INSERT: k.code = milktea::KeyCode.INSERT;
 		case rl::RLKeyboardKey.PAGE_UP: k.code = milktea::KeyCode.PAGE_UP;
 		case rl::RLKeyboardKey.PAGE_DOWN: k.code = milktea::KeyCode.PAGE_DOWN;
-		case rl::RLKeyboardKey.C:
-			if (ctrl) { k.code = milktea::KeyCode.CTRL_C; }
-			else { return NO_KEY~; }
-		default: return NO_KEY~;
+		case rl::RLKeyboardKey.F1: k.code = milktea::KeyCode.F1;
+		case rl::RLKeyboardKey.F2: k.code = milktea::KeyCode.F2;
+		case rl::RLKeyboardKey.F3: k.code = milktea::KeyCode.F3;
+		case rl::RLKeyboardKey.F4: k.code = milktea::KeyCode.F4;
+		case rl::RLKeyboardKey.F5: k.code = milktea::KeyCode.F5;
+		case rl::RLKeyboardKey.F6: k.code = milktea::KeyCode.F6;
+		case rl::RLKeyboardKey.F7: k.code = milktea::KeyCode.F7;
+		case rl::RLKeyboardKey.F8: k.code = milktea::KeyCode.F8;
+		case rl::RLKeyboardKey.F9: k.code = milktea::KeyCode.F9;
+		case rl::RLKeyboardKey.F10: k.code = milktea::KeyCode.F10;
+		case rl::RLKeyboardKey.F11: k.code = milktea::KeyCode.F11;
+		case rl::RLKeyboardKey.F12: k.code = milktea::KeyCode.F12;
+		default:
+			// A-Z are contiguous from 65 in raylib's table.
+			if (mods.ctrl && key >= rl::RLKeyboardKey.A && key <= rl::RLKeyboardKey.Z) {
+				uint lower = (uint)((int)key - (int)rl::RLKeyboardKey.A) + 'a';
+				// Narrow, like input.c3: extra modifiers stay RUNE so
+				// ctrl+shift+c remains distinguishable from a quit.
+				if (lower == 'c' && !mods.alt && !mods.shift) {
+					k.code = milktea::KeyCode.CTRL_C;
+					return k;
+				}
+				k.code = milktea::KeyCode.RUNE;
+				k.rune = lower;
+				return k;
+			}
+			return NO_KEY~;
 	}
 	return k;
 }
@@ -150,18 +210,26 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	m.init();
 
 	while (!rl::window_should_close()) {
-		bool ctrl = rl::is_key_down(rl::RLKeyboardKey.LEFT_CONTROL) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_CONTROL);
+		Mods mods = read_mods();
 
 		// Runes first (letters/digits/punctuation), then non-printable keys —
 		// raylib queues both independently per frame.
+		//
+		// ctrl+letter is deliberately skipped here and synthesized in
+		// translate_key() instead: platforms disagree on whether it produces
+		// text at all, and letting both paths fire would deliver the keypress
+		// twice. Shift is left off runes because it is already baked into the
+		// character ('A' vs 'a'); reporting it again would make a model
+		// testing `shift` see every capital as modified.
 		int ch;
 		while ((ch = rl::get_char_pressed()) != 0) {
-			milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch };
+			if (mods.ctrl) continue;
+			milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch, .alt = mods.alt };
 			m.update({ .kind = milktea::MsgKind.KEY, .key = k });
 		}
 		rl::RLKeyboardKey key;
 		while ((key = rl::get_key_pressed()) != rl::RLKeyboardKey.NONE) {
-			if (try k = translate_key(key, ctrl)) {
+			if (try k = translate_key(key, mods)) {
 				m.update({ .kind = milktea::MsgKind.KEY, .key = k });
 			}
 		}
