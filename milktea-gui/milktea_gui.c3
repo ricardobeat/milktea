@@ -52,19 +52,31 @@ fn int[] build_codepoints() {
 	return cps[:n];
 }
 
-// to_rl resolves a cell's background/foreground color for drawing. NONE
-// (the terminal-default color) renders as black — a real terminal would
-// leave its own background showing, and black is the closest a GUI window
-// has to that without tracking a separate "terminal background" concept.
-fn RLColor to_rl(xray::Color c) {
-	if (c.kind == xray::ColorKind.TRUECOLOR) {
-		return { c.r, c.g, c.b, 255 };
+// to_rl resolves a cell color for drawing. `fallback` is what a NONE or
+// TRANSPARENT color becomes — the caller supplies it because "terminal
+// default" means black for a background but white for a foreground, and
+// this function has no way to tell which role it is resolving.
+//
+// TRANSPARENT reaching here means xray had nothing to composite against,
+// so it resolves to the same default as NONE rather than to a real alpha:
+// the cell grid is already flattened by the time it arrives.
+fn RLColor to_rl(xray::Color c, RLColor fallback) {
+	switch (c.kind) {
+		case xray::ColorKind.TRUECOLOR:
+			// effective_alpha() maps xray's a == 0 ("opaque", for backwards
+			// compatibility) onto a real 255 rather than a transparent 0.
+			return { c.r, c.g, c.b, c.effective_alpha() };
+		case xray::ColorKind.ANSI:
+			// ANSI carries a 0-15 index, but clamp rather than trust it:
+			// an out-of-range index would read past ANSI16.
+			Rgb p = ANSI16[c.index & 0x0f];
+			return { p.r, p.g, p.b, 255 };
+		case xray::ColorKind.ANSI256:
+			Rgb p = ansi256_rgb(c.index);
+			return { p.r, p.g, p.b, 255 };
+		default:
+			return fallback;
 	}
-	if (c.kind == xray::ColorKind.NONE) return rl::BLACK;
-	// ANSI/256 fallback: apps that rely on the 16/256-color palette instead
-	// of truecolor will look flat here — this backend only really resolves
-	// truecolor styles.
-	return rl::WHITE;
 }
 
 faultdef NO_KEY;
@@ -198,12 +210,12 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 					int px = (int)col * opts.cell_w;
 					int py = (int)row * opts.cell_h;
 
-					rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, to_rl(cell.style.bg));
+					rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, to_rl(cell.style.bg, rl::BLACK));
 					if (cell.content_len > 0 && cell.content[0] != ' ') {
 						char[9] buf;
 						mem::copy(&buf, &cell.content, cell.content_len);
 						buf[cell.content_len] = 0;
-						RLColor fg = cell.style.fg.is_none() ? rl::WHITE : to_rl(cell.style.fg);
+						RLColor fg = to_rl(cell.style.fg, rl::WHITE);
 						rl::draw_text_ex(font, (ZString)&buf[0], { (float)px, (float)py }, (float)opts.font_size, 0, fg);
 					}
 				}
