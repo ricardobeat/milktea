@@ -13,6 +13,7 @@ fn int main() {
 		.cols = 80, .rows = 24,
 		.cell_w = 10, .cell_h = 19,
 		.font_size = 17,
+		.corner_radius = 8.0,
 	});
 	return 0;
 }

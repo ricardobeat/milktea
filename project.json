@@ -105,6 +105,16 @@
       "opt": "O0",
       "dependencies": ["raylib6"]
     },
+    "examples/doom-fire-gui": {
+      "type": "executable",
+      "sources": [
+        "milktea/**", "glaze/**", "xray/**", "milktea-gui/**",
+        "examples/doom-fire-gui/**"
+      ],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "O0",
+      "dependencies": ["raylib6"]
+    },
     "examples/pagination": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "examples/pagination/**"],

@@ -21,6 +21,8 @@ struct GuiOptions {
 	int cell_w;
 	int cell_h;
 	int font_size;
+	bool undecorated;
+	float corner_radius; // pixels; 0 = square corners (default). Implies undecorated + a transparent framebuffer.
 }
 
 fn GuiOptions default_options() {
@@ -31,6 +33,30 @@ fn GuiOptions default_options() {
 		.font_size = 17,
 	};
 }
+
+// ROUND_CORNERS_FS composites a texture onto a transparent-window
+// framebuffer, cutting the four corners to a rounded rect by zeroing
+// alpha outside the radius (signed-distance test against the nearest
+// corner center). `size` is the destination rect in pixels, `radius`
+// the corner radius in the same units — both set per-frame since the
+// window (and so the texture) can be resized live.
+const String ROUND_CORNERS_FS = `
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+out vec4 finalColor;
+uniform sampler2D texture0;
+uniform vec2 size;
+uniform float radius;
+void main() {
+	vec4 c = texture(texture0, fragTexCoord);
+	vec2 p = fragTexCoord * size;
+	vec2 corner = clamp(p, vec2(radius), size - vec2(radius));
+	float d = length(p - corner);
+	c.a *= 1.0 - smoothstep(radius - 1.0, radius + 1.0, d);
+	finalColor = c;
+}
+`;
 
 extern fn char* getenv(char* name);
 
@@ -248,6 +274,70 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 	return k;
 }
 
+// draw_block_glyph paints U+2580-block-element codepoints as filled rects
+// instead of going through font rendering. These glyphs are meant to tile
+// pixel-perfectly against their neighbors (doom-fire's ▀ half-blocks rely
+// on this), but a font's own bearing/advance metrics rarely put the glyph
+// flush with the cell box — leaving visible seams or an offset grid, as
+// seen with JetBrains Mono. Drawing the shapes ourselves sidesteps font
+// metrics entirely. Returns true if it handled the codepoint (caller
+// should skip the text draw), false for anything else (falls through to
+// normal glyph rendering).
+fn bool draw_block_glyph(uint cp, int px, int py, int cw, int ch, RLColor fg, RLColor bg) {
+	switch (cp) {
+		case 0x2588: // █ full block
+			rl::draw_rectangle(px, py, cw, ch, fg);
+			return true;
+		case 0x2580: // ▀ upper half
+			rl::draw_rectangle(px, py, cw, ch / 2, fg);
+			return true;
+		case 0x2584: // ▄ lower half
+			rl::draw_rectangle(px, py + ch / 2, cw, ch - ch / 2, fg);
+			return true;
+		case 0x258c: // ▌ left half
+			rl::draw_rectangle(px, py, cw / 2, ch, fg);
+			return true;
+		case 0x2590: // ▐ right half
+			rl::draw_rectangle(px + cw / 2, py, cw - cw / 2, ch, fg);
+			return true;
+		case 0x2591: // ░ light shade (25%)
+			rl::draw_rectangle(px, py, cw, ch, shade_blend(fg, bg, 0.25f));
+			return true;
+		case 0x2592: // ▒ medium shade (50%)
+			rl::draw_rectangle(px, py, cw, ch, shade_blend(fg, bg, 0.5f));
+			return true;
+		case 0x2593: // ▓ dark shade (75%)
+			rl::draw_rectangle(px, py, cw, ch, shade_blend(fg, bg, 0.75f));
+			return true;
+		case 0x2596: // ▖ quadrant lower-left
+			rl::draw_rectangle(px, py + ch / 2, cw / 2, ch - ch / 2, fg);
+			return true;
+		case 0x2597: // ▗ quadrant lower-right
+			rl::draw_rectangle(px + cw / 2, py + ch / 2, cw - cw / 2, ch - ch / 2, fg);
+			return true;
+		case 0x2598: // ▘ quadrant upper-left
+			rl::draw_rectangle(px, py, cw / 2, ch / 2, fg);
+			return true;
+		case 0x259d: // ▝ quadrant upper-right
+			rl::draw_rectangle(px + cw / 2, py, cw - cw / 2, ch / 2, fg);
+			return true;
+		default:
+			return false;
+	}
+}
+
+// shade_blend mixes fg toward bg by `amount` (0 = fg, 1 = bg) — used for
+// the ░▒▓ shade glyphs, which are visually a translucency over whatever
+// sits behind them rather than a distinct solid color.
+fn RLColor shade_blend(RLColor fg, RLColor bg, float amount) @local {
+	return {
+		(char)((float)fg.r + ((float)bg.r - (float)fg.r) * amount),
+		(char)((float)fg.g + ((float)bg.g - (float)fg.g) * amount),
+		(char)((float)fg.b + ((float)bg.b - (float)fg.b) * amount),
+		255,
+	};
+}
+
 // load_mono_font rasterizes the atlas at the display's actual pixel density
 // (2x on retina) so glyphs stay crisp when raylib's HighDPI backbuffer
 // scales drawing coordinates back up — same trick as @2x image assets.
@@ -274,11 +364,52 @@ fn rl::RLFont load_mono_font(int font_size) {
 // quits. `m` must already be initialized (init() called) by the caller,
 // mirroring milktea::Program.run()'s contract for consistency — actually,
 // for simplicity this calls init() itself, same as milktea::@run does.
+// dispatch_gui sends msg to the model and runs any Cmd chain it returns,
+// mirroring milktea::Program's dispatch() — the GUI loop drives update()
+// by hand instead of going through Program.run(), so it needs its own
+// copy of the same Cmd-chaining and QUIT handling.
+fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
+	if (msg.kind == milktea::MsgKind.QUIT) return true;
+	milktea::Cmd c = m.update(msg);
+	int chain = 0;
+	while (c != null && chain < milktea::MAX_BATCH) {
+		milktea::Msg next = c();
+		if (next.kind == milktea::MsgKind.QUIT) return true;
+		if (next.kind == milktea::MsgKind.NONE) break;
+		c = m.update(next);
+		chain++;
+	}
+	return false;
+}
+
 fn void run(milktea::Model m, GuiOptions opts = default_options()) {
-	rl::set_config_flags(rl::RLConfigFlag.WINDOW_HIGHDPI);
+	bool rounded = opts.corner_radius > 0.0f;
+
+	uint config_flags = (uint)rl::RLConfigFlag.WINDOW_HIGHDPI | (uint)rl::RLConfigFlag.WINDOW_RESIZABLE;
+	if (opts.undecorated || rounded) config_flags |= (uint)rl::RLConfigFlag.WINDOW_UNDECORATED;
+	if (rounded) config_flags |= (uint)rl::RLConfigFlag.WINDOW_TRANSPARENT;
+	rl::set_config_flags((rl::RLConfigFlag)config_flags);
 	rl::init_window(opts.cols * opts.cell_w, opts.rows * opts.cell_h, (ZString)opts.title.zstr_tcopy());
+	rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
 	rl::set_target_fps(60);
 	rl::RLFont font = load_mono_font(opts.font_size);
+
+	// Rounded corners need real per-pixel transparency at the window's
+	// edges — something no raylib/GLFW window flag provides (undecorated
+	// just removes the OS chrome; the framebuffer itself stays a plain
+	// rectangle). So the scene is drawn into an offscreen RenderTexture
+	// first, then composited onto the (transparent) window through a
+	// shader that zeroes alpha outside a rounded-rect SDF — the actual
+	// corner cut comes from that alpha, not from any window shape API.
+	rl::RLRenderTexture2D target;
+	rl::RLShader round_shader;
+	int round_radius_loc, round_size_loc;
+	if (rounded) {
+		target = rl::load_render_texture(opts.cols * opts.cell_w, opts.rows * opts.cell_h);
+		round_shader = rl::load_shader_from_memory(null, (ZString)ROUND_CORNERS_FS);
+		round_radius_loc = round_shader.get_location("radius");
+		round_size_loc = round_shader.get_location("size");
+	}
 
 	// draw() needs a live g_program only for its scratch buffers and to
 	// answer screen_width()/screen_height(); nothing else about Program is
@@ -289,9 +420,60 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
 
-	m.init();
+	milktea::Cmd init_cmd = m.init();
+	{
+		int chain = 0;
+		milktea::Cmd c = init_cmd;
+		while (c != null && chain < milktea::MAX_BATCH) {
+			milktea::Msg next = c();
+			if (next.kind == milktea::MsgKind.QUIT) return;
+			if (next.kind == milktea::MsgKind.NONE) break;
+			c = m.update(next);
+			chain++;
+		}
+	}
 
-	while (!rl::window_should_close()) {
+	bool should_quit = false;
+	while (!should_quit && !rl::window_should_close()) {
+		// Fire expired timers registered via milktea::tick()/every() —
+		// mirrors Program.run()'s timer loop, since this GUI loop bypasses
+		// Program.run() entirely and drives update() by hand.
+		sz now = milktea::time_ms();
+		for (sz i = 0; i < milktea::MAX_TIMERS; i++) {
+			if (prog.timers[i].active && now >= prog.timers[i].deadline_ms) {
+				milktea::Cmd cb = prog.timers[i].callback;
+				void* owner = prog.timers[i].owner;
+				prog.timers[i].active = false;
+				milktea::Msg tmsg = cb();
+				tmsg.owner = owner;
+				if (tmsg.kind != milktea::MsgKind.NONE && dispatch_gui(m, tmsg)) {
+					should_quit = true;
+					break;
+				}
+				now = milktea::time_ms();
+			}
+		}
+		if (should_quit) break;
+
+		if (rl::is_window_resized()) {
+			int new_cols = rl::get_screen_width() / opts.cell_w;
+			int new_rows = rl::get_screen_height() / opts.cell_h;
+			if (new_cols < 1) new_cols = 1;
+			if (new_rows < 1) new_rows = 1;
+			if (new_cols != opts.cols || new_rows != opts.rows) {
+				opts.cols = new_cols;
+				opts.rows = new_rows;
+				prog.cached_ws.ws_col = (ushort)new_cols;
+				prog.cached_ws.ws_row = (ushort)new_rows;
+				milktea::Msg wm = { .kind = milktea::MsgKind.WINDOW_SIZE, .window_size = { new_cols, new_rows } };
+				if (rounded) {
+					rl::unload_render_texture(target);
+					target = rl::load_render_texture(new_cols * opts.cell_w, new_rows * opts.cell_h);
+				}
+				if (dispatch_gui(m, wm)) { should_quit = true; break; }
+			}
+		}
+
 		Mods mods = read_mods();
 
 		// Runes first (letters/digits/punctuation), then non-printable keys —
@@ -307,14 +489,15 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		while ((ch = rl::get_char_pressed()) != 0) {
 			if (mods.ctrl) continue;
 			milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch, .alt = mods.alt };
-			m.update({ .kind = milktea::MsgKind.KEY, .key = k });
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
 		}
 		rl::RLKeyboardKey key;
 		while ((key = rl::get_key_pressed()) != rl::RLKeyboardKey.NONE) {
 			if (try k = translate_key(key, mods)) {
-				m.update({ .kind = milktea::MsgKind.KEY, .key = k });
+				if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
 			}
 		}
+		if (should_quit) break;
 
 		int mcol = rl::get_mouse_x() / opts.cell_w;
 		int mrow = rl::get_mouse_y() / opts.cell_h;
@@ -324,11 +507,11 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			// before the raw MouseMsg reaches update() — same order as the
 			// terminal event loop's dispatch().
 			milktea::dispatch_click(mcol, mrow);
-			m.update({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
 		}
 		if (rl::is_mouse_button_released(rl::RLMouseButton.LEFT)) {
 			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_RELEASE, .row = mrow, .col = mcol };
-			m.update({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
 		}
 		float wheel = rl::get_mouse_wheel_move();
 		if (wheel != 0.0f) {
@@ -336,12 +519,14 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				.button = wheel > 0 ? milktea::MouseButton.MOUSE_WHEEL_UP : milktea::MouseButton.MOUSE_WHEEL_DOWN,
 				.action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol,
 			};
-			m.update({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
 		}
+		if (should_quit) break;
 
 		milktea::View v = m.view();
 
 		rl::begin_drawing();
+		if (rounded) rl::begin_texture_mode(target);
 
 		if (v.cells.ptr != null) {
 			// Every cell paints its own background — including an unset one,
@@ -360,20 +545,45 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 					int px = (int)col * opts.cell_w;
 					int py = (int)row * opts.cell_h;
 
-					rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, to_rl(cell.style.bg, rl::BLACK));
+					RLColor bg = to_rl(cell.style.bg, rl::BLACK);
+					rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, bg);
 					if (cell.content_len > 0 && cell.content[0] != ' ') {
-						char[9] buf;
-						mem::copy(&buf, &cell.content, cell.content_len);
-						buf[cell.content_len] = 0;
 						RLColor fg = to_rl(cell.style.fg, rl::WHITE);
-						rl::draw_text_ex(font, (ZString)&buf[0], { (float)px, (float)py }, (float)opts.font_size, 0, fg);
+						uint cp;
+						xray::utf8_decode(cell.content_str(), &cp);
+						if (!draw_block_glyph(cp, px, py, opts.cell_w, opts.cell_h, fg, bg)) {
+							char[9] buf;
+							mem::copy(&buf, &cell.content, cell.content_len);
+							buf[cell.content_len] = 0;
+							rl::draw_text_ex(font, (ZString)&buf[0], { (float)px, (float)py }, (float)opts.font_size, 0, fg);
+						}
 					}
 				}
 			}
 		}
 
+		if (rounded) {
+			rl::end_texture_mode();
+			rl::clear_background(rl::BLANK);
+			float[2] tex_size = { (float)target.texture.width, (float)target.texture.height };
+			round_shader.set_value(round_size_loc, &tex_size, rl::RLShaderUniformDataType.VEC2);
+			round_shader.set_value(round_radius_loc, &opts.corner_radius, rl::RLShaderUniformDataType.FLOAT);
+			rl::begin_shader_mode(round_shader);
+			// Render textures are stored bottom-up; flip the source rect's
+			// height negative to draw them right-side up, same trick raylib's
+			// own examples use.
+			rl::draw_texture_rec(
+				target.texture,
+				{ 0, 0, (float)target.texture.width, -(float)target.texture.height },
+				{ 0, 0 }, rl::WHITE);
+			rl::end_shader_mode();
+		}
 		rl::end_drawing();
 	}
 
+	if (rounded) {
+		rl::unload_shader(round_shader);
+		rl::unload_render_texture(target);
+	}
 	rl::close_window();
 }
