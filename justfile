@@ -31,3 +31,8 @@ gen-targets:
 # from Unicode data (edit scripts/gen_width.py first)
 gen-width:
     python3 scripts/gen_width.py
+
+# Regenerate the patched, cell-exact webfont used by examples/nanobots/index.html
+# from the characters milktea.txt actually uses
+gen-symbol-font:
+    python3 scripts/gen_symbol_font.py
