@@ -355,6 +355,14 @@ fn int Textarea.text_offset(&self) {
 	return (gutter > 0 ? gutter + 1 : 0) + (int)self.prompt.len;
 }
 
+// blank_span returns a run of spaces, for padding a styled run out to a
+// fixed width.
+fn String blank_span(int width) @local {
+	DString out = dstring::temp_with_capacity(width);
+	for (int i = 0; i < width; i++) out.append_char(' ');
+	return out.str_view();
+}
+
 fn String Textarea.view(&self) {
 	DString out = dstring::temp();
 	int lc      = self.line_count();
@@ -461,8 +469,10 @@ fn String Textarea.view(&self) {
 					String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
 					out.append_string(self.line_number_style.render(num));
 				} else {
-					// Continuation line: blank gutter of same width
-					for (int g = 0; g < gutter_visual; g++) out.append_char(' ');
+					// Continuation row: the gutter is blank, but it still has to carry
+					// the gutter style. Unstyled spaces would drop whatever background
+					// the gutter shares with the text and punch a hole in the line.
+					out.append_string(self.line_number_style.render(blank_span(gutter_visual)));
 				}
 			}
 
@@ -470,8 +480,9 @@ fn String Textarea.view(&self) {
 			if (chunk_idx == 0 && self.prompt.len > 0) {
 				out.append_string(self.prompt_style.render(self.prompt));
 			} else if (chunk_idx > 0 && self.prompt.len > 0) {
-				// Blank prompt space on continuation lines
-				for (int p = 0; p < prompt_visual; p++) out.append_char(' ');
+				// Blank prompt space on continuation lines, styled for the same
+				// reason as the blank gutter above.
+				out.append_string(self.prompt_style.render(blank_span(prompt_visual)));
 			}
 
 			String chunk_text = line_text[chunk_start:chunk_end - chunk_start];
