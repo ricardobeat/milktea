@@ -368,7 +368,12 @@ fn rl::RLFont load_mono_font(int font_size) {
 // mirroring milktea::Program's dispatch() — the GUI loop drives update()
 // by hand instead of going through Program.run(), so it needs its own
 // copy of the same Cmd-chaining and QUIT handling.
+// Set by dispatch_gui whenever a msg reaches the model; run()'s loop
+// consumes it to decide whether this frame needs a new view() at all.
+bool g_dirty = true;
+
 fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
+	g_dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
 	milktea::Cmd c = m.update(msg);
 	int chain = 0;
@@ -432,6 +437,21 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			chain++;
 		}
 	}
+
+	// Nothing about a milktea view changes between frames unless a msg
+	// (key, mouse, timer, resize) moved the model, so the drawn grid is
+	// compared against the previous frame's copy and an identical one
+	// skips the whole GPU path: no cell rects, no swap. The window keeps
+	// showing the front buffer that is already correct. Idle apps then
+	// cost a poll and a sleep per frame instead of cols*rows draw calls.
+	xray::Cell[] prev_cells;
+	sz prev_count = 0;
+	bool prev_valid = false;
+	// A model only ever moves through update(), and every update() on this
+	// loop goes through dispatch_gui, so a frame that dispatched nothing
+	// cannot have produced a different view — skip view() too, not just
+	// the draw. g_dirty starts true so the first frame always renders.
+	g_dirty = true;
 
 	bool should_quit = false;
 	while (!should_quit && !rl::window_should_close()) {
@@ -523,7 +543,32 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		if (should_quit) break;
 
+		if (!g_dirty) {
+			rl::poll_input_events();
+			rl::wait_time(1.0 / 60.0);
+			continue;
+		}
+		g_dirty = false;
+
 		milktea::View v = m.view();
+
+		sz cell_count = v.cells.ptr != null ? v.cells_width * v.cells_height : 0;
+		bool unchanged = prev_valid && cell_count == prev_count &&
+			(cell_count == 0 || mem::equals(prev_cells, v.cells[:cell_count]));
+		if (unchanged) {
+			// begin/end_drawing normally does this for us; standing in for
+			// it keeps input flowing and the frame rate capped while idle.
+			rl::poll_input_events();
+			rl::wait_time(1.0 / 60.0);
+			continue;
+		}
+		if (cell_count != prev_count) {
+			if (prev_cells.ptr != null) mem::free(prev_cells);
+			prev_cells = cell_count > 0 ? mem::new_array(xray::Cell, cell_count) : {};
+			prev_count = cell_count;
+		}
+		if (cell_count > 0) prev_cells[..] = v.cells[:cell_count];
+		prev_valid = true;
 
 		rl::begin_drawing();
 		if (rounded) rl::begin_texture_mode(target);
@@ -581,6 +626,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		rl::end_drawing();
 	}
 
+	if (prev_cells.ptr != null) mem::free(prev_cells);
 	if (rounded) {
 		rl::unload_shader(round_shader);
 		rl::unload_render_texture(target);
