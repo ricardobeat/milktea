@@ -36,7 +36,10 @@ QUICKJS_C_SOURCES = [
 #
 # Recognized keys:
 #   extra_dirs   - extra top-level source dirs prepended before the example's
-#                  own dir, e.g. ["xray"] -> "xray/**"
+#                  own dir, e.g. ["xray"] -> "xray/**". "milktea", "glaze",
+#                  "boba", "xray", "src" are already in the global sources, so
+#                  do not list them here unless you need them explicitly for
+#                  clarity (the script will not strip them if you do).
 #   sources      - full explicit `sources` list, overrides everything else
 #                  (used for targets with per-file sources, e.g. doom-fire)
 #   c_sources    - full explicit `c-sources` list (default: tty_winsize.c only)
@@ -45,32 +48,31 @@ QUICKJS_C_SOURCES = [
 #                  False to omit the key entirely, as cursors/inputbox do)
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
+#   dependencies         - value for "dependencies" (e.g. ["raylib6"])
 OVERRIDES = {
-    "component-viewer": {"extra_dirs": ["boba", "xray"]},
-    "paste": {"extra_dirs": ["boba", "xray"]},
-    "split-editors": {"extra_dirs": ["xray"]},
-    "clock": {"extra_dirs": ["xray"]},
-    "nanobots": {"extra_dirs": ["xray"]},
-    "paint": {"extra_dirs": ["xray"]},
-    "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
-    "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
+    "component-viewer": {},
+    "paste": {},
+    "split-editors": {},
+    "clock": {},
+    "nanobots": {},
+    "paint": {},
+    "minecraft": {"extra_dirs": ["taro"]},
+    "wolf3d": {"extra_dirs": ["taro"]},
     "wolf3d-server": {
-        "sources": ["src/**", "examples/wolf3d-server/**"],
+        "sources": ["examples/wolf3d-server/**"],
         "linked_libraries": ["sqlite3"],
         "linker_search_paths": ["/opt/homebrew/lib"],
     },
-    "cursors": {"extra_dirs": ["boba", "xray"], "opt": "O0", "strip_unused": False},
-    "inputbox": {"extra_dirs": ["xray"], "opt": "O0", "strip_unused": False},
+    "cursors": {"opt": "O0", "strip_unused": False},
+    "inputbox": {"opt": "O0", "strip_unused": False},
     "doom-fire": {
-        "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire.c3"],
+        "sources": ["examples/doom-fire/doom-fire.c3"],
     },
     "doom-fire-milktea": {
-        "sources": ["milktea/**", "glaze/**", "examples/doom-fire/doom-fire-milktea.c3"],
+        "sources": ["examples/doom-fire/doom-fire-milktea.c3"],
     },
     "doom-fire-donut": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
             "examples/lib/glb.c3",
             "examples/doom-fire-donut/**",
             "examples/lib/stb_json.c3",
@@ -79,8 +81,6 @@ OVERRIDES = {
     },
     "glb-viewer": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
             "examples/lib/glb.c3",
             "examples/lib/stb_json.c3",
             "examples/glb-viewer/**",
@@ -89,8 +89,6 @@ OVERRIDES = {
     },
     "oiia-player": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
             "examples/oiia-player/**",
             "examples/lib/stb_image.c3",
             "examples/lib/stb_json.c3",
@@ -102,10 +100,30 @@ OVERRIDES = {
         ],
     },
     "taro": {
-        "extra_dirs": ["xray", "boba", "taro"],
+        "extra_dirs": ["taro"],
         "c_sources": QUICKJS_C_SOURCES,
         "linked_libraries": ["curl"],
         "strip_unused": False,
+    },
+    "dos-app-gui": {
+        "sources": [
+            "milktea-gui/**",
+            "examples/dos-app/button.c3",
+            "examples/dos-app/dialog.c3",
+            "examples/dos-app/menu.c3",
+            "examples/dos-app/picker.c3",
+            "examples/dos-app/theme.c3",
+            "examples/dos-app-gui/**",
+        ],
+        "opt": "O0",
+        "strip_unused": False,
+        "dependencies": ["raylib6"],
+    },
+    "doom-fire-gui": {
+        "extra_dirs": ["milktea-gui"],
+        "opt": "O0",
+        "strip_unused": False,
+        "dependencies": ["raylib6"],
     },
 }
 
@@ -143,8 +161,7 @@ def build_target(name):
         sources = override["sources"]
     else:
         extra_dirs = override.get("extra_dirs", [])
-        sources = ["milktea/**", "glaze/**"]
-        sources.extend(f"{d}/**" for d in extra_dirs)
+        sources = [f"{d}/**" for d in extra_dirs]
         sources.append(f"examples/{name}/**")
 
     target = {
@@ -159,6 +176,8 @@ def build_target(name):
         target["linked-libraries"] = override["linked_libraries"]
     if "linker_search_paths" in override:
         target["linker-search-paths"] = override["linker_search_paths"]
+    if "dependencies" in override:
+        target["dependencies"] = override["dependencies"]
     return target
 
 
