@@ -115,12 +115,14 @@ OVERRIDES = {
         ],
         "opt": "O0",
         "strip_unused": False,
+        "c_sources": ["milktea-gui/macos_window.c"],
         "dependencies": ["raylib6"],
     },
     "doom-fire-gui": {
         "extra_dirs": ["milktea-gui"],
         "opt": "O0",
         "strip_unused": False,
+        "c_sources": ["milktea-gui/macos_window.c"],
         "dependencies": ["raylib6"],
     },
 }

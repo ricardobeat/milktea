@@ -28,7 +28,40 @@ struct GuiOptions {
 	// through the same font, so a view can be inspected as an image with
 	// nobody at the keyboard.
 	String screenshot_path;
+	// chrome_rows puts the top N cell rows in place of the platform title
+	// bar: where the platform allows it the window keeps its buttons but
+	// loses the title bar text, and a drag starting in those rows moves the
+	// window. Zero keeps the ordinary window chrome.
+	int chrome_rows;
 }
+
+// Window chrome, implemented in macos_window.c. See that file for what it
+// does and why it is not done here.
+extern fn int milktea_macos_inline_titlebar(int row_height)
+	@cname("milktea_macos_inline_titlebar") @feat(DARWIN);
+
+// CHROME_BUTTONS_RIGHT is how far the window buttons reach from the window's
+// left edge, in points: the sum of the layout constants in macos_window.c.
+// It is only an estimate, for an app that has to lay out before there is a
+// window to measure; g_chrome_buttons_right replaces it with the real edge as
+// soon as run() has one.
+const int CHROME_BUTTONS_RIGHT = 66;
+int g_chrome_buttons_right @local = CHROME_BUTTONS_RIGHT;
+
+// chrome_inset_cells reports how many cells of the first row the window
+// buttons occupy, so an app can start its own top bar after them instead of
+// under them. Zero when the platform keeps its own title bar.
+fn int chrome_inset_cells(int cell_w) {
+	$if env::DARWIN:
+		if (cell_w > 0) return (g_chrome_buttons_right + cell_w - 1) / cell_w;
+	$endif
+	return 0;
+}
+
+// How far the pointer has to travel in the title strip before a press turns
+// into a window drag, in screen pixels. Enough to swallow the wobble of a
+// click, small enough that a deliberate drag starts at once.
+const int DRAG_SLOP = 3;
 
 fn GuiOptions default_options() {
 	return {
@@ -422,6 +455,20 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	rl::set_target_fps(60);
 	rl::RLFont font = load_mono_font(opts.font_size);
 
+	$if env::DARWIN:
+		if (opts.chrome_rows > 0) {
+			int buttons_right = milktea_macos_inline_titlebar(opts.cell_h);
+			if (buttons_right > 0) {
+				g_chrome_buttons_right = buttons_right;
+				// Giving the content view the title bar's height changed the
+				// window's size behind GLFW's back. Asking for the original
+				// size again puts GLFW and the framebuffer raylib draws into
+				// back in agreement.
+				rl::set_window_size(opts.cols * opts.cell_w, opts.rows * opts.cell_h);
+			}
+		}
+	$endif
+
 	// Rounded corners need real per-pixel transparency at the window's
 	// edges — something no raylib/GLFW window flag provides (undecorated
 	// just removes the OS chrome; the framebuffer itself stays a plain
@@ -488,6 +535,19 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	g_dirty = true;
 
 	bool should_quit = false;
+
+	// Dragging: a press in the title strip only becomes a drag once the
+	// pointer has moved, so a click there still reaches the app and opens a
+	// menu. Pointer and window positions are kept in screen coordinates,
+	// because window-relative ones stop changing as soon as the window
+	// starts following the pointer.
+	bool drag_pending = false;
+	bool drag_active = false;
+	int drag_win_x = 0;
+	int drag_win_y = 0;
+	int drag_ptr_x = 0;
+	int drag_ptr_y = 0;
+
 	while (!should_quit && !rl::window_should_close()) {
 		// Fire expired timers registered via milktea::tick()/every() —
 		// mirrors Program.run()'s timer loop, since this GUI loop bypasses
@@ -528,6 +588,24 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			}
 		}
 
+		if (drag_pending) {
+			if (!rl::is_mouse_button_down(rl::RLMouseButton.LEFT)) {
+				drag_pending = false;
+				drag_active = false;
+			} else {
+				rl::RLVector2 wp = rl::get_window_position();
+				int dx = (int)wp.x + rl::get_mouse_x() - drag_ptr_x;
+				int dy = (int)wp.y + rl::get_mouse_y() - drag_ptr_y;
+				if (!drag_active && (dx > DRAG_SLOP || dx < -DRAG_SLOP
+					|| dy > DRAG_SLOP || dy < -DRAG_SLOP)) {
+					drag_active = true;
+				}
+				if (drag_active) {
+					rl::set_window_position(drag_win_x + dx, drag_win_y + dy);
+				}
+			}
+		}
+
 		Mods mods = read_mods();
 
 		// Runes first (letters/digits/punctuation), then non-printable keys —
@@ -556,6 +634,15 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		int mcol = rl::get_mouse_x() / opts.cell_w;
 		int mrow = rl::get_mouse_y() / opts.cell_h;
 		if (rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT)) {
+			if (opts.chrome_rows > 0 && mrow < opts.chrome_rows) {
+				rl::RLVector2 wp = rl::get_window_position();
+				drag_pending = true;
+				drag_active = false;
+				drag_win_x = (int)wp.x;
+				drag_win_y = (int)wp.y;
+				drag_ptr_x = drag_win_x + rl::get_mouse_x();
+				drag_ptr_y = drag_win_y + rl::get_mouse_y();
+			}
 			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol };
 			// Fires on_click/on_click_outside against last frame's layout
 			// before the raw MouseMsg reaches update() — same order as the

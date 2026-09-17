@@ -104,12 +104,14 @@
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/dos-app/button.c3", "examples/dos-app/dialog.c3", "examples/dos-app/menu.c3", "examples/dos-app/picker.c3", "examples/dos-app/theme.c3", "examples/dos-app-gui/**"],
       "opt": "O0",
+      "c-sources": ["milktea-gui/macos_window.c"],
       "dependencies": ["raylib6"]
     },
     "examples/doom-fire-gui": {
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/doom-fire-gui/**"],
       "opt": "O0",
+      "c-sources": ["milktea-gui/macos_window.c"],
       "dependencies": ["raylib6"]
     },
     "examples/pagination": {
