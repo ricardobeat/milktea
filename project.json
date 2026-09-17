@@ -1,25 +1,39 @@
 {
   "langrev": "1",
-  "warnings": ["no-unused-parameter", "no-unused-import"],
+  "warnings": [
+    "no-unused-parameter",
+    "no-unused-import"
+  ],
   "macos-min-version": "27.0",
-  "sources": ["milktea/**", "glaze/**", "boba/**", "xray/**", "src/**", "test/**"],
+  "sources": [
+    "milktea/**",
+    "glaze/**",
+    "boba/**",
+    "xray/**",
+    "src/**",
+    "test/**"
+  ],
+  "c-sources": [
+    "milktea/tty_winsize.c"
+  ],
   "targets": {
     "milktea": {
-      "type": "static-lib",
-      "sources": ["milktea/**", "glaze/**"],
-      "c-sources": ["milktea/tty_winsize.c"]
+      "type": "static-lib"
     },
     "bench-draw": {
       "type": "executable",
-      "sources": ["bench/bench_draw.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
+      "sources": [
+        "bench/bench_draw.c3"
+      ],
       "opt": "O3"
     },
     "bench-ffi": {
       "type": "executable",
-      "sources": ["bench/bench_ffi.c3", "taro/**"],
+      "sources": [
+        "bench/bench_ffi.c3",
+        "taro/**"
+      ],
       "c-sources": [
-        "milktea/tty_winsize.c",
         "taro/taro.c",
         "vendor/quickjs/quickjs.c",
         "vendor/quickjs/cutils.c",
@@ -28,299 +42,261 @@
         "vendor/quickjs/dtoa.c"
       ],
       "opt": "O3",
-      "linked-libraries": ["curl"]
+      "linked-libraries": [
+        "curl"
+      ]
     },
     "examples/component-viewer": {
       "type": "executable",
       "sources": ["examples/component-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/counter": {
       "type": "executable",
       "sources": ["examples/counter/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/list": {
       "type": "executable",
       "sources": ["examples/list/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/spinner": {
       "type": "executable",
       "sources": ["examples/spinner/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/timer": {
       "type": "executable",
       "sources": ["examples/timer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/pomodoro": {
       "type": "executable",
       "sources": ["examples/pomodoro/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/fullscreen": {
       "type": "executable",
       "sources": ["examples/fullscreen/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/tabs": {
       "type": "executable",
       "sources": ["examples/tabs/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/dos-app": {
       "type": "executable",
       "sources": ["examples/dos-app/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/dos-app-gui": {
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/dos-app/button.c3", "examples/dos-app/dialog.c3", "examples/dos-app/menu.c3", "examples/dos-app/picker.c3", "examples/dos-app/theme.c3", "examples/dos-app-gui/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O0",
       "dependencies": ["raylib6"]
     },
     "examples/doom-fire-gui": {
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/doom-fire-gui/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O0",
       "dependencies": ["raylib6"]
     },
     "examples/pagination": {
       "type": "executable",
       "sources": ["examples/pagination/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/viewport": {
       "type": "executable",
       "sources": ["examples/viewport/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/spinners": {
       "type": "executable",
       "sources": ["examples/spinners/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/progress": {
       "type": "executable",
       "sources": ["examples/progress/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/bounce": {
       "type": "executable",
       "sources": ["examples/bounce/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/composable-views": {
       "type": "executable",
       "sources": ["examples/composable-views/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/focus-blur": {
       "type": "executable",
       "sources": ["examples/focus-blur/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/doom-fire": {
       "type": "executable",
       "sources": ["examples/doom-fire/doom-fire.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/doom-fire-milktea": {
       "type": "executable",
       "sources": ["examples/doom-fire/doom-fire-milktea.c3"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/doom-fire-3d": {
       "type": "executable",
       "sources": ["examples/doom-fire-3d/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/doom-fire-donut": {
       "type": "executable",
       "sources": ["examples/lib/glb.c3", "examples/doom-fire-donut/**", "examples/lib/stb_json.c3"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
+      "c-sources": ["examples/lib/stb_json_impl.c"],
       "strip-unused": true
     },
     "examples/textinputs": {
       "type": "executable",
       "sources": ["examples/textinputs/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/canvas": {
       "type": "executable",
       "sources": ["examples/canvas/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/vanish": {
       "type": "executable",
       "sources": ["examples/vanish/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/space": {
       "type": "executable",
       "sources": ["examples/space/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/splash": {
       "type": "executable",
       "sources": ["examples/splash/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/split-editors": {
       "type": "executable",
       "sources": ["examples/split-editors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/file-picker": {
       "type": "executable",
       "sources": ["examples/file-picker/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/chat": {
       "type": "executable",
       "sources": ["examples/chat/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/clock": {
       "type": "executable",
       "sources": ["examples/clock/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/ticks": {
       "type": "executable",
       "sources": ["examples/ticks/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/mouse": {
       "type": "executable",
       "sources": ["examples/mouse/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/paint": {
       "type": "executable",
       "sources": ["examples/paint/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/colors": {
       "type": "executable",
       "sources": ["examples/colors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/diff-viewer": {
       "type": "executable",
       "sources": ["examples/diff-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/voxel-renderer": {
       "type": "executable",
       "sources": ["examples/voxel-renderer/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/super-splash": {
       "type": "executable",
       "sources": ["examples/super-splash/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/glb-viewer": {
       "type": "executable",
       "sources": ["examples/lib/glb.c3", "examples/lib/stb_json.c3", "examples/glb-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
+      "c-sources": ["examples/lib/stb_json_impl.c"],
       "strip-unused": true
     },
     "examples/minecraft": {
       "type": "executable",
       "sources": ["taro/**", "examples/minecraft/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/wolf3d": {
       "type": "executable",
       "sources": ["taro/**", "examples/wolf3d/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/wolf3d-server": {
       "type": "executable",
       "sources": ["examples/wolf3d-server/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true,
       "linked-libraries": ["sqlite3"],
@@ -329,54 +305,48 @@
     "examples/cursors": {
       "type": "executable",
       "sources": ["examples/cursors/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O0"
     },
     "examples/inputbox": {
       "type": "executable",
       "sources": ["examples/inputbox/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "O0"
     },
     "examples/color-swatches": {
       "type": "executable",
       "sources": ["examples/color-swatches/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/oiia-player": {
       "type": "executable",
       "sources": ["examples/oiia-player/**", "examples/lib/stb_image.c3", "examples/lib/stb_json.c3"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_image_impl.c", "examples/lib/stb_json_impl.c"],
       "opt": "Os",
+      "c-sources": ["examples/lib/stb_image_impl.c", "examples/lib/stb_json_impl.c"],
       "strip-unused": true
     },
     "examples/taro": {
       "type": "executable",
       "sources": ["taro/**", "examples/taro/**"],
-      "c-sources": ["milktea/tty_winsize.c", "taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
       "opt": "Os",
+      "c-sources": ["taro/taro.c", "vendor/quickjs/quickjs.c", "vendor/quickjs/cutils.c", "vendor/quickjs/libregexp.c", "vendor/quickjs/libunicode.c", "vendor/quickjs/dtoa.c"],
       "linked-libraries": ["curl"]
     },
     "examples/paste": {
       "type": "executable",
       "sources": ["examples/paste/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/ai-harness": {
       "type": "executable",
       "sources": ["examples/ai-harness/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/nanobots": {
       "type": "executable",
       "sources": ["examples/nanobots/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
     }

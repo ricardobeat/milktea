@@ -17,10 +17,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_JSON = os.path.join(PROJECT_ROOT, "project.json")
 EXAMPLES_DIR = os.path.join(PROJECT_ROOT, "examples")
 
-DEFAULT_C_SOURCES = ["milktea/tty_winsize.c"]
+DEFAULT_C_SOURCES = []
 
 QUICKJS_C_SOURCES = [
-    "milktea/tty_winsize.c",
     "taro/taro.c",
     "vendor/quickjs/quickjs.c",
     "vendor/quickjs/cutils.c",
@@ -77,7 +76,7 @@ OVERRIDES = {
             "examples/doom-fire-donut/**",
             "examples/lib/stb_json.c3",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+        "c_sources": ["examples/lib/stb_json_impl.c"],
     },
     "glb-viewer": {
         "sources": [
@@ -85,7 +84,7 @@ OVERRIDES = {
             "examples/lib/stb_json.c3",
             "examples/glb-viewer/**",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+        "c_sources": ["examples/lib/stb_json_impl.c"],
     },
     "oiia-player": {
         "sources": [
@@ -94,7 +93,6 @@ OVERRIDES = {
             "examples/lib/stb_json.c3",
         ],
         "c_sources": [
-            "milktea/tty_winsize.c",
             "examples/lib/stb_image_impl.c",
             "examples/lib/stb_json_impl.c",
         ],
@@ -167,9 +165,15 @@ def build_target(name):
     target = {
         "type": "executable",
         "sources": sources,
-        "c-sources": override.get("c_sources", list(DEFAULT_C_SOURCES)),
         "opt": override.get("opt", "Os"),
     }
+    # Only emit c-sources when the target adds C files beyond the default
+    # `milktea/tty_winsize.c` (which is declared at the top of project.json
+    # and inherited by every target). Targets whose c-sources list is exactly
+    # the default omit the key to avoid duplication.
+    c_sources = override.get("c_sources", DEFAULT_C_SOURCES)
+    if c_sources != DEFAULT_C_SOURCES:
+        target["c-sources"] = c_sources
     if override.get("strip_unused", True):
         target["strip-unused"] = True
     if "linked_libraries" in override:
