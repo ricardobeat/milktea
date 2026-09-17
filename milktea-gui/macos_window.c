@@ -21,6 +21,10 @@ typedef struct {
 	double x, y, width, height;
 } Rect4;
 
+typedef struct {
+	double x, y;
+} Point2;
+
 extern Id sel_registerName(const char *name);
 extern Id objc_getClass(const char *name);
 
@@ -41,6 +45,7 @@ extern void objc_msg_send_void_long(Id, Id, long) __asm__("_objc_msgSend");
 extern void objc_msg_send_void_id(Id, Id, Id) __asm__("_objc_msgSend");
 extern void objc_msg_send_void_rect(Id, Id, Rect4) __asm__("_objc_msgSend");
 extern Rect4 objc_msg_send_rect(Id, Id) __asm__("_objc_msgSend");
+extern Point2 objc_msg_send_point(Id, Id) __asm__("_objc_msgSend");
 
 static Id sel(const char *name) {
 	return sel_registerName(name);
@@ -148,6 +153,27 @@ int milktea_macos_inline_titlebar(int row_height) {
 	if (titlebar != 0) objc_msg_send_void(titlebar, sel("removeFromSuperview"));
 
 	return (int)(right_edge + 0.5);
+}
+
+// milktea_macos_cursor_screen reports the pointer's position in screen
+// coordinates, which is what a window drag needs: a pointer position measured
+// against the window is worthless once the window starts following it, since
+// moving the window changes that reading as much as moving the pointer does.
+//
+// NSEvent's mouseLocation is not tied to the event queue, so it answers with
+// wherever the pointer is right now. Its origin is the bottom left of the
+// primary screen and y grows upward, the opposite of a window's y, so the
+// value is only meaningful as a delta against another reading -- which is all
+// the drag uses it for.
+//
+// Returns 1 on success, 0 if the runtime did not answer.
+int milktea_macos_cursor_screen(double *out_x, double *out_y) {
+	Id cls = objc_getClass("NSEvent");
+	if (cls == 0) return 0;
+	Point2 p = objc_msg_send_point(cls, sel("mouseLocation"));
+	*out_x = p.x;
+	*out_y = p.y;
+	return 1;
 }
 
 #endif

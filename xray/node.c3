@@ -181,6 +181,12 @@ struct Node {
 	void* on_click_ctx;
 	ClickFn on_click_outside_fn;
 	void* on_click_outside_ctx;
+
+	// Marks this node's area as a place to drag the OS window from, the way
+	// a title bar is. Collected after solve() alongside the click targets
+	// (see collect_drag_regions); a terminal build has no window to move and
+	// ignores it.
+	bool window_drag_area;
 }
 
 fn Node* new_node(NodeDirection dir) @local {
@@ -376,6 +382,15 @@ fn Node* Node.on_click(&self, ClickFn handler, void* ctx) {
 fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
 	self.on_click_outside_fn = handler;
 	self.on_click_outside_ctx = ctx;
+	return self;
+}
+
+// window_drag marks this node as a drag handle for the OS window: a press
+// inside its solved rect that then moves drags the window, the way a title
+// bar does. The press still reaches the node's own on_click, so a node can be
+// both a drag handle and clickable. Only a GUI build acts on it.
+fn Node* Node.window_drag(&self, bool on = true) {
+	self.window_drag_area = on;
 	return self;
 }
 

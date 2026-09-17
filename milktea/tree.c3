@@ -146,6 +146,8 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	// actually on screen right now.
 	g_program.click_target_count = 0;
 	xray::collect_click_targets(root, g_program.click_targets[..], &g_program.click_target_count);
+	g_program.drag_region_count = 0;
+	xray::collect_drag_regions(root, g_program.drag_regions[..], &g_program.drag_region_count);
 
 	View v = {
 		.cells        = buf.cells,

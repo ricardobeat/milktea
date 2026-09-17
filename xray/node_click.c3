@@ -56,3 +56,23 @@ fn void dispatch_click(ClickTarget[] targets, int col, int row) {
 		}
 	}
 }
+
+// collect_drag_regions walks a solved tree and appends the rect of every node
+// that set window_drag, in the same paint order as collect_click_targets.
+// Order does not matter here the way it does for clicks — a point either
+// falls in some drag region or it does not — but keeping the two walks alike
+// keeps them easy to read together.
+//
+// out is a caller-owned fixed buffer; *count is both the starting offset and,
+// on return, the new total. Regions beyond out.len are dropped silently, same
+// as click targets.
+fn void collect_drag_regions(Node* n, Rect[] out, int* count) {
+	if (n == null || *count >= (int)out.len) return;
+	if (n.window_drag_area) {
+		out[*count] = n.computed_rect;
+		(*count)++;
+	}
+	for (int i = 0; i < n.child_count; i++) {
+		collect_drag_regions(n.children[i], out, count);
+	}
+}

@@ -282,6 +282,7 @@ interface Model {
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
 const int MAX_CLICK_TARGETS = 32;
+const int MAX_DRAG_REGIONS = 8;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
@@ -319,6 +320,11 @@ struct Program {
 	// timers/send_queue/pending.
 	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
 	int click_target_count;
+	// Areas the app offered as drag handles for the OS window (xray::Node
+	// .window_drag), refilled by draw() from the same solved tree. Only a GUI
+	// build reads them; in a terminal there is no window to move.
+	xray::Rect[MAX_DRAG_REGIONS] drag_regions;
+	int drag_region_count;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -558,6 +564,14 @@ fn int screen_height() {
 // frame — called for every MOUSE_PRESS before the raw MouseMsg reaches
 // model.update(), by dispatch() in the normal event loop and directly by any
 // backend (e.g. a GUI renderer) that drives a Model outside Program.run().
+// drag_regions returns the rects the last drawn view offered as OS-window
+// drag handles, in cell coordinates. Empty unless the app marked a node with
+// xray::Node.window_drag.
+fn xray::Rect[] drag_regions() {
+	if (g_program == null) return {};
+	return g_program.drag_regions[:g_program.drag_region_count];
+}
+
 fn void dispatch_click(int col, int row) {
 	if (g_program == null) return;
 	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);

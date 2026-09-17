@@ -39,6 +39,33 @@ struct GuiOptions {
 // does and why it is not done here.
 extern fn int milktea_macos_inline_titlebar(int row_height)
 	@cname("milktea_macos_inline_titlebar") @feat(DARWIN);
+extern fn int milktea_macos_cursor_screen(double* x, double* y)
+	@cname("milktea_macos_cursor_screen") @feat(DARWIN);
+
+// cursor_screen_pos reports the pointer in screen space, which is the only
+// frame of reference a window drag can use: a window-relative position moves
+// as much when the window moves as when the pointer does, so feeding it back
+// into the window's position makes the window chase itself.
+//
+// The value is an offset, not a coordinate — AppKit measures y upward from
+// the bottom of the primary screen, and the sign flip here only lines its
+// axis up with the window's. Both are constant, so a difference between two
+// readings is exact; a single reading means nothing on its own.
+//
+// Returns false where there is no way to ask, and the drag falls back to
+// window-relative tracking.
+fn bool cursor_screen_pos(int* x, int* y) @local {
+	$if env::DARWIN:
+		double cx;
+		double cy;
+		if (milktea_macos_cursor_screen(&cx, &cy) != 0) {
+			*x = (int)cx;
+			*y = (int)-cy;
+			return true;
+		}
+	$endif
+	return false;
+}
 
 // CHROME_BUTTONS_RIGHT is how far the window buttons reach from the window's
 // left edge, in points: the sum of the layout constants in macos_window.c.
@@ -62,6 +89,24 @@ fn int chrome_inset_cells(int cell_w) {
 // into a window drag, in screen pixels. Enough to swallow the wobble of a
 // click, small enough that a deliberate drag starts at once.
 const int DRAG_SLOP = 3;
+
+// is_drag_point answers whether a press at this cell should be able to drag
+// the window. A view that marked nodes with xray::Node.window_drag decides
+// it entirely — those rects move with the layout, so a title bar that is
+// indented, split around the window buttons, or absent on some screens
+// behaves correctly without the app restating its geometry here. chrome_rows
+// is the fallback for a view that marked nothing: the top N rows, all of
+// them, which is what a window with no title bar needs to stay movable.
+fn bool is_drag_point(GuiOptions opts, int col, int row) @local {
+	xray::Rect[] regions = milktea::drag_regions();
+	if (regions.len > 0) {
+		foreach (r : regions) {
+			if (r.contains(col, row)) return true;
+		}
+		return false;
+	}
+	return opts.chrome_rows > 0 && row < opts.chrome_rows;
+}
 
 fn GuiOptions default_options() {
 	return {
@@ -543,6 +588,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// starts following the pointer.
 	bool drag_pending = false;
 	bool drag_active = false;
+	bool drag_abs = false;
 	int drag_win_x = 0;
 	int drag_win_y = 0;
 	int drag_ptr_x = 0;
@@ -593,9 +639,26 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				drag_pending = false;
 				drag_active = false;
 			} else {
-				rl::RLVector2 wp = rl::get_window_position();
-				int dx = (int)wp.x + rl::get_mouse_x() - drag_ptr_x;
-				int dy = (int)wp.y + rl::get_mouse_y() - drag_ptr_y;
+				// Both branches answer the same question — how far has the
+				// pointer travelled since the press — and the window is then
+				// placed at its press position plus that, so each frame is
+				// computed from the press rather than from the frame before
+				// it and nothing accumulates.
+				int px;
+				int py;
+				int dx;
+				int dy;
+				if (drag_abs && cursor_screen_pos(&px, &py)) {
+					dx = px - drag_ptr_x;
+					dy = py - drag_ptr_y;
+				} else {
+					// Window-relative fallback. It reads the pointer through
+					// the window that is being moved, so it is a frame behind
+					// whenever the window moved last frame.
+					rl::RLVector2 wp = rl::get_window_position();
+					dx = (int)wp.x + rl::get_mouse_x() - drag_ptr_x;
+					dy = (int)wp.y + rl::get_mouse_y() - drag_ptr_y;
+				}
 				if (!drag_active && (dx > DRAG_SLOP || dx < -DRAG_SLOP
 					|| dy > DRAG_SLOP || dy < -DRAG_SLOP)) {
 					drag_active = true;
@@ -634,14 +697,17 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		int mcol = rl::get_mouse_x() / opts.cell_w;
 		int mrow = rl::get_mouse_y() / opts.cell_h;
 		if (rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT)) {
-			if (opts.chrome_rows > 0 && mrow < opts.chrome_rows) {
+			if (is_drag_point(opts, mcol, mrow)) {
 				rl::RLVector2 wp = rl::get_window_position();
 				drag_pending = true;
 				drag_active = false;
 				drag_win_x = (int)wp.x;
 				drag_win_y = (int)wp.y;
-				drag_ptr_x = drag_win_x + rl::get_mouse_x();
-				drag_ptr_y = drag_win_y + rl::get_mouse_y();
+				drag_abs = cursor_screen_pos(&drag_ptr_x, &drag_ptr_y);
+				if (!drag_abs) {
+					drag_ptr_x = drag_win_x + rl::get_mouse_x();
+					drag_ptr_y = drag_win_y + rl::get_mouse_y();
+				}
 			}
 			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol };
 			// Fires on_click/on_click_outside against last frame's layout
