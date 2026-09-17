@@ -23,6 +23,11 @@ struct GuiOptions {
 	int font_size;
 	bool undecorated;
 	float corner_radius; // pixels; 0 = square corners (default). Implies undecorated + a transparent framebuffer.
+	// When set, the first painted frame is written to this path as a PNG and
+	// the loop exits. It renders the same cells the terminal would receive,
+	// through the same font, so a view can be inspected as an image with
+	// nobody at the keyboard.
+	String screenshot_path;
 }
 
 fn GuiOptions default_options() {
@@ -387,6 +392,24 @@ fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
 	return false;
 }
 
+// write_screenshot captures the frame that was just drawn and writes it to
+// opts.screenshot_path as a PNG. On a HiDPI display the readback covers more
+// than the window's render area, with the frame in a corner of it, so the
+// image is cropped to that area first. Without the crop most of the file is
+// empty and the UI sits in a quarter of it.
+fn void write_screenshot(GuiOptions opts) @local {
+	rl::RLImage img = rl::load_image_from_screen();
+	int rw = rl::get_render_width();
+	int rh = rl::get_render_height();
+	int w = rw < img.width ? rw : img.width;
+	int h = rh < img.height ? rh : img.height;
+	if (w < img.width || h < img.height) {
+		rl::image_crop(&img, { 0, (float)(img.height - h), (float)w, (float)h });
+	}
+	rl::export_image(img, (ZString)opts.screenshot_path.zstr_tcopy());
+	rl::unload_image(img);
+}
+
 fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	bool rounded = opts.corner_radius > 0.0f;
 
@@ -634,6 +657,17 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				{ 0, 0 }, rl::WHITE);
 			rl::end_shader_mode();
 		}
+		// A screenshot has to run before the swap below (after it, the back
+		// buffer holds an older frame) and it has to flush raylib's pending
+		// draw batch first, or the readback misses whatever was drawn last and
+		// those cells come out empty.
+		if (opts.screenshot_path.len > 0) {
+			rl::gl_draw_render_batch_active();
+			write_screenshot(opts);
+			rl::end_drawing();
+			break;
+		}
+
 		rl::end_drawing();
 	}
 
