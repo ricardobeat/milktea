@@ -33,11 +33,17 @@ struct GuiOptions {
 	// loses the title bar text, and a drag starting in those rows moves the
 	// window. Zero keeps the ordinary window chrome.
 	int chrome_rows;
+	// Takes the close/minimise/zoom buttons away along with the title bar,
+	// for a window whose own top row already offers whatever it wants to
+	// offer. Only meaningful with chrome_rows set, since the buttons are the
+	// platform's to draw until the title bar goes. The window can still be
+	// closed from the menu bar and its keyboard equivalents.
+	bool hide_window_buttons;
 }
 
 // Window chrome, implemented in macos_window.c. See that file for what it
 // does and why it is not done here.
-extern fn int milktea_macos_inline_titlebar(int row_height)
+extern fn int milktea_macos_inline_titlebar(int row_height, int hide_buttons)
 	@cname("milktea_macos_inline_titlebar") @feat(DARWIN);
 extern fn int milktea_macos_cursor_screen(double* x, double* y)
 	@cname("milktea_macos_cursor_screen") @feat(DARWIN);
@@ -502,8 +508,11 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 
 	$if env::DARWIN:
 		if (opts.chrome_rows > 0) {
-			int buttons_right = milktea_macos_inline_titlebar(opts.cell_h);
-			if (buttons_right > 0) {
+			int buttons_right = milktea_macos_inline_titlebar(
+				opts.cell_h, opts.hide_window_buttons ? 1 : 0);
+			// Zero is a real answer (the buttons are hidden and cover no part
+			// of the first row); only -1 means nothing happened.
+			if (buttons_right >= 0) {
 				g_chrome_buttons_right = buttons_right;
 				// Giving the content view the title bar's height changed the
 				// window's size behind GLFW's back. Asking for the original

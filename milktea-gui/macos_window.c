@@ -101,19 +101,23 @@ static Rect4 send_rect(Id target, const char *name) {
 // as CHROME_BUTTONS_RIGHT and replaces it with this function's return value
 // once the real frames are known.
 
-// milktea_macos_inline_titlebar drops the window's title bar while keeping
-// its buttons, and centres the buttons on a row of the caller's grid.
-// row_height is that row's height in points, so the buttons line up with
-// whatever the app draws in its first row.
+// milktea_macos_inline_titlebar drops the window's title bar, and either
+// keeps its buttons -- centred on a row of the caller's grid, row_height
+// being that row's height in points, so they line up with whatever the app
+// draws in its first row -- or takes them away with it when hide_buttons is
+// set. A window with no buttons can still be closed from the menu bar and its
+// keyboard equivalents; nothing here touches those.
 //
-// Returns the width the buttons occupy from the window's left edge, in
-// points, or 0 when the window could not be converted.
-int milktea_macos_inline_titlebar(int row_height) {
+// Returns the width the buttons occupy from the window's left edge in points,
+// which is 0 when they are hidden, or -1 when the window could not be
+// converted. The caller keeps its own chrome either way, so the two zeroes
+// have to stay distinguishable.
+int milktea_macos_inline_titlebar(int row_height, int hide_buttons) {
 	Id window = main_window();
-	if (window == 0) return 0;
+	if (window == 0) return -1;
 
 	Id content = send_id(window, "contentView");
-	if (content == 0) return 0;
+	if (content == 0) return -1;
 	Rect4 bounds = send_rect(content, "bounds");
 
 	long mask = objc_msg_send_long(window, sel("styleMask"));
@@ -124,7 +128,7 @@ int milktea_macos_inline_titlebar(int row_height) {
 	Id close = objc_msg_send_id_long(window, sel("standardWindowButton:"), BUTTON_CLOSE);
 	Id mini = objc_msg_send_id_long(window, sel("standardWindowButton:"), BUTTON_MINIATURIZE);
 	Id zoom = objc_msg_send_id_long(window, sel("standardWindowButton:"), BUTTON_ZOOM);
-	if (close == 0 || mini == 0 || zoom == 0) return 0;
+	if (close == 0 || mini == 0 || zoom == 0) return -1;
 
 	Id titlebar = send_id(close, "superview");
 	double row = row_height > 0 ? (double)row_height : BUTTON_FALLBACK_SIZE;
@@ -134,18 +138,28 @@ int milktea_macos_inline_titlebar(int row_height) {
 
 	Id buttons[3] = { close, mini, zoom };
 	double right_edge = 0;
-	for (int i = 0; i < 3; i++) {
-		Rect4 f = send_rect(buttons[i], "frame");
-		double w = f.width > 0 ? f.width : BUTTON_FALLBACK_SIZE;
-		double h = f.height > 0 ? f.height : BUTTON_FALLBACK_SIZE;
-		Rect4 target = { BUTTON_FIRST_X + (double)i * BUTTON_PITCH, centre_y - h / 2.0, w, h };
-		if (send_id(buttons[i], "superview") != content) {
-			objc_msg_send_void(buttons[i], sel("removeFromSuperview"));
-			objc_msg_send_void_id(content, sel("addSubview:"), buttons[i]);
+	if (hide_buttons) {
+		// Removing the title bar below takes the buttons with it, since they
+		// are still its subviews. Hiding them first covers the case where
+		// AppKit rebuilds that view -- on a style mask change, or entering
+		// full screen -- and brings its subviews back with it.
+		for (int i = 0; i < 3; i++) {
+			objc_msg_send_void_bool(buttons[i], sel("setHidden:"), 1);
 		}
-		objc_msg_send_void_rect(buttons[i], sel("setFrame:"), target);
-		double edge = target.x + w;
-		if (edge > right_edge) right_edge = edge;
+	} else {
+		for (int i = 0; i < 3; i++) {
+			Rect4 f = send_rect(buttons[i], "frame");
+			double w = f.width > 0 ? f.width : BUTTON_FALLBACK_SIZE;
+			double h = f.height > 0 ? f.height : BUTTON_FALLBACK_SIZE;
+			Rect4 target = { BUTTON_FIRST_X + (double)i * BUTTON_PITCH, centre_y - h / 2.0, w, h };
+			if (send_id(buttons[i], "superview") != content) {
+				objc_msg_send_void(buttons[i], sel("removeFromSuperview"));
+				objc_msg_send_void_id(content, sel("addSubview:"), buttons[i]);
+			}
+			objc_msg_send_void_rect(buttons[i], sel("setFrame:"), target);
+			double edge = target.x + w;
+			if (edge > right_edge) right_edge = edge;
+		}
 	}
 
 	// With the buttons gone the title bar has nothing left in it, and leaving
