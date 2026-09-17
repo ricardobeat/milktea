@@ -438,6 +438,17 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 	}
 
+	// Program.run() tells the model its initial size through a WINDOW_SIZE
+	// message; this loop stands in for it, so it has to do the same. Without
+	// it a model that caches the size in init() keeps that default for every
+	// later frame and lays out anything derived from it (a text field's width,
+	// the rows a list shows) for the wrong window.
+	milktea::Msg init_size = {
+		.kind = milktea::MsgKind.WINDOW_SIZE,
+		.window_size = { opts.cols, opts.rows },
+	};
+	if (dispatch_gui(m, init_size)) return;
+
 	// Nothing about a milktea view changes between frames unless a msg
 	// (key, mouse, timer, resize) moved the model, so the drawn grid is
 	// compared against the previous frame's copy and an identical one
