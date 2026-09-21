@@ -81,13 +81,19 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 // picked a size: its own extent plus whatever the style frames it with. They
 // are consulted for a centered modal and under draw_inline, where nothing
 // else fixes that axis.
+//
+// A style carrying an explicit size names the answer outright: render() sizes
+// the box to it, so measuring the text instead would hand the node a rect
+// smaller than what it paints.
 fn int StyledText.measure(&self, int width) @dynamic {
+	if (self.style.height > 0) return self.style.height;
 	int lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
 	return lines + frame_height(self.style);
 }
 
 fn int StyledText.measure_width(&self, int height) @dynamic {
+	if (self.style.width > 0) return self.style.width;
 	int widest = 0;
 	usz start = 0;
 	for (usz i = 0; i <= self.text.len; i++) {

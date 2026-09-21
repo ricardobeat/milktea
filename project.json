@@ -180,7 +180,7 @@
     },
     "examples/canvas": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/canvas/**"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/canvas/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
