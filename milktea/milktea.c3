@@ -706,8 +706,27 @@ const String CURSOR_BLOCK     = "\xe2\x96\x88"; // █
 const String CURSOR_UNDERLINE = "\xe2\x96\x84"; // ▄
 const String CURSOR_BAR       = "\xe2\x96\x82"; // ▂
 
-fn Cmd quit() {
+// quit asks the running program to stop. It is a Cmd — the loop stops when a
+// model's update() returns it — so a caller with no Cmd to return (a click
+// handler, say, which is a plain void function) wants request_quit() instead.
+// @nodiscard is what makes that distinction visible: `quit();` as a statement
+// builds a Cmd and throws it away, which reads as "quit" and does nothing.
+fn Cmd quit() @nodiscard {
 	return &make_quit_msg;
+}
+
+// request_quit asks the running program to stop at the next turn, for callers
+// with no Cmd to hand back — a node's click handler is a void function, and a
+// window's close button is exactly that. The message goes through the send
+// queue, which both backends drain every frame, so it is handled on the next
+// pass of the loop rather than inside the callback that asked for it (which
+// may be midway through a dispatch).
+//
+// Returns false when nothing is running to receive it.
+fn bool request_quit() {
+	if (g_program == null) return false;
+	g_program.send(make_quit_msg());
+	return true;
 }
 
 // ============================================================

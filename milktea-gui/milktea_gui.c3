@@ -15,6 +15,7 @@ import raylib6::rl;
 import std::io::file;
 import std::io;
 import std::os::env;
+import std::thread;
 
 struct GuiOptions {
 	String title;
@@ -746,6 +747,17 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
 
+	// Arm the send queue the way Program.run() does, so milktea::send and
+	// milktea::request_quit work in a GUI app too: a click handler is a void
+	// function with no Cmd to return, and asking the loop to stop (or to hand
+	// the model any other message) has to go somewhere. Initialising the
+	// mutex before marking the program as accepting is the same ordering
+	// run() uses, so a sender that sees the flag sees a valid mutex.
+	prog.send_head = 0;
+	prog.send_tail = 0;
+	prog.send_mu.init()!!;
+	prog.send_accepting.store(true);
+
 	// Honour the MILKTEA_DEBUG_MOUSE / MILKTEA_DEBUG_CLICK_AT /
 	// MILKTEA_DEBUG_POINTER_AT env vars at startup for convenience — tests
 	// prefer the programmatic API (milktea::set_debug_mouse /
@@ -874,6 +886,20 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	int drag_ptr_y = 0;
 
 	while (!should_quit && !rl::window_should_close()) {
+		// Messages handed to the program from outside the loop — milktea::send
+		// from another thread, or request_quit() from a callback that had no
+		// Cmd to return. Same drain Program.run() does, and it runs before
+		// everything else so a request made during the previous turn (a click
+		// handler asking to close the window, say) takes effect at once.
+		milktea::Msg sent;
+		while (prog.send_recv(&sent)) {
+			if (sent.kind != milktea::MsgKind.NONE && dispatch_gui(m, sent)) {
+				should_quit = true;
+				break;
+			}
+		}
+		if (should_quit) break;
+
 		// Fire expired timers registered via milktea::tick()/every() —
 		// mirrors Program.run()'s timer loop, since this GUI loop bypasses
 		// Program.run() entirely and drives update() by hand.
@@ -1231,4 +1257,15 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		rl::unload_render_texture(target);
 	}
 	rl::close_window();
+
+	// Mirror image of Program.run()'s teardown of the send queue: stop
+	// accepting, wait for senders already past their check, then destroy the
+	// mutex they would have locked. Without this a sender from another thread
+	// could push into a queue whose mutex is gone.
+	prog.send_accepting.store(false);
+	while (prog.send_inflight.load() > 0) {
+		thread::yield();
+	}
+	prog.send_mu.destroy();
+	milktea::g_program = null;
 }
