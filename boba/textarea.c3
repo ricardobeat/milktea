@@ -4,6 +4,7 @@ import milktea;
 import xray;
 import glaze;
 import std::core::dstring;
+import std::core::mem;
 
 // Textarea is a multi-line text input component.
 struct Textarea (xray::Content) {
@@ -33,7 +34,22 @@ struct Textarea (xray::Content) {
 	glaze::Style placeholder_style;
 	glaze::Style line_number_style;
 	glaze::Style prompt_style;
+	// Press callback, fired when a mouse press lands inside the textarea's
+	// rect. The callback receives the cell row/col (already adjusted for the
+	// gutter, prompt, and scroll — i.e. text coordinates, not screen), and
+	// is the hook the app uses to focus the editor and move the caret. ctx
+	// is whatever the app registered; the textarea stores the address, and
+	// the owning component outlasts the node tree.
+	TextareaPressFn on_press_fn;
+	void* on_press_ctx;
 }
+
+// TextareaPressFn fires when a mouse press lands inside the textarea. row
+// and col are in text coordinates — they are already past the gutter and
+// prompt and adjusted for the textarea's own scroll, so the callback can
+// use them directly to move the caret. id is the per-call ctx the app
+// registered through on_press.
+alias TextareaPressFn = fn void(void* id, int row, int col);
 
 // new_textarea creates a textarea with the given dimensions.
 fn Textarea new_textarea(int width, int height) {
@@ -90,6 +106,54 @@ fn void Textarea.clear(&self) {
 	self.cursor_pos = 0;
 	self.cursor_row = 0;
 	self.cursor_col = 0;
+}
+
+// set_cursor places the caret at the given text-coordinate row/col. row and
+// col are in the same space the textarea paints — col 0 is the first cell of
+// the line, not counting the gutter or prompt — and out-of-range values are
+// clamped to the buffer. The textarea updates scroll_offset so the new
+// caret position is visible.
+//
+// This is the hook a click handler uses to move the caret without driving
+// the keyboard path: a press inside the editor reports (row, col) text
+// coordinates (already adjusted for the gutter, prompt and scroll) and the
+// app forwards them straight to set_cursor.
+fn void Textarea.set_cursor(&self, int row, int col) {
+	if (self.len == 0) {
+		self.cursor_pos = 0;
+		self.cursor_row = 0;
+		self.cursor_col = 0;
+		return;
+	}
+	int lc = self.line_count();
+	if (row < 0) row = 0;
+	if (row >= lc) row = lc - 1;
+	// Find the byte position at the start of row-th line and walk forward
+	// by `col` cells (not bytes — multi-byte runes are skipped whole).
+	sz pos = 0;
+	int r = 0;
+	while (r < row && pos < self.len) {
+		if (self.buf[pos] == '\n') r++;
+		pos++;
+	}
+	// pos now points at the first byte of row `row`. Walk forward by col
+	// runes, stopping at the newline or buffer end.
+	int walked = 0;
+	while (walked < col && pos < self.len && self.buf[pos] != '\n') {
+		sz next = utf8_next_boundary(self.buf[:self.len], pos);
+		if (next <= pos) break;
+		pos = next;
+		walked++;
+	}
+	self.cursor_pos = pos;
+	self.cursor_row = row;
+	self.cursor_col = walked;
+	// Keep the caret on screen.
+	int vis = self.height;
+	if (vis < 1) vis = 1;
+	if (self.cursor_row < self.scroll_offset) self.scroll_offset = self.cursor_row;
+	if (self.cursor_row >= self.scroll_offset + vis) self.scroll_offset = self.cursor_row - vis + 1;
+	if (self.scroll_offset < 0) self.scroll_offset = 0;
 }
 
 // insert inserts a character at the cursor position.
@@ -564,4 +628,46 @@ fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 		self.caret);
 }
 
-fn xray::Node* Textarea.node(&self) => xray::content_node(self);
+fn xray::Node* Textarea.node(&self) {
+	xray::Node* n = xray::content_node(self);
+	if (self.on_press_fn != null) {
+		PressCtx* pc = mem::tnew(PressCtx);
+		pc.t = self;
+		n.id_with(pc).on_click(&textarea_press);
+	}
+	return n;
+}
+
+// on_press registers a handler that fires when a mouse press lands inside
+// the textarea's rect. The textarea takes care of converting the press cell
+// into a (row, col) pair in text coordinates — adjusted for the gutter, the
+// prompt and the scroll offset — so the app can move the caret directly
+// without any layout math.
+//
+// ctx is the value the callback receives as its first parameter; typically
+// &self of the owning editor. The textarea keeps the address, and since the
+// textarea itself outlives the per-frame node tree, the pointer stays valid.
+fn void Textarea.on_press(&self, TextareaPressFn cb, void* ctx) {
+	self.on_press_fn = cb;
+	self.on_press_ctx = ctx;
+}
+
+// textarea_press is the bridge between xray's click system (which reports
+// rect-relative cell positions) and the textarea's own coordinate system.
+// The id pointer the framework forwards carries a fresh PressCtx on tmem
+// that holds &self; the static handler does the cast and the conversion.
+struct PressCtx { Textarea* t; }
+
+fn void textarea_press(void* id, String id_str, int col, int row) @local {
+	PressCtx* pc = (PressCtx*)id;
+	Textarea* t = pc.t;
+	if (t.on_press_fn == null) return;
+	// col / row are already rect-local (the framework subtracts rect.x /
+	// rect.y for us). Strip the gutter + prompt to land in text coords; the
+	// app uses these directly as a caret position.
+	int adj_col = col - t.text_offset();
+	int adj_row = row;  // scroll was applied during render, so row is already in screen coords; the caller decides whether to translate.
+	if (adj_col < 0) adj_col = 0;
+	if (adj_row < 0) adj_row = 0;
+	t.on_press_fn(t.on_press_ctx, adj_row, adj_col);
+}
