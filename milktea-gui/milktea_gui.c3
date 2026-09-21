@@ -13,6 +13,8 @@ import milktea;
 import xray;
 import raylib6::rl;
 import std::io::file;
+import std::io;
+import std::os::env;
 
 struct GuiOptions {
 	String title;
@@ -45,6 +47,8 @@ struct GuiOptions {
 // does and why it is not done here.
 extern fn int milktea_macos_inline_titlebar(int row_height, int hide_buttons)
 	@cname("milktea_macos_inline_titlebar") @feat(DARWIN);
+extern fn double milktea_macos_content_height()
+	@cname("milktea_macos_content_height") @feat(DARWIN);
 extern fn int milktea_macos_cursor_screen(double* x, double* y)
 	@cname("milktea_macos_cursor_screen") @feat(DARWIN);
 
@@ -89,6 +93,35 @@ fn int chrome_inset_cells(int cell_w) {
 		if (cell_w > 0) return (g_chrome_buttons_right + cell_w - 1) / cell_w;
 	$endif
 	return 0;
+}
+
+// A model cannot reach run()'s options once the loop has them, so a request
+// to re-size the grid is left here and picked up at the top of the next
+// frame. The cell size is the app's to decide — it is the one that knows its
+// font's advance and line box — so this takes the answer rather than a point
+// size to derive it from.
+int g_req_cell_w @local;
+int g_req_cell_h @local;
+int g_req_font_size @local;
+bool g_size_request @local;
+// Last pointer position seen at the GUI loop, in cell coordinates. The
+// hover-dispatch path only fires when it actually moves, so this doubles as
+// the "did the pointer change" bit — the alternative is reading the global
+// mouse position twice per frame and diffing.
+int g_prev_mcol @local = -1;
+int g_prev_mrow @local = -1;
+
+// set_cell_size asks the loop to redraw at a new cell size and point size,
+// taking effect on the next frame. The window keeps the pixels it has; what
+// changes is how many cells fit in them, so the model is told its new size
+// through an ordinary WINDOW_SIZE message and lays out as it would for any
+// other resize. Values below 1 are ignored.
+fn void set_cell_size(int cell_w, int cell_h, int font_size) {
+	if (cell_w < 1 || cell_h < 1 || font_size < 1) return;
+	g_req_cell_w = cell_w;
+	g_req_cell_h = cell_h;
+	g_req_font_size = font_size;
+	g_size_request = true;
 }
 
 // How far the pointer has to travel in the title strip before a press turns
@@ -345,6 +378,27 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 		case rl::RLKeyboardKey.F11: k.code = milktea::KeyCode.F11;
 		case rl::RLKeyboardKey.F12: k.code = milktea::KeyCode.F12;
 		default:
+			// With ctrl held the char queue is skipped (see the caller), so
+			// the punctuation an app is likeliest to want a ctrl chord on
+			// has to be named here or it never arrives. Keypad and main row
+			// report the same rune, the way a terminal does.
+			if (mods.ctrl) {
+				uint punct = 0;
+				switch (key) {
+					case rl::RLKeyboardKey.MINUS:
+					case rl::RLKeyboardKey.KP_SUBTRACT: punct = '-';
+					case rl::RLKeyboardKey.EQUAL:
+					case rl::RLKeyboardKey.KP_ADD: punct = '=';
+					case rl::RLKeyboardKey.ZERO:
+					case rl::RLKeyboardKey.KP_0: punct = '0';
+					default:
+				}
+				if (punct != 0) {
+					k.code = milktea::KeyCode.RUNE;
+					k.rune = punct;
+					return k;
+				}
+			}
 			// A-Z are contiguous from 65 in raylib's table.
 			if (mods.ctrl && key >= rl::RLKeyboardKey.A && key <= rl::RLKeyboardKey.Z) {
 				uint lower = (uint)((int)key - (int)rl::RLKeyboardKey.A) + 'a';
@@ -430,6 +484,35 @@ fn RLColor shade_blend(RLColor fg, RLColor bg, float amount) @local {
 // load_mono_font rasterizes the atlas at the display's actual pixel density
 // (2x on retina) so glyphs stay crisp when raylib's HighDPI backbuffer
 // scales drawing coordinates back up — same trick as @2x image assets.
+// Box drawing. These glyphs are meant to meet across cells, so they are the
+// ones that have to be drawn at the cell's own size rather than the text's:
+// a rule scaled to a 16 pt line box inside a 20 pt row stops an ascender
+// short of the row below and the border comes out dashed. Block elements are
+// not listed because draw_block_glyph paints them as rects already, which is
+// exact at any size.
+fn bool is_rule_glyph(uint cp) @local => cp >= 0x2500 && cp <= 0x257F;
+
+// CellFit is where inside its cell a glyph from a given font is drawn. The
+// advance is measured rather than assumed: milktea does not know the font it
+// ended up with, and the app's cell is only ever as close to it as whole
+// points allow. Splitting the slack puts the text in the middle of the cell
+// instead of hard against its top-left corner, which is what a terminal does
+// and what makes an off-ladder point size look deliberate rather than loose.
+struct CellFit {
+	int dx;
+	int dy;
+}
+
+fn CellFit cell_fit(rl::RLFont f, int font_size, int cell_w, int cell_h) @local {
+	rl::RLVector2 m = rl::measure_text_ex(f, (ZString)"M", (float)font_size, 0);
+	CellFit fit;
+	fit.dx = (int)(((float)cell_w - m.x) * 0.5f + 0.5f);
+	fit.dy = (cell_h - font_size) / 2;
+	if (fit.dx < 0) fit.dx = 0;
+	if (fit.dy < 0) fit.dy = 0;
+	return fit;
+}
+
 fn rl::RLFont load_mono_font(int font_size) {
 	float dpi_scale = rl::get_window_scale_dpi().x;
 	if (dpi_scale < 1.0f) dpi_scale = 1.0f;
@@ -481,15 +564,16 @@ fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
 // than the window's render area, with the frame in a corner of it, so the
 // image is cropped to that area first. Without the crop most of the file is
 // empty and the UI sits in a quarter of it.
-fn void write_screenshot(GuiOptions opts) @local {
-	rl::RLImage img = rl::load_image_from_screen();
-	int rw = rl::get_render_width();
-	int rh = rl::get_render_height();
-	int w = rw < img.width ? rw : img.width;
-	int h = rh < img.height ? rh : img.height;
-	if (w < img.width || h < img.height) {
-		rl::image_crop(&img, { 0, (float)(img.height - h), (float)w, (float)h });
-	}
+// A screenshot is read back from the texture the frame was drawn into, not
+// from the window. The window is hidden on a screenshot run, and what a
+// hidden window hands back is the platform's business rather than raylib's —
+// on macOS it comes back the wrong size. The texture is the app's own
+// framebuffer, exactly the grid and nothing else, whoever is or is not
+// looking at the window.
+fn void write_screenshot(GuiOptions opts, rl::RLRenderTexture2D from) @local {
+	rl::RLImage img = rl::load_image_from_texture(from.texture);
+	// Render textures are stored bottom-up.
+	rl::image_flip_vertical(&img);
 	rl::export_image(img, (ZString)opts.screenshot_path.zstr_tcopy());
 	rl::unload_image(img);
 }
@@ -498,13 +582,33 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	bool rounded = opts.corner_radius > 0.0f;
 
 	uint config_flags = (uint)rl::RLConfigFlag.WINDOW_HIGHDPI | (uint)rl::RLConfigFlag.WINDOW_RESIZABLE;
+	// A screenshot run still needs a window — that is where the GL context
+	// and the framebuffer it renders into come from — but nobody has to see
+	// it. Hidden, it renders its one frame, is read back and closed, so a
+	// shot taken from a script does not steal focus or flash on screen.
+	if (opts.screenshot_path.len > 0) config_flags |= (uint)rl::RLConfigFlag.WINDOW_HIDDEN;
 	if (opts.undecorated || rounded) config_flags |= (uint)rl::RLConfigFlag.WINDOW_UNDECORATED;
 	if (rounded) config_flags |= (uint)rl::RLConfigFlag.WINDOW_TRANSPARENT;
 	rl::set_config_flags((rl::RLConfigFlag)config_flags);
 	rl::init_window(opts.cols * opts.cell_w, opts.rows * opts.cell_h, (ZString)opts.title.zstr_tcopy());
 	rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
 	rl::set_target_fps(60);
+	// raylib closes the window on ESC unless told otherwise, which is wrong
+	// for anything built on this loop: ESC is a key the model gets to read
+	// like any other, and a view that uses it to leave a menu or a dialog
+	// would instead quit the app. Nothing here ever decides on its own that
+	// the program should end — a quit comes from the model, through Cmd.
+	rl::set_exit_key(rl::RLKeyboardKey.NONE);
 	rl::RLFont font = load_mono_font(opts.font_size);
+	// A point size the app could not fit to its cell exactly leaves the rules
+	// to a second atlas at the cell's height. When the two agree — the usual
+	// case — there is nothing to load and both names point at one font.
+	bool split_atlas = opts.font_size != opts.cell_h;
+	rl::RLFont rule_font = split_atlas ? load_mono_font(opts.cell_h) : font;
+	CellFit text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h);
+	CellFit rule_fit = split_atlas
+		? cell_fit(rule_font, opts.cell_h, opts.cell_w, opts.cell_h)
+		: text_fit;
 
 	$if env::DARWIN:
 		if (opts.chrome_rows > 0) {
@@ -530,6 +634,22 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// first, then composited onto the (transparent) window through a
 	// shader that zeroes alpha outside a rounded-rect SDF — the actual
 	// corner cut comes from that alpha, not from any window shape API.
+	// The shot target is sized in pixels, not points, so a screenshot keeps
+	// the resolution the display would have given it; the scene is drawn into
+	// it through a camera at the same zoom, leaving every drawing coordinate
+	// below in points as usual.
+	bool shot = opts.screenshot_path.len > 0;
+	rl::RLRenderTexture2D shot_target;
+	rl::RLCamera2D shot_cam;
+	if (shot) {
+		float s = rl::get_window_scale_dpi().x;
+		if (s < 1.0f) s = 1.0f;
+		shot_target = rl::load_render_texture(
+			(int)((float)(opts.cols * opts.cell_w) * s),
+			(int)((float)(opts.rows * opts.cell_h) * s));
+		shot_cam.zoom = s;
+	}
+
 	rl::RLRenderTexture2D target;
 	rl::RLShader round_shader;
 	int round_radius_loc, round_size_loc;
@@ -548,6 +668,33 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	prog.cached_ws.ws_col = (ushort)opts.cols;
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
+
+	// Honour the MILKTEA_DEBUG_MOUSE / MILKTEA_DEBUG_CLICK_AT env vars at
+	// startup for convenience — tests prefer the programmatic API
+	// (milktea::set_debug_mouse / milktea::test_click) but a one-liner
+	// from the shell is still the shortest way to ask the running app
+	// "what did that click hit?".
+	if (try dbg = env::tget_var("MILKTEA_DEBUG_MOUSE")) milktea::set_debug_mouse(dbg.len > 0);
+	if (try at = env::tget_var("MILKTEA_DEBUG_CLICK_AT")) {
+		sz c1 = 0; sz c2 = 0;
+		foreach (i, ch : at) { if (ch == ',') { if (c1 == 0) { c1 = i; } else { c2 = i; } } }
+		if (c1 > 0) {
+			// c3 string slices are length-based in the [a:b] form: at[c1+1:c2-c1-1]
+			// takes (c2-c1-1) characters starting at index c1+1. That covers
+			// exactly the substring between the two commas, with neither one
+			// included.
+			int col = at[:c1].to_int() ?? 0;
+			int row = (c2 > 0 ? at[c1+1:c2-c1-1] : at[c1+1..]).to_int() ?? 0;
+			long delay = c2 > 0 ? (at[c2+1..].to_int() ?? 2) : 2;
+			milktea::test_click(col, row, delay);
+		}
+	}
+	$if env::DARWIN:
+		if (milktea::debug_mouse()) {
+			io::eprintfn("[mouse] raylib screen h=%d, real content h=%.1f",
+				rl::get_screen_height(), milktea_macos_content_height());
+		}
+	$endif
 
 	milktea::Cmd init_cmd = m.init();
 	{
@@ -624,12 +771,46 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		if (should_quit) break;
 
-		if (rl::is_window_resized()) {
+		// A size request and a window resize answer the same question — how
+		// many cells fit — so the request only swaps the font and the cell
+		// size, and lets the resize path below work out the rest. Forcing
+		// that path to run is what makes the new grid reach the model: the
+		// window itself did not change, so is_window_resized() is false.
+		bool size_changed = false;
+		if (g_size_request) {
+			g_size_request = false;
+			if (split_atlas) rl::unload_font(rule_font);
+			rl::unload_font(font);
+			opts.cell_w = g_req_cell_w;
+			opts.cell_h = g_req_cell_h;
+			opts.font_size = g_req_font_size;
+			font = load_mono_font(opts.font_size);
+			split_atlas = opts.font_size != opts.cell_h;
+			rule_font = split_atlas ? load_mono_font(opts.cell_h) : font;
+			text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h);
+			rule_fit = split_atlas
+				? cell_fit(rule_font, opts.cell_h, opts.cell_w, opts.cell_h)
+				: text_fit;
+			rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
+			$if env::DARWIN:
+				// The inline title bar is cell_h tall, so it has to be told
+				// too or the app's top row and the strip stop agreeing.
+				if (opts.chrome_rows > 0) {
+					int br = milktea_macos_inline_titlebar(
+						opts.cell_h, opts.hide_window_buttons ? 1 : 0);
+					if (br >= 0) g_chrome_buttons_right = br;
+				}
+			$endif
+			size_changed = true;
+			g_dirty = true;
+		}
+
+		if (rl::is_window_resized() || size_changed) {
 			int new_cols = rl::get_screen_width() / opts.cell_w;
 			int new_rows = rl::get_screen_height() / opts.cell_h;
 			if (new_cols < 1) new_cols = 1;
 			if (new_rows < 1) new_rows = 1;
-			if (new_cols != opts.cols || new_rows != opts.rows) {
+			if (new_cols != opts.cols || new_rows != opts.rows || size_changed) {
 				opts.cols = new_cols;
 				opts.rows = new_rows;
 				prog.cached_ws.ws_col = (ushort)new_cols;
@@ -703,9 +884,64 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		if (should_quit) break;
 
+		// frame_no counts every iteration of the GUI loop, not just the ones
+		// that actually rendered: test scripts schedule events at "frame
+		// N" and want that to mean "after N ticks of the input pump", not
+		// "after N renders" (which would be indeterminate during idle).
+		milktea::g_program.frame_no++;
+
+		// Pending synthetic click / pointer: the test API parks them here and
+		// the GUI backend fires them through the same dispatch path a real
+		// mouse uses, so target lookup, id forwarding, hover bookkeeping and
+		// the resulting on_click / on_hover_in chains behave exactly as in
+		// a live session — only the raylib input poll is skipped.
+		if (milktea::g_program.test_click_armed
+				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_click_frame) {
+			int tc = milktea::g_program.test_pending_click_col;
+			int tr = milktea::g_program.test_pending_click_row;
+			milktea::g_program.test_click_armed = false;
+			io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
+				milktea::g_program.frame_no, tc, tr,
+				milktea::g_program.click_target_count);
+			milktea::dispatch_click(tc, tr);
+			milktea::MouseMsg fm = { .button = milktea::MouseButton.MOUSE_LEFT,
+				.action = milktea::MouseAction.MOUSE_PRESS, .row = tr, .col = tc };
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = fm })) { should_quit = true; break; }
+		}
+		if (milktea::g_program.test_pointer_armed
+				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_pointer_frame) {
+			int pc = milktea::g_program.test_pending_pointer_col;
+			int pr = milktea::g_program.test_pending_pointer_row;
+			milktea::g_program.test_pointer_armed = false;
+			io::eprintfn("[test] frame %d: pointer col=%d row=%d",
+				milktea::g_program.frame_no, pc, pr);
+			milktea::dispatch_hover(pc, pr);
+			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
+				.action = milktea::MouseAction.MOUSE_MOTION, .row = pr, .col = pc };
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
+		}
 		int mcol = rl::get_mouse_x() / opts.cell_w;
 		int mrow = rl::get_mouse_y() / opts.cell_h;
+		if (mcol != g_prev_mcol || mrow != g_prev_mrow) {
+			// Hover is an edge event: walking every target each frame would
+			// be a no-op while the pointer stays put, but the edge crossing
+			// is what tells a node "you are now hovered" / "you are no
+			// longer". Same dispatch path the terminal loop uses on a real
+			// MOUSE_MOTION, kept in sync so a model written against either
+			// backend sees identical behaviour.
+			milktea::dispatch_hover(mcol, mrow);
+			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
+				.action = milktea::MouseAction.MOUSE_MOTION, .row = mrow, .col = mcol };
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
+			g_prev_mcol = mcol;
+			g_prev_mrow = mrow;
+		}
 		if (rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT)) {
+			if (milktea::debug_mouse()) {
+				io::eprintfn("[mouse] press at px=%d,%d -> col=%d row=%d (cell %dx%d) drag=%s",
+					rl::get_mouse_x(), rl::get_mouse_y(), mcol, mrow,
+					opts.cell_w, opts.cell_h, is_drag_point(opts, mcol, mrow));
+			}
 			if (is_drag_point(opts, mcol, mrow)) {
 				rl::RLVector2 wp = rl::get_window_position();
 				drag_pending = true;
@@ -767,7 +1003,12 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		prev_valid = true;
 
 		rl::begin_drawing();
-		if (rounded) rl::begin_texture_mode(target);
+		if (shot) {
+			rl::begin_texture_mode(shot_target);
+			rl::begin_mode2d(shot_cam);
+		} else if (rounded) {
+			rl::begin_texture_mode(target);
+		}
 
 		if (v.cells.ptr != null) {
 			// Every cell paints its own background — including an unset one,
@@ -796,14 +1037,23 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 							char[9] buf;
 							mem::copy(&buf, &cell.content, cell.content_len);
 							buf[cell.content_len] = 0;
-							rl::draw_text_ex(font, (ZString)&buf[0], { (float)px, (float)py }, (float)opts.font_size, 0, fg);
+							bool rule = split_atlas && is_rule_glyph(cp);
+							rl::RLFont gf = rule ? rule_font : font;
+							CellFit fit = rule ? rule_fit : text_fit;
+							int gsize = rule ? opts.cell_h : opts.font_size;
+							rl::draw_text_ex(gf, (ZString)&buf[0],
+								{ (float)(px + fit.dx), (float)(py + fit.dy) },
+								(float)gsize, 0, fg);
 						}
 					}
 				}
 			}
 		}
 
-		if (rounded) {
+		if (shot) {
+			rl::end_mode2d();
+			rl::end_texture_mode();
+		} else if (rounded) {
 			rl::end_texture_mode();
 			rl::clear_background(rl::BLANK);
 			float[2] tex_size = { (float)target.texture.width, (float)target.texture.height };
@@ -823,9 +1073,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		// buffer holds an older frame) and it has to flush raylib's pending
 		// draw batch first, or the readback misses whatever was drawn last and
 		// those cells come out empty.
-		if (opts.screenshot_path.len > 0) {
+		if (shot && !milktea::g_program.test_click_armed) {
 			rl::gl_draw_render_batch_active();
-			write_screenshot(opts);
+			write_screenshot(opts, shot_target);
+			rl::unload_render_texture(shot_target);
 			rl::end_drawing();
 			break;
 		}
