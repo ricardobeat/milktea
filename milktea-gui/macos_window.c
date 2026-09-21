@@ -27,6 +27,14 @@ typedef struct {
 
 extern Id sel_registerName(const char *name);
 extern Id objc_getClass(const char *name);
+extern const char *object_getClassName(Id obj);
+extern char *getenv(const char *);
+extern int printf(const char *, ...);
+
+static int chrome_debug(void) {
+	const char *v = getenv("MILKTEA_DEBUG_CHROME");
+	return v != 0 && v[0] != 0;
+}
 
 // The Objective-C runtime has one message-send entry point, and the caller
 // decides the argument types, so each signature gets its own declaration of
@@ -164,9 +172,54 @@ int milktea_macos_inline_titlebar(int row_height, int hide_buttons) {
 
 	// With the buttons gone the title bar has nothing left in it, and leaving
 	// it in place would be a strip that eats mouse events.
-	if (titlebar != 0) objc_msg_send_void(titlebar, sel("removeFromSuperview"));
+	//
+	// The buttons' own superview is the NSTitlebarView, which sits inside an
+	// NSTitlebarContainerView. Removing only the inner one leaves the
+	// container, and the container still hit-tests: every press in the top
+	// strip goes to it instead of the app, so the first row of the grid --
+	// exactly where a window like this draws its menu and its own buttons --
+	// stops responding while the rest of the window is fine. Walk up and take
+	// the container too, checking the class name each step so this can never
+	// reach the frame view that the content view also hangs from.
+	Id view = titlebar;
+	if (chrome_debug()) {
+		printf("[chrome] contentView=%s window=%s hide_buttons=%d\n",
+			object_getClassName(content), object_getClassName(window), hide_buttons);
+	}
+	for (int i = 0; i < 3 && view != 0; i++) {
+		const char *name = object_getClassName(view);
+		if (chrome_debug()) printf("[chrome] level %d: %s\n", i, name ? name : "(null)");
+		if (name == 0) break;
+		int titled = name[0] == 'N' && name[1] == 'S'
+			&& name[2] == 'T' && name[3] == 'i' && name[4] == 't'
+			&& name[5] == 'l' && name[6] == 'e';
+		if (!titled) break;
+		Id parent = send_id(view, "superview");
+		objc_msg_send_void(view, sel("removeFromSuperview"));
+		if (chrome_debug()) printf("[chrome]   removed %s\n", name);
+		view = parent;
+	}
+
+	if (chrome_debug()) {
+		Rect4 cb = send_rect(content, "bounds");
+		Rect4 wf = send_rect(window, "frame");
+		printf("[chrome] after: content bounds %.1fx%.1f, window frame %.1fx%.1f\n",
+			cb.width, cb.height, wf.width, wf.height);
+	}
 
 	return (int)(right_edge + 0.5);
+}
+
+// milktea_macos_content_height reports the content view's real height in
+// points. GLFW keeps its own idea of that number, and a window whose content
+// view was grown to cover the title bar can leave the two disagreeing — which
+// matters because the cursor position is flipped through it.
+double milktea_macos_content_height(void) {
+	Id window = main_window();
+	if (window == 0) return -1;
+	Id content = send_id(window, "contentView");
+	if (content == 0) return -1;
+	return send_rect(content, "bounds").height;
 }
 
 // milktea_macos_cursor_screen reports the pointer's position in screen
