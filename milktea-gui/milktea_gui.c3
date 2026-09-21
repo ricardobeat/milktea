@@ -659,6 +659,15 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	if (rounded) config_flags |= (uint)rl::RLConfigFlag.WINDOW_TRANSPARENT;
 	rl::set_config_flags((rl::RLConfigFlag)config_flags);
 	rl::init_window(opts.cols * opts.cell_w, opts.rows * opts.cell_h, (ZString)opts.title.zstr_tcopy());
+	// A window that could not be created leaves raylib half-initialised, and
+	// every call after it — font loading, the first draw — walks into that:
+	// the no-monitor case (all displays asleep, a display-less session) ends
+	// in a segfault rather than a message. Stopping here turns it into one
+	// line on stderr and an ordinary exit, which is what a caller can act on.
+	if (!rl::is_window_ready()) {
+		io::eprintfn("milktea-gui: could not create a window (no display?) — nothing to run on");
+		return;
+	}
 	rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
 	rl::set_target_fps(60);
 	// raylib closes the window on ESC unless told otherwise, which is wrong
