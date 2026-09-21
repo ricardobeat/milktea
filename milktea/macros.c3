@@ -8,10 +8,10 @@ import std::io;
 // 
 // Example:
 //   Counter c = {};
-//   Program p = milktea::@program(&c);
+//   Program p = milktea::@program(&c, { .alt_screen = true });
 //   if (catch err = p.run()) { ... }
-macro @program(#model) {
-	Program p = { .model = (Model)#model };
+macro @program(#model, Options opts = {}) {
+	Program p = { .model = (Model)#model, .options = opts };
 	return p;
 }
 
@@ -23,8 +23,8 @@ macro @program(#model) {
 //   if (catch err = milktea::@run_program(&c)) {
 //       io::printfn("Error: %s", err);
 //   }
-macro @run_program(#model) {
-	Program p = { .model = (Model)#model };
+macro @run_program(#model, Options opts = {}) {
+	Program p = { .model = (Model)#model, .options = opts };
 	return p.run();
 }
 
@@ -34,10 +34,10 @@ macro @run_program(#model) {
 // Example:
 //   fn int main() {
 //       Counter c = {};
-//       return milktea::@run(&c);
+//       return milktea::@run(&c, { .alt_screen = true });
 //   }
-macro @run(#model) {
-	Program p = { .model = (Model)#model };
+macro @run(#model, Options opts = {}) {
+	Program p = { .model = (Model)#model, .options = opts };
 	if (catch err = p.run()) {
 		io::eprintfn("Error: %s", err);
 		return 1;
@@ -55,8 +55,8 @@ macro @run(#model) {
 //   Program p = milktea::@test_program(&c, &out, 80, 24);
 //   p.send({ .kind = MsgKind.QUIT });
 //   p.run();
-macro @test_program(#model, #output, #w, #h) {
-	Program p = { .model = (Model)#model };
+macro @test_program(#model, #output, #w, #h, Options opts = {}) {
+	Program p = { .model = (Model)#model, .options = opts };
 	with_test_mode(&p, #output);
 	with_window_size(&p, #w, #h);
 	return p;

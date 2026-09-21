@@ -268,6 +268,19 @@ struct Msg {
 // Cmd: function pointer producing a Msg. A null Cmd means "no command".
 alias Cmd = fn Msg();
 
+// Options configures program-level terminal state, fixed for the lifetime of
+// the run and applied before the first frame.
+//
+// Per-frame state stays on the View: mouse mode, key-event reporting and
+// pixel-resolution mouse reporting all vary while a program runs, so a view
+// declares what it wants and the runtime applies the difference.
+struct Options {
+	// alt_screen runs the program on the terminal's alternate screen buffer,
+	// leaving the user's scrollback untouched. The screen is entered before
+	// the first frame and exited on teardown, including on a fatal signal.
+	bool alt_screen;
+}
+
 interface Model {
 	fn Cmd init();
 	fn Cmd update(Msg msg);
@@ -302,6 +315,7 @@ struct TimerEntry {
 // Enables sequential multi-instance use and proper testability.
 struct Program {
 	Model model;
+	Options options;
 	TimerEntry[MAX_TIMERS] timers;
 	// Buffers for tree layout (see draw / draw_inline), kept across frames
 	// rather than reallocated per view. draw_buf holds the painted grid the
@@ -610,11 +624,11 @@ fn void emit(String escape) {
 }
 
 // in_alt_screen reports whether the terminal is currently showing the
-// alternate screen buffer. False during init() even for alt-screen programs:
-// the alt screen is entered when the first alt view is rendered, not at
-// program start. Useful for gating writes that are tied to the current
-// screen (kitty-graphics images die on a screen switch) and for
-// direct-rendering code that does not run under a Program.
+// alternate screen buffer. True from the start of init() for a program run
+// with Options.alt_screen, which is when the screen is entered. Useful for
+// gating writes that are tied to the current screen (kitty-graphics images
+// die on a screen switch) and for direct-rendering code that does not run
+// under a Program.
 fn bool in_alt_screen() {
 	if (g_program != null) return g_program.in_alt_screen;
 	return g_manual_alt_screen;
@@ -1091,6 +1105,15 @@ fn void? Program.run(Program* self) {
 				exit_alt_screen();
 			}
 		}
+	}
+
+	// Enter the alt screen before init() so a model can emit screen-tied
+	// output (graphics images die on a screen switch) from its first frame.
+	// The defer above owns the matching exit, and setup_signals() has the
+	// address of in_alt_screen so a fatal signal exits too.
+	if (self.options.alt_screen) {
+		self.emit_sgr(SGR_ALT_ON);
+		self.in_alt_screen = true;
 	}
 
 	Cmd c0 = self.model.init();
