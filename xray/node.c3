@@ -39,10 +39,20 @@ interface Content {
 alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
 
 // ClickFn fires when a mouse press lands inside (on_click) or outside
-// (on_click_outside) the node's solved rect. ctx is whatever the caller
-// passed to .on_click()/.on_click_outside() — typically `self` from the
-// component that built the node, cast back on the way in.
-alias ClickFn = fn void(void* ctx, int col, int row);
+// (on_click_outside) the node's solved rect, and when the pointer crosses the
+// node's edges (on_hover_in / on_hover_out).
+//
+// id is whatever the node was tagged with via .id(...): for a string id it is
+// a pointer to the framework-owned copy (id_str below holds the value); for an
+// int id it is the value as a void*; for a pointer id it is the pointer. Most
+// callers inspect id_str first and fall through to id_ptr.
+//
+// ctx was kept on the per-call site as a separate parameter historically; the
+// node's id now plays that role, so on_click / on_click_outside / on_hover_*
+// no longer take their own ctx — the id IS the ctx. col and row are the press
+// position in cells, useful only when a node spans a region it does not want
+// to divide into sub-targets.
+alias ClickFn = fn void(void* id, String id_str, int col, int row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
@@ -177,10 +187,16 @@ struct Node {
 	// its own ctx — a node that sets both (a button that also wants to know
 	// about clicks elsewhere) would otherwise have the second call silently
 	// clobber the first's context.
+	//
+	// id_str / id_ptr are the per-node identity the click and hover callbacks
+	// receive; .id(String) and .id(...) populate them. id_str takes precedence
+	// when non-empty — a node with both set delivers the string.
+	String id_str;
+	void* id_ptr;
 	ClickFn on_click_fn;
-	void* on_click_ctx;
 	ClickFn on_click_outside_fn;
-	void* on_click_outside_ctx;
+	ClickFn on_hover_in_fn;
+	ClickFn on_hover_out_fn;
 
 	// Marks this node's area as a place to drag the OS window from, the way
 	// a title bar is. Collected after solve() alongside the click targets
@@ -366,22 +382,62 @@ fn Node* Node.repaint_after(&self, int ms) {
 	return self;
 }
 
-// on_click fires fn(ctx, col, row) when a mouse press lands inside this
-// node's solved rect. Hit-testing picks the topmost (last-painted) node
-// whose rect contains the click, so a button inside a dialog gets the
-// click rather than the dialog panel behind it.
-fn Node* Node.on_click(&self, ClickFn handler, void* ctx) {
-	self.on_click_fn = handler;
-	self.on_click_ctx = ctx;
+// id attaches a name to this node that the click and hover callbacks receive
+// as id_str. Useful for a small static layout — a chrome row, a fixed button
+// — where the callback can switch on the name without an app-side slot table.
+// Strings live as long as the node does: a copy is made here on tmem, freed
+// when the tree is torn down at the end of the frame.
+fn Node* Node.id(&self, String name) {
+	self.id_str = name.tcopy();
+	self.id_with(null);
 	return self;
 }
 
-// on_click_outside fires handler(ctx, col, row) when a mouse press lands
-// anywhere outside this node's solved rect — the standard "dismiss on
+// id_ptr attaches an opaque pointer as the node's identity. Used for ints
+// (boxed as void*) and for app-side structs (cast back on the way in). When
+// the node already has an id_str, it is cleared so id_ptr is the only id.
+fn Node* Node.id_with(&self, void* p) {
+	self.id_str = "";
+	self.id_ptr = p;
+	return self;
+}
+
+// id_int is sugar for id_with on a (void*)(uptr) cast — the common case for
+// a static row index. The framework hands it back as a void* that the app
+// recovers with (int)(uptr).
+fn Node* Node.id_int(&self, int i) => self.id_with((void*)(uptr)i);
+
+// on_click fires fn(id, id_str, col, row) when a mouse press lands inside this
+// node's solved rect. Hit-testing picks the topmost (last-painted) node whose
+// rect contains the click, so a button inside a dialog gets the click rather
+// than the dialog panel behind it.
+fn Node* Node.on_click(&self, ClickFn handler) {
+	self.on_click_fn = handler;
+	return self;
+}
+
+// on_click_outside fires handler(id, id_str, col, row) when a mouse press
+// lands anywhere outside this node's solved rect — the standard "dismiss on
 // outside click" behavior for a dropdown or modal backdrop.
-fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
+fn Node* Node.on_click_outside(&self, ClickFn handler) {
 	self.on_click_outside_fn = handler;
-	self.on_click_outside_ctx = ctx;
+	return self;
+}
+
+// on_hover_in fires when the pointer enters this node's rect. The framework
+// only fires it on a real edge crossing — moving the mouse while it is
+// already inside does not re-fire it. The dedicated handler means a hover
+// effect (highlight, tooltip) can be wired without sharing a callback with
+// click and getting it called on every press.
+fn Node* Node.on_hover_in(&self, ClickFn handler) {
+	self.on_hover_in_fn = handler;
+	return self;
+}
+
+// on_hover_out fires when the pointer leaves this node's rect after having
+// been inside (see on_hover_in).
+fn Node* Node.on_hover_out(&self, ClickFn handler) {
+	self.on_hover_out_fn = handler;
 	return self;
 }
 
