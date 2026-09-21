@@ -320,6 +320,14 @@ struct Program {
 	// timers/send_queue/pending.
 	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
 	int click_target_count;
+	// Last pointer position and last hovered targets, used by dispatch_hover
+	// to fire on_hover_in / on_hover_out only on real edge crossings. Targets
+	// themselves are not stored — the same click_targets list is filtered each
+	// frame, so a frame that rebuilt the tree invalidates the comparison and
+	// every previously-hovered target gets on_hover_out + on_hover_in again.
+	int hover_prev_col;
+	int hover_prev_row;
+	bool hover_has_prev;
 	// Areas the app offered as drag handles for the OS window (xray::Node
 	// .window_drag), refilled by draw() from the same solved tree. Only a GUI
 	// build reads them; in a terminal there is no window to move.
@@ -333,6 +341,28 @@ struct Program {
 	bool report_key_events;
 	bool mouse_pixels;
 	bool debug;
+	// debug_mouse turns on the framework's mouse-event tracing: every click
+	// dispatch prints its target list, every hover edge print which targets
+	// gained or lost hover. Both the GUI backend and xray::node_click read
+	// this — one source of truth instead of separate env-var checks per
+	// file. Set with milktea::set_debug_mouse().
+	bool debug_mouse;
+	// frame_no increments once per view() call. Test scripts use it to
+	// schedule fake clicks / pointer moves at a deterministic frame; the
+	// GUI backend exposes the same number internally for the same purpose.
+	long frame_no;
+	// test_click / test_pointer pending state. Each is armed with a target
+	// frame, and the running backend fires the synthetic event when its
+	// own frame counter reaches that point. After firing, the slot is
+	// disarmed so the event does not re-fire every subsequent frame.
+	bool test_click_armed;
+	int test_pending_click_col;
+	int test_pending_click_row;
+	long test_pending_click_frame;
+	bool test_pointer_armed;
+	int test_pending_pointer_col;
+	int test_pending_pointer_row;
+	long test_pending_pointer_frame;
 	char[512] pending;
 	sz pending_len;
 	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
@@ -574,7 +604,78 @@ fn xray::Rect[] drag_regions() {
 
 fn void dispatch_click(int col, int row) {
 	if (g_program == null) return;
-	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);
+	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count],
+		col, row, g_program.debug_mouse);
+}
+
+// dispatch_hover walks the last drawn frame's click targets and fires
+// on_hover_in / on_hover_out on targets whose rect changed side relative to
+// the last pointer event. A press at (col, row) also counts as motion for
+// the purposes of hover tracking — the press location becomes the new
+// pointer position. (-1, -1) on the first call skips every prior target.
+fn void dispatch_hover(int col, int row) {
+	if (g_program == null) return;
+	xray::ClickTarget[] targs = g_program.click_targets[:g_program.click_target_count];
+	if (g_program.hover_has_prev) {
+		xray::dispatch_hover(targs, col, row, targs, g_program.click_target_count,
+			g_program.hover_prev_col, g_program.hover_prev_row,
+			g_program.debug_mouse);
+	} else {
+		xray::dispatch_hover(targs, col, row, targs, g_program.click_target_count,
+			-1, -1, g_program.debug_mouse);
+	}
+	g_program.hover_prev_col = col;
+	g_program.hover_prev_row = row;
+	g_program.hover_has_prev = true;
+}
+
+// set_debug_mouse turns mouse-event tracing on or off for the running
+// program. When on, both the GUI backend and xray::node_click print every
+// dispatch_hover / dispatch_click's target list to stderr. Apps usually set
+// it from a CLI flag or env var at startup; tests toggle it per assertion.
+fn void set_debug_mouse(bool on) {
+	if (g_program == null) return;
+	g_program.debug_mouse = on;
+}
+
+// debug_mouse reports whether mouse tracing is currently on. Useful for
+// conditional logging in app code that wants to be quiet in production.
+fn bool debug_mouse() => g_program != null && g_program.debug_mouse;
+
+// frame_no returns how many times the running program has rendered the
+// model's view. Tests use it to schedule fake clicks / pointer moves at a
+// deterministic point in the loop, and the GUI backend keeps a parallel
+// counter for the same purpose.
+fn long frame_no() => g_program != null ? g_program.frame_no : 0;
+
+// test_click schedules a synthetic left-button press at (col, row) to fire
+// after the next `after_frame` render calls complete. after_frame=0 means
+// "next frame"; the GUI and terminal backends both honour it through their
+// own fake-click paths. The press fires through the same dispatch_click
+// the real mouse uses, so target lookup, id forwarding, and the resulting
+// on_click / on_hover_in chains all behave exactly as they would in a
+// real session — the only thing missing is the pixel the pointer was at.
+//
+// Test scripts prefer this over MILKTEA_DEBUG_CLICK_AT: it is deterministic,
+// has a programmatic return value, and does not depend on the env-var
+// parsing happening to produce a valid cell.
+fn void test_click(int col, int row, long after_frame) {
+	if (g_program == null) return;
+	g_program.test_pending_click_col = col;
+	g_program.test_pending_click_row = row;
+	g_program.test_pending_click_frame = g_program.frame_no + after_frame;
+	g_program.test_click_armed = true;
+}
+
+// test_pointer schedules a synthetic hover at (col, row), firing after
+// `after_frame` frames the same way test_click does. Useful for asserting
+// that hover effects render without driving a real mouse.
+fn void test_pointer(int col, int row, long after_frame) {
+	if (g_program == null) return;
+	g_program.test_pending_pointer_col = col;
+	g_program.test_pending_pointer_row = row;
+	g_program.test_pending_pointer_frame = g_program.frame_no + after_frame;
+	g_program.test_pointer_armed = true;
 }
 
 // debug_warn appends a timestamped line to milktea-debug.log.
@@ -697,6 +798,11 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
+	}
+	if (m.kind == MsgKind.MOUSE
+		&& (m.mouse.action == MouseAction.MOUSE_PRESS
+			|| m.mouse.action == MouseAction.MOUSE_MOTION)) {
+		dispatch_hover(m.mouse.col, m.mouse.row);
 	}
 	Cmd c     = model.update(m);
 	int chain = 0;
@@ -1494,6 +1600,7 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
 fn void Program.render_current_view(Program* self) {
+	self.frame_no++;
 	@pool() {
 		View v = self.model.view();
 		if (v.alt_screen && !self.in_alt_screen) {
