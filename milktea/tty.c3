@@ -95,6 +95,13 @@ int g_cell_h_px = 0;
 bool g_cell_px_known = false;
 bool g_tgp_replied = false;
 
+// The terminal's own background, from the OSC 11 probe. Unknown until it
+// answers; terminals that do not implement the query stay silent.
+int g_term_bg_r = 0;
+int g_term_bg_g = 0;
+int g_term_bg_b = 0;
+bool g_term_bg_known = false;
+
 // How long probe_terminal_caps waits for replies before giving up. Terminals
 // that support none of the queries (alacritty, GNU Screen) pay this cost at
 // startup; keep it small.
@@ -109,6 +116,13 @@ fn void report_cell_size_reply(int height, int width) {
 
 fn void report_tgp_reply() {
 	g_tgp_replied = true;
+}
+
+fn void report_term_bg_reply(int r, int g, int b) {
+	g_term_bg_r = r;
+	g_term_bg_g = g;
+	g_term_bg_b = b;
+	g_term_bg_known = true;
 }
 
 fn bool is_csi_final(char c) @local {
@@ -143,8 +157,72 @@ fn void handle_probe_csi(char[] body) @local {
 // iTerm2's ReportCellSize=<height>;<width>; for APC ESC_G it records that the
 // terminal speaks the kitty graphics protocol (the a=q probe is answered with
 // OK or ERR — either way the protocol is implemented).
+// parse_hex_channel reads one `rgb:` channel — 1 to 4 hex digits — and scales
+// it to 8 bits, so `ff`, `ffff` and `f` all come back as 255.
+fn bool parse_hex_channel(char[] s, int* out) @local {
+	if (s.len == 0 || s.len > 4) return false;
+	int v = 0;
+	foreach (c : s) {
+		int d;
+		if (c >= '0' && c <= '9') {
+			d = c - '0';
+		} else if (c >= 'a' && c <= 'f') {
+			d = c - 'a' + 10;
+		} else if (c >= 'A' && c <= 'F') {
+			d = c - 'A' + 10;
+		} else {
+			return false;
+		}
+		v = v * 16 + d;
+	}
+	// Scale from the reply's width to 8 bits: one digit spans 0-15, four span
+	// 0-65535, and both must land on 0-255.
+	int max = (1 << (4 * (int)s.len)) - 1;
+	*out = max == 255 ? v : v * 255 / max;
+	return true;
+}
+
+// parse_osc11_body reads `11;rgb:RRRR/GGGG/BBBB` and reports the color.
+fn void parse_osc11_body(char[] body) @local {
+	String prefix = (String)"11;rgb:";
+	if (body.len <= prefix.len) return;
+	for (sz i = 0; i < prefix.len; i++) {
+		if (body[i] != prefix[i]) return;
+	}
+	char[] rest = body[prefix.len..];
+
+	// Split on the two slashes.
+	sz first = 0;
+	sz second = 0;
+	sz seen = 0;
+	for (sz i = 0; i < rest.len; i++) {
+		if (rest[i] != '/') continue;
+		if (seen == 0) {
+			first = i;
+		} else if (seen == 1) {
+			second = i;
+		} else {
+			return; // more than two separators — not a color we understand
+		}
+		seen++;
+	}
+	if (seen != 2) return;
+
+	int r;
+	int g;
+	int b;
+	if (!parse_hex_channel(rest[0:first], &r)) return;
+	if (!parse_hex_channel(rest[first + 1:second - first - 1], &g)) return;
+	if (!parse_hex_channel(rest[second + 1..], &b)) return;
+	report_term_bg_reply(r, g, b);
+}
+
 fn void handle_probe_string(bool is_osc, char[] body) @local {
 	if (is_osc) {
+		if (body.len > 2 && body[0] == '1' && body[1] == '1' && body[2] == ';') {
+			parse_osc11_body(body);
+			return;
+		}
 		String prefix = (String)"1337;ReportCellSize=";
 		if (body.len <= prefix.len) return;
 		// Prefix match on the raw bytes.
@@ -175,7 +253,7 @@ fn void handle_probe_string(bool is_osc, char[] body) @local {
 // of buf and returns the number of bytes consumed. Noise bytes (e.g. keys the
 // user typed during the probe) are skipped; an incomplete trailing sequence is
 // left in the buffer for the next round or returned to the input stream.
-fn sz parse_probe_replies(char[] buf) @local {
+fn sz parse_probe_replies(char[] buf) {
 	sz pos = 0;
 	while (pos < buf.len) {
 		if (buf[pos] != 0x1b) {
@@ -217,6 +295,9 @@ fn sz parse_probe_replies(char[] buf) @local {
 fn sz probe_terminal_caps(char[] leftover) {
 	write_stdout((char[])"\x1b[16t");
 	write_stdout((char[])"\x1b]1337;ReportCellSize\x07");
+	// Background-color query. Terminals that support it answer
+	// OSC 11 ; rgb:RRRR/GGGG/BBBB ST; the rest stay silent.
+	write_stdout((char[])"\x1b]11;?\x07");
 	// Kitty graphics capability probe: a=q with a 1x1 pixel RGB payload id 31.
 	// Supported terminals answer APC ESC_Gi=31;... (OK or ERR); unsupported
 	// ones stay silent. The payload matters: Ghostty only replies when the
@@ -227,7 +308,7 @@ fn sz probe_terminal_caps(char[] leftover) {
 	sz len = 0;
 	sz deadline = time_ms() + PROBE_TIMEOUT_MS;
 	while (time_ms() < deadline) {
-		if (g_cell_px_known && g_tgp_replied) break;
+		if (g_cell_px_known && g_tgp_replied && g_term_bg_known) break;
 		char[128] chunk;
 		sz n = read_stdin_timeout(chunk[..], 30);
 		if (n > 0) {

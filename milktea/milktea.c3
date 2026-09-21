@@ -651,6 +651,19 @@ fn bool kitty_graphics_supported() {
 	return g_tgp_replied;
 }
 
+// terminal_background reports the terminal's own background color, from the
+// OSC 11 query sent during the startup probe. Terminals that do not implement
+// it stay silent, so check terminal_background_known() first — the returned
+// color is black when nothing answered, which is the safe assumption for a
+// dark terminal but a wrong one for a light theme.
+fn int terminal_background_r() => g_term_bg_r;
+fn int terminal_background_g() => g_term_bg_g;
+fn int terminal_background_b() => g_term_bg_b;
+
+fn bool terminal_background_known() {
+	return g_term_bg_known;
+}
+
 // ============================================================
 // Program options — configure a Program before run()
 // ============================================================
