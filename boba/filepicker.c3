@@ -131,15 +131,26 @@ fn void FilePicker.load_dir(&self, String path) {
 
 extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
 
+// clear_selection drops the row a click chose. Navigating with the arrows
+// means the cursor is the current row again, and a list showing two
+// highlighted rows — one the keyboard's, one the pointer's — is a list whose
+// selection looks like it ignores the arrow keys.
+fn void FilePicker.clear_selection(&self) {
+	self.selected = -1;
+	self.selected_name = "";
+}
+
 // handle_key processes file picker keybindings.
 // Returns true if the key was consumed.
 fn bool FilePicker.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.UP:
 			if (self.cursor > 0) self.cursor--;
+			self.clear_selection();
 			return true;
 		case milktea::KeyCode.DOWN:
 			if (self.cursor < self.count - 1) self.cursor++;
+			self.clear_selection();
 			return true;
 		case milktea::KeyCode.ENTER:
 			if (self.cursor < self.count && self.is_dirs[self.cursor]) {
@@ -233,6 +244,11 @@ fn xray::Node* FilePicker.node(&self) => xray::content_node(self);
 // app's registered callback. The app never has to walk a target list to
 // figure out which row was clicked.
 //
+// A click also moves the cursor, since the cursor is the keyboard's idea of
+// the current row and a click is the pointer saying which row that is: leave
+// it behind and the next arrow key moves the highlight away from the row the
+// user just clicked, which reads as the list ignoring the keyboard.
+//
 // ctx for picker_row_clicked / hover_in / hover_out is a fresh PickRowCtx on
 // tmem that captures &self + index, so the framework only sees a void* and
 // the picker's static handler does the cast.
@@ -247,6 +263,7 @@ fn void picker_row_clicked(void* id, String id_str, int col, int row) @local {
 	FilePicker* fp = rc.picker;
 	int i = rc.index;
 	if (i < 0 || i >= fp.count) return;
+	fp.cursor = i;
 	fp.selected = i;
 	fp.selected_name = (String)fp.names[i][:fp.name_lens[i]];
 	if (fp.on_row_click_fn != null) {

@@ -45,10 +45,11 @@ struct Textarea (xray::Content) {
 }
 
 // TextareaPressFn fires when a mouse press lands inside the textarea. row
-// and col are in text coordinates — they are already past the gutter and
-// prompt and adjusted for the textarea's own scroll, so the callback can
-// use them directly to move the caret. id is the per-call ctx the app
-// registered through on_press.
+// and col are the position in the textarea's own coordinates — the space
+// set_cursor takes, already past the gutter and prompt and with the wrap and
+// the scroll resolved — so the callback can hand them straight back to
+// set_cursor without knowing how the text is laid out. id is the per-call
+// ctx the app registered through on_press.
 alias TextareaPressFn = fn void(void* id, int row, int col);
 
 // new_textarea creates a textarea with the given dimensions.
@@ -148,12 +149,126 @@ fn void Textarea.set_cursor(&self, int row, int col) {
 	self.cursor_pos = pos;
 	self.cursor_row = row;
 	self.cursor_col = walked;
-	// Keep the caret on screen.
+	self.scroll_to_caret();
+}
+
+// rows_for is how many rows the view spends on a line of len bytes. A line
+// wider than the content area is wrapped, so this is the count of chunks the
+// render draws — at least one, since even an empty line is a row.
+fn int rows_for(sz len, int width) @local {
+	if (len <= 0) return 1;
+	return (int)((len + (sz)width - 1) / (sz)width);
+}
+
+// caret_visual_pos gives the caret's row from the top of the view and its
+// column inside the chunk it sits in — the two numbers the drawn cursor and
+// the scroll check both need, and both counted the way the render counts
+// them: a wrapped line above the caret adds rows to that distance, so
+// counting lines instead draws the cursor over a line that merely happens to
+// be that far down, and scrolls for a caret that was on screen all along.
+//
+// The chunk is clamped to the caret line's own last one, so a caret at a
+// column that is a whole number of chunks wide sits at the end of the text
+// rather than on a row the line does not have.
+fn void Textarea.caret_visual_pos(&self, int* out_row, int* out_col) {
+	int width = self.width - self.text_offset();
+	if (width < 1) width = 1;
+
+	int rows = 0;
+	sz pos = 0;
+	for (int r = 0; r < self.cursor_row && pos < self.len; r++) {
+		sz line_end = pos;
+		while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
+		if (r >= self.scroll_offset) rows += rows_for(line_end - pos, width);
+		pos = line_end < self.len ? line_end + 1 : line_end;
+	}
+
+	// pos is the start of the caret's own line now.
+	sz line_end = pos;
+	while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
+	int chunks = rows_for(line_end - pos, width);
+	int chunk = self.cursor_col / width;
+	if (chunk > chunks - 1) chunk = chunks - 1;
+	if (chunk < 0) chunk = 0;
+
+	*out_row = rows + chunk;
+	*out_col = self.cursor_col - chunk * width;
+}
+
+// scroll_to_caret brings the caret back into the view after set_cursor moved
+// it. A click lands inside the view by definition, so it never moves for one;
+// a position placed from elsewhere ends up on the view's first row.
+fn void Textarea.scroll_to_caret(&self) {
+	if (self.cursor_row < self.scroll_offset) {
+		self.scroll_offset = self.cursor_row;
+		return;
+	}
 	int vis = self.height;
 	if (vis < 1) vis = 1;
-	if (self.cursor_row < self.scroll_offset) self.scroll_offset = self.cursor_row;
-	if (self.cursor_row >= self.scroll_offset + vis) self.scroll_offset = self.cursor_row - vis + 1;
+	int row;
+	int col;
+	self.caret_visual_pos(&row, &col);
+	if (row >= vis) self.scroll_offset = self.cursor_row;
 	if (self.scroll_offset < 0) self.scroll_offset = 0;
+}
+
+// text_pos_at converts a press at (row, col) in the component's own cells —
+// the space xray reports a click in — into the (row, col) set_cursor takes.
+//
+// The two only agree while the view sits at the top of the buffer and no line
+// wraps. The render starts at scroll_offset and breaks a line wider than the
+// content area into several rows, so a screen row is neither a line number
+// nor a fixed distance from one: counting rows through the same wrap the
+// render walks is what puts the caret on the row the click named, and the
+// column is then counted only inside the chunk it landed in.
+//
+// A press past the end of the text answers with the end of the buffer, which
+// is where a click under the last line belongs.
+fn void Textarea.text_pos_at(&self, int row, int col, int* out_row, int* out_col) {
+	if (row < 0) row = 0;
+	int width = self.width - self.text_offset();
+	if (width < 1) width = 1;
+
+	int lc = self.line_count();
+	int first = self.scroll_offset;
+	if (first < 0) first = 0;
+	if (first >= lc) first = lc - 1;
+
+	// Walk to the line the view draws first; rows are counted from there,
+	// since that line is row 0 on screen.
+	sz pos = 0;
+	for (int r = 0; r < first && pos < self.len; r++) {
+		while (pos < self.len && self.buf[pos] != '\n') pos++;
+		if (pos < self.len) pos++;
+	}
+
+	int visual = 0;
+	int last_row = first;
+	int last_col = 0;
+	for (int r = first; r < lc; r++) {
+		sz line_start = pos;
+		while (pos < self.len && self.buf[pos] != '\n') pos++;
+		sz line_len = pos - line_start;
+		last_row = r;
+		last_col = (int)line_len;
+		int chunks = rows_for(line_len, width);
+		if (row < visual + chunks) {
+			sz chunk_start = (sz)(row - visual) * (sz)width;
+			if (chunk_start > line_len) chunk_start = line_len;
+			int text_col = (int)chunk_start + (col - self.text_offset());
+			if (text_col < (int)chunk_start) text_col = (int)chunk_start;
+			sz chunk_end = chunk_start + (sz)width;
+			if (chunk_end > line_len) chunk_end = line_len;
+			if (text_col > (int)chunk_end) text_col = (int)chunk_end;
+			*out_row = r;
+			*out_col = text_col;
+			return;
+		}
+		visual += chunks;
+		pos = pos < self.len ? pos + 1 : pos;
+	}
+	*out_row = last_row;
+	*out_col = last_col;
 }
 
 // insert inserts a character at the cursor position.
@@ -619,12 +734,15 @@ fn int Textarea.measure_width(&self, int height) @dynamic => self.width;
 
 fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.focused) return {};
-	// scroll_offset is the first visible line, so the caret's row on screen is
-	// its distance from there; text_offset() is the gutter and prompt drawn
-	// before the text itself.
+	// The caret's row on screen is its visual row within the view, and its
+	// column is its place inside the chunk it is in, past the gutter and
+	// prompt the text is drawn after — see caret_visual_pos.
+	int row;
+	int col;
+	self.caret_visual_pos(&row, &col);
 	return milktea::place_cursor(r,
-		self.text_offset() + self.cursor_col,
-		self.cursor_row - self.scroll_offset,
+		self.text_offset() + col,
+		row,
 		self.caret);
 }
 
@@ -662,12 +780,13 @@ fn void textarea_press(void* id, String id_str, int col, int row) @local {
 	PressCtx* pc = (PressCtx*)id;
 	Textarea* t = pc.t;
 	if (t.on_press_fn == null) return;
-	// col / row are already rect-local (the framework subtracts rect.x /
-	// rect.y for us). Strip the gutter + prompt to land in text coords; the
-	// app uses these directly as a caret position.
-	int adj_col = col - t.text_offset();
-	int adj_row = row;  // scroll was applied during render, so row is already in screen coords; the caller decides whether to translate.
-	if (adj_col < 0) adj_col = 0;
-	if (adj_row < 0) adj_row = 0;
-	t.on_press_fn(t.on_press_ctx, adj_row, adj_col);
+	// col / row arrive rect-local (the framework subtracts rect.x / rect.y
+	// for us) but still in screen cells. The textarea turns them into the
+	// text position the caret belongs at — see text_pos_at — so the app can
+	// hand them straight to set_cursor without knowing how the view wraps or
+	// where it is scrolled to.
+	int text_row;
+	int text_col;
+	t.text_pos_at(row, col, &text_row, &text_col);
+	t.on_press_fn(t.on_press_ctx, text_row, text_col);
 }

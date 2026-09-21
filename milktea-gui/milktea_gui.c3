@@ -49,6 +49,8 @@ extern fn int milktea_macos_inline_titlebar(int row_height, int hide_buttons)
 	@cname("milktea_macos_inline_titlebar") @feat(DARWIN);
 extern fn double milktea_macos_content_height()
 	@cname("milktea_macos_content_height") @feat(DARWIN);
+extern fn int milktea_macos_cursor_window(double* x, double* y)
+	@cname("milktea_macos_cursor_window") @feat(DARWIN);
 extern fn int milktea_macos_cursor_screen(double* x, double* y)
 	@cname("milktea_macos_cursor_screen") @feat(DARWIN);
 
@@ -110,6 +112,16 @@ bool g_size_request @local;
 // mouse position twice per frame and diffing.
 int g_prev_mcol @local = -1;
 int g_prev_mrow @local = -1;
+// Last pointer position reported by the debug trace below, in window pixels,
+// so a disagreement between the live reading and raylib's is logged once per
+// movement rather than once per frame.
+int g_trace_x @local = -1;
+int g_trace_y @local = -1;
+// The one key MILKTEA_DEBUG_KEY_AT asks the loop to send, and the frame to
+// send it on (see the parsing in run()).
+milktea::KeyMsg g_key_msg @local;
+long g_key_frame @local;
+bool g_key_armed @local;
 
 // set_cell_size asks the loop to redraw at a new cell size and point size,
 // taking effect on the next frame. The window keeps the pixels it has; what
@@ -128,6 +140,62 @@ fn void set_cell_size(int cell_w, int cell_h, int font_size) {
 // into a window drag, in screen pixels. Enough to swallow the wobble of a
 // click, small enough that a deliberate drag starts at once.
 const int DRAG_SLOP = 3;
+
+// pointer_cell reports the pointer's cell in the grid, preferring a live
+// reading of the pointer over raylib's cached one.
+//
+// raylib only learns where the pointer is from motion events: GLFW's mouse
+// button handlers carry a button, not a location, so a press is reported at
+// wherever the pointer was on its last move over the window. That is usually
+// where it still is — but not when no such move has happened since the window
+// opened, and not while the window is not key, because AppKit delivers
+// mouse-moved events to the key window only. A press in either case is
+// hit-tested against a cell the pointer left long ago, so it opens the wrong
+// thing or, more often, nothing: the click that only works after the pointer
+// has been wobbled. Asking the window directly answers with where the pointer
+// is now, whatever the event queue did or did not deliver.
+//
+// A pointer outside the window answers (-1, -1), which no layout rect
+// contains, so hover clears and a press finds no target instead of being
+// rounded into the first row or column. Only the live reading can report
+// that: raylib's cached position cannot leave the window it was last seen in.
+fn void pointer_cell(GuiOptions opts, int* col, int* row) @local {
+	int x = rl::get_mouse_x();
+	int y = rl::get_mouse_y();
+	$if env::DARWIN:
+		double live_x;
+		double live_y;
+		// A miniaturised window has no place on screen to be measured
+		// against, so the reading would be an offset from a window in the
+		// Dock and could land inside the grid by accident. raylib's cached
+		// position is stale but harmless, and nothing can be pressed there
+		// anyway.
+		if (!rl::is_window_minimized() && milktea_macos_cursor_window(&live_x, &live_y) != 0) {
+			x = (int)live_x;
+			y = (int)live_y;
+			// The two disagreeing is exactly what a press that lands in the
+			// wrong place looks like from inside, so the trace says so when
+			// it happens — once per pointer movement, not once per frame.
+			if (milktea::debug_mouse()
+				&& (x != rl::get_mouse_x() || y != rl::get_mouse_y())
+				&& (x != g_trace_x || y != g_trace_y)) {
+				g_trace_x = x;
+				g_trace_y = y;
+				io::eprintfn("[mouse] pointer at %d,%d; raylib last moved at %d,%d",
+					x, y, rl::get_mouse_x(), rl::get_mouse_y());
+			}
+		}
+	$endif
+	int w = rl::get_screen_width();
+	int h = rl::get_screen_height();
+	if (w < 1 || h < 1 || x < 0 || y < 0 || x >= w || y >= h) {
+		*col = -1;
+		*row = -1;
+		return;
+	}
+	*col = x / opts.cell_w;
+	*row = y / opts.cell_h;
+}
 
 // is_drag_point answers whether a press at this cell should be able to drag
 // the window. A view that marked nodes with xray::Node.window_drag decides
@@ -669,11 +737,12 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
 
-	// Honour the MILKTEA_DEBUG_MOUSE / MILKTEA_DEBUG_CLICK_AT env vars at
-	// startup for convenience — tests prefer the programmatic API
-	// (milktea::set_debug_mouse / milktea::test_click) but a one-liner
-	// from the shell is still the shortest way to ask the running app
-	// "what did that click hit?".
+	// Honour the MILKTEA_DEBUG_MOUSE / MILKTEA_DEBUG_CLICK_AT /
+	// MILKTEA_DEBUG_POINTER_AT env vars at startup for convenience — tests
+	// prefer the programmatic API (milktea::set_debug_mouse /
+	// milktea::test_click / milktea::test_pointer) but a one-liner from the
+	// shell is still the shortest way to ask the running app "what did that
+	// click hit?" or "what does that row look like hovered?".
 	if (try dbg = env::tget_var("MILKTEA_DEBUG_MOUSE")) milktea::set_debug_mouse(dbg.len > 0);
 	if (try at = env::tget_var("MILKTEA_DEBUG_CLICK_AT")) {
 		sz c1 = 0; sz c2 = 0;
@@ -689,12 +758,57 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			milktea::test_click(col, row, delay);
 		}
 	}
+	if (try at = env::tget_var("MILKTEA_DEBUG_POINTER_AT")) {
+		sz c1 = 0; sz c2 = 0;
+		foreach (i, ch : at) { if (ch == ',') { if (c1 == 0) { c1 = i; } else { c2 = i; } } }
+		if (c1 > 0) {
+			int col = at[:c1].to_int() ?? 0;
+			int row = (c2 > 0 ? at[c1+1:c2-c1-1] : at[c1+1..]).to_int() ?? 0;
+			long delay = c2 > 0 ? (at[c2+1..].to_int() ?? 2) : 2;
+			milktea::test_pointer(col, row, delay);
+		}
+	}
 	$if env::DARWIN:
 		if (milktea::debug_mouse()) {
 			io::eprintfn("[mouse] raylib screen h=%d, real content h=%.1f",
 				rl::get_screen_height(), milktea_macos_content_height());
 		}
 	$endif
+	// MILKTEA_DEBUG_KEY_AT="<key>,<frame>" sends one key through the same
+	// dispatch a real keypress takes, the way _CLICK_AT does for the mouse:
+	// the shortest way to ask the running app what a keystroke does to its
+	// view, and the only one that works without a hand on the keyboard. The
+	// key is a name (up/down/left/right/enter/esc/tab/backspace/space) or a
+	// single character, which arrives as a rune.
+	if (try at = env::tget_var("MILKTEA_DEBUG_KEY_AT")) {
+		sz comma = 0;
+		foreach (i, ch : at) { if (ch == ',') { comma = i; break; } }
+		String name = comma > 0 ? at[:comma] : at;
+		long frame = comma > 0 ? (at[comma+1..].to_int() ?? 2) : 2;
+		milktea::KeyMsg k = { };
+		if (name == "up") { k.code = milktea::KeyCode.UP; }
+		else if (name == "down") { k.code = milktea::KeyCode.DOWN; }
+		else if (name == "left") { k.code = milktea::KeyCode.LEFT; }
+		else if (name == "right") { k.code = milktea::KeyCode.RIGHT; }
+		else if (name == "enter") { k.code = milktea::KeyCode.ENTER; }
+		else if (name == "esc") { k.code = milktea::KeyCode.ESC; }
+		else if (name == "tab") { k.code = milktea::KeyCode.TAB; }
+		else if (name == "backspace") { k.code = milktea::KeyCode.BACKSPACE; }
+		else if (name == "space") {
+			k.code = milktea::KeyCode.RUNE;
+			k.rune = ' ';
+		} else if (name.len == 1) {
+			k.code = milktea::KeyCode.RUNE;
+			k.rune = (uint)name[0];
+		} else {
+			io::eprintfn("[test] MILKTEA_DEBUG_KEY_AT: unknown key \"%s\"", name);
+		}
+		if (k.code != milktea::KeyCode.NONE) {
+			g_key_msg = k;
+			g_key_frame = frame;
+			g_key_armed = true;
+		}
+	}
 
 	milktea::Cmd init_cmd = m.init();
 	{
@@ -920,8 +1034,18 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				.action = milktea::MouseAction.MOUSE_MOTION, .row = pr, .col = pc };
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
 		}
-		int mcol = rl::get_mouse_x() / opts.cell_w;
-		int mrow = rl::get_mouse_y() / opts.cell_h;
+		// The MILKTEA_DEBUG_KEY_AT key, if one was armed and its frame has
+		// arrived. It goes through dispatch_gui exactly as a keystroke read
+		// from the keyboard does, so a shell run sees the same result.
+		if (g_key_armed && milktea::g_program.frame_no >= g_key_frame) {
+			g_key_armed = false;
+			io::eprintfn("[test] frame %d: key code=%d rune=%d",
+				milktea::g_program.frame_no, (int)g_key_msg.code, (int)g_key_msg.rune);
+			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = g_key_msg })) { should_quit = true; break; }
+		}
+		int mcol;
+		int mrow;
+		pointer_cell(opts, &mcol, &mrow);
 		if (mcol != g_prev_mcol || mrow != g_prev_mrow) {
 			// Hover is an edge event: walking every target each frame would
 			// be a no-op while the pointer stays put, but the edge crossing
@@ -957,8 +1081,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol };
 			// Fires on_click/on_click_outside against last frame's layout
 			// before the raw MouseMsg reaches update() — same order as the
-			// terminal event loop's dispatch().
+			// terminal event loop's dispatch(): a press counts as a pointer
+			// move, so it settles hover first and then delivers the press.
 			milktea::dispatch_click(mcol, mrow);
+			milktea::dispatch_hover(mcol, mrow);
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
 		}
 		if (rl::is_mouse_button_released(rl::RLMouseButton.LEFT)) {
@@ -1073,7 +1199,13 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		// buffer holds an older frame) and it has to flush raylib's pending
 		// draw batch first, or the readback misses whatever was drawn last and
 		// those cells come out empty.
-		if (shot && !milktea::g_program.test_click_armed) {
+		//
+		// A scheduled test event holds the shot back: MILKTEA_DEBUG_CLICK_AT,
+		// _POINTER_AT and _KEY_AT all fire some frames in, and a shot taken
+		// before them would be a picture of the state they were meant to
+		// change.
+		if (shot && !milktea::g_program.test_click_armed
+			&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
 			rl::gl_draw_render_batch_active();
 			write_screenshot(opts, shot_target);
 			rl::unload_render_texture(shot_target);

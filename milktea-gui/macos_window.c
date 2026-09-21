@@ -222,6 +222,37 @@ double milktea_macos_content_height(void) {
 	return send_rect(content, "bounds").height;
 }
 
+// milktea_macos_cursor_window reports the pointer in the window's content
+// coordinates: points, origin at the top left, y growing downward — the same
+// frame raylib reports a mouse-moved event in.
+//
+// This exists because GLFW only refreshes that position from motion events.
+// Its mouseDown/mouseUp handlers carry a button, not a location, so a press
+// is matched against wherever the pointer was on its last move over the
+// window. That is wrong whenever no such move has happened since: a press in
+// a window that has not been entered yet, and any press at all into a window
+// that is not key, because AppKit delivers mouse-moved events to the key
+// window only. The app then hit-tests a cell the pointer left long ago — or
+// the (0,0) raylib starts at — and the press appears to do nothing until the
+// pointer moves again. A window can answer this itself, whatever the event
+// queue did or did not deliver.
+//
+// The arithmetic mirrors GLFW's own mouseMoved — x as given, y flipped
+// through the content view's height — so a reading from here and one raylib
+// reports from a real motion event agree exactly.
+//
+// Returns 1 on success, 0 if the runtime did not answer.
+int milktea_macos_cursor_window(double *out_x, double *out_y) {
+	Id window = main_window();
+	if (window == 0) return 0;
+	Id content = send_id(window, "contentView");
+	if (content == 0) return 0;
+	Point2 p = objc_msg_send_point(window, sel("mouseLocationOutsideOfEventStream"));
+	*out_x = p.x;
+	*out_y = send_rect(content, "frame").height - p.y;
+	return 1;
+}
+
 // milktea_macos_cursor_screen reports the pointer's position in screen
 // coordinates, which is what a window drag needs: a pointer position measured
 // against the window is worthless once the window starts following it, since
