@@ -706,6 +706,7 @@ struct Style {
 	Color fg;
 	Color bg;
 	Color border_color;
+	Color corner_color;
 	// Background behind the border. Unset means the border sits on the block's
 	// own background, which is right for a box drawn around its content. A
 	// border used as a drop shadow wants the surface behind the block instead,
@@ -808,6 +809,12 @@ fn Style Style.with_border(self, Border b) {
 fn Style Style.border_fg(self, Color c) {
 	Style s = self;
 	s.border_color = c;
+	return s;
+}
+
+fn Style Style.corner_fg(self, Color c) {
+	Style s = self;
+	s.corner_color = c;
 	return s;
 }
 
@@ -1155,7 +1162,7 @@ fn String Style.render(self, String input) {
 
 	if (!border_is_empty) {
 		Color bbg = self.border_bg.kind != ColorKind.NONE ? self.border_bg : self.bg;
-		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg);
+		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg, self.corner_color);
 		// The gradient runs over the whole block, border rows included, so it
 		// is applied after wrapping rather than to the content alone.
 		return apply_bg_gradient(bordered, self.bg, self.bg_gradient);
@@ -1242,6 +1249,7 @@ fn String Style.render_content_only(self, String input) {
 	Style s     = self;
 	s.border = { };
 	s.border_color = { };
+	s.corner_color = { };
 	s.border_animation = BorderAnimation.NONE;
 	String result = s.render(input);
 	return result;
