@@ -107,15 +107,15 @@ fn Pressed Picker.take_pending(&self) {
 	return p;
 }
 
-fn void picker_choice_clicked(void* ctx, int col, int row) @local {
-	ChoiceSlot* slot = (ChoiceSlot*)ctx;
+fn void picker_choice_clicked(void* id, String id_str, int col, int row) @local {
+	ChoiceSlot* slot = (ChoiceSlot*)id;
 	// A click on a choice previews it, same as arrowing to it — it does not
 	// confirm on its own, matching how Up/Down behave for the keyboard path.
 	slot.picker.selected = slot.index;
 }
 
-fn void picker_button_clicked(void* ctx, int col, int row) @local {
-	PickerButtonSlot* slot = (PickerButtonSlot*)ctx;
+fn void picker_button_clicked(void* id, String id_str, int col, int row) @local {
+	PickerButtonSlot* slot = (PickerButtonSlot*)id;
 	Picker* p = slot.picker;
 	p.focused_button = slot.index;
 	p.open = false;
@@ -127,8 +127,8 @@ fn void picker_button_clicked(void* ctx, int col, int row) @local {
 	}
 }
 
-fn void picker_backdrop_dismissed(void* ctx, int col, int row) @local {
-	Picker* p = (Picker*)ctx;
+fn void picker_backdrop_dismissed(void* id, String id_str, int col, int row) @local {
+	Picker* p = (Picker*)id;
 	p.open = false;
 	p.selected = p.opening;
 	p.pending = Pressed.DISMISSED;
@@ -156,7 +156,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
-	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
+	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
 
 	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
 
@@ -171,7 +171,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
 		xray::Node* choice_node = milktea::text(on ? current : row, label).height(milktea::cells(1));
-		choice_node.on_click(&picker_choice_clicked, &self.choice_slots[i]);
+		choice_node.id_with(&self.choice_slots[i]).on_click(&picker_choice_clicked);
 		list_node.add(choice_node);
 	}
 	panel_node.add(list_node);
@@ -184,7 +184,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
 		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.on_click(&picker_button_clicked, &self.button_slots[i]);
+		btn.id_with(&self.button_slots[i]).on_click(&picker_button_clicked);
 		buttons_row.add(btn);
 	}
 	panel_node.add(buttons_row);

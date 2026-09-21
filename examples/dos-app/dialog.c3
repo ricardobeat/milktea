@@ -87,15 +87,15 @@ fn Pressed Dialog.take_pending(&self) {
 	return p;
 }
 
-fn void button_clicked(void* ctx, int col, int row) @local {
-	ButtonSlot* slot = (ButtonSlot*)ctx;
+fn void button_clicked(void* id, String id_str, int col, int row) @local {
+	ButtonSlot* slot = (ButtonSlot*)id;
 	slot.dialog.focused = slot.index;
 	slot.dialog.open = false;
 	slot.dialog.pending = slot.index == 0 ? Pressed.CONFIRMED : Pressed.DISMISSED;
 }
 
-fn void backdrop_dismissed(void* ctx, int col, int row) @local {
-	Dialog* d = (Dialog*)ctx;
+fn void backdrop_dismissed(void* id, String id_str, int col, int row) @local {
+	Dialog* d = (Dialog*)id;
 	d.open = false;
 	d.pending = Pressed.DISMISSED;
 }
@@ -123,7 +123,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
-	panel_node.on_click_outside(&backdrop_dismissed, self);
+	panel_node.id_with(self).on_click_outside(&backdrop_dismissed);
 
 	// Body text has no bg of its own — without one it paints on the
 	// renderer's default (black) instead of showing the panel through, so it
@@ -143,7 +143,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 		self.button_slots[i] = { .dialog = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused).view();
 		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.on_click(&button_clicked, &self.button_slots[i]);
+		btn.id_with(&self.button_slots[i]).on_click(&button_clicked);
 		buttons_row.add(btn);
 	}
 	panel_node.add(buttons_row);
