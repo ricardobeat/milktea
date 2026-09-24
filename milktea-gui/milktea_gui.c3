@@ -1049,6 +1049,26 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
 			}
 		}
+
+		// A held key repeats through GLFW_REPEAT, and raylib records that per
+		// key for the frame rather than queueing it (see IsKeyPressedRepeat) —
+		// so the repeats never arrive through the press queue above and every
+		// code has to be asked about by name. KB_MENU is the highest key
+		// raylib names, so the sweep covers the table; translate_key() drops
+		// the codes that mean nothing to a model. Without this a held arrow
+		// or backspace moves once and then sits still, which is what no key
+		// repeat looks like in a window.
+		//
+		// Text is deliberately not swept: raylib's char queue already carries
+		// the repeats of a held letter, and dispatching those again here
+		// would type each one twice.
+		for (int code = 1; code <= (int)rl::RLKeyboardKey.KB_MENU; code++) {
+			rl::RLKeyboardKey repeated = (rl::RLKeyboardKey)code;
+			if (!rl::is_key_pressed_repeat(repeated)) continue;
+			if (try k = translate_key(repeated, mods)) {
+				if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
+			}
+		}
 		if (should_quit) break;
 
 		// frame_no counts every iteration of the GUI loop, not just the ones
