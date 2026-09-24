@@ -286,6 +286,18 @@ fn Node* Node.min_height(&self, int n) {
 	return self;
 }
 
+// max_width is the mirror of min_width: the node hugs its content but never
+// grows past n — a modal that should not stretch across the whole window.
+fn Node* Node.max_width(&self, int n) {
+	self.size_w = max_fit(n, &node_measure_w, self);
+	return self;
+}
+
+fn Node* Node.max_height(&self, int n) {
+	self.size_h = max_fit(n, &node_measure_h, self);
+	return self;
+}
+
 // fill gives this node a share of whatever space is left over on its parent's
 // main axis, weighted against its siblings. Which axis that is depends on the
 // parent, so it sets both and the parent uses the one it lays out along.
