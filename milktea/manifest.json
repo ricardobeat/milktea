@@ -1,6 +1,6 @@
 {
 	"provides": "milktea",
-	"sources": ["*.c3"],
+	"sources": ["**"],
 	"c-sources": ["tty_winsize.c"],
 	"dependencies": ["glaze", "xray"],
 	"targets": {

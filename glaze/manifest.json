@@ -1,6 +1,6 @@
 {
 	"provides": "glaze",
-	"sources": ["*.c3"],
+	"sources": ["**"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},
