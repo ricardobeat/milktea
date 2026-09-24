@@ -359,3 +359,19 @@ fn void test_textarea_caret_visual_pos_clamps_to_the_last_chunk() @test {
 	assert(row == 0);
 	assert(col == content_w);
 }
+
+fn void test_textarea_draws_highlight_spans() @test {
+	boba::Textarea t = boba::new_textarea(20, 3);
+	t.show_line_numbers = false;
+	t.focused_style = {};
+	t.blurred_style = {};
+	foreach (c : "fn main\nx fn") t.insert(c);
+	boba::HighlightSpan[2] spans = {
+		{ .start = 0, .len = 2, .style = { .bold = true } },
+		{ .start = 10, .len = 2, .style = { .italic = true } },
+	};
+	t.highlights = spans[..];
+	String v = t.view();
+	assert(v.starts_with("\x1b[1mfn\x1b[0m main\n"), "first span bold, the rest plain");
+	assert(v.ends_with("x \x1b[3mfn\x1b[0m"), "a span on the second line lands on its bytes");
+}

@@ -42,6 +42,19 @@ struct Textarea (xray::Content) {
 	// the owning component outlasts the node tree.
 	TextareaPressFn on_press_fn;
 	void* on_press_ctx;
+	// Byte ranges of the text drawn in their own style over the field's —
+	// syntax highlighting, search matches. Sorted by start and not
+	// overlapping; the owner keeps the slice alive and in step with the text.
+	HighlightSpan[] highlights;
+}
+
+// HighlightSpan styles len bytes of the text from start. Its foreground and
+// bold/italic/underline go over the field's own style; the background stays
+// the field's, so a highlight never punches a hole in the editor.
+struct HighlightSpan {
+	sz start;
+	sz len;
+	glaze::Style style;
 }
 
 // TextareaPressFn fires when a mouse press lands inside the textarea. row
@@ -542,6 +555,40 @@ fn String blank_span(int width) @local {
 	return out.str_view();
 }
 
+// append_text renders text, which starts at byte `at` of the buffer, in
+// base, switching to each highlight span's colors where one covers it.
+fn void Textarea.append_text(&self, DString* out, glaze::Style base, sz at, String text) @local {
+	if (self.highlights.len == 0) {
+		out.append_string(base.render(text));
+		return;
+	}
+	sz i = 0;
+	while (i < text.len) {
+		sz pos = at + i;
+		// The last span starting at or before pos, by binary search.
+		sz lo = 0;
+		sz hi = self.highlights.len;
+		while (lo < hi) {
+			sz mid = (lo + hi) / 2;
+			if (self.highlights[mid].start <= pos) { lo = mid + 1; } else { hi = mid; }
+		}
+		glaze::Style s = base;
+		sz end = at + text.len;
+		if (lo > 0 && pos < self.highlights[lo - 1].start + self.highlights[lo - 1].len) {
+			HighlightSpan* h = &self.highlights[lo - 1];
+			if (h.style.fg.kind != glaze::ColorKind.NONE) s.fg = h.style.fg;
+			s.bold = s.bold || h.style.bold;
+			s.italic = s.italic || h.style.italic;
+			s.underline = s.underline || h.style.underline;
+			if (h.start + h.len < end) end = h.start + h.len;
+		} else if (lo < self.highlights.len && self.highlights[lo].start < end) {
+			end = self.highlights[lo].start;
+		}
+		out.append_string(s.render(text[i:end - pos]));
+		i = end - at;
+	}
+}
+
 fn String Textarea.view(&self) {
 	DString out = dstring::temp();
 	int lc      = self.line_count();
@@ -682,7 +729,7 @@ fn String Textarea.view(&self) {
 				// before-cursor segment
 				if (chunk_cursor_col > 0) {
 					sz blen = chunk_cursor_col < chunk_len ? chunk_cursor_col : chunk_len;
-					out.append_string(content_style.render(chunk_text[:blen]));
+					self.append_text(&out, content_style, line_start + chunk_start, chunk_text[:blen]);
 				}
 				// cursor character or space if at end
 				if (chunk_cursor_col < chunk_len) {
@@ -690,14 +737,15 @@ fn String Textarea.view(&self) {
 					out.append_string(self.cursor_style.render(((ZString)&ch_buf).str_view()));
 					// after-cursor segment
 					if (chunk_cursor_col + 1 < chunk_len) {
-						out.append_string(content_style.render(chunk_text[chunk_cursor_col + 1:chunk_len - chunk_cursor_col - 1]));
+						self.append_text(&out, content_style, line_start + chunk_start + chunk_cursor_col + 1,
+							chunk_text[chunk_cursor_col + 1:chunk_len - chunk_cursor_col - 1]);
 					}
 				} else {
 					// Cursor past end of chunk text — highlighted space
 					out.append_string(self.cursor_style.render(" "));
 				}
 			} else {
-				out.append_string(content_style.render(chunk_text));
+				self.append_text(&out, content_style, line_start + chunk_start, chunk_text);
 			}
 
 			out.append_char('\n');
