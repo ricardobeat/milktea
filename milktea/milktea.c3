@@ -1436,7 +1436,7 @@ fn void? Program.run(Program* self) {
 						self.pending[i - 1] = self.pending[i];
 					}
 					self.pending_len--;
-					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS } };
+					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS, false } };
 					if (dispatch(self, self.model, em)) return;
 					dirty   = true;
 					reparse = true;

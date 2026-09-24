@@ -390,6 +390,7 @@ struct Mods {
 	bool ctrl;
 	bool alt;
 	bool shift;
+	bool super;
 }
 
 fn Mods read_mods() {
@@ -397,6 +398,7 @@ fn Mods read_mods() {
 		.ctrl = rl::is_key_down(rl::RLKeyboardKey.LEFT_CONTROL) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_CONTROL),
 		.alt = rl::is_key_down(rl::RLKeyboardKey.LEFT_ALT) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_ALT),
 		.shift = rl::is_key_down(rl::RLKeyboardKey.LEFT_SHIFT) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_SHIFT),
+		.super = rl::is_key_down(rl::RLKeyboardKey.LEFT_SUPER) || rl::is_key_down(rl::RLKeyboardKey.RIGHT_SUPER),
 	};
 }
 
@@ -416,6 +418,7 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 	k.ctrl = mods.ctrl;
 	k.alt = mods.alt;
 	k.shift = mods.shift;
+	k.super = mods.super;
 
 	switch (key) {
 		case rl::RLKeyboardKey.ENTER:
@@ -451,7 +454,7 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 			// the punctuation an app is likeliest to want a ctrl chord on
 			// has to be named here or it never arrives. Keypad and main row
 			// report the same rune, the way a terminal does.
-			if (mods.ctrl) {
+			if (mods.ctrl || mods.super) {
 				uint punct = 0;
 				switch (key) {
 					case rl::RLKeyboardKey.MINUS:
@@ -468,12 +471,14 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 					return k;
 				}
 			}
-			// A-Z are contiguous from 65 in raylib's table.
-			if (mods.ctrl && key >= rl::RLKeyboardKey.A && key <= rl::RLKeyboardKey.Z) {
+			// A-Z are contiguous from 65 in raylib's table. Super+letter
+			// produces no text either, and arrives the same way with super
+			// set: Cmd+S is RUNE 's' with super.
+			if ((mods.ctrl || mods.super) && key >= rl::RLKeyboardKey.A && key <= rl::RLKeyboardKey.Z) {
 				uint lower = (uint)((int)key - (int)rl::RLKeyboardKey.A) + 'a';
 				// Narrow, like input.c3: extra modifiers stay RUNE so
 				// ctrl+shift+c remains distinguishable from a quit.
-				if (lower == 'c' && !mods.alt && !mods.shift) {
+				if (lower == 'c' && mods.ctrl && !mods.alt && !mods.shift && !mods.super) {
 					k.code = milktea::KeyCode.CTRL_C;
 					return k;
 				}
@@ -1021,7 +1026,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		// testing `shift` see every capital as modified.
 		int ch;
 		while ((ch = rl::get_char_pressed()) != 0) {
-			if (mods.ctrl) continue;
+			if (mods.ctrl || mods.super) continue;
 			milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch, .alt = mods.alt };
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
 		}

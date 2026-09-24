@@ -50,6 +50,9 @@ struct KeyMsg {
 	bool alt;
 	bool shift;
 	KeyAction action;
+	// Cmd on macOS, the Windows or Super key elsewhere. Only the GUI backend
+	// sets it: a terminal keeps those shortcuts for itself.
+	bool super;
 }
 
 enum MouseAction : int {
@@ -238,7 +241,7 @@ fn KeyMods decode_xterm_mods(int mod) {
 fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
 	return {
 		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift, KEY_PRESS },
+		{ code, rune, ctrl, alt, shift, KEY_PRESS, false },
 		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
 		consumed
 	};
@@ -250,7 +253,7 @@ fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift
 fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, KeyAction action, sz consumed) {
 	return {
 		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift, action },
+		{ code, rune, ctrl, alt, shift, action, false },
 		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
 		consumed
 	};
@@ -268,7 +271,7 @@ fn ParseResult make_mouse(
 ) {
 	return {
 		MsgKind.MOUSE,
-		{ NONE, 0, false, false, false, KEY_PRESS },
+		{ NONE, 0, false, false, false, KEY_PRESS, false },
 		{ button, action, row, col, shift, alt, ctrl, 0, 0 },
 		consumed
 	};
@@ -462,7 +465,7 @@ fn ParseResult parse_key(char[] buf) {
 			if (fb == 'I' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = FOCUS;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
 				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
@@ -470,7 +473,7 @@ fn ParseResult parse_key(char[] buf) {
 			if (fb == 'O' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = BLUR;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
 				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
@@ -505,7 +508,7 @@ fn ParseResult parse_key(char[] buf) {
 					case 200: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_START;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
 						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;
@@ -513,7 +516,7 @@ fn ParseResult parse_key(char[] buf) {
 					case 201: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_END;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
 						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;
