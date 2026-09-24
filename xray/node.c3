@@ -163,6 +163,13 @@ struct Node {
 
 	int pad_top, pad_right, pad_bottom, pad_left;
 
+	// The box the node's own content draws around itself — a border and the
+	// padding inside it, say. Kept apart from pad_* so each has one owner:
+	// content sets the frame (milktea::text copies it from its glaze style),
+	// the caller sets padding, and children sit inside both. Measuring adds
+	// both too, so a bordered panel sized to its content includes its border.
+	int frame_top, frame_right, frame_bottom, frame_left;
+
 	Content content;
 
 	// Effects applied when this node paints. shadow lands under the content,
@@ -329,6 +336,23 @@ fn Node* Node.with_padding(&self, int top, int right, int bottom, int left) {
 	self.pad_left = left;
 	return self;
 }
+
+// with_frame records the box this node's content draws around itself. See
+// the frame_* fields.
+fn Node* Node.with_frame(&self, int top, int right, int bottom, int left) {
+	self.frame_top = top;
+	self.frame_right = right;
+	self.frame_bottom = bottom;
+	self.frame_left = left;
+	return self;
+}
+
+// inset_* are the frame and padding together: how far children and measured
+// content sit from the node's edge.
+fn int Node.inset_top(&self) => self.frame_top + self.pad_top;
+fn int Node.inset_right(&self) => self.frame_right + self.pad_right;
+fn int Node.inset_bottom(&self) => self.frame_bottom + self.pad_bottom;
+fn int Node.inset_left(&self) => self.frame_left + self.pad_left;
 
 // place centres or aligns this node inside its parent's rect on both axes at
 // once, and sizes it to its content. It is meant for a child of a zstack —

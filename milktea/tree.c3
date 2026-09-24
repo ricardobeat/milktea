@@ -78,13 +78,14 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 }
 
 // measure and measure_width report what the text needs before layout has
-// picked a size: its own extent plus whatever the style frames it with. They
+// picked a size: the text's own extent. The style's border and padding are
+// the node's frame (see text()), which the layout adds on top. They
 // are consulted for a centered modal and under draw_inline, where nothing
 // else fixes that axis.
 fn int StyledText.measure(&self, int width) @dynamic {
 	int lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
-	return lines + frame_height(self.style);
+	return lines;
 }
 
 fn int StyledText.measure_width(&self, int height) @dynamic {
@@ -96,15 +97,32 @@ fn int StyledText.measure_width(&self, int height) @dynamic {
 		if (w > widest) widest = w;
 		start = i + 1;
 	}
-	return widest + frame_width(self.style);
+	return widest;
 }
 
-// text puts a styled string in the tree.
+// text puts a styled string in the tree. The style's border and padding
+// become the node's frame, so the layout measures them and children added to
+// it sit inside them rather than on top of the border.
 fn Node* text(glaze::Style style, String s) {
 	StyledText* st = mem::tnew(StyledText);
 	st.style = style;
 	st.text = s;
-	return xray::content_node(st);
+	return xray::content_node(st).with_frame(
+		style.pad_top + (style.border.top.len > 0 ? 1 : 0),
+		style.pad_right + (style.border.right.len > 0 ? 1 : 0),
+		style.pad_bottom + (style.border.bottom.len > 0 ? 1 : 0),
+		style.pad_left + (style.border.left.len > 0 ? 1 : 0));
+}
+
+// vbox and hbox are a vstack and an hstack that draw a styled box — its
+// background, border and padding — with their children laid out inside it,
+// the way a CSS box with a border and padding holds its content.
+fn Node* vbox(glaze::Style style) => text(style, "");
+
+fn Node* hbox(glaze::Style style) {
+	Node* n = text(style, "");
+	n.direction = xray::NodeDirection.ROW;
+	return n;
 }
 
 // draw solves the tree against the whole terminal and paints it.

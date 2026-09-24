@@ -672,3 +672,16 @@ fn void test_draw_inline_sizes_the_block_to_its_content() @test {
 	// Alt screen is never entered for an inline view.
 	assert(!contains(s, "\x1b[?1049h"));
 }
+
+fn void test_text_style_box_frames_children() @test {
+	glaze::Style box = { .border = glaze::ROUNDED, .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2 };
+	xray::Node* child = milktea::text({}, "hi");
+	xray::Node* panel = milktea::vbox(box).add(child).center();
+	xray::Node* r = xray::root().add(panel);
+	r.solve(xray::new_rect(0, 0, 40, 20));
+
+	assert(panel.rect().w == 2 + 2 + 2 + 2, "text + padding + border");
+	assert(panel.rect().h == 1 + 2 + 2, "one line + padding + border");
+	assert(child.rect().x == panel.rect().x + 3, "child clears border and padding");
+	assert(child.rect().y == panel.rect().y + 2, "child clears border and padding");
+}

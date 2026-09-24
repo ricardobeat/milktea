@@ -364,3 +364,49 @@ fn void test_add_ignores_a_null_child() @test {
 
 	assert(r.count() == 1, "the null child was not added");
 }
+
+fn void test_frame_insets_children_on_top_of_padding() @test {
+	Fixed* inner = fixed(0, 0);
+
+	xray::Node* r = xray::vstack()
+		.with_frame(1, 3, 1, 3)
+		.with_padding(1, 1, 0, 0)
+		.add(xray::content_node(inner).fill(1));
+	r.solve(xray::new_rect(0, 0, 20, 10));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.paint(r);
+
+	assert(inner.got.x == 3 && inner.got.y == 2, "frame plus padding at the origin");
+	assert(inner.got.w == 13 && inner.got.h == 7, "frame plus padding off the size");
+}
+
+fn void test_frame_counts_toward_natural_size() @test {
+	xray::Node* r = xray::vstack()
+		.with_frame(1, 2, 1, 2)
+		.add(xray::content_node(fixed(6, 3)));
+	assert(r.natural_width(0) == 10, "6 + 2 + 2");
+	assert(r.natural_height(0) == 5, "3 + 1 + 1");
+}
+
+// Flow is content with a fixed amount of text that wraps: the narrower it
+// is, the more lines it takes.
+struct Flow (xray::Content) {
+	int len;
+}
+
+fn String Flow.render(&self, xray::Rect r) @dynamic => "";
+fn int Flow.measure(&self, int width) @dynamic => width <= 0 ? self.len : (self.len + width - 1) / width;
+fn int Flow.measure_width(&self, int height) @dynamic => self.len;
+
+fn void test_a_capped_stack_child_is_measured_at_its_own_width() @test {
+	Flow* f = mem::tnew(Flow);
+	f.len = 40;
+	xray::Node* child = xray::content_node(f).max_width(10).center();
+	xray::Node* r = xray::root().add(child);
+	r.solve(xray::new_rect(0, 0, 80, 24));
+
+	assert(child.rect().w == 10, "capped at 10");
+	assert(child.rect().h == 4, "40 cells of text at 10 wide is 4 rows, not 1");
+}

@@ -46,8 +46,8 @@ fn int Node.natural_height(&self, int width) {
 // content_width measures what is inside this node, ignoring the node's own
 // width constraint.
 fn int Node.content_width(&self, int height) {
-	int pad_x = self.pad_left + self.pad_right;
-	int inner_h = height - self.pad_top - self.pad_bottom;
+	int pad_x = self.inset_left() + self.inset_right();
+	int inner_h = height - self.inset_top() - self.inset_bottom();
 	if (inner_h < 0) inner_h = 0;
 
 	if (self.child_count == 0) {
@@ -78,8 +78,8 @@ fn int Node.content_width(&self, int height) {
 // content_height measures what is inside this node, ignoring the node's own
 // height constraint.
 fn int Node.content_height(&self, int width) {
-	int pad_y = self.pad_top + self.pad_bottom;
-	int inner_w = width - self.pad_left - self.pad_right;
+	int pad_y = self.inset_top() + self.inset_bottom();
+	int inner_w = width - self.inset_left() - self.inset_right();
 	if (inner_w < 0) inner_w = 0;
 
 	if (self.child_count == 0) {
@@ -123,7 +123,7 @@ fn void Node.solve(&self, Rect area) {
 
 	if (self.child_count == 0) return;
 
-	Rect inner = area.inset(self.pad_left, self.pad_top, self.pad_right, self.pad_bottom);
+	Rect inner = area.inset(self.inset_left(), self.inset_top(), self.inset_right(), self.inset_bottom());
 
 	// A stack gives each child the full inner rect, subject to that child's
 	// own constraints and its own justify/align — which is how a centered
@@ -214,10 +214,12 @@ fn void Node.solve(&self, Rect area) {
 // (vertically) — which is what place() sets both of.
 fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
 	int w = resolve_axis(child.size_w, area.w, area.h);
-	int h = resolve_axis(child.size_h, area.h, area.w);
 	if (w > area.w) w = area.w;
-	if (h > area.h) h = area.h;
 	if (w < 0) w = 0;
+	// Height is measured at the width just settled on, not the area's:
+	// content that wraps is taller in a narrower box.
+	int h = resolve_axis(child.size_h, area.h, w);
+	if (h > area.h) h = area.h;
 	if (h < 0) h = 0;
 
 	// A pinned child names its own offset; everything else is placed by its

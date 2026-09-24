@@ -199,8 +199,8 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 //
 // The panel is one node: milktea::text() paints the bordered background from
 // an empty string (giving the frame without baking any content into it), and
-// the item rows are its children, padded 1 cell in to clear the border —
-// NORMAL's border glyphs are always exactly 1 cell thick on every side. Each
+// the item rows are its children, which the border's frame keeps clear of
+// it. Each
 // row is its own clickable node, and a click anywhere on the panel that
 // isn't a row (the border, the padding) falls through to on_click_outside,
 // which is exactly the dismiss behavior wanted there too.
@@ -222,7 +222,6 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	xray::Node* panel_node = milktea::text(panel, "")
 		.width(milktea::cells(self.item_width + ITEM_PAD * 2 + 2))
 		.height(milktea::cells(MENU_ITEMS + 2))
-		.with_padding(1, 1, 1, 1)
 		.at(self.title_x[self.selected], below)
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.id_with(self).on_click_outside(&dropdown_dismissed);
