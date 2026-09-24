@@ -103,11 +103,9 @@ fn void backdrop_dismissed(void* id, String id_str, int col, int row) @local {
 // node returns the dialog, or null when it is closed, so the caller can add
 // it unconditionally.
 //
-// The panel is a real container sized entirely by the layout solver: the
-// header text and the button row are children, and min_width().center()
-// measures the panel from them (same content_width/content_height the
-// solver already uses for any CFIT node) rather than computing panel_w/
-// panel_h by hand ahead of time.
+// The panel is a styled box sized by the layout: its border and padding frame
+// the title, body and button row, and it hugs them, no narrower than the
+// min_width its style carries.
 fn xray::Node* Dialog.node(&self, Theme* th) {
 	if (!self.open) return null;
 
@@ -115,25 +113,20 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 		.bg = th.panel, .fg = th.text,
 		.border = glaze::DOUBLE, .border_color = th.accent,
 		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+		.min_width = self.min_cols,
 	};
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
-	xray::Node* panel_node = milktea::text(panel, "")
-		.min_width(self.min_cols)
+	xray::Node* panel_node = milktea::vbox(panel)
 		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.id_with(self).on_click_outside(&backdrop_dismissed);
 
-	// Body text has no bg of its own — without one it paints on the
-	// renderer's default (black) instead of showing the panel through, so it
-	// carries the same bg as the panel. title_s stays a separate style baked
-	// into the string (render() below) since only the title is accented.
-	glaze::Style body_s = { .fg = th.text, .bg = th.panel };
-	String header = glaze::join_vertical_arr(glaze::Position.LEFT, {
-		title_s.background(th.panel).render(self.title), "", body_s.render(self.body),
-	});
-	panel_node.add(milktea::text(body_s, header));
+	// Text carries the panel's bg, or it would paint on the renderer's
+	// default (black) instead of showing the panel through.
+	panel_node.add(milktea::text(title_s.background(th.panel), self.title).fit_height());
+	panel_node.add(milktea::text({ .fg = th.text, .bg = th.panel }, self.body).fit_height());
 
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)

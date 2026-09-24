@@ -136,11 +136,10 @@ fn void picker_backdrop_dismissed(void* id, String id_str, int col, int row) @lo
 
 // node returns the picker, or null when it is closed.
 //
-// Same shape as Dialog.node(): the panel is a real container sized by the
-// solver from its children (min_width().center()) — the choice rows and the
-// button row are individually clickable nodes, and each choice row stretches
-// to the panel's own content width (ALIGN_STRETCH, the vstack default)
-// instead of a widest-choice width computed by hand ahead of layout.
+// Same shape as Dialog.node(): a styled box that hugs its children — the
+// choice rows and the button row, each individually clickable. Each choice
+// row stretches to the panel's own content width (ALIGN_STRETCH, the vstack
+// default) instead of a widest-choice width computed by hand ahead of layout.
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
@@ -148,19 +147,19 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.bg = th.panel, .fg = th.text,
 		.border = glaze::DOUBLE, .border_color = th.accent,
 		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
+		.min_width = self.min_cols,
 	};
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	xray::Node* panel_node = milktea::text(panel, "")
-		.min_width(self.min_cols)
+	xray::Node* panel_node = milktea::vbox(panel)
 		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
 
-	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
+	panel_node.add(milktea::text(title_s, self.title).fit_height());
 
-	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
+	xray::Node* list_node = xray::vstack().fit_height();
 	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
 	glaze::Style current = {
 		.fg = th.ink, .bg = th.accent, .bold = true,
@@ -170,7 +169,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.choice_slots[i] = { .picker = self, .index = i };
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
-		xray::Node* choice_node = milktea::text(on ? current : row, label).height(milktea::cells(1));
+		xray::Node* choice_node = milktea::text(on ? current : row, label).fit_height();
 		choice_node.id_with(&self.choice_slots[i]).on_click(&picker_choice_clicked);
 		list_node.add(choice_node);
 	}

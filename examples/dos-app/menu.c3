@@ -19,6 +19,8 @@ struct MenuItem {
 
 // Cells of padding on each side of a dropdown item, inside its highlight.
 const int ITEM_PAD = 1;
+// Least space between an item's label and its key.
+const int ITEM_GAP = 2;
 
 const int MENU_COLS  = 4;
 const int MENU_ITEMS = 4;
@@ -50,7 +52,7 @@ struct Menu {
 	int item;          // which item within the open dropdown
 	bool open;
 
-	// Width of an item's text, before the padding around it.
+	// Narrowest a dropdown gets, border included; longer items widen it.
 	int item_width;
 
 	TitleSlot[MENU_COLS] title_slots;
@@ -71,7 +73,7 @@ enum Chosen {
 	PICKED,
 }
 
-fn Menu new_menu(String[MENU_COLS] titles, int item_width = 20) {
+fn Menu new_menu(String[MENU_COLS] titles, int item_width = 24) {
 	Menu m = { .titles = titles, .item_width = item_width };
 	// Titles sit end to end from the left edge, each as wide as its own text.
 	int x = 0;
@@ -185,9 +187,8 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	xray::Node* row = milktea::hstack().height(milktea::cells(1));
 	for (int i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
-		String label = (i == self.selected ? active : bar).render(self.titles[i]);
-		xray::Node* title_node = milktea::text(bar, label)
-			.width(milktea::cells(glaze::string_width(self.titles[i])));
+		xray::Node* title_node = milktea::text(i == self.selected ? active : bar, self.titles[i])
+			.fit_width();
 		title_node.id_with(&self.title_slots[i]).on_click(&title_clicked);
 		row.add(title_node);
 	}
@@ -197,31 +198,22 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 // dropdown returns the open panel, or null when the menu is closed — so the
 // caller adds it unconditionally and an absent menu contributes nothing.
 //
-// The panel is one node: milktea::text() paints the bordered background from
-// an empty string (giving the frame without baking any content into it), and
-// the item rows are its children, which the border's frame keeps clear of
-// it. Each
-// row is its own clickable node, and a click anywhere on the panel that
-// isn't a row (the border, the padding) falls through to on_click_outside,
-// which is exactly the dismiss behavior wanted there too.
+// The panel is a bordered box of item rows, as wide as its widest row but no
+// narrower than item_width. Each row is its own clickable node, and a click
+// anywhere on the panel that isn't a row (the border) falls through to
+// on_click_outside, which is exactly the dismiss behavior wanted there too.
 fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
 		.bg = th.bar, .fg = th.bar_text,
 		.border = glaze::NORMAL, .border_color = th.text,
+		.min_width = self.item_width,
 	};
-	// No pad_left/pad_right here: label and key are now separate leaf nodes
-	// (see item_row), each sized to exactly its own text width — style-level
-	// padding would make Style.render's content wider than that solved
-	// width and overflow into the neighboring column. The inset that used
-	// to come from this padding is now node-level padding on the row itself.
 	glaze::Style selected = { .bg = th.ink, .fg = th.accent, .bold = true };
 	glaze::Style item = { .bg = th.bar, .fg = th.bar_text };
 
-	xray::Node* panel_node = milktea::text(panel, "")
-		.width(milktea::cells(self.item_width + ITEM_PAD * 2 + 2))
-		.height(milktea::cells(MENU_ITEMS + 2))
+	xray::Node* panel_node = milktea::vbox(panel)
 		.at(self.title_x[self.selected], below)
 		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
 	panel_node.id_with(self).on_click_outside(&dropdown_dismissed);
@@ -236,27 +228,16 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 	return panel_node;
 }
 
-// item_row lays a label against its shortcut key, label left and key pushed
-// to the row's right edge — a real hstack with JUSTIFY_SPACE_BETWEEN, so the
-// gap between them grows or shrinks with the row's solved width instead of
-// a width computed ahead of layout (self.item_width - string_width(label))
-// that has to happen to match whatever the panel ends up being.
-//
-// The hstack itself paints nothing (a pure layout node has no content), so
-// it sits inside a background leaf sized to the same row — otherwise the
-// gap JUSTIFY_SPACE_BETWEEN opens up between label and key would show
-// whatever is behind the dropdown instead of the row's own highlight.
+// item_row lays a label against its shortcut key: a padded box with the key
+// pushed to its right edge (JUSTIFY_SPACE_BETWEEN), so the space between them
+// follows the row's solved width. The box paints the row's highlight behind
+// that space, and ITEM_GAP keeps the two apart when the panel is sized to its
+// widest row.
 fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
-	xray::Node* bg = milktea::text(base, "").height(milktea::cells(1));
-	xray::Node* row = xray::hstack()
+	return milktea::hbox(base.pad_x(ITEM_PAD))
 		.with_justify(xray::JustifyContent.JUSTIFY_SPACE_BETWEEN)
-		.with_padding(0, ITEM_PAD, 0, ITEM_PAD);
-	// Both children need an explicit (shrink-to-content) width: hstack's
-	// default is fill, which would split the row 50/50 between them and
-	// leave JUSTIFY_SPACE_BETWEEN nothing to push apart, since two fill
-	// children already consume the whole row between them.
-	row.add(milktea::text(base, mi.label).width(milktea::cells(glaze::string_width(mi.label))));
-	row.add(milktea::text(base, mi.key).width(milktea::cells(glaze::string_width(mi.key))));
-	bg.add(row);
-	return bg;
+		.with_gap(ITEM_GAP)
+		.fit_height()
+		.add(milktea::text(base, mi.label).fit_width())
+		.add(milktea::text(base, mi.key).fit_width());
 }

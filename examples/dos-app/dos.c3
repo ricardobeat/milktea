@@ -215,11 +215,9 @@ fn xray::Node* DosModel.content(&self) {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	String inner = glaze::join_vertical(glaze::Position.LEFT,
-		title.render(tab_titles[self.active_tab]),
-		body.render(tab_bodies[self.active_tab]));
-
-	return milktea::text(panel, inner);
+	return milktea::vbox(panel)
+		.add(milktea::text(title, tab_titles[self.active_tab]).fit_height())
+		.add(milktea::text(body, tab_bodies[self.active_tab]).fit_height());
 }
 
 fn xray::Node* DosModel.statusbar(&self) {
@@ -238,7 +236,7 @@ fn xray::Node* DosModel.statusbar(&self) {
 	return milktea::hstack()
 		.height(milktea::cells(BAR_ROWS))
 		.add(milktea::text(bar, hints).fill(1))
-		.add(milktea::text(info, right).width(milktea::cells(glaze::string_width(right))));
+		.add(milktea::text(info, right).fit_width());
 }
 
 fn int main() {
