@@ -184,9 +184,10 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 	return milktea::draw(milktea::root()
 		.add(milktea::vstack()
 			.add(self.menu.bar(self.theme()))
-			.add(self.content()
+			.add(milktea::vstack()
 				.fill(1)
-				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2))
+				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2)
+				.add(self.content().fill(1)))
 			.add(self.statusbar()))
 		// Both return null when closed, and add() ignores a null child, so
 		// neither needs a condition here.
