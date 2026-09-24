@@ -87,3 +87,16 @@ fn void wrap_line(DString* out, String line, int width) @local {
 		}
 	}
 }
+
+// widest_line is the display width of the widest line in s.
+fn int widest_line(String s) {
+	int widest = 0;
+	sz start = 0;
+	for (sz i = 0; i <= s.len; i++) {
+		if (i < s.len && s[i] != '\n') continue;
+		int w = string_width(s[start:i - start]);
+		if (w > widest) widest = w;
+		start = i + 1;
+	}
+	return widest;
+}

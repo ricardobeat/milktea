@@ -723,6 +723,11 @@ struct Style {
 	int pad_bottom;
 	int pad_left;
 	int width; // 0 = auto (don't pad)
+	// Bounds on an auto width, total like width: the block hugs its content
+	// but is at least min_width and at most max_width wide, wrapping to fit
+	// the latter. 0 leaves that side unbounded; a set width overrides both.
+	int min_width;
+	int max_width;
 	// Text wider than width wraps onto more lines unless this is set, in
 	// which case it runs past the edge, like CSS white-space: nowrap.
 	bool nowrap;
@@ -921,15 +926,38 @@ fn void mark_sgr_channel(int code, bool* fg, bool* bg) @local {
 	if ((code >= 40 && code <= 49) || (code >= 100 && code <= 107)) *bg = true;
 }
 
+// frame_width is the columns the style spends on its border and padding.
+fn int Style.frame_width(self) {
+	return self.pad_left + self.pad_right
+		+ (self.border.left.len > 0 ? 1 : 0) + (self.border.right.len > 0 ? 1 : 0);
+}
+
+fn Style Style.with_min_width(self, int w) {
+	Style s = self;
+	s.min_width = w;
+	return s;
+}
+
+fn Style Style.with_max_width(self, int w) {
+	Style s = self;
+	s.max_width = w;
+	return s;
+}
+
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
+
+	if (self.width == 0 && (self.min_width > 0 || self.max_width > 0)) {
+		int outer = widest_line(input) + self.frame_width();
+		if (self.max_width > 0 && outer > self.max_width) outer = self.max_width;
+		if (self.min_width > 0 && outer < self.min_width) outer = self.min_width;
+		return self.with_width(outer).render(input);
+	}
 
 	// A set width is the most the content may take, so wrap to what is left
 	// of it inside the border and padding before splitting into lines.
 	if (self.width > 0 && !self.nowrap) {
-		int frame = self.pad_left + self.pad_right
-			+ (self.border.left.len > 0 ? 1 : 0) + (self.border.right.len > 0 ? 1 : 0);
-		input = wrap_text(input, self.width - frame);
+		input = wrap_text(input, self.width - self.frame_width());
 	}
 
 	// Split input into lines. The line table is sized to the actual line

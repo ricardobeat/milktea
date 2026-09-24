@@ -90,15 +90,7 @@ fn int StyledText.measure(&self, int width) @dynamic {
 }
 
 fn int StyledText.measure_width(&self, int height) @dynamic {
-	int widest = 0;
-	usz start = 0;
-	for (usz i = 0; i <= self.text.len; i++) {
-		if (i < self.text.len && self.text[i] != '\n') continue;
-		int w = glaze::string_width(self.text[start:i - start]);
-		if (w > widest) widest = w;
-		start = i + 1;
-	}
-	return widest;
+	return glaze::widest_line(self.text);
 }
 
 // text puts a styled string in the tree. The style's border and padding
@@ -108,11 +100,17 @@ fn Node* text(glaze::Style style, String s) {
 	StyledText* st = mem::tnew(StyledText);
 	st.style = style;
 	st.text = s;
-	return xray::content_node(st).with_frame(
+	Node* n = xray::content_node(st).with_frame(
 		style.pad_top + (style.border.top.len > 0 ? 1 : 0),
 		style.pad_right + (style.border.right.len > 0 ? 1 : 0),
 		style.pad_bottom + (style.border.bottom.len > 0 ? 1 : 0),
 		style.pad_left + (style.border.left.len > 0 ? 1 : 0));
+	// The style's width bounds become the node's, so a panel can carry its
+	// sizing in its style. A later .width() or .max_width() replaces them.
+	if (style.min_width > 0 || style.max_width > 0) {
+		n.size_w = xray::range_fit(style.min_width, style.max_width, &xray::node_measure_w, n);
+	}
+	return n;
 }
 
 // vbox and hbox are a vstack and an hstack that draw a styled box — its

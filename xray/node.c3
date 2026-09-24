@@ -283,26 +283,39 @@ fn Node* Node.height(&self, Constraint c) {
 // uses) and only falls back to n when that comes out smaller. Meant for a
 // panel whose natural size should usually win but that would look cramped
 // below some width — a modal with a one-word body, say.
+//
+// On a node already fitted to its content with bounds — a milktea::text whose
+// style set a max_width, say — it replaces only the floor and keeps the cap.
 fn Node* Node.min_width(&self, int n) {
-	self.size_w = min_fit(n, &node_measure_w, self);
+	self.size_w = bounded_fit(self.size_w, n, -1, &node_measure_w, self);
 	return self;
 }
 
 fn Node* Node.min_height(&self, int n) {
-	self.size_h = min_fit(n, &node_measure_h, self);
+	self.size_h = bounded_fit(self.size_h, n, -1, &node_measure_h, self);
 	return self;
 }
 
 // max_width is the mirror of min_width: the node hugs its content but never
 // grows past n — a modal that should not stretch across the whole window.
+// Like min_width, it keeps a floor already set and replaces only the cap.
 fn Node* Node.max_width(&self, int n) {
-	self.size_w = max_fit(n, &node_measure_w, self);
+	self.size_w = bounded_fit(self.size_w, -1, n, &node_measure_w, self);
 	return self;
 }
 
 fn Node* Node.max_height(&self, int n) {
-	self.size_h = max_fit(n, &node_measure_h, self);
+	self.size_h = bounded_fit(self.size_h, -1, n, &node_measure_h, self);
 	return self;
+}
+
+// bounded_fit fits an axis to its content, setting whichever of lo and hi is
+// not -1 and keeping the other from c when c already fits to content.
+fn Constraint bounded_fit(Constraint c, int lo, int hi, MeasureFn measure, Node* n) @local {
+	if (c.kind != ConstraintKind.CFIT) c = fit(measure, n);
+	if (lo >= 0) c.fit_min = lo;
+	if (hi >= 0) c.fit_max = hi;
+	return c;
 }
 
 // fill gives this node a share of whatever space is left over on its parent's

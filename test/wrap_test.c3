@@ -54,3 +54,39 @@ fn void test_text_grows_taller_when_its_box_is_narrow() @test {
 	// 10 cells of text per line: "the quick" / "brown fox" / "jumps over".
 	assert(panel.rect().h == 3 + 2, "three wrapped lines inside the border");
 }
+
+fn void test_render_max_width_wraps_and_min_width_pads() @test {
+	glaze::Style capped = { .max_width = 10 };
+	assert(capped.render("the quick brown fox") == "the quick \nbrown fox ");
+	assert(capped.render("short") == "short", "hugs content under the cap");
+
+	glaze::Style floored = { .min_width = 8 };
+	assert(floored.render("hi") == "hi      ");
+}
+
+fn void test_style_width_bounds_size_the_node() @test {
+	xray::Node* narrow = milktea::vbox({ .min_width = 20 })
+		.add(milktea::text({}, "hi"))
+		.center();
+	xray::Node* r = xray::root().add(narrow);
+	r.solve(xray::new_rect(0, 0, 40, 20));
+	assert(narrow.rect().w == 20, "the style's floor");
+}
+
+fn void test_a_later_max_width_keeps_the_style_floor() @test {
+	xray::Node* panel = milktea::vbox({ .min_width = 20, .max_width = 30 })
+		.add(milktea::text({}, "the quick brown fox jumps over the lazy dog"))
+		.max_width(24)
+		.center();
+	xray::Node* r = xray::root().add(panel);
+	r.solve(xray::new_rect(0, 0, 80, 20));
+	assert(panel.rect().w == 24, "the call's cap wins over the style's");
+
+	xray::Node* small = milktea::vbox({ .min_width = 20 })
+		.add(milktea::text({}, "hi"))
+		.max_width(24)
+		.center();
+	r = xray::root().add(small);
+	r.solve(xray::new_rect(0, 0, 80, 20));
+	assert(small.rect().w == 20, "and the style's floor still holds");
+}
