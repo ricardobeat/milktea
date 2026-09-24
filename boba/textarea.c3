@@ -557,7 +557,7 @@ fn String blank_span(int width) @local {
 
 // append_text renders text, which starts at byte `at` of the buffer, in
 // base, switching to each highlight span's colors where one covers it.
-fn void Textarea.append_text(&self, DString* out, glaze::Style base, sz at, String text) @local {
+fn void Textarea.append_text(&self, DString* out, glaze::Style base, sz at, String text) {
 	if (self.highlights.len == 0) {
 		out.append_string(base.render(text));
 		return;
