@@ -491,6 +491,16 @@ fn milktea::KeyMsg? translate_key(rl::RLKeyboardKey key, Mods mods) {
 	return k;
 }
 
+fn void gui_clipboard_write(String text) @local {
+	rl::set_clipboard_text(text.zstr_tcopy());
+}
+
+fn String? gui_clipboard_read() @local {
+	ZString z = rl::get_clipboard_text();
+	if (z == null) return milktea::NO_CLIPBOARD~;
+	return z.str_view().tcopy();
+}
+
 // draw_block_glyph paints U+2580-block-element codepoints as filled rects
 // instead of going through font rendering. These glyphs are meant to tile
 // pixel-perfectly against their neighbors (doom-fire's ▀ half-blocks rely
@@ -682,6 +692,9 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// would instead quit the app. Nothing here ever decides on its own that
 	// the program should end — a quit comes from the model, through Cmd.
 	rl::set_exit_key(rl::RLKeyboardKey.NONE);
+	// The window has the system clipboard; milktea::set_clipboard and
+	// milktea::clipboard go through it rather than the terminal's ways.
+	milktea::use_clipboard(&gui_clipboard_write, &gui_clipboard_read);
 	rl::RLFont font = load_mono_font(opts.font_size);
 	// A point size the app could not fit to its cell exactly leaves the rules
 	// to a second atlas at the cell's height. When the two agree — the usual
