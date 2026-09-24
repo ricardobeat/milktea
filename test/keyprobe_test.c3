@@ -188,7 +188,9 @@ fn char[6] x10_mouse_buf(int cb, int cx, int cy) {
 	return buf;
 }
 
-// Plain left-button press: cb=0, col=5, row=10.
+// Plain left-button press: cb=0, col=5, row=10. x10_mouse_buf encodes
+// the cursor's cell as (param + 32); the library converts to 0-based so the
+// framework and the GUI agree.
 fn void test_x10_mouse_left_press() @test {
 	char[6] buf             = x10_mouse_buf(0, 5, 10);
 	milktea::ParseResult pr = milktea::parse_key(buf[..]);
@@ -196,8 +198,8 @@ fn void test_x10_mouse_left_press() @test {
 	assert(pr.kind == milktea::MsgKind.MOUSE);
 	assert(pr.mouse.button == milktea::MouseButton.MOUSE_LEFT);
 	assert(pr.mouse.action == milktea::MouseAction.MOUSE_PRESS);
-	assert(pr.mouse.col == 5);
-	assert(pr.mouse.row == 10);
+	assert(pr.mouse.col == 4);
+	assert(pr.mouse.row == 9);
 	assert(!pr.mouse.shift);
 	assert(!pr.mouse.alt);
 	assert(!pr.mouse.ctrl);
@@ -256,8 +258,8 @@ fn void test_x10_mouse_motion_left_held() @test {
 	assert(pr.kind == milktea::MsgKind.MOUSE);
 	assert(pr.mouse.button == milktea::MouseButton.MOUSE_LEFT);
 	assert(pr.mouse.action == milktea::MouseAction.MOUSE_MOTION);
-	assert(pr.mouse.col == 8);
-	assert(pr.mouse.row == 4);
+	assert(pr.mouse.col == 7);
+	assert(pr.mouse.row == 3);
 }
 
 // ============================================================

@@ -331,8 +331,8 @@ fn ParseResult parse_key(char[] buf) {
 				}
 				// X10 mouse: ESC [ M b x y  (3 bytes after M)
 				int cb = (int)(buf[3]) - 32;
-				int cx = (int)(buf[4]) - 32;
-				int cy = (int)(buf[5]) - 32;
+				int cx = (int)(buf[4]) - 32 - 1;
+				int cy = (int)(buf[5]) - 32 - 1;
 
 				// X10 encodes a coordinate as byte-32, so anything past column
 				// 223 wraps around and decodes negative. Nothing downstream
@@ -395,8 +395,14 @@ fn ParseResult parse_key(char[] buf) {
 			if (csi.private_prefix == '<' && (fb == 'M' || fb == 'm')) {
 				if (csi.param_count == 3) {
 					int btn_code = csi.params[0];
-					int col      = csi.params[1];
-					int row      = csi.params[2];
+					// SGR mouse reports the cell the cursor is in as 1-based
+					// (col=1,row=1 for the top-left). Every other consumer
+					// — the GUI's pixel-to-cell division, xray's Rect.contains,
+					// app code indexing a grid — wants 0-based. Subtract here
+					// so the rest of the library and the app see the same
+					// coordinate system the cursor is over.
+					int col      = csi.params[1] - 1;
+					int row      = csi.params[2] - 1;
 
 					MouseButton button = MOUSE_NONE;
 					// Wheel buttons (64-67) must be checked before the low-2-bits mask
