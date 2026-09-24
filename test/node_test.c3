@@ -410,3 +410,18 @@ fn void test_a_capped_stack_child_is_measured_at_its_own_width() @test {
 	assert(child.rect().w == 10, "capped at 10");
 	assert(child.rect().h == 4, "40 cells of text at 10 wide is 4 rows, not 1");
 }
+
+fn void test_fit_height_takes_what_the_content_needs() @test {
+	Fixed* a = fixed(0, 1);
+	Fixed* b = fixed(0, 3);
+	xray::Node* r = xray::vstack()
+		.add(xray::content_node(a).fit_height())
+		.add(xray::content_node(b).fit_height());
+	r.solve(xray::new_rect(0, 0, 20, 10));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(20, 10);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.paint(r);
+
+	assert(a.got.h == 1 && b.got.h == 3, "each is its content's height, not half the column");
+}

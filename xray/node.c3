@@ -309,6 +309,19 @@ fn Node* Node.max_height(&self, int n) {
 	return self;
 }
 
+// fit_width and fit_height size one axis to the node's content, the way a CSS
+// block's height is auto: a paragraph in a column takes the lines it needs
+// rather than a share of the column's leftover space.
+fn Node* Node.fit_width(&self) {
+	self.size_w = fit(&node_measure_w, self);
+	return self;
+}
+
+fn Node* Node.fit_height(&self) {
+	self.size_h = fit(&node_measure_h, self);
+	return self;
+}
+
 // bounded_fit fits an axis to its content, setting whichever of lo and hi is
 // not -1 and keeping the other from c when c already fits to content.
 fn Constraint bounded_fit(Constraint c, int lo, int hi, MeasureFn measure, Node* n) @local {
