@@ -83,9 +83,10 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 // are consulted for a centered modal and under draw_inline, where nothing
 // else fixes that axis.
 fn int StyledText.measure(&self, int width) @dynamic {
-	int lines = 1;
-	foreach (c : self.text) if (c == '\n') lines++;
-	return lines;
+	// Text wraps to the width it is given (see Style.render), so it is as
+	// many lines tall as wrapping at that width makes it.
+	if (self.style.nowrap) width = 0;
+	return glaze::wrapped_line_count(self.text, width);
 }
 
 fn int StyledText.measure_width(&self, int height) @dynamic {

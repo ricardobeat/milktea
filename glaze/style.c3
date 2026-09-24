@@ -548,7 +548,7 @@ fn int glaze_width_lookup(uint cp) @local {
 // like a CSI ended the scan on the first letter in the payload and counted the
 // remainder as visible text. viewport.c3 emits OSC 52 for clipboard writes, so
 // this is a sequence that really does flow through here.
-fn sz skip_escape(String s, sz start) @local {
+fn sz skip_escape(String s, sz start) {
 	sz i = start + 1; // past ESC
 	if (i >= s.len) return s.len;
 
@@ -723,6 +723,9 @@ struct Style {
 	int pad_bottom;
 	int pad_left;
 	int width; // 0 = auto (don't pad)
+	// Text wider than width wraps onto more lines unless this is set, in
+	// which case it runs past the edge, like CSS white-space: nowrap.
+	bool nowrap;
 	int height; // 0 = auto
 	Position align_h; // horizontal alignment within width
 	Position align_v; // vertical alignment within height
@@ -920,6 +923,14 @@ fn void mark_sgr_channel(int code, bool* fg, bool* bg) @local {
 
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
+
+	// A set width is the most the content may take, so wrap to what is left
+	// of it inside the border and padding before splitting into lines.
+	if (self.width > 0 && !self.nowrap) {
+		int frame = self.pad_left + self.pad_right
+			+ (self.border.left.len > 0 ? 1 : 0) + (self.border.right.len > 0 ? 1 : 0);
+		input = wrap_text(input, self.width - frame);
+	}
 
 	// Split input into lines. The line table is sized to the actual line
 	// count: a fixed stack array would silently truncate content beyond its
