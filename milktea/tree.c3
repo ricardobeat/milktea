@@ -156,6 +156,7 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	buf.clear();
 
 	root.solve(xray::new_rect(0, 0, w, h));
+	buf.record_paint = g_program.record_paint;
 	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)time_ms());
 
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear
@@ -167,6 +168,7 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	xray::collect_drag_regions(root, g_program.drag_regions[..], &g_program.drag_region_count);
 
 	View v = {
+		.paint_ops = buf.record_paint ? buf.paint_ops.array_view() : {},
 		.cells        = buf.cells,
 		.cells_width  = (sz)w,
 		.cells_height = (sz)h,

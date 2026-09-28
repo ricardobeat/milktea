@@ -210,6 +210,10 @@ struct Node {
 	// (see collect_drag_regions); a terminal build has no window to move and
 	// ignores it.
 	bool window_drag_area;
+
+	// A vector background emitted before this node's glyphs and children in
+	// the GUI paint stream. Terminal cell backgrounds are unchanged.
+	Decoration decoration;
 }
 
 fn Node* new_node(NodeDirection dir) @local {
@@ -509,6 +513,15 @@ fn Node* Node.on_hover_out(&self, ClickFn handler) {
 // both a drag handle and clickable. Only a GUI build acts on it.
 fn Node* Node.window_drag(&self, bool on = true) {
 	self.window_drag_area = on;
+	return self;
+}
+
+// decorate gives this node a vector background for a GUI build to paint (see
+// xray::Decoration): rounded corners, a gradient fill, a border, a drop shadow.
+// A terminal build ignores it and the node's cells paint as they always did, so
+// the same view renders in both — only the GUI shows the decoration.
+fn Node* Node.decorate(&self, Decoration d) {
+	self.decoration = d;
 	return self;
 }
 

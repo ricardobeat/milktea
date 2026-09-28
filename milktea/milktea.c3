@@ -48,6 +48,8 @@ struct Overlay {
 const int MAX_OVERLAYS = 8;
 
 struct View {
+	// Optional GUI commands, owned by the draw buffer until its next paint.
+	xray::PaintOp[] paint_ops;
 	String content;
 	Cursor cursor;
 	bool has_cursor;
@@ -302,6 +304,7 @@ struct TimerEntry {
 // Program holds all mutable runtime state for a running TUI.
 // Enables sequential multi-instance use and proper testability.
 struct Program {
+	bool record_paint;
 	Model model;
 	TimerEntry[MAX_TIMERS] timers;
 	// Buffers for tree layout (see draw / draw_inline), kept across frames

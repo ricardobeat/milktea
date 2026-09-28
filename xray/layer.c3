@@ -114,6 +114,7 @@ fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, Inne
 			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
 			Color c = s.color;
 			c.a = (char)alpha;
+			self.record_tint(col, row, c);
 			dst.style.bg = c.blend_over(dst.style.bg);
 			dst.style.fg = c.blend_over(dst.style.fg);
 			self.dirty_lines[(sz)row] = true;
@@ -137,6 +138,7 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 				if (col < 0 || row < 0 || col >= (int)self.width || row >= (int)self.height) continue;
 
 				Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
+				self.record_tint(col, row, blend_color);
 				dst.style.bg = blend_color.blend_over(dst.style.bg);
 				dst.style.fg = blend_color.blend_over(dst.style.fg);
 				self.dirty_lines[(sz)row] = true;
@@ -182,6 +184,7 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
 			Color c = s.color;
 			c.a = (char)alpha;
+			self.record_tint(col, row, c);
 			dst.style.bg = c.blend_over(dst.style.bg);
 			dst.style.fg = c.blend_over(dst.style.fg);
 			self.dirty_lines[(sz)row] = true;

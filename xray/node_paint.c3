@@ -28,6 +28,10 @@ struct PaintResult {
 // hang one off something long-lived and pass its address. Passing null
 // disables blending: those nodes paint opaque.
 fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null, long now_ms = 0) {
+	if (self.record_paint) {
+		if (!self.paint_ops.is_initialized()) self.paint_ops.init(mem);
+		self.paint_ops.clear();
+	}
 	PaintResult res;
 	self.paint_node(root, &res, scratch);
 	self.draw_cursor(&res, now_ms);
@@ -83,6 +87,12 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		self.render_shadow(r.x, r.y, r.w, r.h, n.layer_style.shadow);
 	}
 
+	if (self.record_paint && n.decoration.kind != DecorationKind.NONE) {
+		Decoration d = n.decoration;
+		d.rect = r;
+		self.paint_ops.push({ .kind = PaintKind.DECORATION, .decoration = d });
+	}
+	self.decorated_content = n.decoration.kind != DecorationKind.NONE;
 	if (n.content != null && r.w > 0 && r.h > 0) {
 		String s = n.content.render(r);
 		if (s.len > 0) {
@@ -99,6 +109,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		}
 	}
 
+	self.decorated_content = false;
 	for (int i = 0; i < n.child_count; i++) {
 		self.paint_node(n.children[i], res, scratch);
 	}
@@ -144,6 +155,7 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 			Cell* dst = &self.cells[dy * self.width + dx];
 
 			if (src.style.bg.kind == ColorKind.TRUECOLOR) {
+				self.record_tint((int)dx, (int)dy, src.style.bg);
 				dst.style.bg = src.style.bg.blend_over(dst.style.bg);
 			}
 			if (src.style.fg.kind == ColorKind.TRUECOLOR) {

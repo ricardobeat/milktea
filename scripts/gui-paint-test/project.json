@@ -1,0 +1,42 @@
+{
+  "langrev": "1",
+  "dependency-search-paths": [
+    "../..",
+    "../../lib"
+  ],
+  "dependencies": [
+    "milktea",
+    "glaze",
+    "xray",
+    "raylib6"
+  ],
+  "targets": {
+    "paint-test": {
+      "type": "executable",
+      "sources": [
+        "main.c3",
+        "../../milktea-gui/**"
+      ],
+      "c-sources": [
+        "../../milktea-gui/macos_window.c",
+        "../../vendor/plutovg/src/plutovg-blend.c",
+        "../../vendor/plutovg/src/plutovg-canvas.c",
+        "../../vendor/plutovg/src/plutovg-font.c",
+        "../../vendor/plutovg/src/plutovg-ft-math.c",
+        "../../vendor/plutovg/src/plutovg-ft-raster.c",
+        "../../vendor/plutovg/src/plutovg-ft-stroker.c",
+        "../../vendor/plutovg/src/plutovg-matrix.c",
+        "../../vendor/plutovg/src/plutovg-paint.c",
+        "../../vendor/plutovg/src/plutovg-path.c",
+        "../../vendor/plutovg/src/plutovg-rasterize.c",
+        "../../vendor/plutovg/src/plutovg-surface.c"
+      ],
+      "c-include-dirs": [
+        "../../vendor/plutovg/include"
+      ],
+      "cflags": "-DPLUTOVG_DISABLE_IMAGE_WRITE",
+      "opt": "Os",
+      "strip-unused": true
+    }
+  }
+}

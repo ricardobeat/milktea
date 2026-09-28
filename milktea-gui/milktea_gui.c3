@@ -794,6 +794,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// used since the loop below drives init/update/view by hand instead of
 	// Program.run() (which assumes a real or test-mode TTY).
 	milktea::Program prog;
+	prog.record_paint = true;
 	prog.cached_ws.ws_col = (ushort)opts.cols;
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
@@ -915,6 +916,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	xray::Cell[] prev_cells;
 	sz prev_count = 0;
 	bool prev_valid = false;
+	xray::PaintOp[] prev_paint;
 	// A model only ever moves through update(), and every update() on this
 	// loop goes through dispatch_gui, so a frame that dispatched nothing
 	// cannot have produced a different view — skip view() too, not just
@@ -1233,7 +1235,9 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		milktea::View v = m.view();
 
 		sz cell_count = v.cells.ptr != null ? v.cells_width * v.cells_height : 0;
-		bool unchanged = prev_valid && cell_count == prev_count &&
+		bool same_paint = prev_paint.len == v.paint_ops.len
+			&& mem::equals(prev_paint, v.paint_ops);
+		bool unchanged = prev_valid && same_paint && cell_count == prev_count &&
 			(cell_count == 0 || mem::equals(prev_cells, v.cells[:cell_count]));
 		if (unchanged) {
 			// Same owed shot as above: the grid is identical but the click
@@ -1257,6 +1261,11 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		if (cell_count > 0) prev_cells[..] = v.cells[:cell_count];
 		prev_valid = true;
+		if (prev_paint.len != v.paint_ops.len) {
+			if (prev_paint.ptr != null) mem::free(prev_paint.ptr);
+			prev_paint = v.paint_ops.len > 0 ? mem::new_array(xray::PaintOp, v.paint_ops.len) : {};
+		}
+		if (prev_paint.len > 0) prev_paint[..] = v.paint_ops[..];
 
 		rl::begin_drawing();
 		if (shot) {
@@ -1266,42 +1275,25 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			rl::begin_texture_mode(target);
 		}
 
-		if (v.cells.ptr != null) {
-			// Every cell paints its own background — including an unset one,
-			// which renders as plain black — rather than clearing the whole
-			// window first. xray's cell grid already covers every cell each
-			// frame (ScreenBuffer.clear() fills it before painting), so a
-			// window-wide clear here would only be masking a cell this loop
-			// failed to draw, not providing real transparency: a NONE bg
-			// means "terminal default", not "see through to whatever's
-			// behind" — that's what ColorKind.TRANSPARENT is for, and xray's
-			// own compositing (set_cell) already resolves it before the
-			// grid ever reaches here.
+		rl::clear_background(rl::BLACK);
+		if (v.paint_ops.len > 0) {
+			foreach (op : v.paint_ops) {
+				switch (op.kind) {
+					case xray::PaintKind.DECORATION:
+						decor_draw(op.decoration, opts);
+					case xray::PaintKind.TINT:
+						rl::draw_rectangle(op.col * opts.cell_w, op.row * opts.cell_h,
+							opts.cell_w, opts.cell_h, to_rl(op.tint, rl::BLANK));
+					case xray::PaintKind.CELL:
+						paint_gui_cell(op.cell, op.col, op.row, opts, font, rule_font,
+							text_fit, rule_fit, split_atlas, true);
+				}
+			}
+		} else if (v.cells.ptr != null) {
 			for (sz row = 0; row < v.cells_height; row++) {
 				for (sz col = 0; col < v.cells_width; col++) {
-					xray::Cell cell = v.cells[row * v.cells_width + col];
-					int px = (int)col * opts.cell_w;
-					int py = (int)row * opts.cell_h;
-
-					RLColor bg = to_rl(cell.style.bg, rl::BLACK);
-					rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, bg);
-					if (cell.content_len > 0 && cell.content[0] != ' ') {
-						RLColor fg = to_rl(cell.style.fg, rl::WHITE);
-						uint cp;
-						xray::utf8_decode(cell.content_str(), &cp);
-						if (!draw_block_glyph(cp, px, py, opts.cell_w, opts.cell_h, fg, bg)) {
-							char[9] buf;
-							mem::copy(&buf, &cell.content, cell.content_len);
-							buf[cell.content_len] = 0;
-							bool rule = split_atlas && is_rule_glyph(cp);
-							rl::RLFont gf = rule ? rule_font : font;
-							CellFit fit = rule ? rule_fit : text_fit;
-							int gsize = rule ? opts.cell_h : opts.font_size;
-							rl::draw_text_ex(gf, (ZString)&buf[0],
-								{ (float)(px + fit.dx), (float)(py + fit.dy) },
-								(float)gsize, 0, fg);
-						}
-					}
+					paint_gui_cell(v.cells[row * v.cells_width + col], (int)col, (int)row,
+						opts, font, rule_font, text_fit, rule_fit, split_atlas, false);
 				}
 			}
 		}
@@ -1347,6 +1339,11 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	}
 
 	if (prev_cells.ptr != null) mem::free(prev_cells);
+	if (prev_paint.ptr != null) mem::free(prev_paint.ptr);
+	if (prog.draw_buf != null && prog.draw_buf.paint_ops.is_initialized()) {
+		prog.draw_buf.paint_ops.free();
+	}
+	decor_shutdown();
 	if (rounded) {
 		rl::unload_shader(round_shader);
 		rl::unload_render_texture(target);
@@ -1363,4 +1360,28 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	}
 	prog.send_mu.destroy();
 	milktea::g_program = null;
+}
+
+fn void paint_gui_cell(xray::Cell cell, int col, int row, GuiOptions opts,
+		rl::RLFont font, rl::RLFont rule_font, CellFit text_fit, CellFit rule_fit,
+		bool split_atlas, bool ordered) @local {
+	int px = col * opts.cell_w;
+	int py = row * opts.cell_h;
+	RLColor bg = ordered && cell.style.bg.kind == xray::ColorKind.TRANSPARENT
+		? rl::BLANK : to_rl(cell.style.bg, rl::BLACK);
+	if (bg[3] != 0) rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, bg);
+	if (cell.content_len == 0 || cell.content[0] == ' ') return;
+	RLColor fg = to_rl(cell.style.fg, rl::WHITE);
+	uint cp;
+	xray::utf8_decode(cell.content_str(), &cp);
+	if (draw_block_glyph(cp, px, py, opts.cell_w, opts.cell_h, fg, bg)) return;
+	char[9] buf;
+	mem::copy(&buf, &cell.content, cell.content_len);
+	buf[cell.content_len] = 0;
+	bool rule = split_atlas && is_rule_glyph(cp);
+	rl::RLFont gf = rule ? rule_font : font;
+	CellFit fit = rule ? rule_fit : text_fit;
+	int gsize = rule ? opts.cell_h : opts.font_size;
+	rl::draw_text_ex(gf, (ZString)&buf[0],
+		{ (float)(px + fit.dx), (float)(py + fit.dy) }, (float)gsize, 0, fg);
 }
