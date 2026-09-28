@@ -237,9 +237,17 @@ double milktea_macos_content_height(void) {
 // pointer moves again. A window can answer this itself, whatever the event
 // queue did or did not deliver.
 //
-// The arithmetic mirrors GLFW's own mouseMoved — x as given, y flipped
-// through the content view's height — so a reading from here and one raylib
-// reports from a real motion event agree exactly.
+// The reading has to be the pointer's position right now, not the position of
+// the last event the window saw. NSWindow's mouseLocationOutsideOfEventStream
+// is the latter: it answers with wherever the pointer was when the deepest
+// event was dispatched, so it lags a move until the queue is pumped — a press
+// arriving in the same breath as the move is then hit-tested at the cell the
+// pointer has already left, which is exactly the click that only lands if the
+// pointer is held still. NSEvent's class-level mouseLocation is not tied to
+// the event queue, so it answers with the live pointer. Its origin is the
+// bottom left of the primary screen with y growing upward, so it is converted
+// through the window's screen frame and then flipped through the content
+// view's height, matching GLFW's own mouseMoved exactly.
 //
 // Returns 1 on success, 0 if the runtime did not answer.
 int milktea_macos_cursor_window(double *out_x, double *out_y) {
@@ -247,9 +255,12 @@ int milktea_macos_cursor_window(double *out_x, double *out_y) {
 	if (window == 0) return 0;
 	Id content = send_id(window, "contentView");
 	if (content == 0) return 0;
-	Point2 p = objc_msg_send_point(window, sel("mouseLocationOutsideOfEventStream"));
-	*out_x = p.x;
-	*out_y = send_rect(content, "frame").height - p.y;
+	Id cls = objc_getClass("NSEvent");
+	if (cls == 0) return 0;
+	Point2 p = objc_msg_send_point(cls, sel("mouseLocation"));
+	Rect4 frame = send_rect(window, "frame");
+	*out_x = p.x - frame.x;
+	*out_y = send_rect(content, "frame").height - (p.y - frame.y);
 	return 1;
 }
 

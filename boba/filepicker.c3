@@ -23,7 +23,10 @@ struct FilePicker (xray::Content) {
 	// itself through each row node's on_hover_in/out hooks; the app does not
 	// have to touch it.
 	int hover;
+	// current_dir views dir_buf, which the picker owns: callers usually pass
+	// temp strings to load_dir, and those are gone once the frame ends.
 	String current_dir;
+	DString dir_buf;
 	String selected_name;
 	int width;
 	int height;
@@ -88,7 +91,12 @@ fn void FilePicker.load_dir(&self, String path) {
 	self.count = 0;
 	self.cursor = 0;
 	self.scroll = 0;
-	self.current_dir = path;
+	// Copy before freeing the old buffer: `path` may be a slice of
+	// current_dir itself (Backspace goes to its parent).
+	DString dir = dstring::new(mem, path);
+	self.dir_buf.free();
+	self.dir_buf = dir;
+	self.current_dir = dir.str_view();
 
 	@pool() {
 		char[512] path_buf;

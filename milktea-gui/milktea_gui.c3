@@ -55,6 +55,22 @@ extern fn int milktea_macos_cursor_window(double* x, double* y)
 extern fn int milktea_macos_cursor_screen(double* x, double* y)
 	@cname("milktea_macos_cursor_screen") @feat(DARWIN);
 
+// raylib samples the mouse button once per frame: its state is a level copied
+// into previous/current on every PollInputEvents, so a press and its release
+// that land inside one poll leave current at 0 and the press is never seen —
+// what a fast click, or any click the loop is slow to poll, looks like from
+// inside. The click then appears to do nothing until the button is held down
+// across a frame boundary.
+//
+// A GLFW button callback runs for every press at the moment the event is
+// drained, whatever the loop's timing, so chaining one in front of raylib's
+// (which still gets called, so its state and the drag that reads it are
+// unchanged) turns a missed level into a queued edge the loop can act on.
+alias GlfwMouseButtonFn = fn void(void* window, int button, int action, int mods);
+extern fn void* glfw_get_current_context() @cname("glfwGetCurrentContext");
+extern fn GlfwMouseButtonFn glfw_set_mouse_button_callback(void* window, GlfwMouseButtonFn cb)
+	@cname("glfwSetMouseButtonCallback");
+
 // cursor_screen_pos reports the pointer in screen space, which is the only
 // frame of reference a window drag can use: a window-relative position moves
 // as much when the window moves as when the pointer does, so feeding it back
@@ -123,6 +139,19 @@ int g_trace_y @local = -1;
 milktea::KeyMsg g_key_msg @local;
 long g_key_frame @local;
 bool g_key_armed @local;
+// raylib's own mouse-button callback, kept so the chained hook below can call
+// it; and a latched left press the loop consumes. See the externs for why.
+GlfwMouseButtonFn g_prev_mouse_button @local;
+int g_left_press_pending @local;
+
+// mouse_button_hook runs for every button event as GLFW drains it, which is
+// the only moment a press shorter than one poll can be observed. It records a
+// left press and forwards everything to raylib's callback, so raylib's own
+// button state — and the window drag that reads it — is unaffected.
+fn void mouse_button_hook(void* window, int button, int action, int mods) {
+	if (button == 0 && action == 1) g_left_press_pending = 1;
+	if (g_prev_mouse_button != null) g_prev_mouse_button(window, button, action, mods);
+}
 
 // set_cell_size asks the loop to redraw at a new cell size and point size,
 // taking effect on the next frame. The window keeps the pixels it has; what
@@ -686,6 +715,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	}
 	rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
 	rl::set_target_fps(60);
+	// Chain in front of raylib's mouse-button callback (see the externs) so a
+	// press too short for raylib's per-frame sampling is still seen.
+	g_prev_mouse_button = glfw_set_mouse_button_callback(
+		glfw_get_current_context(), &mouse_button_hook);
 	// raylib closes the window on ESC unless told otherwise, which is wrong
 	// for anything built on this loop: ESC is a key the model gets to read
 	// like any other, and a view that uses it to leave a menu or a dialog
@@ -1133,7 +1166,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			g_prev_mcol = mcol;
 			g_prev_mrow = mrow;
 		}
-		if (rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT)) {
+		bool left_pressed = g_left_press_pending != 0
+			|| rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT);
+		g_left_press_pending = 0;
+		if (left_pressed) {
 			if (milktea::debug_mouse()) {
 				io::eprintfn("[mouse] press at px=%d,%d -> col=%d row=%d (cell %dx%d) drag=%s",
 					rl::get_mouse_x(), rl::get_mouse_y(), mcol, mrow,
@@ -1175,6 +1211,19 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		if (should_quit) break;
 
 		if (!g_dirty) {
+			// Nothing moved this frame, so shot_target holds the last drawn
+			// frame — the one every scheduled event has already been folded
+			// into. A shot is owed as soon as those events have all fired:
+			// without this the loop would idle forever, never reaching the
+			// render branch that takes the shot, for any run whose last
+			// event (often a click on a row that is already current, a
+			// window control, or empty bar space) left the grid identical.
+			if (shot && prev_valid && !milktea::g_program.test_click_armed
+				&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
+				write_screenshot(opts, shot_target);
+				rl::unload_render_texture(shot_target);
+				break;
+			}
 			rl::poll_input_events();
 			rl::wait_time(1.0 / 60.0);
 			continue;
@@ -1187,6 +1236,14 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		bool unchanged = prev_valid && cell_count == prev_count &&
 			(cell_count == 0 || mem::equals(prev_cells, v.cells[:cell_count]));
 		if (unchanged) {
+			// Same owed shot as above: the grid is identical but the click
+			// may still be the last thing the run was asked to wait for.
+			if (shot && prev_valid && !milktea::g_program.test_click_armed
+				&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
+				write_screenshot(opts, shot_target);
+				rl::unload_render_texture(shot_target);
+				break;
+			}
 			// begin/end_drawing normally does this for us; standing in for
 			// it keeps input flowing and the frame rate capped while idle.
 			rl::poll_input_events();
