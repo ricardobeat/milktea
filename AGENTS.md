@@ -1,15 +1,17 @@
 # milktea — agent guide
 
-Three modules. Each has one job.
+Four modules. Each has one job.
 
 - **milktea** — Elm-style runtime loop (model/update/view, timers, input)
 - **glaze** — styling; builds ANSI-escaped strings
 - **xray** — geometry: layout constraints + the cell grid
+- **tgp** — kitty-graphics images: glyphs, placeholders, placements
 
 User-facing docs cover the API in depth — this file only adds what they don't:
 
 | I need to… | Read |
 |---|---|
+| images (kitty graphics) | `README.md` → "Images with tgp" |
 | model/update/view/main skeleton | `README.md` → "The model", "init", "update", "view", "main" |
 | styling, colors, borders | `README.md` → "Styling with glaze" |
 | splitting the screen (`vstack`/`hstack`) | `README.md` → "Layout with xray::layout" |
@@ -147,8 +149,8 @@ return self.canvas.view();
 
 ## Tests
 
-All tests live in `test/` (kept out of the library dirs so `milktea/**` etc. stay
-test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare
+All tests live in `test/` (kept out of the library dirs so `milktea/**`, `tgp/**`
+etc. stay test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare
 against `snapshots/*/*.snap`; re-record with `just update-snapshots` and review the
 diff. See README → "Testing".
 

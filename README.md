@@ -18,6 +18,7 @@ Milktea is part of a small family of libraries:
 | `milktea` | Runtime, event loop, message types |
 | `glaze` | Styles, colors, borders, text layout |
 | `xray` | Cell grid, screen buffer, constraint solver |
+| `tgp` | Kitty-graphics images (see "Images with tgp") |
 | `xray::layout` | `vstack` / `hstack` layout helpers |
 
 You only need to import what you use. A simple app needs just `milktea` and `glaze`.
@@ -350,6 +351,76 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 ```
 
 If all you do in that handler is copy the size into two fields, delete it and call the accessors instead.
+
+### Cell pixel size
+
+Some rendering needs to know how many *pixels* one character cell occupies — images are the obvious case. Milktea probes this at startup (`CSI 16 t`, with iTerm2's `ReportCellSize` as a fallback) and keeps it current on resizes:
+
+```c3
+if (milktea::cell_size_known()) {
+    int cw = milktea::cell_width_px();   // pixels per cell, horizontal
+    int ch = milktea::cell_height_px();  // pixels per cell, vertical
+}
+```
+
+`cell_size_known()` is false when the terminal never answered (alacritty, GNU Screen). Fall back to a `10x20` guess — flagged as a guess, so later answers can still correct it.
+
+---
+
+## Raw escape output
+
+Terminal state that milktea does not manage (graphics, mode sets, private modes) should be written through `milktea::emit`, which shares the renderer's tty path and respects test-mode capture:
+
+```c3
+milktea::emit("\x1b_Ga=d,d=A,q=2\x1b\\"); // kitty graphics: delete all
+```
+
+Never mix in `io::print` for escape sequences — it buffers independently and interleaves badly with frame output.
+
+Call `milktea::in_alt_screen()` to check whether the alternate screen is currently showing. For a program run with `.alt_screen = true` it is already `true` when `init()` runs, so screen-tied writes — graphics images die on a screen switch — are safe from the first frame.
+
+---
+
+## Images with tgp
+
+The `tgp` module wraps the [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). Register a *glyph* (an animated RGBA image, drawn procedurally or supplied as pre-rendered frames), then draw it inline in text or place it at absolute coordinates:
+
+```c3
+struct Model {
+    tgp::Session gfx;
+    tgp::Glyph   spinner;
+}
+
+fn milktea::Cmd Model.init(&self) @dynamic {
+    self.spinner = self.gfx.register({
+        .draw = &draw_frame,       // fn void(char* rgba, int frame)
+        .count = 8, .width = 32, .height = 64,
+        .fps = 12, .fallback = "◌",
+    })!!;
+    return milktea::tick(80, &on_spin);
+}
+
+fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
+    self.gfx.tick();  // advances the clock, transmits + reconciles placements
+    // ...
+}
+
+fn milktea::View Model.view(&self) @dynamic {
+    String cell = self.spinner.render();          // 1-cell image, in text
+    tgp::InstId id = self.spinner.place(0, 0);    // absolute placement
+    // ...
+}
+```
+
+Design notes:
+
+- **Capability is probed, never sniffed.** `a=q` runs during startup; on unsupported terminals `placeholder` returns the glyph's `fallback` string and `place` becomes a no-op. No `TERM_PROGRAM` branching in your code.
+- **Animation is declarative.** Glyphs do not own timers; the frame index is derived from a session clock you advance with `gfx.tick()` in `update`. Every glyph drawn in one frame agrees on the frame index, and `view` stays side-effect free.
+- **Glyphs render themselves.** A `Glyph` is bound to the session that registered it (registration captures the session pointer), so `spinner.render()` and `spinner.place(col, row)` need no session at the call site. The flip side of that borrow: don't copy the model after `init()` — milktea models are used via pointer, so this holds naturally.
+- **Transmission is lazy.** Frames are sent on the first `tick`/`placeholder`/`place` after the alt screen is active — ordering against `1049h` is handled for you.
+- **Cleanup is automatic.** Image ids are unique per run, and a blanket delete runs on normal teardown *and* fatal signals, so tiles never outlive the app.
+
+Terminal support: placements work in kitty, WezTerm, Ghostty, Konsole, iTerm2 and Warp; everything else (foot, GNOME Terminal, Windows Terminal, tmux, alacritty) shows the fallback character. Cell pixel size answers on kitty, Ghostty, WezTerm, foot, Konsole, mintty, Windows Terminal and xterm; tmux answers approximately from its own geometry.
 
 ---
 
