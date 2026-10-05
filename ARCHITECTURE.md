@@ -195,8 +195,8 @@ stderr, which belong to the rendering surface).
   Anything from the temp allocator (`dstring::temp()`, `string::tformat()`)
   is freed at block exit — models must not stash temp-allocated strings
   across frames.
-- **Heap ownership**: `xray::new_screen_buffer`, `xray::new_renderer`, and
-  `xray::new_layer` return heap pointers the caller owns.
+- **Heap ownership**: `xray::new_screen_buffer` and `xray::new_renderer`
+  return heap pointers the caller owns.
   `Program.run()` frees the renderer in its shutdown `defer`. Temporary
   `ScreenBuffer`s created mid-render for overlay blending always pair
   their allocation with `defer { tmp.destroy(); mem::free(tmp); }`.
