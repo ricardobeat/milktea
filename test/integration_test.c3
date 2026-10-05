@@ -12,7 +12,7 @@ import xray;
 // ============================================================
 
 struct TestModel {
-	int counter;
+	sz counter;
 	bool mounted;
 	bool destroyed;
 }
@@ -142,8 +142,8 @@ fn void test_send_quit() @test {
 // test_window_size_injection verifies WithWindowSize sets the
 // initial WindowSizeMsg delivered to the model.
 struct SizeTrackerModel {
-	int last_w;
-	int last_h;
+	sz last_w;
+	sz last_h;
 }
 
 fn milktea::Cmd SizeTrackerModel.init(SizeTrackerModel* self) @dynamic {
@@ -208,8 +208,8 @@ fn void test_render_contains_sgr() @test {
 // ============================================================
 
 struct TimerModel {
-	int tick_count;
-	int every_count;
+	sz tick_count;
+	sz every_count;
 	bool quit_after_first_tick;
 }
 
@@ -410,7 +410,7 @@ fn void test_add_overlay_inner_shadow() @test {
 // NeverQuitsModel is the shape of a model with a bug: it consumes messages
 // but never returns quit().
 struct NeverQuitsModel {
-	int updates;
+	sz updates;
 }
 
 fn milktea::Cmd NeverQuitsModel.init(NeverQuitsModel* self) @dynamic {
@@ -454,7 +454,7 @@ fn void test_test_mode_terminates_without_quit() @test {
 // view. sz is signed, so the destination guard (dx >= width) let negative
 // coordinates through to index before the cell buffer.
 struct NegativeOverlayModel {
-	int frames;
+	sz frames;
 }
 
 fn milktea::Cmd NegativeOverlayModel.init(NegativeOverlayModel* self) @dynamic {
@@ -494,7 +494,7 @@ fn void test_overlay_with_negative_origin_is_clipped() @test {
 // SendRaceModel quits after a handful of messages so run() tears down while
 // the sender threads below are still hammering send().
 struct SendRaceModel {
-	int updates;
+	sz updates;
 }
 
 fn milktea::Cmd SendRaceModel.init(SendRaceModel* self) @dynamic {
@@ -513,7 +513,7 @@ fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
 
 fn int send_race_sender(void* arg) @private {
 	milktea::Program* p = (milktea::Program*)arg;
-	for (int i = 0; i < 200000; i++) {
+	for (sz i = 0; i < 200000; i++) {
 		milktea::Msg m = { .kind = milktea::MsgKind.USER };
 		p.send(m);
 	}
@@ -532,7 +532,7 @@ fn int send_race_sender(void* arg) @private {
 // send() now registers as in-flight before checking the flag, and teardown
 // stops accepting and then drains the in-flight count before destroying.
 fn void test_send_survives_concurrent_shutdown() @test {
-	for (int round = 0; round < 4; round++) {
+	for (sz round = 0; round < 4; round++) {
 		SendRaceModel m;
 		DString out = dstring::temp();
 		milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
@@ -556,10 +556,10 @@ fn void test_send_survives_concurrent_shutdown() @test {
 // ScreenSizeModel records what the accessors report from inside the
 // program callbacks, so the test can assert on them after run() returns.
 struct ScreenSizeModel {
-	int w_in_update;
-	int h_in_update;
-	int w_in_view;
-	int h_in_view;
+	sz w_in_update;
+	sz h_in_update;
+	sz w_in_view;
+	sz h_in_view;
 }
 
 fn milktea::Cmd ScreenSizeModel.init(ScreenSizeModel* self) @dynamic {
@@ -734,7 +734,7 @@ fn milktea::View CellModel.view(CellModel* self) @dynamic {
 fn void test_cell_view_extent_overstated_is_clamped() @test {
 	// Four real cells, but the View claims a 40x20 grid.
 	xray::Cell[4] backing;
-	for (int i = 0; i < 4; i++) backing[i] = xray::empty_cell();
+	for (sz i = 0; i < 4; i++) backing[i] = xray::empty_cell();
 
 	CellModel m = { .cells = backing[..], .w = 40, .h = 20 };
 	DString out = dstring::temp();
@@ -751,7 +751,7 @@ fn void test_cell_view_extent_overstated_is_clamped() @test {
 // reaches the claimed height, so it needs the same clamp as the fast path.
 fn void test_cell_view_overstated_stride_is_clamped() @test {
 	xray::Cell[16] backing;
-	for (int i = 0; i < 16; i++) backing[i] = xray::empty_cell();
+	for (sz i = 0; i < 16; i++) backing[i] = xray::empty_cell();
 
 	// Stride 8 over 16 cells is 2 real rows; the View claims 9.
 	CellModel m = { .cells = backing[..], .w = 8, .h = 9 };

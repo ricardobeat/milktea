@@ -70,16 +70,16 @@ enum MouseButton : int {
 struct MouseMsg {
 	MouseButton button;
 	MouseAction action;
-	int row;
-	int col;
+	sz row;
+	sz col;
 	bool shift;
 	bool alt;
 	bool ctrl;
 	// px, py: raw 0-based pixel coordinates from DEC mode 1016 (SGR-Pixels).
 	// Both are 0 unless the app opted in via View.set_mouse_pixels and the
 	// terminal actually reported pixel coordinates for this event.
-	int px;
-	int py;
+	sz px;
+	sz py;
 }
 
 struct ParseResult {
@@ -89,12 +89,12 @@ struct ParseResult {
 	sz consumed;
 }
 
-const int CSI_MAX_PARAMS = 8;
+const sz CSI_MAX_PARAMS = 8;
 
 struct CSIParse {
-	int[CSI_MAX_PARAMS] params;
-	int[CSI_MAX_PARAMS] subparams; // ':'-separated subparameter of each param; 0 = absent
-	int param_count;
+	sz[CSI_MAX_PARAMS] params;
+	sz[CSI_MAX_PARAMS] subparams; // ':'-separated subparameter of each param; 0 = absent
+	sz param_count;
 	char final_byte;
 	char private_prefix; // '<', '?', '>', '=' or 0 if none
 	sz consumed;
@@ -106,11 +106,11 @@ struct CSIParse {
 // hostile or garbled sequence from wrapping the accumulator negative, which
 // would make parse_csi drop the parameter entirely and change param_count,
 // silently rerouting the sequence to the wrong handler.
-const int CSI_PARAM_MAX = 0x10FFFF;
+const sz CSI_PARAM_MAX = 0x10FFFF;
 
-fn int accumulate_param(int acc, char digit) @local {
+fn sz accumulate_param(sz acc, char digit) @local {
 	if (acc > (CSI_PARAM_MAX - 9) / 10) return CSI_PARAM_MAX;
-	int next = acc * 10 + (digit - '0');
+	sz next = acc * 10 + (sz)(digit - '0');
 	return next > CSI_PARAM_MAX ? CSI_PARAM_MAX : next;
 }
 
@@ -133,8 +133,8 @@ fn CSIParse parse_csi(char[] buf) {
 		pos = 1;
 	}
 
-	int current_param = -1; // -1 means no param yet (implicit default)
-	int current_subparam = -1; // -1 means no subparam seen for current_param
+	sz current_param = -1; // -1 means no param yet (implicit default)
+	sz current_subparam = -1; // -1 means no subparam seen for current_param
 	bool in_subparam = false; // true once ':' has been seen for the current param
 	bool subparam_seen_second_colon = false; // second ':' in a param — ignore extra levels
 
@@ -203,7 +203,7 @@ fn CSIParse parse_csi(char[] buf) {
 	return csi;
 }
 
-fn int csi_param(CSIParse csi, int idx, int default_val) {
+fn sz csi_param(CSIParse csi, sz idx, sz default_val) {
 	if (idx < csi.param_count) return csi.params[idx];
 	return default_val;
 }
@@ -211,7 +211,7 @@ fn int csi_param(CSIParse csi, int idx, int default_val) {
 // csi_subparam returns the ':'-separated subparameter of params[idx] (e.g. the
 // kitty keyboard protocol event type in "mods:event"), or default_val if the
 // param is out of range or has no subparameter (0 means "absent").
-fn int csi_subparam(CSIParse csi, int idx, int default_val) {
+fn sz csi_subparam(CSIParse csi, sz idx, sz default_val) {
 	if (idx < csi.param_count && csi.subparams[idx] != 0) return csi.subparams[idx];
 	return default_val;
 }
@@ -230,8 +230,8 @@ struct KeyMods {
 // This must be a bitmask test, not a set of equality comparisons against
 // 2/4/6/8 — those silently dropped every modifier once any higher bit was
 // set, so ctrl+meta+Up (mod 13) arrived with no modifiers at all.
-fn KeyMods decode_xterm_mods(int mod) {
-	int bits = mod > 0 ? mod - 1 : 0;
+fn KeyMods decode_xterm_mods(sz mod) {
+	sz bits = mod > 0 ? mod - 1 : 0;
 	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0 };
 }
 
@@ -241,7 +241,7 @@ fn KeyMods decode_xterm_mods(int mod) {
 // tilde keys) carry this subparam too — decoding it only in the 'u' path made
 // every one of those keys fire twice per stroke, once on press and again on
 // release.
-fn KeyAction decode_kitty_event(CSIParse csi, int idx) {
+fn KeyAction decode_kitty_event(CSIParse csi, sz idx) {
 	switch (csi_subparam(csi, idx, 1)) {
 		case 2: return KEY_REPEAT;
 		case 3: return KEY_RELEASE;
@@ -273,8 +273,8 @@ fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, boo
 fn ParseResult make_mouse(
 	MouseButton button,
 	MouseAction action,
-	int row,
-	int col,
+	sz row,
+	sz col,
 	bool shift,
 	bool alt,
 	bool ctrl,
@@ -341,9 +341,9 @@ fn ParseResult parse_key(char[] buf) {
 					return make_key(NONE, 0, false, false, false, 0);
 				}
 				// X10 mouse: ESC [ M b x y  (3 bytes after M)
-				int cb = (int)(buf[3]) - 32;
-				int cx = (int)(buf[4]) - 32;
-				int cy = (int)(buf[5]) - 32;
+				sz cb = (sz)(buf[3]) - 32;
+				sz cx = (sz)(buf[4]) - 32;
+				sz cy = (sz)(buf[5]) - 32;
 
 				// X10 encodes a coordinate as byte-32, so anything past column
 				// 223 wraps around and decodes negative. Nothing downstream
@@ -405,9 +405,9 @@ fn ParseResult parse_key(char[] buf) {
 			// SGR mouse: ESC [ < button ; col ; row M (press) or m (release)
 			if (csi.private_prefix == '<' && (fb == 'M' || fb == 'm')) {
 				if (csi.param_count == 3) {
-					int btn_code = csi.params[0];
-					int col      = csi.params[1];
-					int row      = csi.params[2];
+					sz btn_code = csi.params[0];
+					sz col      = csi.params[1];
+					sz row      = csi.params[2];
 
 					MouseButton button = MOUSE_NONE;
 					// Wheel buttons (64-67) must be checked before the low-2-bits mask
@@ -492,7 +492,7 @@ fn ParseResult parse_key(char[] buf) {
 
 			// Tilde sequences: PgUp, PgDn, Ins, Del, F-keys, and bracketed paste markers.
 			if (fb == '~') {
-				int p1 = csi_param(csi, 0, 0);
+				sz p1 = csi_param(csi, 0, 0);
 				// xterm reports modifiers as a second parameter, e.g.
 				// ESC[3;5~ for Ctrl+Delete. These used to be parsed and then
 				// thrown away, making Ctrl+Delete indistinguishable from Delete.
@@ -566,9 +566,9 @@ fn ParseResult parse_key(char[] buf) {
 			}
 			if (fb == 'u' && csi.private_prefix == 0 && csi.param_count >= 1) {
 				uint cp  = (uint)csi.params[0];
-				int mods = csi_param(csi, 1, 1); // default modifier value = 1 (no mods)
+				sz mods = csi_param(csi, 1, 1); // default modifier value = 1 (no mods)
 				// Modifier value is 1 + bitfield: subtract 1 to get the bits.
-				int mod_bits = mods > 0 ? mods - 1 : 0;
+				sz mod_bits = mods > 0 ? mods - 1 : 0;
 				bool shift   = (mod_bits & 1) != 0;
 				bool alt     = (mod_bits & 2) != 0;
 				bool ctrl    = (mod_bits & 4) != 0;
@@ -578,7 +578,7 @@ fn ParseResult parse_key(char[] buf) {
 				// defaults to press. This subparam is only ever present when
 				// the app opted in via report_key_events (flag 2), so apps
 				// that didn't opt in always see KEY_PRESS here.
-				int event = csi_subparam(csi, 1, 1);
+				sz event = csi_subparam(csi, 1, 1);
 				KeyAction action;
 				switch (event) {
 					case 2: action = KEY_REPEAT;

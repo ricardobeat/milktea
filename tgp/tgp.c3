@@ -38,8 +38,8 @@ faultdef SESSION_FULL, INVALID_GLYPH, NO_SUCH_INSTANCE;
 // rounded-box tiles, far more on flat ones. Compression is optional: if it
 // fails or does not help, the raw bytes go out instead.
 extern fn int compress2(char* dest, sz* dest_len, char* src, sz src_len, int level);
-const int Z_OK = 0;
-const int Z_LEVEL = 6;
+const sz Z_OK = 0;
+const sz Z_LEVEL = 6;
 
 const sz MAX_GLYPHS = 32;
 const sz MAX_INSTANCES = 128;
@@ -49,11 +49,11 @@ const sz MAX_INSTANCES = 128;
 // image. 4096 is the protocol's recommended maximum.
 const sz CHUNK = 4096;
 const uint PLACEHOLDER_CP = 0x10EEEE;
-const int B64_CHUNK = 3; // bytes per base64 group
+const sz B64_CHUNK = 3; // bytes per base64 group
 
 // DrawFn renders one animation frame into an RGBA8 buffer of
 // width*height*4 bytes. Set GlyphDef.draw for procedural glyphs.
-alias DrawFn = fn void(char* buf, int frame);
+alias DrawFn = fn void(char* buf, sz frame);
 
 // Sink receives escape sequences; tests install one to capture output.
 alias Sink = fn void(String escape);
@@ -63,9 +63,9 @@ struct GlyphDef {
 	// Pre-rendered frames: count * width * height * 4 bytes of RGBA8. When
 	// set, draw is ignored.
 	char[] frames;
-	int count;
-	int width;
-	int height;
+	sz count;
+	sz width;
+	sz height;
 	// Animation rate in frames per second; 0 = static (frame 0 only).
 	int fps;
 	// Shown when the terminal has no kitty-graphics support.
@@ -81,53 +81,53 @@ struct GlyphDef {
 struct Glyph {
 	Session* session;
 	uint base_id;
-	int count;
-	int width;
-	int height;
+	sz count;
+	sz width;
+	sz height;
 	int fps;
 	String fallback;
 }
 
 // Identifies a placement within a session, for move/remove.
-alias InstId = int;
+alias InstId = sz;
 const InstId NO_INSTANCE = -1;
 
 struct Placement {
 	bool active;
-	int glyph;
-	int col;
-	int row;
+	sz glyph;
+	sz col;
+	sz row;
 	// Target size in cells. 0 means "natural size": the terminal shows the
 	// image at its own pixel dimensions. Non-zero scales the image to exactly
 	// that many columns/rows, which is how a small gradient strip stretches to
 	// fill a box of any size -- a resize is then just a replacement placement,
 	// with no image data retransmitted.
-	int cols;
-	int rows;
+	sz cols;
+	sz rows;
 	// Vertical stacking order. Negative values draw the image UNDER the text
 	// layer, so ordinary text written over those cells shows through with the
 	// image behind it -- the only way to get text on top of an image, since a
 	// unicode-placeholder cell is consumed by the placeholder itself and
 	// cannot also carry a glyph. Below Z_UNDER_BG the image also goes under
 	// cells with a non-default background.
-	int z;
+	sz z;
 	// Terminal-side state, tracked for the diff in sync():
 	bool shown;
-	int shown_col;
-	int shown_row;
-	int shown_z;
-	int shown_cols;
-	int shown_rows;
-	int frame;
+	sz shown_col;
+	sz shown_row;
+	sz shown_z;
+	sz shown_cols;
+	sz shown_rows;
+	sz frame;
 	uint pid;
 }
 
 // Z_UNDER_TEXT puts an image beneath the text layer while staying above the
 // default background: text drawn over it shows through.
-const int Z_UNDER_TEXT = -1;
+const sz Z_UNDER_TEXT = -1;
 // Z_UNDER_BG additionally puts it under cells that set their own background
 // colour (the protocol's INT32_MIN/2 threshold).
-const int Z_UNDER_BG = -1073741825;
+const sz Z_UNDER_BG = -1073741825;
 
 struct Session {
 	uint next_id;
@@ -137,9 +137,9 @@ struct Session {
 	// A released slot is reusable by register(); its images are already
 	// deleted from the terminal.
 	bool[MAX_GLYPHS] freed;
-	int glyph_count;
+	sz glyph_count;
 	Placement[MAX_INSTANCES] placements;
-	int placement_count;
+	sz placement_count;
 	uint next_pid;
 	sz born_ms;
 	sz clock_ms;
@@ -205,15 +205,15 @@ fn Session new_session() {
 // registered blanket cleanup runs at teardown regardless.
 fn void Session.destroy(&self) {
 	if (!supported()) return;
-	for (int g = 0; g < self.glyph_count; g++) {
+	for (sz g = 0; g < self.glyph_count; g++) {
 		if (!self.transmitted[g]) continue;
 		Glyph gl = self.glyphs[g];
-		for (int f = 0; f < gl.count; f++) {
+		for (sz f = 0; f < gl.count; f++) {
 			emit(string::tformat("\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", gl.base_id + (uint)f));
 		}
 		self.transmitted[g] = false;
 	}
-	for (int p = 0; p < self.placement_count; p++) {
+	for (sz p = 0; p < self.placement_count; p++) {
 		self.placements[p].shown = false;
 	}
 }
@@ -226,8 +226,8 @@ fn Glyph? Session.register(&self, GlyphDef def) {
 	// Reuse a released slot before growing: an app whose glyphs are one point
 	// in a style space (radius x border x fill x ...) cycles through far more
 	// glyphs than MAX_GLYPHS over a run, but holds only a few at a time.
-	int idx = -1;
-	for (int i = 0; i < self.glyph_count; i++) {
+	sz idx = -1;
+	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.freed[i]) { idx = i; break; }
 	}
 	if (idx < 0) {
@@ -257,10 +257,10 @@ fn Glyph? Session.register(&self, GlyphDef def) {
 // the screen for good -- a style the user navigated away from, say -- rather
 // than holding every variant a session ever showed.
 fn void Session.release(&self, Glyph g) {
-	for (int i = 0; i < self.glyph_count; i++) {
+	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.glyphs[i].base_id != g.base_id || self.freed[i]) continue;
 		if (self.transmitted[i] && supported()) {
-			for (int f = 0; f < self.glyphs[i].count; f++) {
+			for (sz f = 0; f < self.glyphs[i].count; f++) {
 				emit(string::tformat(
 					"\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", self.glyphs[i].base_id + (uint)f));
 			}
@@ -285,12 +285,12 @@ fn void Session.tick(&self) {
 // glyph_frame derives the current frame of a glyph from the clock: a pure
 // function of elapsed time, so view() stays side-effect free and every
 // glyph drawn in one frame agrees on the frame index.
-fn int glyph_frame(int fps, int count, sz clock_ms) {
+fn sz glyph_frame(int fps, sz count, sz clock_ms) {
 	if (fps <= 0 || count <= 0) return 0;
-	return (int)((clock_ms * (sz)fps / 1000) % (sz)count);
+	return (sz)((clock_ms * (sz)fps / 1000) % (sz)count);
 }
 
-fn int Session.frame_of(&self, Glyph g) {
+fn sz Session.frame_of(&self, Glyph g) {
 	return glyph_frame(g.fps, g.count, self.clock_ms);
 }
 
@@ -303,9 +303,9 @@ fn String base64_encode(char[] input) {
 	sz i = 0;
 	while (i < input.len) {
 		sz remaining = input.len - i;
-		int b0 = (int)input[i] & 0xff;
-		int b1 = remaining > 1 ? ((int)input[i + 1] & 0xff) : 0;
-		int b2 = remaining > 2 ? ((int)input[i + 2] & 0xff) : 0;
+		sz b0 = (sz)input[i] & 0xff;
+		sz b1 = remaining > 1 ? ((sz)input[i + 1] & 0xff) : 0;
+		sz b2 = remaining > 2 ? ((sz)input[i + 2] & 0xff) : 0;
 
 		out.append_char(B64[(b0 >> 2) & 0x3f]);
 		out.append_char(B64[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0f)]);
@@ -318,7 +318,7 @@ fn String base64_encode(char[] input) {
 	return out.str_view();
 }
 
-fn void base64_emit_chunks(uint id, char[] rgba, int w, int h) {
+fn void base64_emit_chunks(uint id, char[] rgba, sz w, sz h) {
 	// Try deflate first; fall back to raw on any failure or if it does not
 	// actually shrink the payload.
 	sz cap = rgba.len + rgba.len / 100 + 64;
@@ -362,7 +362,7 @@ fn void base64_emit_chunks(uint id, char[] rgba, int w, int h) {
 // frames, one 1x1 virtual placement (U=1) is registered per image: ghostty
 // does not create implicit virtual placements when a placeholder cell is
 // printed (kitty does), and without it placeholders render as tofu there.
-fn void Session.transmit_glyph(&self, int idx) {
+fn void Session.transmit_glyph(&self, sz idx) {
 	GlyphDef* def = &self.defs[idx];
 	sz bytes = (sz)(def.width * def.height * 4);
 	Glyph g = self.glyphs[idx];
@@ -370,7 +370,7 @@ fn void Session.transmit_glyph(&self, int idx) {
 	char* scratch = mem::new_array(char, bytes);
 	defer mem::free(scratch);
 
-	for (int f = 0; f < g.count; f++) {
+	for (sz f = 0; f < g.count; f++) {
 		if (def.frames.len > 0) {
 			sz start = (sz)f * bytes;
 			base64_emit_chunks(g.base_id + (uint)f, def.frames[start:bytes], def.width, def.height);
@@ -392,7 +392,7 @@ fn bool Session.flush(&self) {
 	if (!milktea::in_alt_screen()) return false;
 
 	bool sent = false;
-	for (int i = 0; i < self.glyph_count; i++) {
+	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.transmitted[i] || self.freed[i]) continue;
 		@pool() {
 			self.transmit_glyph(i);
@@ -457,7 +457,7 @@ const uint[297] DIACRITICS = {
 // row and column of the cell within the image's c x r grid. The image id
 // travels in the foreground colour, which the caller sets around a run of
 // these.
-fn void append_placeholder_cell(DString* d, int row, int col) {
+fn void append_placeholder_cell(DString* d, sz row, sz col) {
 	char[4] cp;
 	sz cp_len = milktea::utf8_encode(PLACEHOLDER_CP, cp[..]);
 	d.append_string((String)cp[:cp_len]);
@@ -475,12 +475,12 @@ fn void append_placeholder_cell(DString* d, int row, int col) {
 //
 // The id-carrying foreground colour is set once for the run and reset after:
 // the terminal only joins adjacent placeholder cells while that colour holds.
-fn String placeholder_row(uint id, int row, int col0, int n) {
+fn String placeholder_row(uint id, sz row, sz col0, sz n) {
 	if (n <= 0) return "";
 	DString d = dstring::temp();
 	d.append_string(string::tformat(
 		"\x1b[38;2;%d;%d;%dm", (id >> 16) & 0xff, (id >> 8) & 0xff, id & 0xff));
-	for (int i = 0; i < n; i++) append_placeholder_cell(&d, row, col0 + i);
+	for (sz i = 0; i < n; i++) append_placeholder_cell(&d, row, col0 + i);
 	d.append_string("\x1b[39m");
 	return d.str_view();
 }
@@ -488,12 +488,12 @@ fn String placeholder_row(uint id, int row, int col0, int n) {
 // placeholder_run encodes one image id across n consecutive cells that all
 // show the image's cell (0, 0) -- the right call when each tile is its own
 // 1x1 image. For one image spanning many cells use placeholder_row.
-fn String placeholder_run(uint id, int n) {
+fn String placeholder_run(uint id, sz n) {
 	if (n <= 0) return "";
 	DString d = dstring::temp();
 	d.append_string(string::tformat(
 		"\x1b[38;2;%d;%d;%dm", (id >> 16) & 0xff, (id >> 8) & 0xff, id & 0xff));
-	for (int i = 0; i < n; i++) append_placeholder_cell(&d, 0, 0);
+	for (sz i = 0; i < n; i++) append_placeholder_cell(&d, 0, 0);
 	d.append_string("\x1b[39m");
 	return d.str_view();
 }
@@ -527,7 +527,7 @@ fn String Glyph.render(&self) {
 // place registers an absolute placement of the glyph at a cell coordinate;
 // see Session.place(). The placement reaches the terminal on the next
 // session tick(). Returns the instance id for move/remove, or NO_INSTANCE.
-fn InstId Glyph.place(&self, int col, int row, int z = 0, int cols = 0, int rows = 0) {
+fn InstId Glyph.place(&self, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0) {
 	return self.session.place(*self, col, row, z, cols, rows);
 }
 
@@ -537,9 +537,9 @@ fn InstId Glyph.place(&self, int col, int row, int z = 0, int cols = 0, int rows
 // reaches the terminal on the next tick()/sync(). Returns the instance id
 // for move/remove, or NO_INSTANCE if the session is full or the glyph is
 // unknown.
-fn InstId Session.place(&self, Glyph g, int col, int row, int z = 0, int cols = 0, int rows = 0) {
+fn InstId Session.place(&self, Glyph g, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0) {
 	if (!supported()) return NO_INSTANCE;
-	int glyph_idx = -1;	for (int i = 0; i < self.glyph_count; i++) {
+	sz glyph_idx = -1;	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.glyphs[i].base_id == g.base_id) {
 			glyph_idx = i;
 			break;
@@ -548,7 +548,7 @@ fn InstId Session.place(&self, Glyph g, int col, int row, int z = 0, int cols = 
 	if (glyph_idx < 0) return NO_INSTANCE;
 	if (self.placement_count >= MAX_INSTANCES) return NO_INSTANCE;
 
-	int pid_idx = self.placement_count++;
+	sz pid_idx = self.placement_count++;
 	self.placements[pid_idx] = {
 		.active = true,
 		.glyph = glyph_idx,
@@ -564,7 +564,7 @@ fn InstId Session.place(&self, Glyph g, int col, int row, int z = 0, int cols = 
 	return pid_idx;
 }
 
-fn void Session.move(&self, InstId id, int col, int row) {
+fn void Session.move(&self, InstId id, sz col, sz row) {
 	if (id < 0 || id >= self.placement_count) return;
 	if (!self.placements[id].active) return;
 	self.placements[id].col = col;
@@ -573,7 +573,7 @@ fn void Session.move(&self, InstId id, int col, int row) {
 
 // resize changes a placement's target size in cells. The image itself is not
 // retransmitted: the next sync() replaces the placement at the new size.
-fn void Session.resize(&self, InstId id, int cols, int rows) {
+fn void Session.resize(&self, InstId id, sz cols, sz rows) {
 	if (id < 0 || id >= self.placement_count) return;
 	if (!self.placements[id].active) return;
 	self.placements[id].cols = cols;
@@ -605,10 +605,10 @@ fn void Session.sync(&self) {
 	if (!supported()) return;
 	self.flush();
 
-	for (int p = 0; p < self.placement_count; p++) {
+	for (sz p = 0; p < self.placement_count; p++) {
 		Placement place = self.placements[p];
 		Glyph g = self.glyphs[place.glyph];
-		int frame = self.frame_of(g);
+		sz frame = self.frame_of(g);
 
 		if (!place.active) {
 			if (place.shown) {

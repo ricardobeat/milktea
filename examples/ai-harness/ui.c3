@@ -93,18 +93,18 @@ fn String Model.prompt_line(&self) {
 
 // transcript_text is the log plus whatever transient line belongs at the
 // bottom: a pending bash approval, the spinner, or the last timing.
-fn String Model.transcript_text(&self, Theme th, int width) {
+fn String Model.transcript_text(&self, Theme th, sz width) {
 	DString out = dstring::temp();
 	out.append_string(self.log.text.str_view());
 
 	if (self.bash.pending()) {
-		int cap = width - 16;
+		sz cap = width - 16;
 		if (cap < 10) cap = 10;
 		DString block = dstring::temp();
 		block.append_string("  $ ");
 		String cmd = self.bash.command();
-		int shown = 0;
-		for (int k = 0; k < cmd.len && shown < cap; k++) {
+		sz shown = 0;
+		for (sz k = 0; k < cmd.len && shown < cap; k++) {
 			block.append_char(cmd[k] == '\n' ? ' ' : cmd[k]);
 			shown++;
 		}
@@ -121,15 +121,15 @@ fn String Model.transcript_text(&self, Theme th, int width) {
 
 // sidebar_node is the request list: a background layer with the rows stacked
 // over it. Rows past the pane's height solve to zero and never paint.
-fn xray::Node* Model.sidebar_node(&self, Theme th, int width) {
+fn xray::Node* Model.sidebar_node(&self, Theme th, sz width) {
 	xray::Node* list = milktea::vstack()
 		.add(milktea::text(th.sidebar_header, " REQUESTS").height(milktea::cells(1)))
 		.add(milktea::text(th.sidebar, "").height(milktea::cells(1)));
 
-	int rows = self.requests.count;
+	sz rows = self.requests.count;
 	if (rows > MAX_SIDEBAR_ROWS) rows = MAX_SIDEBAR_ROWS;
-	for (int i = 0; i < rows; i++) {
-		int code = self.requests.status[self.requests.count - 1 - i];
+	for (sz i = 0; i < rows; i++) {
+		sz code = self.requests.status[self.requests.count - 1 - i];
 		glaze::Style rs = code < 400 ? th.row_ok : th.row_error;
 		list.add(milktea::text(rs, string::tformat("  %-3d %s", code, status_label(code)))
 			.height(milktea::cells(1)));
@@ -145,8 +145,8 @@ fn xray::Node* Model.sidebar_node(&self, Theme th, int width) {
 
 // dialog_node builds the centered modal. The box sizes itself to the wrapped
 // text, so .center() measures it rather than the caller computing a rect.
-fn xray::Node* dialog_node(int screen_w, String body, glaze::Style style) {
-	int bw = screen_w - 6;
+fn xray::Node* dialog_node(sz screen_w, String body, glaze::Style style) {
+	sz bw = screen_w - 6;
 	if (bw < 2) bw = 2;
 	if (bw > 76) bw = 76;
 	// The tree is painted after view() returns, so the text must outlive this
@@ -157,9 +157,9 @@ fn xray::Node* dialog_node(int screen_w, String body, glaze::Style style) {
 
 fn milktea::View Model.view(&self) @dynamic {
 	Theme th = theme();
-	int w = milktea::screen_width();
+	sz w = milktea::screen_width();
 
-	int sb_w = self.requests.open ? 30 : 0;
+	sz sb_w = self.requests.open ? 30 : 0;
 	if (sb_w > w - 24) sb_w = w - 24;
 	if (sb_w < 0) sb_w = 0;
 

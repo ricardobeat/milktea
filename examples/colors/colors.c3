@@ -48,9 +48,9 @@ fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 		};
 
 	milktea::Node* grid = milktea::vstack();
-	for (int row = 0; row < 4; row++) {
+	for (sz row = 0; row < 4; row++) {
 		milktea::Node* r = milktea::hstack().fill(1);
-		for (int col = 0; col < 4; col++) {
+		for (sz col = 0; col < 4; col++) {
 			glaze::Style block = glaze::style().background(glaze::color_hex(colors[row * 4 + col]));
 			r.add(milktea::text(block, "").fill(1));
 		}

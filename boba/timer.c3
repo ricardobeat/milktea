@@ -7,8 +7,8 @@ import glaze;
 // Timer is a countdown timer component.
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
 struct Timer (xray::Content) {
-	int total_seconds;
-	int elapsed_seconds;
+	sz total_seconds;
+	sz elapsed_seconds;
 	bool running;
 	bool done;
 	glaze::Style timer_style;
@@ -18,7 +18,7 @@ struct Timer (xray::Content) {
 }
 
 // Timer creates a countdown timer with the given duration in seconds.
-fn Timer new_timer(int seconds) {
+fn Timer new_timer(sz seconds) {
 	Timer t = { };
 	t.total_seconds = seconds;
 	t.running = true;
@@ -81,16 +81,16 @@ fn void Timer.resume(&self) {
 }
 
 // remaining returns the seconds left on the countdown.
-fn int Timer.remaining(&self) {
-	int r = self.total_seconds - self.elapsed_seconds;
+fn sz Timer.remaining(&self) {
+	sz r = self.total_seconds - self.elapsed_seconds;
 	return r > 0 ? r : 0;
 }
 
 // view returns the rendered timer string.
 fn String Timer.view(&self) {
-	int rem = self.remaining();
-	int minutes     = rem / 60;
-	int secs        = rem % 60;
+	sz rem = self.remaining();
+	sz minutes     = rem / 60;
+	sz secs        = rem % 60;
 	String time_str = string::tformat("%02d:%02d", minutes, secs);
 
 	DString out = dstring::temp();
@@ -110,7 +110,7 @@ fn String Timer.view(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Timer.render(&self, xray::Rect r) @dynamic => self.view();
-fn int Timer.measure(&self, int width) @dynamic => 1;
-fn int Timer.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn sz Timer.measure(&self, sz width) @dynamic => 1;
+fn sz Timer.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Timer.node(&self) => xray::content_node(self);

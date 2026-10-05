@@ -14,12 +14,12 @@ struct TextInput (xray::Content) {
 	String placeholder;
 	bool focused;
 	bool is_password;
-	int max_width;
+	sz max_width;
 	// Size the rendered box, in cells. Zero means "fit the text", which is
 	// what a string-built view wants; the layout tree sets both from the rect
 	// it solved so a bordered style is drawn at the size the layout chose.
-	int width;
-	int height;
+	sz width;
+	sz height;
 	// How this input's caret looks while it is focused.
 	milktea::CursorStyle cursor_style;
 	glaze::Style focused_style;
@@ -139,11 +139,11 @@ fn String TextInput.display_text(&self) {
 }
 
 // cursor_col returns the column offset of the cursor within the input text.
-fn int TextInput.cursor_col(&self) {
+fn sz TextInput.cursor_col(&self) {
 	if (self.len > 0 && self.cursor_pos < self.len) {
-		return (int)self.cursor_pos;
+		return (sz)self.cursor_pos;
 	}
-	return (int)self.len;
+	return (sz)self.len;
 }
 
 // handle_key processes a key message and returns true if the input consumed it.
@@ -226,11 +226,11 @@ fn String TextInput.render(&self, xray::Rect r) @dynamic {
 }
 
 // One row of text, plus whatever the style frames it with.
-fn int TextInput.measure(&self, int width) @dynamic {
+fn sz TextInput.measure(&self, sz width) @dynamic {
 	return 1 + milktea::frame_height(self.box_style());
 }
 
-fn int TextInput.measure_width(&self, int height) @dynamic => self.width;
+fn sz TextInput.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::ContentCursor TextInput.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.focused) return {};

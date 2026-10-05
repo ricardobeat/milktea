@@ -85,20 +85,20 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 // A style carrying an explicit size names the answer outright: render() sizes
 // the box to it, so measuring the text instead would hand the node a rect
 // smaller than what it paints.
-fn int StyledText.measure(&self, int width) @dynamic {
+fn sz StyledText.measure(&self, sz width) @dynamic {
 	if (self.style.height > 0) return self.style.height;
-	int lines = 1;
+	sz lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
 	return lines + frame_height(self.style);
 }
 
-fn int StyledText.measure_width(&self, int height) @dynamic {
+fn sz StyledText.measure_width(&self, sz height) @dynamic {
 	if (self.style.width > 0) return self.style.width;
-	int widest = 0;
+	sz widest = 0;
 	usz start = 0;
 	for (usz i = 0; i <= self.text.len; i++) {
 		if (i < self.text.len && self.text[i] != '\n') continue;
-		int w = glaze::string_width(self.text[start:i - start]);
+		sz w = glaze::string_width(self.text[start:i - start]);
 		if (w > widest) widest = w;
 		start = i + 1;
 	}
@@ -122,14 +122,14 @@ fn View draw(Node* root) {
 // only as tall as the tree needs. The block is capped at the terminal height:
 // taller than that cannot be addressed relatively without scrolling.
 fn View draw_inline(Node* root) {
-	int w = screen_width();
-	int h = root != null ? root.natural_height(w) : 0;
+	sz w = screen_width();
+	sz h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
 	return draw_in(root, w, h);
 }
 
-fn View draw_in(Node* root, int w, int h) @local {
+fn View draw_in(Node* root, sz w, sz h) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.

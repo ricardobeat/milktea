@@ -22,15 +22,15 @@ fn xray::Rect content_rect(glaze::Style s, xray::Rect r) {
 // frame_height and frame_width are the rows and columns a style spends on its
 // own border and padding, before any content. Content adds these to its text
 // size to say how big it wants to be.
-fn int frame_height(glaze::Style s) {
-	int n = s.pad_top + s.pad_bottom;
+fn sz frame_height(glaze::Style s) {
+	sz n = s.pad_top + s.pad_bottom;
 	if (s.border.top.len > 0) n++;
 	if (s.border.bottom.len > 0) n++;
 	return n;
 }
 
-fn int frame_width(glaze::Style s) {
-	int n = s.pad_left + s.pad_right;
+fn sz frame_width(glaze::Style s) {
+	sz n = s.pad_left + s.pad_right;
 	if (s.border.left.len > 0) n++;
 	if (s.border.right.len > 0) n++;
 	return n;

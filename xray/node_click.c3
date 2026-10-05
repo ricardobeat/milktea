@@ -20,8 +20,8 @@ struct ClickTarget {
 // *count is both the starting offset and, on return, the new total. Targets
 // beyond `out.len` are silently dropped, matching the fixed-buffer-drops
 // convention used elsewhere (timers, send queue, input ring).
-fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
-	if (n == null || *count >= (int)out.len) return;
+fn void collect_click_targets(Node* n, ClickTarget[] out, sz* count) {
+	if (n == null || *count >= (sz)out.len) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null) {
 		out[*count] = {
 			.rect = n.computed_rect,
@@ -32,7 +32,7 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 		};
 		(*count)++;
 	}
-	for (int i = 0; i < n.child_count; i++) {
+	for (sz i = 0; i < n.child_count; i++) {
 		collect_click_targets(n.children[i], out, count);
 	}
 }
@@ -43,8 +43,8 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 // that order so a click that both hits one target and falls outside others
 // (the common case: click a button, dismiss everything behind it) reaches
 // the click handler first.
-fn void dispatch_click(ClickTarget[] targets, int col, int row) {
-	for (int i = (int)targets.len - 1; i >= 0; i--) {
+fn void dispatch_click(ClickTarget[] targets, sz col, sz row) {
+	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
 		if (targets[i].on_click != null && targets[i].rect.contains(col, row)) {
 			targets[i].on_click(targets[i].on_click_ctx, col, row);
 			break;

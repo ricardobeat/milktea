@@ -19,13 +19,13 @@ import xray;
 import std::math;
 
 const float FIRE_LIFT = -0.62f;        // upward drift of a rising ember spark
-const int FIRE_LIFE = @dur(44);        // how long a glyph cell burns before charring
-const int FIRE_ROWDELAY = @dur(9);     // extra ticks of fire delay per row up the
+const sz FIRE_LIFE = @dur(44);        // how long a glyph cell burns before charring
+const sz FIRE_ROWDELAY = @dur(9);     // extra ticks of fire delay per row up the
 	                                   // word, so the flame creeps from the bottom
-const int FIRE_CHAR_FADE = @dur(46);   // ticks a charred piece crumbles and fades
-const int FIRE_EMBER_LIFE = @dur(34);  // longest life of an emitted ember
-const int EMBER_POOL = 240;            // live-ember slots (ring buffer)
-const int EMBER_EMIT = 20;             // 1/EMBER_EMIT chance a burning cell spits
+const sz FIRE_CHAR_FADE = @dur(46);   // ticks a charred piece crumbles and fades
+const sz FIRE_EMBER_LIFE = @dur(34);  // longest life of an emitted ember
+const sz EMBER_POOL = 240;            // live-ember slots (ring buffer)
+const sz EMBER_EMIT = 20;             // 1/EMBER_EMIT chance a burning cell spits
 	                                   // an ember each tick (~1-2/s per cell)
 
 // A short-lived spark billowing off a burning fuel cell. Floats up, cools
@@ -35,8 +35,8 @@ struct FireEmber {
 	float y;
 	float vx;
 	float vy;
-	int born;          // frame it was emitted
-	int life;          // total frames it lives
+	sz born;          // frame it was emitted
+	sz life;          // total frames it lives
 	bool active;
 }
 
@@ -48,13 +48,13 @@ struct FireCell {
 	float y;
 	float vx;
 	float vy;
-	int col;           // the cell it was born at (also the flame column)
-	int row;
-	int row_src;       // glyph source (for drawing cells ahead of the flame)
-	int byte_off;
-	int byte_len;
-	int ignite_tick;   // frame this cell caught
-	int char_tick;     // frame it charred
+	sz col;           // the cell it was born at (also the flame column)
+	sz row;
+	sz row_src;       // glyph source (for drawing cells ahead of the flame)
+	sz byte_off;
+	sz byte_len;
+	sz ignite_tick;   // frame this cell caught
+	sz char_tick;     // frame it charred
 	float noise_seed;  // flicker / crumble-wobble phase
 	bool alive;
 	bool charred;
@@ -64,7 +64,7 @@ struct FireCell {
 struct FireState {
 	FireCell[] cells;
 	FireEmber[EMBER_POOL] embers;
-	int ember_head;    // ring cursor into embers[]
+	sz ember_head;    // ring cursor into embers[]
 	// (alive count is derived as cells iterate, so restart_cycle fires when
 	// the last cell crumbles away.)
 }
@@ -77,9 +77,9 @@ fn void fire_setup(void* raw) {
 	Model* self = (Model*)raw;
 	FireState* fs = mem::new(FireState);
 	fs.cells = mem::new_array(FireCell, self.total);
-	for (int i = 0; i < EMBER_POOL; i++) fs.embers[i].active = false;
+	for (sz i = 0; i < EMBER_POOL; i++) fs.embers[i].active = false;
 	fs.ember_head = 0;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		FireCell* c = &fs.cells[i];
 		c.alive = true;
@@ -97,7 +97,7 @@ fn void fire_setup(void* raw) {
 		// it catches. Delay grows by FIRE_ROWDELAY per row, plus a little
 		// jitter so a row doesn't light as one flat line — this is what
 		// makes the burn crawl over the word instead of flashing at once.
-		int from_bottom = self.text_y + self.text_h - p.row;
+		sz from_bottom = self.text_y + self.text_h - p.row;
 		c.ignite_tick = self.frame + FIRE_ROWDELAY * from_bottom + @dur(rand() % 7);
 		// Per-block phase for the flame flicker and the char wobble.
 		c.noise_seed = rand_range(0.0f, 1000.0f);
@@ -110,9 +110,9 @@ fn void fire_setup(void* raw) {
 // Release one short-lived ember from a burning fuel cell, reusing a slot in
 // the ring buffer if one is free. Embers are the airborne flame above the
 // word; the fuel cell itself keeps burning below.
-fn void fire_emit_ember(Model* self, FireState* fs, int col, int row) {
-	for (int k = 0; k < EMBER_POOL; k++) {
-		int idx = (fs.ember_head + k) % EMBER_POOL;
+fn void fire_emit_ember(Model* self, FireState* fs, sz col, sz row) {
+	for (sz k = 0; k < EMBER_POOL; k++) {
+		sz idx = (fs.ember_head + k) % EMBER_POOL;
 		FireEmber* e = &fs.embers[idx];
 		if (e.active) continue;
 		e.active = true;
@@ -135,10 +135,10 @@ fn void fire_step(void* raw) {
 	FireState* fs = fire_state(self);
 
 	// Embers rise, drift on a little turbulence, cool (buoyancy eases), expire.
-	for (int i = 0; i < EMBER_POOL; i++) {
+	for (sz i = 0; i < EMBER_POOL; i++) {
 		FireEmber* e = &fs.embers[i];
 		if (!e.active) continue;
-		int age = self.frame - e.born;
+		sz age = self.frame - e.born;
 		if (age >= e.life) { e.active = false; continue; }
 		float t = (float)age / (float)e.life;
 		float m = 1.0f - t;
@@ -154,13 +154,13 @@ fn void fire_step(void* raw) {
 
 	// Cells: still-ahead glyphs wait, burning ones sit and spit embers, and
 	// charred ones crumble (fall, wobble, fade).
-	int alive = 0;
-	for (int i = 0; i < fs.cells.len; i++) {
+	sz alive = 0;
+	for (sz i = 0; i < fs.cells.len; i++) {
 		FireCell* c = &fs.cells[i];
 		if (!c.alive) continue;
 		alive++;
 		if (c.charred) {
-			int c_age = self.frame - c.char_tick;
+			sz c_age = self.frame - c.char_tick;
 			if (c_age >= FIRE_CHAR_FADE || c.y > (float)self.h + 1.0f) {
 				c.alive = false;
 				alive--;
@@ -173,7 +173,7 @@ fn void fire_step(void* raw) {
 			c.y += c.vy * 0.25f * DT;
 			continue;
 		}
-		int age = self.frame - c.ignite_tick;
+		sz age = self.frame - c.ignite_tick;
 		if (age < 0) continue; // still ahead of the flame — no work yet
 		if (age >= FIRE_LIFE) {
 			// Fuel spent: char into a crumbling piece and let it fall.
@@ -198,17 +198,17 @@ fn void fire_render(void* raw) {
 	FireState* fs = fire_state(self);
 	xray::ScreenBuffer* sb = self.canvas;
 
-	for (int i = 0; i < fs.cells.len; i++) {
+	for (sz i = 0; i < fs.cells.len; i++) {
 		FireCell* c = &fs.cells[i];
 		if (!c.alive) continue;
 		if (c.charred) {
 			// Crumble: a burnt-out piece fades from dark red to black as it
 			// falls, so the letters blacken before the char drifts clear.
-			int c_age = self.frame - c.char_tick;
+			sz c_age = self.frame - c.char_tick;
 			float t = (float)c_age / (float)FIRE_CHAR_FADE;
 			if (t > 1.0f) t = 1.0f;
-			int col = (int)c.x;
-			int row = (int)c.y;
+			sz col = (sz)c.x;
+			sz row = (sz)c.y;
 			if (col < 0 || col >= self.w) continue;
 			if (row < 0 || row >= self.h) continue;
 			float dim = 1.0f - t;
@@ -219,7 +219,7 @@ fn void fire_render(void* raw) {
 			sb.set_cell((sz)col, (sz)row, xray::new_cell("\u2588", 1, fsy));
 			continue;
 		}
-		int age = self.frame - c.ignite_tick;
+		sz age = self.frame - c.ignite_tick;
 		if (age < 0) {
 			// Ahead of the flame: draw the real glyph, untouched.
 			if (c.col < 0 || c.col >= self.w) continue;
@@ -269,8 +269,8 @@ fn void fire_render(void* raw) {
 			if (dim < 0.0f) dim = 0.0f;
 			cc = xray::color_rgb((char)(210.0f * dim), (char)(30.0f * dim), 0);
 		}
-		int cell_col = c.col;
-		int cell_row = c.row;
+		sz cell_col = c.col;
+		sz cell_row = c.row;
 		if (cell_col < 0 || cell_col >= self.w) continue;
 		if (cell_row < 0 || cell_row >= self.h) continue;
 		xray::Style fsy = xray::default_style().set_fg(cc).set_bg(xray::color_transparent());
@@ -280,13 +280,13 @@ fn void fire_render(void* raw) {
 	// Embers: the airborne sparks above the fire, drawn after the fuel so
 	// they read as flame rising off the burning word.
 	xray::Style er = xray::default_style().set_bg(xray::color_transparent());
-	for (int i = 0; i < EMBER_POOL; i++) {
+	for (sz i = 0; i < EMBER_POOL; i++) {
 		FireEmber* e = &fs.embers[i];
 		if (!e.active) continue;
-		int age = self.frame - e.born;
+		sz age = self.frame - e.born;
 		if (age < 0 || age >= e.life) continue;
-		int col = (int)e.x;
-		int row = (int)e.y;
+		sz col = (sz)e.x;
+		sz row = (sz)e.y;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		float t = (float)age / (float)e.life;

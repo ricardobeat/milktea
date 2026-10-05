@@ -23,10 +23,10 @@ fn void Model.start_exit(Model* self) {
 	}
 	self.exit_previewed = false; // a random draw, so the badge dims again
 	if (self.has_last_exit) {
-		int pick = rand() % (EXIT_COUNT - 1);
+		sz pick = rand() % (EXIT_COUNT - 1);
 		// Shift past the excluded value: indices at or above it move up one,
 		// which maps the 3 remaining slots onto the 4 exits with no repeat.
-		if (pick >= (int)self.last_exit) pick++;
+		if (pick >= (sz)self.last_exit) pick++;
 		e = (Exit)pick;
 	} else {
 		e = (Exit)(rand() % EXIT_COUNT);

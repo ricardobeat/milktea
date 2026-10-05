@@ -10,8 +10,8 @@ import std::core::dstring;
 // fill_color:  color for the filled portion (NONE = no color)
 // empty_color: color for the empty portion (NONE = no color)
 fn String progress_bar(
-	int width,
-	int percentage,
+	sz width,
+	sz percentage,
 	String fill_char,
 	String empty_char,
 	Color fill_color,
@@ -21,8 +21,8 @@ fn String progress_bar(
 	if (percentage < 0) percentage = 0;
 	if (percentage > 100) percentage = 100;
 
-	int inner  = width - 2; // minus [ and ]
-	int filled = (inner * percentage + 50) / 100;
+	sz inner  = width - 2; // minus [ and ]
+	sz filled = (inner * percentage + 50) / 100;
 	if (filled > inner) filled = inner;
 
 	DString out = dstring::temp();
@@ -34,7 +34,7 @@ fn String progress_bar(
 		fill_color.write_sgr_params(&out, true);
 		out.append_string("m");
 	}
-	for (int i = 0; i < filled; i++) out.append_string(fill_char);
+	for (sz i = 0; i < filled; i++) out.append_string(fill_char);
 	if (fill_color.kind != ColorKind.NONE) out.append_string("\x1b[0m");
 
 	// Empty portion
@@ -43,7 +43,7 @@ fn String progress_bar(
 		empty_color.write_sgr_params(&out, true);
 		out.append_string("m");
 	}
-	for (int i = filled; i < inner; i++) out.append_string(empty_char);
+	for (sz i = filled; i < inner; i++) out.append_string(empty_char);
 	if (empty_color.kind != ColorKind.NONE) out.append_string("\x1b[0m");
 
 	out.append_char(']');

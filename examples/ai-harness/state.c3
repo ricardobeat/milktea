@@ -9,19 +9,19 @@ import std::atomic;
 import std::thread::channel;
 import llm;
 
-const int INPUT_BUF_SIZE = 4096;
-const int MAX_HISTORY = 64;
-const int MAX_LOG = 64;
+const sz INPUT_BUF_SIZE = 4096;
+const sz MAX_HISTORY = 64;
+const sz MAX_LOG = 64;
 // Cap on request rows built for the sidebar. Rows past the pane's height are
 // solved to zero and never painted, so this only bounds the work.
-const int MAX_SIDEBAR_ROWS = 64;
-const int BASH_BUF_SIZE = 4096;
-const int MODAL_MSG_SIZE = 1024;
-const int API_KEY_SIZE = 512;
+const sz MAX_SIDEBAR_ROWS = 64;
+const sz BASH_BUF_SIZE = 4096;
+const sz MODAL_MSG_SIZE = 1024;
+const sz API_KEY_SIZE = 512;
 
 const String API_URL = "https://token-plan-ams.xiaomimimo.com/v1/chat/completions";
 const String DEFAULT_MODEL = "mimo-v2.5";
-const int HTTP_TIMEOUT_MS = 120000;
+const sz HTTP_TIMEOUT_MS = 120000;
 
 // Editor is the prompt line: a byte buffer plus a caret into it. The buffer is
 // UTF-8, and cursor is a byte offset, so it only ever lands on a rune boundary
@@ -111,7 +111,7 @@ struct Request {
 	sz started_ms;
 	// Seconds the last completion took, or -1 before the first one.
 	double last_sec;
-	Atomic{int} cancel;
+	Atomic{sz} cancel;
 }
 
 fn void Request.finish(&self) {
@@ -128,16 +128,16 @@ fn void Request.finish(&self) {
 // it. Dropping the prompt without answering is not expressible.
 struct BashPrompt {
 	char[BASH_BUF_SIZE] cmd;
-	int cmd_len;
-	channel::OneShotChannel{int}* ack;
+	sz cmd_len;
+	channel::OneShotChannel{sz}* ack;
 }
 
 fn bool BashPrompt.pending(&self) => self.ack != null;
 
 fn String BashPrompt.command(&self) => (String)self.cmd[:self.cmd_len];
 
-fn void BashPrompt.set(&self, String command, channel::OneShotChannel{int}* ack) {
-	int n = command.len < BASH_BUF_SIZE - 1 ? (int)command.len : BASH_BUF_SIZE - 1;
+fn void BashPrompt.set(&self, String command, channel::OneShotChannel{sz}* ack) {
+	sz n = command.len < BASH_BUF_SIZE - 1 ? (sz)command.len : BASH_BUF_SIZE - 1;
 	mem::copy(&self.cmd[0], command.ptr, (sz)n);
 	self.cmd[n] = 0;
 	self.cmd_len = n;
@@ -148,7 +148,7 @@ fn void BashPrompt.set(&self, String command, channel::OneShotChannel{int}* ack)
 // first means a second call is a no-op rather than a double push.
 fn void BashPrompt.resolve(&self, bool approved) {
 	if (self.ack == null) return;
-	channel::OneShotChannel{int}* ack = self.ack;
+	channel::OneShotChannel{sz}* ack = self.ack;
 	self.ack = null;
 	ack.push(approved ? 1 : 0)!!;
 }
@@ -157,7 +157,7 @@ fn void BashPrompt.resolve(&self, bool approved) {
 struct Dialog {
 	bool showing;
 	char[MODAL_MSG_SIZE] msg;
-	int msg_len;
+	sz msg_len;
 }
 
 fn String Dialog.text(&self) => (String)self.msg[:self.msg_len];
@@ -171,24 +171,24 @@ fn void Dialog.show(&self, String title, String body) {
 	sz n = s.len < MODAL_MSG_SIZE - 1 ? s.len : MODAL_MSG_SIZE - 1;
 	mem::copy(&self.msg[0], s.ptr, n);
 	self.msg[n] = 0;
-	self.msg_len = (int)n;
+	self.msg_len = (sz)n;
 	self.showing = true;
 }
 
 // RequestLog is the sidebar's list of response codes, newest last.
 struct RequestLog {
 	bool open;
-	int[MAX_LOG] status;
-	int count;
+	sz[MAX_LOG] status;
+	sz count;
 }
 
-fn void RequestLog.add(&self, int status) {
+fn void RequestLog.add(&self, sz status) {
 	if (self.count >= MAX_LOG) return;
 	self.status[self.count] = status;
 	self.count++;
 }
 
-fn String status_label(int code) {
+fn String status_label(sz code) {
 	if (code < 300) return "ok";
 	if (code < 400) return "redirect";
 	return "error";
@@ -198,9 +198,9 @@ fn String status_label(int code) {
 // message history.
 struct Session {
 	char[API_KEY_SIZE] api_key;
-	int api_key_len;
+	sz api_key_len;
 	llm::HistoryEntry[MAX_HISTORY] history;
-	int history_count;
+	sz history_count;
 	// Whether to show the model's reasoning text in the transcript.
 	bool show_thinking;
 }

@@ -7,7 +7,7 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int TOTAL_LINES = 80;
+const sz TOTAL_LINES = 80;
 
 struct ViewportModel {
 	boba::Viewport vp;
@@ -47,7 +47,7 @@ fn milktea::Cmd ViewportModel.update(ViewportModel* self, milktea::Msg msg) @dyn
 	return null;
 }
 
-fn String lorem_line(int i) {
+fn String lorem_line(sz i) {
 	String[10] fragments = {
 		"The quick brown fox jumps over the lazy dog.",
 		"Pack my box with five dozen liquor jugs.",
@@ -76,13 +76,13 @@ fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
 	out.append_string(title_style.render("Scrollable Viewport"));
 	out.append_char('\n');
 
-	int start   = self.vp.view_line_start();
-	int end     = self.vp.view_line_end();
-	int visible = end - start;
+	sz start   = self.vp.view_line_start();
+	sz end     = self.vp.view_line_end();
+	sz visible = end - start;
 
 	DString body = dstring::temp();
-	for (int i = 0; i < visible; i++) {
-		int line_num = start + i;
+	for (sz i = 0; i < visible; i++) {
+		sz line_num = start + i;
 
 		String num     = string::tformat("%4d ", line_num + 1);
 		String content = lorem_line(line_num);
@@ -98,7 +98,7 @@ fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
 
 	out.append_string(box_style.render(body.str_view()));
 
-	int pct = self.vp.scroll_percent();
+	sz pct = self.vp.scroll_percent();
 	String bar = glaze::progress_bar(
 		20,
 		pct,

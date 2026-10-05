@@ -11,8 +11,8 @@ import std::core::mem;
 // Read by js_model.c3 to position the native terminal cursor.
 
 struct FocusedCursor {
-	int x;
-	int y;
+	sz x;
+	sz y;
 	char[32] color_buf; // hex color, e.g. "#ff6600", or empty for terminal default
 	bool suppress_native; // true when drawCursor vnode rendered in its place
 }
@@ -25,7 +25,7 @@ fn void reset_focused_cursor() {
 	g_focused_cursor.suppress_native = false;
 }
 
-fn bool get_focused_cursor(int* out_x, int* out_y, String* out_color, bool* out_suppress) {
+fn bool get_focused_cursor(sz* out_x, sz* out_y, String* out_color, bool* out_suppress) {
 	if (!g_has_focused_cursor) return false;
 	*out_x = g_focused_cursor.x;
 	*out_y = g_focused_cursor.y;
@@ -45,10 +45,10 @@ struct TextareaEntry {
 
 // Simple linear-scan registry (max 16 textareas — this is a TUI, not a web app)
 TextareaEntry[16] g_textareas;
-int g_textarea_count = 0;
+sz g_textarea_count = 0;
 
 fn boba::Textarea* textarea_get(String id) {
-	for (int i = 0; i < g_textarea_count; i++) {
+	for (sz i = 0; i < g_textarea_count; i++) {
 		if (((ZString)&g_textareas[i].id_buf).str_view() == id) return &g_textareas[i].ta;
 	}
 	return null;
@@ -76,18 +76,18 @@ fn void textarea_reset() {
 struct ViewportEntry {
 	char[64] id_buf;
 	boba::Viewport vp;
-	int area_x;
-	int area_y;
-	int area_w;
-	int area_h;
+	sz area_x;
+	sz area_y;
+	sz area_w;
+	sz area_h;
 	bool has_area;
 }
 
 ViewportEntry[16] g_viewports;
-int g_viewport_count = 0;
+sz g_viewport_count = 0;
 
 fn boba::Viewport* viewport_get(String id) {
-	for (int i = 0; i < g_viewport_count; i++) {
+	for (sz i = 0; i < g_viewport_count; i++) {
 		if (((ZString)&g_viewports[i].id_buf).str_view() == id) return &g_viewports[i].vp;
 	}
 	return null;
@@ -112,8 +112,8 @@ fn void* viewport_get_ptr(ZString id) @export {
 
 // viewport_dispatch_mouse sends a mouse scroll event to the viewport at (row, col).
 // Returns true if a viewport consumed the event.
-fn bool viewport_dispatch_mouse(int row, int col, String button, String action) @export {
-	for (int i = 0; i < g_viewport_count; i++) {
+fn bool viewport_dispatch_mouse(sz row, sz col, String button, String action) @export {
+	for (sz i = 0; i < g_viewport_count; i++) {
 		ViewportEntry* e = &g_viewports[i];
 		if (!e.has_area) continue;
 		if (row >= e.area_y && row < e.area_y + e.area_h && col >= e.area_x && col < e.area_x + e.area_w) {
@@ -123,7 +123,7 @@ fn bool viewport_dispatch_mouse(int row, int col, String button, String action) 
 	return false;
 }
 
-fn void viewport_handle_key_ptr(void* vp_ptr, int code, int ctrl, int alt, int shift) @export {
+fn void viewport_handle_key_ptr(void* vp_ptr, sz code, sz ctrl, sz alt, sz shift) @export {
 	if (!vp_ptr) return;
 	boba::Viewport* vp = (boba::Viewport*)vp_ptr;
 	milktea::KeyMsg k        = { };
@@ -139,7 +139,7 @@ fn void viewport_scroll_to_bottom_ptr(void* vp_ptr) @export {
 	((boba::Viewport*)vp_ptr).scroll_to_bottom();
 }
 
-fn int viewport_offset_ptr(void* vp_ptr) @export {
+fn sz viewport_offset_ptr(void* vp_ptr) @export {
 	if (!vp_ptr) return 0;
 	return ((boba::Viewport*)vp_ptr).offset;
 }
@@ -170,7 +170,7 @@ fn void* textarea_get_ptr(ZString id) @export {
 	return textarea_get(id.str_view());
 }
 
-fn void textarea_handle_key_ptr(void* ta_ptr, int code, int rune, bool ctrl, bool alt, bool shift) @export {
+fn void textarea_handle_key_ptr(void* ta_ptr, sz code, sz rune, bool ctrl, bool alt, bool shift) @export {
 	if (!ta_ptr) return;
 	boba::Textarea* ta = (boba::Textarea*)ta_ptr;
 	milktea::KeyMsg k        = { };
@@ -188,13 +188,13 @@ fn void textarea_clear_ptr(void* ta_ptr) @export {
 	ta.clear();
 }
 
-fn int textarea_cursor_row_ptr(void* ta_ptr) @export {
+fn sz textarea_cursor_row_ptr(void* ta_ptr) @export {
 	if (!ta_ptr) return 0;
 	boba::Textarea* ta = (boba::Textarea*)ta_ptr;
 	return ta.cursor_row;
 }
 
-fn int textarea_cursor_col_ptr(void* ta_ptr) @export {
+fn sz textarea_cursor_col_ptr(void* ta_ptr) @export {
 	if (!ta_ptr) return 0;
 	boba::Textarea* ta = (boba::Textarea*)ta_ptr;
 	return ta.cursor_col;
@@ -206,10 +206,10 @@ fn ZString textarea_text_ptr(void* ta_ptr) @export {
 	return (ZString)(&ta.buf[0]);
 }
 
-fn int textarea_text_len(void* ta_ptr) @export {
+fn sz textarea_text_len(void* ta_ptr) @export {
 	if (!ta_ptr) return 0;
 	boba::Textarea* ta = (boba::Textarea*)ta_ptr;
-	return (int)ta.len;
+	return (sz)ta.len;
 }
 
 
@@ -242,8 +242,8 @@ fn String get_prop_string(Runtime* rt, void* obj, String name) @local {
 	return s;
 }
 
-// get_prop_int reads an int property, returning default_val if absent/not-int
-fn int get_prop_int(Runtime* rt, void* obj, String name, int default_val) @local {
+// get_prop_int reads an sz property, returning default_val if absent/not-sz
+fn sz get_prop_int(Runtime* rt, void* obj, String name, sz default_val) @local {
 	void* prop = rt.get_prop(obj, name);
 	if (!prop || rt.is_null(prop)) {
 		if (prop) rt.free_value(prop);
@@ -252,7 +252,7 @@ fn int get_prop_int(Runtime* rt, void* obj, String name, int default_val) @local
 	ZString cstr = taro_to_cstring(rt.ctx, prop);
 	rt.free_value(prop);
 	if (!cstr) return default_val;
-	int val = default_val;
+	sz val = default_val;
 	if (try parsed = cstr.str_view().to_int()) val = parsed;
 	taro_free_cstring(rt.ctx, cstr);
 	return val;
@@ -318,22 +318,22 @@ fn glaze::Style props_to_style(Runtime* rt, void* props) @local {
 		s = s.border_anim(glaze::BorderAnimation.RACE);
 	}
 
-	int anim_speed = get_prop_int(rt, props, "borderAnimSpeed", 0);
+	sz anim_speed = get_prop_int(rt, props, "borderAnimSpeed", 0);
 	if (anim_speed > 0) s = s.border_anim_speed(anim_speed);
 
-	int pad   = get_prop_int(rt, props, "pad", 0);
-	int pad_x = get_prop_int(rt, props, "pad_x", pad);
-	int pad_y = get_prop_int(rt, props, "pad_y", pad);
+	sz pad   = get_prop_int(rt, props, "pad", 0);
+	sz pad_x = get_prop_int(rt, props, "pad_x", pad);
+	sz pad_y = get_prop_int(rt, props, "pad_y", pad);
 	if (pad > 0 || pad_x > 0 || pad_y > 0) {
 		s = s.padding(pad_y, pad_x, pad_y, pad_x);
 	}
 
 	// set_width/set_height in our glaze mean total outer size (border + padding + content),
 	// matching Go glaze Width(N) semantics — render() subtracts border and padding internally.
-	int w = get_prop_int(rt, props, "width", 0);
+	sz w = get_prop_int(rt, props, "width", 0);
 	if (w > 0) s = s.with_width(w);
 
-	int h = get_prop_int(rt, props, "height", 0);
+	sz h = get_prop_int(rt, props, "height", 0);
 	if (h > 0) s = s.with_height(h);
 
 	return s;
@@ -346,11 +346,11 @@ fn String collect_text(Runtime* rt, void* vnode) @local {
 		if (children) rt.free_value(children);
 		return "";
 	}
-	int n = rt.array_length(children);
+	sz n = rt.array_length(children);
 	DString ds;
 	ds.tinit();
-	for (int i = 0; i < n; i++) {
-		void* child = rt.array_item(children, i);
+	for (sz i = 0; i < n; i++) {
+		void* child = rt.array_item(children, (int)i);
 		if (!child) continue;
 		if (is_vnode(rt, child)) {
 			String sub = collect_text(rt, child);
@@ -375,7 +375,7 @@ struct BoxMeasureCtx {
 	void* vnode; // borrowed — valid for the duration of layout
 }
 
-fn int _measure_box_height(void* raw_ctx, int cross) @local {
+fn sz _measure_box_height(void* raw_ctx, sz cross) @local {
 	BoxMeasureCtx* ctx    = (BoxMeasureCtx*)raw_ctx;
 	void* props           = ctx.rt.get_prop(ctx.vnode, "props");
 	glaze::Style style = props_to_style(ctx.rt, props);
@@ -394,12 +394,12 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 		if (props) rt.free_value(props);
 		return xray::fill(1);
 	}
-	int size = is_col ? get_prop_int(rt, props, "height", 0) : get_prop_int(rt, props, "width", 0);
+	sz size = is_col ? get_prop_int(rt, props, "height", 0) : get_prop_int(rt, props, "width", 0);
 
 	if (size > 0) {
 		bool has_border = get_prop_string(rt, props, "border").len > 0;
 		if (has_border) size += 2;
-		int pad = is_col ? get_prop_int(
+		sz pad = is_col ? get_prop_int(
 			rt,
 			props,
 			"pad_y",
@@ -471,31 +471,31 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 // When a <draw> vnode has animate={fps}, rendered cells are cached and only
 // re-invoked at the target rate. Intermediate frames replay the cache.
 
-const int DRAW_CACHE_MAX = 8;
-const int DRAW_CACHE_MAX_CELLS = 16384; // max ~128x128 cells per entry
+const sz DRAW_CACHE_MAX = 8;
+const sz DRAW_CACHE_MAX_CELLS = 16384; // max ~128x128 cells per entry
 
 struct DrawCacheEntry {
-	int x, y, w, h;
+	sz x, y, w, h;
 	long last_ms;
 	long interval_ms;
-	int cell_count;
+	sz cell_count;
 	xray::Cell[DRAW_CACHE_MAX_CELLS] cells;
 	bool active;
 }
 
 DrawCacheEntry[DRAW_CACHE_MAX] g_draw_cache = { };
-int g_draw_cache_count = 0;
+sz g_draw_cache_count = 0;
 
-fn DrawCacheEntry* draw_cache_find(int x, int y, int w, int h) @local {
-	for (int i = 0; i < g_draw_cache_count; i++) {
+fn DrawCacheEntry* draw_cache_find(sz x, sz y, sz w, sz h) @local {
+	for (sz i = 0; i < g_draw_cache_count; i++) {
 		DrawCacheEntry* e = &g_draw_cache[i];
 		if (e.active && e.x == x && e.y == y && e.w == w && e.h == h) return e;
 	}
 	return null;
 }
 
-fn DrawCacheEntry* draw_cache_get_or_create(int x, int y, int w, int h, long interval_ms) @local {
-	int total = w * h;
+fn DrawCacheEntry* draw_cache_get_or_create(sz x, sz y, sz w, sz h, long interval_ms) @local {
+	sz total = w * h;
 	if (total > DRAW_CACHE_MAX_CELLS) return null;
 	DrawCacheEntry* existing = draw_cache_find(x, y, w, h);
 	if (existing) {
@@ -516,20 +516,20 @@ fn DrawCacheEntry* draw_cache_get_or_create(int x, int y, int w, int h, long int
 }
 
 fn void draw_cache_store(DrawCacheEntry* e, xray::ScreenBuffer* screen) @local {
-	int total = e.w * e.h;
+	sz total = e.w * e.h;
 	e.cell_count = total;
-	for (int row = 0; row < e.h; row++) {
-		for (int col = 0; col < e.w; col++) {
-			sz src_idx = (sz)((e.y + row) * (int)screen.width + (e.x + col));
+	for (sz row = 0; row < e.h; row++) {
+		for (sz col = 0; col < e.w; col++) {
+			sz src_idx = (sz)((e.y + row) * (sz)screen.width + (e.x + col));
 			e.cells[row * e.w + col] = screen.cells[src_idx];
 		}
 	}
 }
 
 fn void draw_cache_replay(DrawCacheEntry* e, xray::ScreenBuffer* screen) @local {
-	for (int row = 0; row < e.h; row++) {
-		for (int col = 0; col < e.w; col++) {
-			sz dst_idx = (sz)((e.y + row) * (int)screen.width + (e.x + col));
+	for (sz row = 0; row < e.h; row++) {
+		for (sz col = 0; col < e.w; col++) {
+			sz dst_idx = (sz)((e.y + row) * (sz)screen.width + (e.x + col));
 			screen.cells[dst_idx] = e.cells[row * e.w + col];
 		}
 	}
@@ -565,7 +565,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
 	if (type == "row" || type == "col" || type == "stack") {
 		bool is_col            = type == "col" || (type == "stack" && !get_prop_bool(rt, props, "horizontal"));
-		int gap                = 0;
+		sz gap                = 0;
 		xray::AlignItems align = xray::AlignItems.ALIGN_START;
 		if (props && !rt.is_null(props)) {
 			gap = get_prop_int(rt, props, "gap", 0);
@@ -581,7 +581,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			}
 		}
 
-		int n = 0;
+		sz n = 0;
 		if (children_arr && !rt.is_null(children_arr) && rt.is_array(children_arr)) {
 			n = rt.array_length(children_arr);
 		}
@@ -591,8 +591,8 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			xray::Rect[64] rects;
 			void*[64] children_refs; // keep fit children alive until after layout
 
-			for (int i = 0; i < n; i++) {
-				void* child = rt.array_item(children_arr, i);
+			for (sz i = 0; i < n; i++) {
+				void* child = rt.array_item(children_arr, (int)i);
 				children_refs[i] = null;
 				if (!child || rt.is_null(child)) {
 					cs[i] = xray::fill(1);
@@ -607,7 +607,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				}
 			}
 
-			int computed;
+			sz computed;
 			if (is_col) {
 				computed = xray::layout_v_gap(area, cs[0:n], gap, rects[0:n]);
 			} else {
@@ -615,16 +615,16 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			}
 
 			// Free fit children now that layout is done
-			for (int i = 0; i < n; i++) {
+			for (sz i = 0; i < n; i++) {
 				if (children_refs[i]) rt.free_value(children_refs[i]);
 			}
 
 			// Apply cross-axis alignment: for row → vertical; for col → horizontal
-			int cross_total = is_col ? area.w : area.h;
-			for (int i = 0; i < computed; i++) {
+			sz cross_total = is_col ? area.w : area.h;
+			for (sz i = 0; i < computed; i++) {
 				// Natural cross size: read height/width prop; default to 1 for leaves, full for fill
-				void* child = rt.array_item(children_arr, i);
-				int natural = 1;
+				void* child = rt.array_item(children_arr, (int)i);
+				sz natural = 1;
 				if (child) {
 					natural = is_col ? get_prop_int(
 						rt,
@@ -648,7 +648,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 							rects[i].h = natural;
 						}
 					case xray::AlignItems.ALIGN_CENTER:
-						int extra_c = cross_total - natural;
+						sz extra_c = cross_total - natural;
 						if (is_col) {
 							rects[i].x = area.x + extra_c / 2;
 							rects[i].w = natural;
@@ -668,8 +668,8 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				}
 			}
 
-			for (int i = 0; i < computed; i++) {
-				void* child = rt.array_item(children_arr, i);
+			for (sz i = 0; i < computed; i++) {
+				void* child = rt.array_item(children_arr, (int)i);
 				if (child) {
 					render_vnode(rt, child, screen, rects[i]);
 					rt.free_value(child);
@@ -679,14 +679,14 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 	} else if (type == "box") {
 		glaze::Style style = props_to_style(rt, props);
 		bool has_border       = props && !rt.is_null(props) && get_prop_string(rt, props, "border").len > 0;
-		int border_pad        = has_border ? 2 : 0;
+		sz border_pad        = has_border ? 2 : 0;
 
 		// Check whether any child is a vnode (vs all strings)
 		bool has_vnode_children = false;
 		if (children_arr && !rt.is_null(children_arr) && rt.is_array(children_arr)) {
-			int cn = rt.array_length(children_arr);
-			for (int i = 0; i < cn; i++) {
-				void* ch = rt.array_item(children_arr, i);
+			sz cn = rt.array_length(children_arr);
+			for (sz i = 0; i < cn; i++) {
+				void* ch = rt.array_item(children_arr, (int)i);
 				if (ch && is_vnode(rt, ch)) {
 					has_vnode_children = true;
 					rt.free_value(ch);
@@ -699,13 +699,13 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		if (has_vnode_children) {
 			// Draw border frame via glaze on empty content, then recurse into inner rect.
 			// set_width/set_height = total outer size; render() subtracts border+pad internally.
-			int pad      = props ? get_prop_int(rt, props, "pad", 0) : 0;
-			int pad_x    = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
-			int pad_y    = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
-			int offset_x = border_pad / 2 + pad_x;
-			int offset_y = border_pad / 2 + pad_y;
-			int inner_w  = area.w - border_pad - pad_x * 2;
-			int inner_h  = area.h - border_pad - pad_y * 2;
+			sz pad      = props ? get_prop_int(rt, props, "pad", 0) : 0;
+			sz pad_x    = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
+			sz pad_y    = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
+			sz offset_x = border_pad / 2 + pad_x;
+			sz offset_y = border_pad / 2 + pad_y;
+			sz inner_w  = area.w - border_pad - pad_x * 2;
+			sz inner_h  = area.h - border_pad - pad_y * 2;
 			if (inner_w < 1) inner_w = 1;
 			if (inner_h < 1) inner_h = 1;
 			style = style.with_width(area.w).with_height(area.h);
@@ -735,18 +735,18 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
 
 
-			int n = rt.array_length(children_arr);
+			sz n = rt.array_length(children_arr);
 			if (n > 0 && n <= 64) {
 				xray::Constraint[64] cs;
 				xray::Rect[64] rects;
-				for (int i = 0; i < n; i++) {
-					void* ch = rt.array_item(children_arr, i);
+				for (sz i = 0; i < n; i++) {
+					void* ch = rt.array_item(children_arr, (int)i);
 					cs[i] = ch ? child_constraint(rt, ch, true, inner) : xray::fill(1);
 					if (ch) rt.free_value(ch);
 				}
-				int computed = xray::layout_v_gap(inner, cs[0:n], 0, rects[0:n]);
-				for (int i = 0; i < computed; i++) {
-					void* ch = rt.array_item(children_arr, i);
+				sz computed = xray::layout_v_gap(inner, cs[0:n], 0, rects[0:n]);
+				for (sz i = 0; i < computed; i++) {
+					void* ch = rt.array_item(children_arr, (int)i);
 					if (ch) {
 						render_vnode(rt, ch, screen, rects[i]);
 						rt.free_value(ch);
@@ -756,8 +756,8 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		} else {
 			// All-text path: collect and render via glaze.
 			// set_width/set_height mean total outer size; render() subtracts border internally.
-			int content_w = area.w - border_pad;
-			int content_h = area.h - border_pad;
+			sz content_w = area.w - border_pad;
+			sz content_h = area.h - border_pad;
 			if (content_w < 1) content_w = 1;
 			if (content_h < 1) content_h = 1;
 			String content = collect_text(rt, vnode);
@@ -825,7 +825,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		}
 
 		boba::SpinnerFrames fs = boba::spinner_frames(kind);
-		int frame                = (int)((taro_now_ms() / (long)fs.interval_ms) % (long)fs.count);
+		sz frame                = (sz)((taro_now_ms() / (long)fs.interval_ms) % (long)fs.count);
 		String frame_str         = fs.frames[frame];
 		if (fg.kind != glaze::ColorKind.NONE) {
 			frame_str = glaze::style().foreground(fg).render(frame_str);
@@ -843,14 +843,14 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		boba::Textarea* ta = textarea_get_or_create(id);
 		if (ta) {
 			bool has_border = props && !rt.is_null(props) && get_prop_string(rt, props, "border").len > 0;
-			int border_pad  = has_border ? 2 : 0;
-			int pad         = props ? get_prop_int(rt, props, "pad", 0) : 0;
-			int pad_x       = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
-			int pad_y       = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
+			sz border_pad  = has_border ? 2 : 0;
+			sz pad         = props ? get_prop_int(rt, props, "pad", 0) : 0;
+			sz pad_x       = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
+			sz pad_y       = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
 
 			// Inner area after border and padding
-			int inner_w = area.w - border_pad - pad_x * 2;
-			int inner_h = area.h - border_pad - pad_y * 2;
+			sz inner_w = area.w - border_pad - pad_x * 2;
+			sz inner_h = area.h - border_pad - pad_y * 2;
 			if (inner_w < 1) inner_w = 1;
 			if (inner_h < 1) inner_h = 1;
 
@@ -929,7 +929,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
 			// Record screen-space cursor position for the native terminal cursor.
 			if (ta.focused) {
-				int prompt_w = (int)ta.prompt.len;
+				sz prompt_w = (sz)ta.prompt.len;
 				g_focused_cursor.x = inner.x + prompt_w + ta.cursor_col;
 				g_focused_cursor.y = inner.y + (ta.cursor_row - ta.scroll_offset);
 				// Store cursor color from the cursorColor prop (or clear it)
@@ -943,14 +943,14 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				// Renders a custom string at the cursor position and suppresses the native cursor.
 				void* draw_fn = props ? rt.get_prop(props, "drawCursor") : null;
 				if (draw_fn && !rt.is_null(draw_fn) && rt.is_function(draw_fn)) {
-					int interval_ms = props ? get_prop_int(rt, props, "cursorInterval", 500) : 500;
+					sz interval_ms = props ? get_prop_int(rt, props, "cursorInterval", 500) : 500;
 					if (interval_ms < 16) interval_ms = 16;
 					long now   = taro_now_ms();
 					bool blink = ((now / (long)interval_ms) % 2) == 0;
 					request_render_tick((long)interval_ms);
 
-					void* x_arg       = rt.new_int32(g_focused_cursor.x);
-					void* y_arg       = rt.new_int32(g_focused_cursor.y);
+					void* x_arg       = rt.new_int32((int)g_focused_cursor.x);
+					void* y_arg       = rt.new_int32((int)g_focused_cursor.y);
 					void* b_arg       = rt.new_int32((int)blink);
 					void* draw_result = rt.call3(draw_fn, null, x_arg, y_arg, b_arg);
 					if (x_arg) rt.free_value(x_arg);
@@ -984,7 +984,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		boba::Viewport* vp = viewport_get_or_create(id);
 		if (vp) {
 			// Store the rendered area for mouse event dispatch
-			for (int vi = 0; vi < g_viewport_count; vi++) {
+			for (sz vi = 0; vi < g_viewport_count; vi++) {
 				if (&g_viewports[vi].vp == vp) {
 					g_viewports[vi].area_x = area.x;
 					g_viewports[vi].area_y = area.y;
@@ -996,13 +996,13 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			}
 
 			bool has_border = props && !rt.is_null(props) && get_prop_string(rt, props, "border").len > 0;
-			int border_pad  = has_border ? 2 : 0;
-			int pad         = props ? get_prop_int(rt, props, "pad", 0) : 0;
-			int pad_x       = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
-			int pad_y       = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
+			sz border_pad  = has_border ? 2 : 0;
+			sz pad         = props ? get_prop_int(rt, props, "pad", 0) : 0;
+			sz pad_x       = props ? get_prop_int(rt, props, "pad_x", pad) : 0;
+			sz pad_y       = props ? get_prop_int(rt, props, "pad_y", pad) : 0;
 
-			int inner_w = area.w - border_pad - pad_x * 2;
-			int inner_h = area.h - border_pad - pad_y * 2;
+			sz inner_w = area.w - border_pad - pad_x * 2;
+			sz inner_h = area.h - border_pad - pad_y * 2;
 			if (inner_w < 1) inner_w = 1;
 			if (inner_h < 1) inner_h = 1;
 
@@ -1022,9 +1022,9 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			DString content_ds;
 			content_ds.tinit();
 			if (children_arr && !rt.is_null(children_arr) && rt.is_array(children_arr)) {
-				int cn = rt.array_length(children_arr);
-				for (int ci = 0; ci < cn; ci++) {
-					void* ch = rt.array_item(children_arr, ci);
+				sz cn = rt.array_length(children_arr);
+				for (sz ci = 0; ci < cn; ci++) {
+					void* ch = rt.array_item(children_arr, (int)ci);
 					if (!ch) continue;
 					if (!is_vnode(rt, ch) && !rt.is_null(ch)) {
 						ZString cstr = taro_to_cstring(rt.ctx, ch);
@@ -1037,35 +1037,35 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				}
 			}
 			String content      = content_ds.str_view();
-			int text_line_count = 1;
+			sz text_line_count = 1;
 			for (sz ci = 0; ci < content.len; ci++) {
 				if (content[ci] == '\n') text_line_count++;
 			}
 
 			// Collect vnode children and measure each one's height at inner_w
-			int vnode_child_count = 0;
+			sz vnode_child_count = 0;
 			void*[16] vnode_children;
-			int[16] vnode_heights;
+			sz[16] vnode_heights;
 			if (children_arr && !rt.is_null(children_arr) && rt.is_array(children_arr)) {
-				int cn = rt.array_length(children_arr);
-				for (int ci = 0; ci < cn && vnode_child_count < 16; ci++) {
-					void* ch = rt.array_item(children_arr, ci);
+				sz cn = rt.array_length(children_arr);
+				for (sz ci = 0; ci < cn && vnode_child_count < 16; ci++) {
+					void* ch = rt.array_item(children_arr, (int)ci);
 					if (ch && is_vnode(rt, ch)) {
 						// measure height: explicit height prop, else 1 for inline types, else measure
 						void* ch_props = rt.get_prop(ch, "type");
-						int h_explicit = 0;
+						sz h_explicit = 0;
 						void* cp       = rt.get_prop(ch, "props");
 						if (cp && !rt.is_null(cp)) h_explicit = get_prop_int(rt, cp, "height", 0);
 						if (cp) rt.free_value(cp);
 						if (ch_props) rt.free_value(ch_props);
-						int ch_h;
+						sz ch_h;
 						if (h_explicit > 0) {
 							ch_h = h_explicit;
 						} else {
 							// use child_constraint in col mode to detect fixed-height types
 							xray::Constraint cc = child_constraint(rt, ch, true, inner);
 							if (cc.kind == xray::ConstraintKind.CLEN) {
-								ch_h = (int)cc.value;
+								ch_h = (sz)cc.value;
 							} else {
 								ch_h = 1; // fill/fit defaults to 1 inside viewport
 							}
@@ -1079,9 +1079,9 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				}
 			}
 
-			int vnode_total_lines = 0;
-			for (int vi = 0; vi < vnode_child_count; vi++) vnode_total_lines += vnode_heights[vi];
-			int total_lines = text_line_count + vnode_total_lines;
+			sz vnode_total_lines = 0;
+			for (sz vi = 0; vi < vnode_child_count; vi++) vnode_total_lines += vnode_heights[vi];
+			sz total_lines = text_line_count + vnode_total_lines;
 			vp.set_content(total_lines);
 
 			// Draw border frame
@@ -1110,17 +1110,17 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			}
 
 			// Render visible lines into inner rect
-			int start = vp.view_line_start();
-			int end   = vp.view_line_end();
+			sz start = vp.view_line_start();
+			sz end   = vp.view_line_end();
 
 			// Walk text content to find the start line, then render each visible text line
 			sz pos       = 0;
-			int cur_line = 0;
+			sz cur_line = 0;
 			while (pos < content.len && cur_line < start) {
 				if (content[pos] == '\n') cur_line++;
 				pos++;
 			}
-			for (int r = start; r < end && r < text_line_count; r++) {
+			for (sz r = start; r < end && r < text_line_count; r++) {
 				if (pos > content.len) break;
 				sz line_end = pos;
 				while (line_end < content.len && content[line_end] != '\n') line_end++;
@@ -1144,17 +1144,17 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			}
 
 			// Render vnode children that fall within the visible range (appended after text lines)
-			int vnode_line = text_line_count;
-			for (int vi = 0; vi < vnode_child_count; vi++) {
-				int ch_h   = vnode_heights[vi];
-				int ch_end = vnode_line + ch_h;
+			sz vnode_line = text_line_count;
+			for (sz vi = 0; vi < vnode_child_count; vi++) {
+				sz ch_h   = vnode_heights[vi];
+				sz ch_end = vnode_line + ch_h;
 				// visible if any part of this child overlaps [start, end)
 
 
 
 				if (ch_end > start && vnode_line < end) {
-					int screen_y = inner.y + vnode_line - start;
-					int clip_h   = ch_h;
+					sz screen_y = inner.y + vnode_line - start;
+					sz clip_h   = ch_h;
 					// clip to inner rect
 
 
@@ -1166,7 +1166,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					if (screen_y + clip_h > inner.y + inner_h) clip_h = inner.y + inner_h - screen_y;
 					if (clip_h > 0) {
 						void* ch_props = rt.get_prop(vnode_children[vi], "props");
-						int ch_w       = ch_props ? get_prop_int(rt, ch_props, "width", inner_w) : inner_w;
+						sz ch_w       = ch_props ? get_prop_int(rt, ch_props, "width", inner_w) : inner_w;
 						if (ch_props) rt.free_value(ch_props);
 						if (ch_w <= 0 || ch_w > inner_w) ch_w = inner_w;
 						xray::Rect ch_rect = xray::new_rect(inner.x, screen_y, ch_w, clip_h);
@@ -1190,7 +1190,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		//                When animate is set, drawing is throttled to the target rate;
 		//                intermediate frames replay the last cached render.
 		if (props && !rt.is_null(props)) {
-			int fps = get_prop_int(rt, props, "animate", 0);
+			sz fps = get_prop_int(rt, props, "animate", 0);
 			bool anim_bool = !fps ? get_prop_bool(rt, props, "animate") : false;
 			bool has_animate = fps > 0 || anim_bool;
 			long interval_ms = has_animate ? (fps > 0 ? 1000 / fps : 16) : 0;
@@ -1213,9 +1213,9 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				void* fn_val = rt.get_prop(props, "fn");
 				if (fn_val && !rt.is_null(fn_val) && rt.is_function(fn_val)) {
 					void* undef = null; // null this
-					for (int r = 0; r < area.h; r++) {
-						void* w_arg  = rt.new_int32(area.w);
-						void* r_arg  = rt.new_int32(r);
+					for (sz r = 0; r < area.h; r++) {
+						void* w_arg  = rt.new_int32((int)area.w);
+						void* r_arg  = rt.new_int32((int)r);
 						void* result = rt.call2(fn_val, undef, w_arg, r_arg);
 						if (w_arg) rt.free_value(w_arg);
 						if (r_arg) rt.free_value(r_arg);

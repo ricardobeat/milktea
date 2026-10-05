@@ -15,11 +15,11 @@ extern fn long c3_time_ms_long();
 
 // ── Game Constants ─────────────────────────────────────────────────────────────
 
-const int FRAME_MS = 25; // 40 FPS
-const int MAX_PIPES = 8;
-const int MAX_PARTICLES = 120;
-const int PIPE_WIDTH = 9; // width in pixel columns
-const int PIPE_SPACING = 38; // pixel distance between pipe columns
+const sz FRAME_MS = 25; // 40 FPS
+const sz MAX_PIPES = 8;
+const sz MAX_PARTICLES = 120;
+const sz PIPE_WIDTH = 9; // width in pixel columns
+const sz PIPE_SPACING = 38; // pixel distance between pipe columns
 
 enum GameState : char {
 	INTRO,      // Animated splash screen with floating bird & glowing title
@@ -40,13 +40,13 @@ enum Difficulty : char {
 
 struct Pipe {
 	float x;        // pixel x (sub-cell)
-	int gap_y;      // center of gap in pixel coordinates
-	int gap_size;   // height of gap in pixel rows
+	sz gap_y;      // center of gap in pixel coordinates
+	sz gap_size;   // height of gap in pixel rows
 	bool scored;
 	bool active;
 	float speed_y;  // for dynamic moving pipes in hard mode
-	int min_gap_y;
-	int max_gap_y;
+	sz min_gap_y;
+	sz max_gap_y;
 }
 
 struct Particle {
@@ -54,8 +54,8 @@ struct Particle {
 	float y;
 	float vx;
 	float vy;
-	int life;
-	int max_life;
+	sz life;
+	sz max_life;
 	xray::Color color;
 	bool active;
 }
@@ -65,7 +65,7 @@ struct Bird {
 	float y;
 	float vy;
 	float angle; // tilt in radians
-	int flap_frame;
+	sz flap_frame;
 }
 
 
@@ -73,26 +73,26 @@ struct Bird {
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 struct FlappyModel {
-	int term_w;
-	int term_h;
-	int ticks;
+	sz term_w;
+	sz term_h;
+	sz ticks;
 
 	GameState state;
 	Difficulty difficulty;
-	int menu_selected; // 0: Play, 1: Difficulty, 2: Help, 3: Quit
+	sz menu_selected; // 0: Play, 1: Difficulty, 2: Help, 3: Quit
 
 	// Game entities
 	Bird bird;
 	Pipe[MAX_PIPES] pipes;
 	Particle[MAX_PARTICLES] particles;
 
-	int score;
-	int high_score;
-	int death_timer;
+	sz score;
+	sz high_score;
+	sz death_timer;
 	float world_scroll;
 
 	// Flash effect on hit
-	int flash_timer;
+	sz flash_timer;
 
 	// Graphics buffer
 	xray::PixelBuffer* vbuf;
@@ -106,14 +106,14 @@ fn float rnd_float(float min, float max) {
 	return min + r * (max - min);
 }
 
-fn int rnd_int(int min, int max) {
+fn sz rnd_int(sz min, sz max) {
 	if (max <= min) return min;
 	return min + (rand() % (max - min + 1));
 }
 
 // ── Particle System ───────────────────────────────────────────────────────────
 
-fn void FlappyModel.spawn_particle(&self, float x, float y, float vx, float vy, int life, xray::Color c) {
+fn void FlappyModel.spawn_particle(&self, float x, float y, float vx, float vy, sz life, xray::Color c) {
 	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		if (!self.particles[i].active) {
 			self.particles[i] = (Particle){
@@ -131,8 +131,8 @@ fn void FlappyModel.spawn_particle(&self, float x, float y, float vx, float vy, 
 	}
 }
 
-fn void FlappyModel.spawn_feathers(&self, float x, float y, int count) {
-	for (int i = 0; i < count; i++) {
+fn void FlappyModel.spawn_feathers(&self, float x, float y, sz count) {
+	for (sz i = 0; i < count; i++) {
 		float angle = rnd_float(0.0f, 6.28318f);
 		float speed = rnd_float(1.5f, 5.0f);
 		float vx = math::cos(angle) * speed;
@@ -143,7 +143,7 @@ fn void FlappyModel.spawn_feathers(&self, float x, float y, int count) {
 }
 
 fn void FlappyModel.spawn_score_sparkles(&self, float x, float y) {
-	for (int i = 0; i < 14; i++) {
+	for (sz i = 0; i < 14; i++) {
 		float angle = rnd_float(0.0f, 6.28318f);
 		float speed = rnd_float(1.0f, 4.0f);
 		xray::Color c = (i % 3 == 0) ? xray::color_rgb(255, 255, 100) : (i % 3 == 1 ? xray::color_rgb(100, 255, 255) : xray::color_rgb(255, 255, 255));
@@ -172,7 +172,7 @@ fn void FlappyModel.start_game(&self) {
 	self.flash_timer = 0;
 	self.world_scroll = 0.0f;
 
-	int py = self.vbuf.height > 0 ? (int)self.vbuf.height / 2 : 25;
+	sz py = self.vbuf.height > 0 ? (sz)self.vbuf.height / 2 : 25;
 	self.bird = (Bird){
 		.x = 18.0f,
 		.y = (float)py,
@@ -187,17 +187,17 @@ fn void FlappyModel.start_game(&self) {
 	}
 
 	// Gap size according to difficulty
-	int gap = 17;
+	sz gap = 17;
 	if (self.difficulty == Difficulty.EASY) gap = 21;
 	if (self.difficulty == Difficulty.HARD) gap = 13;
 
 	// Reset pipes
-	float start_x = (float)((int)self.vbuf.width + 10);
+	float start_x = (float)((sz)self.vbuf.width + 10);
 	for (sz i = 0; i < MAX_PIPES; i++) {
-		int min_y = 12;
-		int max_y = (int)self.vbuf.height - 20;
+		sz min_y = 12;
+		sz max_y = (sz)self.vbuf.height - 20;
 		if (max_y <= min_y) max_y = min_y + 10;
-		int gy = rnd_int(min_y, max_y);
+		sz gy = rnd_int(min_y, max_y);
 
 		self.pipes[i] = (Pipe){
 			.x = start_x + (float)(i * PIPE_SPACING),
@@ -279,7 +279,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 				self.bird.flap_frame = (self.bird.vy < 0.0f) ? (self.ticks / 3) % 3 : 1;
 
 				// Bounds collision (floor/ceiling)
-				int ground_y = (int)self.vbuf.height - 8;
+				sz ground_y = (sz)self.vbuf.height - 8;
 				if (self.bird.y >= (float)(ground_y - 2) || self.bird.y <= 1.0f) {
 					self.trigger_death();
 				}
@@ -292,7 +292,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 
 					// Vertical oscillation for hard mode
 					if (self.pipes[i].speed_y != 0.0f) {
-						self.pipes[i].gap_y += (int)(self.pipes[i].speed_y * 1.5f);
+						self.pipes[i].gap_y += (sz)(self.pipes[i].speed_y * 1.5f);
 						if (self.pipes[i].gap_y <= self.pipes[i].min_gap_y || self.pipes[i].gap_y >= self.pipes[i].max_gap_y) {
 							self.pipes[i].speed_y = -self.pipes[i].speed_y;
 						}
@@ -316,8 +316,8 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 							if (self.pipes[j].x > max_x) max_x = self.pipes[j].x;
 						}
 						self.pipes[i].x = max_x + (float)PIPE_SPACING;
-						int min_y = 12;
-						int max_y = (int)self.vbuf.height - 20;
+						sz min_y = 12;
+						sz max_y = (sz)self.vbuf.height - 20;
 						if (max_y <= min_y) max_y = min_y + 10;
 						self.pipes[i].gap_y = rnd_int(min_y, max_y);
 						self.pipes[i].scored = false;
@@ -327,12 +327,12 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 					float bx = self.bird.x;
 					float by = self.bird.y;
 					float px = self.pipes[i].x;
-					int gy = self.pipes[i].gap_y;
-					int gs = self.pipes[i].gap_size;
+					sz gy = self.pipes[i].gap_y;
+					sz gs = self.pipes[i].gap_size;
 
 					if (bx + 5.0f >= px && bx <= px + (float)PIPE_WIDTH) {
-						int top_pipe_bottom = gy - gs / 2;
-						int bot_pipe_top = gy + gs / 2;
+						sz top_pipe_bottom = gy - gs / 2;
+						sz bot_pipe_top = gy + gs / 2;
 
 						if (by - 2.0f < (float)top_pipe_bottom || by + 2.0f > (float)bot_pipe_top) {
 							self.trigger_death();
@@ -382,7 +382,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 							case 0:
 								self.start_game();
 							case 1:
-								self.difficulty = (Difficulty)(((int)self.difficulty + 1) % 3);
+								self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 							case 2:
 								self.state = GameState.HELP;
 							case 3:
@@ -395,7 +395,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 								case 0:
 									self.start_game();
 								case 1:
-									self.difficulty = (Difficulty)(((int)self.difficulty + 1) % 3);
+									self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 								case 2:
 									self.state = GameState.HELP;
 								case 3:
@@ -404,7 +404,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 						}
 						if (k.rune == ' ') self.start_game();
 						if (k.rune == 'd' || k.rune == 'D') {
-							self.difficulty = (Difficulty)(((int)self.difficulty + 1) % 3);
+							self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 						}
 						if (k.rune == 'h' || k.rune == 'H' || k.rune == '?') {
 							self.state = GameState.HELP;
@@ -459,23 +459,23 @@ fn void FlappyModel.trigger_death(&self) {
 
 // Draw dynamic procedural background with city skyline, clouds, hills, and ground
 fn void FlappyModel.draw_background(&self) {
-	int pw = (int)self.vbuf.width;
-	int ph = (int)self.vbuf.height;
-	int ground_y = ph - 8;
+	sz pw = (sz)self.vbuf.width;
+	sz ph = (sz)self.vbuf.height;
+	sz ground_y = ph - 8;
 
 	// Sky gradient (day to sunset tones based on difficulty/mode)
 	xray::Color sky_top = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(30, 20, 60) : xray::color_rgb(35, 75, 150);
 	xray::Color sky_bot = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(180, 70, 60) : xray::color_rgb(140, 210, 245);
 
-	for (int y = 0; y < ground_y; y++) {
+	for (sz y = 0; y < ground_y; y++) {
 		float t = (float)y / (float)ground_y;
-		int r = (int)((float)sky_top.r * (1.0f - t) + (float)sky_bot.r * t);
-		int g = (int)((float)sky_top.g * (1.0f - t) + (float)sky_bot.g * t);
-		int b = (int)((float)sky_top.b * (1.0f - t) + (float)sky_bot.b * t);
+		sz r = (sz)((float)sky_top.r * (1.0f - t) + (float)sky_bot.r * t);
+		sz g = (sz)((float)sky_top.g * (1.0f - t) + (float)sky_bot.g * t);
+		sz b = (sz)((float)sky_top.b * (1.0f - t) + (float)sky_bot.b * t);
 		xray::Color sky_line = xray::color_rgb((char)r, (char)g, (char)b);
 
 		sz row_off = (sz)y * (sz)pw;
-		for (int x = 0; x < pw; x++) {
+		for (sz x = 0; x < pw; x++) {
 			self.vbuf.pixels[row_off + (sz)x] = sky_line;
 		}
 	}
@@ -483,13 +483,13 @@ fn void FlappyModel.draw_background(&self) {
 	// Distant Clouds (Parallax 0.15x)
 	float cloud_scroll = self.world_scroll * 0.15f;
 	xray::Color cloud_c = xray::color_rgba(255, 255, 255, 170);
-	for (int i = 0; i < 5; i++) {
-		int cx = (int)((float)(i * 45 + 10) - cloud_scroll) % (pw + 50);
+	for (sz i = 0; i < 5; i++) {
+		sz cx = (sz)((float)(i * 45 + 10) - cloud_scroll) % (pw + 50);
 		if (cx < -40) cx += pw + 50;
-		int cy = 8 + (i % 3) * 6;
+		sz cy = 8 + (i % 3) * 6;
 		// Cloud shape
-		for (int dx = -14; dx <= 14; dx++) {
-			for (int dy = -4; dy <= 4; dy++) {
+		for (sz dx = -14; dx <= 14; dx++) {
+			for (sz dy = -4; dy <= 4; dy++) {
 				if (dx * dx * 2 + dy * dy * 14 < 160) {
 					self.vbuf.blend_pixel(cx + dx, cy + dy, cloud_c);
 				}
@@ -502,18 +502,18 @@ fn void FlappyModel.draw_background(&self) {
 	xray::Color bldg_c = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(50, 30, 65) : xray::color_rgb(60, 110, 155);
 	xray::Color win_c = xray::color_rgb(255, 230, 120);
 
-	for (int b = 0; b < 15; b++) {
-		int bw = 10 + (b * 7) % 11;
-		int bh = 14 + (b * 13) % 22;
-		int bx = (int)((float)(b * 22) - sky_scroll) % (pw + 30);
+	for (sz b = 0; b < 15; b++) {
+		sz bw = 10 + (b * 7) % 11;
+		sz bh = 14 + (b * 13) % 22;
+		sz bx = (sz)((float)(b * 22) - sky_scroll) % (pw + 30);
 		if (bx < -30) bx += pw + 30;
-		int by = ground_y - bh;
+		sz by = ground_y - bh;
 
 		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), bldg_c);
 
 		// Windows
-		for (int wy = by + 2; wy < ground_y - 2; wy += 4) {
-			for (int wx = bx + 2; wx < bx + bw - 2; wx += 3) {
+		for (sz wy = by + 2; wy < ground_y - 2; wy += 4) {
+			for (sz wx = bx + 2; wx < bx + bw - 2; wx += 3) {
 				if ((b + wx + wy) % 5 != 0) {
 					self.vbuf.set_pixel(wx, wy, win_c);
 				}
@@ -524,10 +524,10 @@ fn void FlappyModel.draw_background(&self) {
 	// Green Hills (Parallax 0.6x)
 	float hill_scroll = self.world_scroll * 0.6f;
 	xray::Color hill_c = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(45, 80, 50) : xray::color_rgb(75, 175, 80);
-	for (int x = 0; x < pw; x++) {
+	for (sz x = 0; x < pw; x++) {
 		float hx = (float)x + hill_scroll;
-		int hy = ground_y - 6 - (int)(math::sin(hx * 0.04f) * 5.0f + math::cos(hx * 0.09f) * 3.0f);
-		for (int y = hy; y < ground_y; y++) {
+		sz hy = ground_y - 6 - (sz)(math::sin(hx * 0.04f) * 5.0f + math::cos(hx * 0.09f) * 3.0f);
+		for (sz y = hy; y < ground_y; y++) {
 			self.vbuf.set_pixel(x, y, hill_c);
 		}
 	}
@@ -541,11 +541,11 @@ fn void FlappyModel.draw_background(&self) {
 	self.vbuf.fill_rect(xray::new_rect(0, ground_y + 2, pw, ph - (ground_y + 2)), dirt_c);
 
 	// Ground moving chevron pattern
-	int g_offset = (int)self.world_scroll % 8;
-	for (int x = -8; x < pw + 8; x += 8) {
-		int px = x - g_offset;
-		for (int y = ground_y + 2; y < ph; y++) {
-			int dx = (y - ground_y) / 2;
+	sz g_offset = (sz)self.world_scroll % 8;
+	for (sz x = -8; x < pw + 8; x += 8) {
+		sz px = x - g_offset;
+		for (sz y = ground_y + 2; y < ph; y++) {
+			sz dx = (y - ground_y) / 2;
 			self.vbuf.set_pixel(px + dx, y, dirt_dark);
 		}
 	}
@@ -553,13 +553,13 @@ fn void FlappyModel.draw_background(&self) {
 
 // Draw a classic Mario-style Pipe with highlights, rims, and shading
 fn void FlappyModel.draw_pipe(&self, Pipe* p) {
-	int px = (int)p.x;
-	int gy = p.gap_y;
-	int gs = p.gap_size;
-	int top_bottom = gy - gs / 2;
-	int bot_top = gy + gs / 2;
-	int pw = PIPE_WIDTH;
-	int ground_y = (int)self.vbuf.height - 8;
+	sz px = (sz)p.x;
+	sz gy = p.gap_y;
+	sz gs = p.gap_size;
+	sz top_bottom = gy - gs / 2;
+	sz bot_top = gy + gs / 2;
+	sz pw = PIPE_WIDTH;
+	sz ground_y = (sz)self.vbuf.height - 8;
 
 	xray::Color c_dark = xray::color_rgb(25, 100, 30);
 	xray::Color c_mid = xray::color_rgb(60, 185, 45);
@@ -569,8 +569,8 @@ fn void FlappyModel.draw_pipe(&self, Pipe* p) {
 	// Top Pipe (pointing downwards)
 	if (top_bottom > 0) {
 		// Body
-		for (int y = 0; y < top_bottom - 3; y++) {
-			for (int x = 0; x < pw; x++) {
+		for (sz y = 0; y < top_bottom - 3; y++) {
+			for (sz x = 0; x < pw; x++) {
 				xray::Color c = (x == 1) ? c_light : ((x >= pw - 2) ? c_dark : c_mid);
 				self.vbuf.set_pixel(px + x, y, c);
 			}
@@ -578,17 +578,17 @@ fn void FlappyModel.draw_pipe(&self, Pipe* p) {
 			self.vbuf.set_pixel(px + pw - 1, y, c_rim_dark);
 		}
 		// Rim Lip
-		int lip_y0 = top_bottom - 3;
-		int lip_y1 = top_bottom;
-		for (int y = lip_y0; y < lip_y1; y++) {
-			for (int x = -1; x <= pw; x++) {
+		sz lip_y0 = top_bottom - 3;
+		sz lip_y1 = top_bottom;
+		for (sz y = lip_y0; y < lip_y1; y++) {
+			for (sz x = -1; x <= pw; x++) {
 				xray::Color c = (x == 0) ? c_light : ((x >= pw - 1) ? c_dark : c_mid);
 				self.vbuf.set_pixel(px + x, y, c);
 			}
 			self.vbuf.set_pixel(px - 1, y, c_rim_dark);
 			self.vbuf.set_pixel(px + pw, y, c_rim_dark);
 		}
-		for (int x = -1; x <= pw; x++) {
+		for (sz x = -1; x <= pw; x++) {
 			self.vbuf.set_pixel(px + x, lip_y1 - 1, c_rim_dark);
 		}
 	}
@@ -596,22 +596,22 @@ fn void FlappyModel.draw_pipe(&self, Pipe* p) {
 	// Bottom Pipe (pointing upwards)
 	if (bot_top < ground_y) {
 		// Rim Lip
-		int lip_y0 = bot_top;
-		int lip_y1 = bot_top + 3;
-		for (int y = lip_y0; y < lip_y1; y++) {
-			for (int x = -1; x <= pw; x++) {
+		sz lip_y0 = bot_top;
+		sz lip_y1 = bot_top + 3;
+		for (sz y = lip_y0; y < lip_y1; y++) {
+			for (sz x = -1; x <= pw; x++) {
 				xray::Color c = (x == 0) ? c_light : ((x >= pw - 1) ? c_dark : c_mid);
 				self.vbuf.set_pixel(px + x, y, c);
 			}
 			self.vbuf.set_pixel(px - 1, y, c_rim_dark);
 			self.vbuf.set_pixel(px + pw, y, c_rim_dark);
 		}
-		for (int x = -1; x <= pw; x++) {
+		for (sz x = -1; x <= pw; x++) {
 			self.vbuf.set_pixel(px + x, lip_y0, c_rim_dark);
 		}
 		// Body
-		for (int y = lip_y1; y < ground_y; y++) {
-			for (int x = 0; x < pw; x++) {
+		for (sz y = lip_y1; y < ground_y; y++) {
+			for (sz x = 0; x < pw; x++) {
 				xray::Color c = (x == 1) ? c_light : ((x >= pw - 2) ? c_dark : c_mid);
 				self.vbuf.set_pixel(px + x, y, c);
 			}
@@ -622,9 +622,9 @@ fn void FlappyModel.draw_pipe(&self, Pipe* p) {
 }
 
 // Draw the iconic bird pixel sprite (6x5 pixels)
-fn void FlappyModel.draw_bird(&self, float bx, float by, float angle, int frame) {
-	int cx = (int)bx;
-	int cy = (int)by;
+fn void FlappyModel.draw_bird(&self, float bx, float by, float angle, sz frame) {
+	sz cx = (sz)bx;
+	sz cy = (sz)by;
 
 	xray::Color c_body = xray::color_rgb(255, 215, 0);     // Golden Yellow
 	xray::Color c_belly = xray::color_rgb(255, 245, 170);   // Pale Yellow
@@ -636,7 +636,7 @@ fn void FlappyModel.draw_bird(&self, float bx, float by, float angle, int frame)
 
 	// Pixel sprite definition: 6 cols x 5 rows
 	// Frame 0: Wing up, Frame 1: Wing mid, Frame 2: Wing down
-	int[30] sprite = {
+	sz[30] sprite = {
 		0, 1, 1, 1, 1, 0,
 		1, 2, 5, 2, 1, 0,
 		1, 3, 2, 2, 4, 4,
@@ -653,17 +653,17 @@ fn void FlappyModel.draw_bird(&self, float bx, float by, float angle, int frame)
 		sprite[2 * 6 + 1] = 2;
 	}
 
-	for (int dy = -2; dy <= 2; dy++) {
-		for (int dx = -3; dx <= 2; dx++) {
-			int val = sprite[(dy + 2) * 6 + (dx + 3)];
+	for (sz dy = -2; dy <= 2; dy++) {
+		for (sz dx = -3; dx <= 2; dx++) {
+			sz val = sprite[(dy + 2) * 6 + (dx + 3)];
 			if (val == 0) continue;
 
 			// Rotate sprite pixel around center
 			float rx = (float)dx * math::cos(angle) - (float)dy * math::sin(angle);
 			float ry = (float)dx * math::sin(angle) + (float)dy * math::cos(angle);
 
-			int px = cx + (int)(rx + 0.5f);
-			int py = cy + (int)(ry + 0.5f);
+			sz px = cx + (sz)(rx + 0.5f);
+			sz py = cy + (sz)(ry + 0.5f);
 
 			xray::Color col = c_outline;
 			switch (val) {
@@ -685,14 +685,14 @@ fn void FlappyModel.draw_bird(&self, float bx, float by, float angle, int frame)
 fn void FlappyModel.draw_particles(&self) {
 	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		if (!self.particles[i].active) continue;
-		int px = (int)self.particles[i].x;
-		int py = (int)self.particles[i].y;
+		sz px = (sz)self.particles[i].x;
+		sz py = (sz)self.particles[i].y;
 		self.vbuf.set_pixel(px, py, self.particles[i].color);
 	}
 }
 
 // Big blocky digits for HUD score
-fn void FlappyModel.draw_score_digit(&self, int digit, int x, int y, xray::Color fg) {
+fn void FlappyModel.draw_score_digit(&self, sz digit, sz x, sz y, xray::Color fg) {
 	// 3x5 font table flattened
 	bool[15] g;
 	switch (digit) {
@@ -710,8 +710,8 @@ fn void FlappyModel.draw_score_digit(&self, int digit, int x, int y, xray::Color
 	}
 
 	xray::Color shadow = xray::color_rgb(20, 20, 20);
-	for (int dy = 0; dy < 5; dy++) {
-		for (int dx = 0; dx < 3; dx++) {
+	for (sz dy = 0; dy < 5; dy++) {
+		for (sz dx = 0; dx < 3; dx++) {
 			if (g[dy * 3 + dx]) {
 				self.vbuf.set_pixel(x + dx + 1, y + dy + 1, shadow);
 				self.vbuf.set_pixel(x + dx, y + dy, fg);
@@ -721,9 +721,9 @@ fn void FlappyModel.draw_score_digit(&self, int digit, int x, int y, xray::Color
 }
 
 fn void FlappyModel.draw_score_hud(&self) {
-	int s = self.score;
-	int[5] digits;
-	int count = 0;
+	sz s = self.score;
+	sz[5] digits;
+	sz count = 0;
 	if (s == 0) {
 		digits[0] = 0;
 		count = 1;
@@ -734,13 +734,13 @@ fn void FlappyModel.draw_score_hud(&self) {
 		}
 	}
 
-	int total_w = count * 4 - 1;
-	int start_x = ((int)self.vbuf.width - total_w) / 2;
-	int y = 4;
+	sz total_w = count * 4 - 1;
+	sz start_x = ((sz)self.vbuf.width - total_w) / 2;
+	sz y = 4;
 
 	xray::Color fg = xray::color_rgb(255, 255, 255);
-	for (int i = 0; i < count; i++) {
-		int d = digits[count - 1 - i];
+	for (sz i = 0; i < count; i++) {
+		sz d = digits[count - 1 - i];
 		self.draw_score_digit(d, start_x + i * 4, y, fg);
 	}
 }
@@ -752,8 +752,8 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 		return milktea::view("");
 	}
 
-	int w = self.term_w;
-	int h = self.term_h;
+	sz w = self.term_w;
+	sz h = self.term_h;
 
 	// 1. Render all procedural art into virtual pixel buffer
 	self.draw_background();
@@ -790,12 +790,12 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 
 	// 2. Convert PixelBuffer (2 pixel rows -> 1 cell with '▀') into view_cells
 	xray::Style base = xray::default_style();
-	for (int vy = 0; vy < h; vy++) {
-		int py_top = vy * 2;
-		int py_bot = py_top + 1;
+	for (sz vy = 0; vy < h; vy++) {
+		sz py_top = vy * 2;
+		sz py_bot = py_top + 1;
 		sz row_offset = (sz)vy * (sz)w;
 
-		for (int vx = 0; vx < w; vx++) {
+		for (sz vx = 0; vx < w; vx++) {
 			xray::Color c_top = self.vbuf.get_pixel(vx, py_top);
 			xray::Color c_bot = self.vbuf.get_pixel(vx, py_bot);
 
@@ -838,11 +838,11 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 // ── Overlay UI Renders ────────────────────────────────────────────────────────
 
 fn void FlappyModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
 
 	// Animated glowing title
-	int title_y = h / 2 - 4;
+	sz title_y = h / 2 - 4;
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
 
 	xray::Color c_start = xray::color_rgb(255, (char)(120 + pulse * 100), 20);
@@ -855,18 +855,18 @@ fn void FlappyModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
 	String logo_line5 = "  ██║     ███████╗██║  ██║██║     ██║        ██║   ";
 	String logo_line6 = "  ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   ";
 
-	int lx = (w - 52) / 2;
+	sz lx = (w - 52) / 2;
 	if (lx < 0) lx = 0;
 
 	String[6] lines = { logo_line1, logo_line2, logo_line3, logo_line4, logo_line5, logo_line6 };
-	for (int i = 0; i < 6; i++) {
+	for (sz i = 0; i < 6; i++) {
 		String styled = glaze::gradient_text(lines[i], c_start, c_end, true);
 		canvas.render_ansi_string((sz)lx, (sz)(title_y + i), styled, xray::default_style());
 	}
 
 	// Flying intro bird
-	int bird_x = (int)((float)self.ticks * 1.8f) % (w + 20) - 10;
-	int bird_y = title_y - 2 + (int)(math::sin((float)self.ticks * 0.2f) * 2.0f);
+	sz bird_x = (sz)((float)self.ticks * 1.8f) % (w + 20) - 10;
+	sz bird_y = title_y - 2 + (sz)(math::sin((float)self.ticks * 0.2f) * 2.0f);
 	if (bird_x >= 0 && bird_x < w - 4 && bird_y >= 0 && bird_y < h) {
 		canvas.render_ansi_string((sz)bird_x, (sz)bird_y, "🐤💨", xray::default_style());
 	}
@@ -877,7 +877,7 @@ fn void FlappyModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
 		.foreground(xray::color_rgb(220, 240, 255))
 		.with_bold(true)
 		.render(sub);
-	int sx = (w - glaze::string_width(sub)) / 2;
+	sz sx = (w - glaze::string_width(sub)) / 2;
 	canvas.render_ansi_string((sz)sx, (sz)(title_y + 7), sub_styled, xray::default_style());
 
 	// Press any key
@@ -886,19 +886,19 @@ fn void FlappyModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
 		String press_styled = glaze::style()
 			.foreground(xray::color_rgb(255, 230, 100))
 			.render(press);
-		int px = (w - glaze::string_width(press)) / 2;
+		sz px = (w - glaze::string_width(press)) / 2;
 		canvas.render_ansi_string((sz)px, (sz)(title_y + 10), press_styled, xray::default_style());
 	}
 }
 
 fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
 
-	int box_w = 44;
-	int box_h = 16;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2 - 1;
+	sz box_w = 44;
+	sz box_h = 16;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2 - 1;
 	if (bx < 0) bx = 0;
 	if (by < 0) by = 0;
 
@@ -913,8 +913,8 @@ fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 
 	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
 	xray::Color menu_tint = xray::color_rgba(10, 14, 28, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = menu_tint.blend_over(cl.style.fg);
 			cl.style.bg = menu_tint.blend_over(cl.style.bg);
@@ -924,7 +924,7 @@ fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 	// Title
 	String title = " ★ FLAPPY BIRD ★ ";
 	String title_s = glaze::gradient_text(title, xray::color_rgb(255, 240, 100), xray::color_rgb(255, 120, 40), true);
-	int tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
 
 	// Menu items
@@ -942,7 +942,7 @@ fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 		"Exit",
 	};
 
-	for (int i = 0; i < 4; i++) {
+	for (sz i = 0; i < 4; i++) {
 		bool sel = (i == self.menu_selected);
 		DString line = dstring::temp();
 		if (sel) {
@@ -962,7 +962,7 @@ fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 		if (sel) s = s.background(bg);
 
 		String rendered = s.render(line.str_view());
-		int ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
+		sz ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
 		canvas.render_ansi_string((sz)ox, (sz)(inner.y + 3 + i * 2), rendered, xray::default_style());
 	}
 
@@ -970,18 +970,18 @@ fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 	DString hs_str = dstring::temp();
 	hs_str.append_string(string::tformat("🏆 Best Score: %d", self.high_score));
 	String hs_s = glaze::style().foreground(xray::color_rgb(255, 215, 0)).render(hs_str.str_view());
-	int hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
+	sz hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
 	canvas.render_ansi_string((sz)hx, (sz)(inner.y + inner.h - 2), hs_s, xray::default_style());
 }
 
 fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
 
-	int box_w = 40;
-	int box_h = 15;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2 - 1;
+	sz box_w = 40;
+	sz box_h = 15;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2 - 1;
 	if (bx < 0) bx = 0;
 	if (by < 0) by = 0;
 
@@ -995,8 +995,8 @@ fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
 
 	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
 	xray::Color go_tint = xray::color_rgba(20, 10, 15, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = go_tint.blend_over(cl.style.fg);
 			cl.style.bg = go_tint.blend_over(cl.style.bg);
@@ -1009,7 +1009,7 @@ fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
 		.foreground(xray::color_rgb(255, 70, 70))
 		.with_bold(true)
 		.render(go_text);
-	int gx = inner.x + (inner.w - glaze::string_width(go_text)) / 2;
+	sz gx = inner.x + (inner.w - glaze::string_width(go_text)) / 2;
 	canvas.render_ansi_string((sz)gx, (sz)inner.y, go_s, xray::default_style());
 
 	// Medal Award
@@ -1045,18 +1045,18 @@ fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
 	// Retry Prompt
 	String prompt = "[SPACE] Play Again  |  [M] Menu";
 	String prompt_s = glaze::style().foreground(xray::color_rgb(200, 220, 240)).render(prompt);
-	int px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
+	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
 	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
 }
 
 fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
 
-	int box_w = 46;
-	int box_h = 16;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2;
+	sz box_w = 46;
+	sz box_h = 16;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2;
 	if (bx < 0) bx = 0;
 	if (by < 0) by = 0;
 
@@ -1070,8 +1070,8 @@ fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
 	xray::Color help_tint = xray::color_rgba(12, 16, 28, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = help_tint.blend_over(cl.style.fg);
 			cl.style.bg = help_tint.blend_over(cl.style.bg);
@@ -1080,7 +1080,7 @@ fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 	String h_title = " HOW TO PLAY ";
 	String ht_s = glaze::gradient_text(h_title, xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true);
-	int tx = inner.x + (inner.w - glaze::string_width(h_title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(h_title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, ht_s, xray::default_style());
 
 	String[5] instructions = {
@@ -1091,14 +1091,14 @@ fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 		"• Press [ESC] or [Q] to pause/quit",
 	};
 
-	for (int i = 0; i < 5; i++) {
+	for (sz i = 0; i < 5; i++) {
 		String line_s = glaze::style().foreground(xray::color_rgb(220, 230, 245)).render(instructions[i]);
 		canvas.render_ansi_string((sz)(inner.x + 2), (sz)(inner.y + 2 + i * 2), line_s, xray::default_style());
 	}
 
 	String back = "[Press SPACE or ESC to Return]";
 	String back_s = glaze::style().foreground(xray::color_rgb(255, 215, 100)).render(back);
-	int back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
+	sz back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
 	canvas.render_ansi_string((sz)back_x, (sz)(inner.y + inner.h - 2), back_s, xray::default_style());
 }
 

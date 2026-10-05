@@ -17,14 +17,14 @@ enum DiffLineKind : int {
 struct DiffLine {
 	DiffLineKind kind;
 	String content;
-	int line_num;
+	sz line_num;
 }
 
 struct DiffModel {
 	DiffLine[256] lines;
-	int line_count;
-	int scroll_offset;
-	int cursor;
+	sz line_count;
+	sz scroll_offset;
+	sz cursor;
 }
 
 fn milktea::Cmd DiffModel.init(DiffModel* self) @dynamic {
@@ -44,7 +44,7 @@ fn void parse_sample_diff(DiffModel* self) {
 		"--- a/src/main.c3",
 		"+++ b/src/main.c3",
 		"@@ -10,7 +10,8 @@ fn void process(String path) {",
-		"     int total = 0;",
+		"     sz total = 0;",
 		"     // Process each line",
 		"-    foreach (line : input) {",
 		"+    foreach (idx, line : input) {",
@@ -126,7 +126,7 @@ fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn void adjust_scroll(DiffModel* self) {
-	int visible_height = milktea::screen_height() - 3;
+	sz visible_height = milktea::screen_height() - 3;
 
 	if (self.cursor < self.scroll_offset) {
 		self.scroll_offset = self.cursor;
@@ -144,11 +144,11 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	out.append_string(header);
 	out.append_char('\n');
 
-	int visible_height = milktea::screen_height() - 3;
-	int end_idx        = self.scroll_offset + visible_height;
+	sz visible_height = milktea::screen_height() - 3;
+	sz end_idx        = self.scroll_offset + visible_height;
 	if (end_idx > self.line_count) end_idx = self.line_count;
 
-	for (int i = self.scroll_offset; i < end_idx; i++) {
+	for (sz i = self.scroll_offset; i < end_idx; i++) {
 		DiffLine* dl = &self.lines[i];
 		String line  = format_diff_line(self, dl, i == self.cursor);
 		out.append_string(line);

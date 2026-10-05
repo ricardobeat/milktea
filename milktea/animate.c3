@@ -29,21 +29,21 @@ import xray;
 // tween drives to zero as it runs, so the node finishes wherever the layout
 // solver put it.
 struct Motion {
-	int from_dx;
-	int from_dy;
+	sz from_dx;
+	sz from_dy;
 	bool fades;
 }
 
 // slide_down starts the node `rows` above its solved position and travels down
 // onto it. Negative rows slide up instead.
-fn Motion slide_down(int rows) => { .from_dy = -rows, .from_dx = 0, .fades = false };
+fn Motion slide_down(sz rows) => { .from_dy = -rows, .from_dx = 0, .fades = false };
 
 // slide_up starts the node `rows` below its solved position.
-fn Motion slide_up(int rows) => { .from_dy = rows, .from_dx = 0, .fades = false };
+fn Motion slide_up(sz rows) => { .from_dy = rows, .from_dx = 0, .fades = false };
 
 // slide_in starts the node `cols` to the left of its solved position.
 // Negative cols come from the right.
-fn Motion slide_in(int cols) => { .from_dx = -cols, .from_dy = 0, .fades = false };
+fn Motion slide_in(sz cols) => { .from_dx = -cols, .from_dy = 0, .fades = false };
 
 // fade adds a fade-in to a motion, or on its own animates opacity with no
 // movement: `fade_in()` is `Motion{}.fade()`.
@@ -83,7 +83,7 @@ fn xray::Node* animate(xray::Node* node, Motion motion, Tween* tw) {
 	// Ask for the next frame only while there is one to draw. paint() collects
 	// the smallest request in the tree and milktea::draw arms a single timer
 	// for it, so a settled animation costs nothing.
-	if (running) node.repaint_after((int)FRAME_MS);
+	if (running) node.repaint_after((sz)FRAME_MS);
 
 	return node;
 }

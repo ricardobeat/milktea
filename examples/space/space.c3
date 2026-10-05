@@ -12,9 +12,9 @@ extern fn long c3_time_ms_long();
 
 
 struct SpaceModel {
-	int frame;
-	int width;
-	int height;
+	sz frame;
+	sz width;
+	sz height;
 	char* color_r;
 	char* color_g;
 	char* color_b;
@@ -39,9 +39,9 @@ fn void SpaceModel.compute_colors(SpaceModel* self) {
 		self.color_g = mem::new_array(char, total);
 		self.color_b = mem::new_array(char, total);
 	}
-	int pixel_rows = self.height * 2;
-	for (int y = 0; y < pixel_rows; y++) {
-		for (int x = 0; x < self.width; x++) {
+	sz pixel_rows = self.height * 2;
+	for (sz y = 0; y < pixel_rows; y++) {
+		for (sz x = 0; x < self.width; x++) {
 			// Squared gradient: top is brightest (1.0), bottom is darkest (0.0)
 			double randomness_factor = (double)(pixel_rows - y) / (double)pixel_rows;
 			double base_value        = randomness_factor * randomness_factor;
@@ -96,20 +96,20 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 	if (self.width == 0 || self.height == 0) return milktea::view("");
 	if (!self.matrix_init) self.compute_colors();
 
-	int w      = self.width;
-	int h      = self.height;
-	int frame  = self.frame;
-	int view_h = h;
+	sz w      = self.width;
+	sz h      = self.height;
+	sz frame  = self.frame;
+	sz view_h = h;
 
 	xray::Style base_style = xray::default_style();
 
-	for (int vy = 0; vy < view_h; vy++) {
-		int fire_y     = vy * 2;
-		int next_y     = fire_y + 1;
-		int pixel_rows = h * 2;
-		int row_offset = vy * w;
-		for (int vx = 0; vx < w; vx++) {
-			int xi = ((vx + frame) % w + w) % w;
+	for (sz vy = 0; vy < view_h; vy++) {
+		sz fire_y     = vy * 2;
+		sz next_y     = fire_y + 1;
+		sz pixel_rows = h * 2;
+		sz row_offset = vy * w;
+		for (sz vx = 0; vx < w; vx++) {
+			sz xi = ((vx + frame) % w + w) % w;
 			sz idx = (sz)fire_y * (sz)w + (sz)xi;
 
 			char tr = self.color_r[idx];

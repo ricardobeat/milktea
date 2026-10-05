@@ -16,7 +16,7 @@ struct KeyBinding {
 // KeyMap holds a set of named key bindings.
 struct KeyMap {
 	KeyBinding[32] bindings;
-	int count;
+	sz count;
 }
 
 // new_keymap creates an empty key map.
@@ -41,7 +41,7 @@ fn void KeyMap.bind_mod(&self, String key, String action, bool alt, bool ctrl) {
 // match checks a KeyMsg against all bindings and returns the action name, or "" if none match.
 // Uses milktea::KeyMsg.code and milktea::KeyMsg.rune for matching.
 fn String KeyMap.match(&self, milktea::KeyMsg k) {
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		KeyBinding b = self.bindings[i];
 
 		// Check modifiers
@@ -84,7 +84,7 @@ fn String key_match_string(milktea::KeyMsg k) {
 
 // has_binding returns true if any binding matches the given action.
 fn bool KeyMap.has_binding(&self, String action) {
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		if (self.bindings[i].action == action) return true;
 	}
 	return false;
@@ -95,7 +95,7 @@ fn String KeyMap.view(&self) {
 	DString out = dstring::temp();
 	glaze::Style key_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style act_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		out.append_string(string::tformat("  %-7s  ", key_style.render(self.bindings[i].key)));
 		out.append_string(act_style.render(self.bindings[i].action));
 		out.append_char('\n');

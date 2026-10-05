@@ -10,9 +10,9 @@ const int MSG_SPIN = 1;
 const int MSG_TICK = 2;
 
 struct Model {
-	int spin_frame;
-	int seconds;
-	int focus; // 0 = timer, 1 = spinner
+	sz spin_frame;
+	sz seconds;
+	sz focus; // 0 = timer, 1 = spinner
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -57,8 +57,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 fn milktea::View Model.view(Model* self) @dynamic {
 	String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
 	String spin      = frames[self.spin_frame % 8];
-	int mins         = self.seconds / 60;
-	int secs         = self.seconds % 60;
+	sz mins         = self.seconds / 60;
+	sz secs         = self.seconds % 60;
 
 	glaze::Border active_border = glaze::ROUNDED;
 	glaze::Border inactive_border = {

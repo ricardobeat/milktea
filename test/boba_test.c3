@@ -150,7 +150,7 @@ fn void test_table_row_capacity_is_enforced() @test {
 	// the end of the struct.
 	boba::Table t = boba::new_table();
 	t.add_column("Name", 10);
-	for (int i = 0; i < 200; i++) {
+	for (sz i = 0; i < 200; i++) {
 		t.add_row("row");
 	}
 	assert(t.row_count == boba::MAX_TABLE_ROWS);
@@ -207,7 +207,7 @@ fn void test_viewport_selection_uses_display_columns() @test {
 	// wrapped in its own SGR pair, so the style appears once per selected
 	// glyph, followed immediately by that glyph's bytes.
 	char[] sel = "\x1b[38;2;0;0;0;48;2;255;255;255m";
-	int matches = 0;
+	sz matches = 0;
 	for (sz i = 0; i + sel.len + 1 <= out.len; i++) {
 		bool match = true;
 		for (sz j = 0; j < sel.len; j++) {

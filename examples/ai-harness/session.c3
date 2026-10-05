@@ -21,7 +21,7 @@ const int MSG_BASH   = 4; // user = BashReq*
 
 struct BashReq {
 	DString cmd;
-	channel::OneShotChannel{int}* ack;
+	channel::OneShotChannel{sz}* ack;
 }
 
 // ── Callbacks (run on the background thread) ───────────────────────────────
@@ -37,7 +37,7 @@ fn void post_string(int tag, String s) @local {
 	milktea::g_program.send({ .kind = milktea::MsgKind.USER, .tag = tag, .user = (void*)ds });
 }
 
-fn int cb_stream(void* ctx, String delta) {
+fn sz cb_stream(void* ctx, String delta) {
 	post_string(MSG_STREAM, delta);
 	return 0;
 }
@@ -48,14 +48,14 @@ fn void cb_tool(void* ctx, String description) {
 
 // cb_bash blocks this thread until the UI answers, which is what makes the
 // approval prompt synchronous from the tool's point of view.
-fn int cb_bash(void* ctx, String command) {
-	channel::OneShotChannel{int}* ack = channel::create_one_shot(mem)!!;
+fn sz cb_bash(void* ctx, String command) {
+	channel::OneShotChannel{sz}* ack = channel::create_one_shot(mem)!!;
 	BashReq* br = mem::new(BashReq);
 	br.cmd = dstring::new(mem);
 	br.cmd.append_string(command);
 	br.ack = ack;
 	milktea::g_program.send({ .kind = milktea::MsgKind.USER, .tag = MSG_BASH, .user = (void*)br });
-	int go = ack.pop()!!;
+	sz go = ack.pop()!!;
 	br.cmd.free();
 	mem::free(br);
 	ack.destroy();
@@ -82,7 +82,7 @@ fn void json_escape(DString* out, String input) {
 			case '\f': out.append_string("\\f");
 			default:
 				if (c < 0x20) {
-					out.append_string(string::tformat("\\u%04x", (int)c));
+					out.append_string(string::tformat("\\u%04x", (sz)c));
 				} else {
 					out.append_char(c);
 				}
@@ -113,7 +113,7 @@ fn bool Session.read_api_key(&self) {
 	if (len > API_KEY_SIZE - 1) len = API_KEY_SIZE - 1;
 	mem::copy(&self.api_key[0], val, len);
 	self.api_key[len] = 0;
-	self.api_key_len = (int)len;
+	self.api_key_len = (sz)len;
 	return true;
 }
 

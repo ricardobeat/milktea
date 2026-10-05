@@ -9,9 +9,9 @@ import xray;
 import glaze;
 import std::math;
 
-const int GRAD_EXPAND = @dur(90);  // ticks for the pulse to fill the screen
-const int GRAD_FADE   = @dur(42);  // ticks the full rainbow fades to the wash
-const int GRAD_HOLD   = @dur(20);  // beat on the restored background
+const sz GRAD_EXPAND = @dur(90);  // ticks for the pulse to fill the screen
+const sz GRAD_FADE   = @dur(42);  // ticks the full rainbow fades to the wash
+const sz GRAD_HOLD   = @dur(20);  // beat on the restored background
 
 // Geometric basis of the scene's elliptical gradient: focus at bottom-centre
 // and the radii that shape the iso-colour bands. Shared by the distance test
@@ -25,7 +25,7 @@ fn void scene_geom(Model* self, float* cx, float* cy, float* rxi, float* ryi) {
 
 // Normalized elliptical distance from the focus, 0 at the centre and growing
 // toward 1+ at the far corners. This is the pulse radius coordinate.
-fn float scene_t(Model* self, int col, int row, float cx, float cy, float rxi, float ryi) {
+fn float scene_t(Model* self, sz col, sz row, float cx, float cy, float rxi, float ryi) {
 	float dx = ((float)col - cx) * rxi;
 	float dy = ((float)row - cy) * ryi;
 	return math::sqrt(dx * dx + dy * dy);
@@ -50,9 +50,9 @@ fn xray::Color scene_bg(Model* self, float t) {
 // val picks the brightness, so the pulse can carry the vertical shading of the
 // gradient it is replacing rather than glowing at a flat intensity.
 fn xray::Color rainbow_tint(float h, float val) {
-	h -= (float)(int)h;
+	h -= (float)(sz)h;
 	float f = h * 6.0f;
-	int sector = (int)f;
+	sz sector = (sz)f;
 	float u = f - (float)sector;
 	float x = 1.0f - u;
 	float r;
@@ -81,14 +81,14 @@ fn void gradient_setup(void* raw) {
 
 fn void gradient_step(void* raw) {
 	Model* self = (Model*)raw;
-	int age = self.frame - self.phase_frame;
+	sz age = self.frame - self.phase_frame;
 	if (age >= GRAD_EXPAND + GRAD_FADE + GRAD_HOLD) self.restart_cycle();
 }
 
 fn void gradient_render(void* raw) {
 	Model* self = (Model*)raw;
 	xray::ScreenBuffer* sb = self.canvas;
-	int age = self.frame - self.phase_frame;
+	sz age = self.frame - self.phase_frame;
 
 	float cx;
 	float cy;
@@ -114,8 +114,8 @@ fn void gradient_render(void* raw) {
 		fade_t = 1.0f;
 	}
 
-	for (int row = 0; row < self.h; row++) {
-		for (int col = 0; col < self.w; col++) {
+	for (sz row = 0; row < self.h; row++) {
+		for (sz col = 0; col < self.w; col++) {
 			float t = scene_t(self, col, row, cx, cy, rxi, ryi);
 			xray::Color base = scene_bg(self, t);
 			xray::Color bgc = base;
@@ -158,7 +158,7 @@ fn void gradient_render(void* raw) {
 	// Only the still-intact part of the word — cells ahead of the expanding
 	// pulse — is drawn, on a transparent background to inherit the wash.
 	if (r < tmax) {
-		for (int i = 0; i < self.total; i++) {
+		for (sz i = 0; i < self.total; i++) {
 			Particle* p = &self.particles[i];
 			if (p.col < 0 || p.col >= self.w) continue;
 			if (p.row < 0 || p.row >= self.h) continue;

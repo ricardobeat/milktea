@@ -6,7 +6,7 @@ import glaze;
 
 // Progress is an animated progress bar component.
 struct Progress (xray::Content) {
-	int width; // total width in cells
+	sz width; // total width in cells
 	double percent; // 0.0 - 100.0
 	String fill_char; // character for filled portion
 	String empty_char; // character for empty portion
@@ -16,7 +16,7 @@ struct Progress (xray::Content) {
 }
 
 // new_progress creates a progress bar with the given width and initial percentage.
-fn Progress new_progress(int width, double percent) {
+fn Progress new_progress(sz width, double percent) {
 	Progress p = { };
 	p.width = width;
 	p.percent = percent;
@@ -60,7 +60,7 @@ fn void Progress.incr_percent(&self, double amount) {
 fn String Progress.view(&self) {
 	return glaze::progress_bar(
 		self.width,
-		(int)self.percent,
+		(sz)self.percent,
 		self.fill_char,
 		self.empty_char,
 		self.fill_style.fg,
@@ -73,7 +73,7 @@ fn String Progress.view_with_percent(&self) {
 	DString out = dstring::temp();
 	out.append_string(self.view());
 	out.append_char(' ');
-	out.append_string(self.percent_style.render(string::tformat("%d%%", (int)self.percent)));
+	out.append_string(self.percent_style.render(string::tformat("%d%%", (sz)self.percent)));
 	return out.str_view();
 }
 
@@ -85,7 +85,7 @@ fn String Progress.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int Progress.measure(&self, int width) @dynamic => 1;
-fn int Progress.measure_width(&self, int height) @dynamic => self.width;
+fn sz Progress.measure(&self, sz width) @dynamic => 1;
+fn sz Progress.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* Progress.node(&self) => xray::content_node(self);

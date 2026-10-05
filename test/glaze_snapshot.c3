@@ -452,7 +452,7 @@ fn void test_render_long_input_is_not_truncated() @test {
 	// content past line 256 — rendering a long log or file lost everything
 	// after that, with no marker in the output.
 	DString in = dstring::temp();
-	for (int i = 0; i < 300; i++) {
+	for (sz i = 0; i < 300; i++) {
 		in.appendf("line %d\n", i);
 	}
 	String out = glaze::style().render(in.str_view());
@@ -484,7 +484,7 @@ fn void test_partial_border_draws_only_its_sides() @test {
 
 	String out = s.render("ok");
 
-	int lines = 1;
+	sz lines = 1;
 	foreach (c : out) if (c == '\n') lines++;
 	assert(lines == 2, "one content row and one bottom row, not four: %s", out);
 	assert(!out.starts_with("\n"), "no blank row where the top border is absent");
@@ -498,7 +498,7 @@ fn void test_height_clips_content_that_overflows() @test {
 
 	String out = s.render("a\nb\nc\nd\ne\nf\ng");
 
-	int lines = 1;
+	sz lines = 1;
 	foreach (c : out) if (c == '\n') lines++;
 	assert(lines == 5, "five rows including the border, got %d", lines);
 }

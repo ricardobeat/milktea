@@ -212,7 +212,7 @@ fn void test_textinputs_line_counting() @test {
 	String content = "Sign Up\n       \n\nNickname: Nickname\nEmail: Email\nPassword: Password\n\nhint";
 
 	// Count the lines by splitting on \n
-	int line_count = 0;
+	sz line_count = 0;
 	for (sz i = 0; i < content.len; i++) {
 		if (content[i] == '\n') line_count++;
 	}
@@ -220,13 +220,13 @@ fn void test_textinputs_line_counting() @test {
 
 	// "Nickname: Nickname" starts after 3 \n characters → line index 3
 	// So base_row should be 3 (0-indexed)
-	int nickname_line = 0;
-	int nl_count      = 0;
+	sz nickname_line = 0;
+	sz nl_count      = 0;
 	for (sz i = 0; i < content.len; i++) {
 		if (content[i] == '\n') {
 			nl_count++;
 			if (nl_count == 3) {
-				nickname_line = (int)(i + 1 < content.len ? i + 1 : i);
+				nickname_line = (sz)(i + 1 < content.len ? i + 1 : i);
 				break;
 			}
 		}

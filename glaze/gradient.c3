@@ -12,17 +12,17 @@ fn sz _utf8_char_len(char b) @local {
 }
 
 fn String gradient_text(String text, Color from, Color to, bool bold = true) {
-	int width = string_width(text);
+	sz width = string_width(text);
 	if (width <= 0) return text;
 
 	DString out = dstring::temp();
 	sz i = 0;
-	int col = 0;
+	sz col = 0;
 	while (i < text.len) {
 		sz clen = _utf8_char_len(text[i]);
 		if (clen > text.len - i) clen = text.len - i;
 		String ch = text[i..i + clen - 1];
-		int ch_w = string_width(ch);
+		sz ch_w = string_width(ch);
 
 		double t = width > 1 ? (double)col / (double)(width - 1) : 0.0;
 		Color c = blend_luv(from, to, t);

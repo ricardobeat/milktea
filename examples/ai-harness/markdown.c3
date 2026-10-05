@@ -110,8 +110,8 @@ fn DString render(String markdown, Theme theme = default_theme()) {
 
 // count_lines counts the lines in s, counting a trailing fragment with no
 // newline as a line of its own.
-fn int count_lines(String s) {
-	int n = 0;
+fn sz count_lines(String s) {
+	sz n = 0;
 	for (sz i = 0; i < s.len; i++) {
 		if (s[i] == '\n') n++;
 	}
@@ -122,10 +122,10 @@ fn int count_lines(String s) {
 // slice_lines returns the count lines starting at line start, as a slice of
 // s — no copy, so the result lives exactly as long as s does. An out-of-range
 // start yields an empty slice.
-fn String slice_lines(String s, int start, int count) {
+fn String slice_lines(String s, sz start, sz count) {
 	if (count <= 0 || start < 0) return (String)s[0:0];
 	sz begin = 0;
-	int line = 0;
+	sz line = 0;
 	for (sz i = 0; i < s.len; i++) {
 		if (s[i] == '\n') {
 			line++;
@@ -138,7 +138,7 @@ fn String slice_lines(String s, int start, int count) {
 	if (line < start) return (String)s[0:0];
 
 	sz end = s.len;
-	int taken = 0;
+	sz taken = 0;
 	for (sz i = begin; i < s.len; i++) {
 		if (s[i] == '\n') {
 			taken++;

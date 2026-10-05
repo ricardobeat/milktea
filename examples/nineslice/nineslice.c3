@@ -27,13 +27,13 @@ import std::core::dstring;
 import std::core::string;
 import std::core::mem;
 
-const int COLS = 3;
-const int ROWS = 3;
-const int BOX_COUNT = COLS * ROWS;
-const int BODY_ROWS = 3;
+const sz COLS = 3;
+const sz ROWS = 3;
+const sz BOX_COUNT = COLS * ROWS;
+const sz BODY_ROWS = 3;
 // Total box height in cells, set by layout. Radius and border never change it.
-const int BOX_H = BODY_ROWS + 2;
-const int GRID_GAP = 1;
+const sz BOX_H = BODY_ROWS + 2;
+const sz GRID_GAP = 1;
 
 // The drop shadow darkens whatever is under it, so it is invisible on a black
 // terminal. Paint a lighter backdrop behind everything.
@@ -46,7 +46,7 @@ struct BoxDef {
 	String line;
 	String fg;
 	String sample;
-	int stroke;
+	sz stroke;
 	float line_w;
 	float inset;
 	bool shadow;
@@ -95,7 +95,7 @@ struct Model {
 	tgp::Session gfx;
 	tgp::Glyph[BOX_COUNT] rings;
 	// Radius each ring was built for; -1 means nothing registered yet.
-	int[BOX_COUNT] ring_radius;
+	sz[BOX_COUNT] ring_radius;
 	// Whether that ring was built with the selection border.
 	bool[BOX_COUNT] ring_selected;
 	// Shadow tiles, a separate pass drawn outside the box. Only shadowed
@@ -104,21 +104,21 @@ struct Model {
 	// Radius the shadow was built for; -1 means none. The shadow follows the
 	// box silhouette, so its corner curve -- and its tile count -- change with
 	// the radius, exactly like the ring's.
-	int[BOX_COUNT] shadow_radius;
-	int[BOX_COUNT] radius;
+	sz[BOX_COUNT] shadow_radius;
+	sz[BOX_COUNT] radius;
 	// Solved grid rects from the last view(), so a mouse press can be hit
 	// tested. view() computes the layout; update() only reads it back.
 	xray::Rect[BOX_COUNT] hit;
 	bool hit_valid;
-	int selected;
+	sz selected;
 	bool tgp_ok;   // terminal capability
 	bool tgp_on;   // user toggle ('t')
 }
 
-fn int hexval(char c) {
-	if (c >= '0' && c <= '9') return c - '0';
-	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+fn sz hexval(char c) {
+	if (c >= '0' && c <= '9') return (sz)(c - '0');
+	if (c >= 'a' && c <= 'f') return (sz)(c - 'a' + 10);
+	if (c >= 'A' && c <= 'F') return (sz)(c - 'A' + 10);
 	return 0;
 }
 
@@ -129,26 +129,26 @@ fn uint parse_rgb(String hex) {
 	return v;
 }
 
-fn String repeat_str(String s, int n) {
+fn String repeat_str(String s, sz n) {
 	DString d = dstring::temp();
-	for (int i = 0; i < n; i++) d.append_string(s);
+	for (sz i = 0; i < n; i++) d.append_string(s);
 	return d.str_view();
 }
 
-fn String center(String s, int w) {
+fn String center(String s, sz w) {
 	DString d = dstring::temp();
-	int left = (w - (int)s.len) / 2;
-	int right = w - (int)s.len - left;
+	sz left = (w - (sz)s.len) / 2;
+	sz right = w - (sz)s.len - left;
 	if (left < 0) left = 0;
 	if (right < 0) right = 0;
-	for (int i = 0; i < left; i++) d.append_char(' ');
+	for (sz i = 0; i < left; i++) d.append_char(' ');
 	d.append_string(s);
-	for (int i = 0; i < right; i++) d.append_char(' ');
+	for (sz i = 0; i < right; i++) d.append_char(' ');
 	return d.str_view();
 }
 
-fn String clip(String s, int w) {
-	if ((int)s.len <= w) return s;
+fn String clip(String s, sz w) {
+	if ((sz)s.len <= w) return s;
 	return w <= 0 ? "" : s[:(sz)w];
 }
 
@@ -160,7 +160,7 @@ const String SELECT_LINE = "#38bdf3";
 const float SELECT_W = 4.0f;
 const float SELECT_INSET = 1.0f;
 
-fn BoxStyle style_of(int b, bool selected = false) {
+fn BoxStyle style_of(sz b, bool selected = false) {
 	BoxDef d = BOX_DEFS[b];
 	uint bg = parse_rgb(d.bg);
 	uint bg2 = parse_rgb(d.bg2);
@@ -199,17 +199,17 @@ fn BoxStyle style_of(int b, bool selected = false) {
 // Frame index of one tile: radius picks the block, tile_index the slot in it.
 // Interior rows left once the corner blocks take 2*ky of the box height. The
 // box height is fixed by layout; a radius never changes it.
-fn int body_rows(int ky) {
-	int n = BOX_H - 2 * ky;
+fn sz body_rows(sz ky) {
+	sz n = BOX_H - 2 * ky;
 	return n < 1 ? 1 : n;
 }
 
-fn int ring_frame(int kx, int ky, int slot, int ox, int oy) {
+fn sz ring_frame(sz kx, sz ky, sz slot, sz ox, sz oy) {
 	return tile_index(kx, ky, slot, ox, oy);
 }
 
 // Frame of one body-row tile (which: 0 left, 1 centre, 2 right).
-fn int ring_row_frame(int kx, int ky, int row, int which) {
+fn sz ring_row_frame(sz kx, sz ky, sz row, sz which) {
 	return row_tile_index(kx, ky, row, which);
 }
 
@@ -229,16 +229,16 @@ fn bool Model.gfx_active(Model* self) => self.tgp_ok && self.tgp_on;
 //
 // The builder and the emitter MUST agree on this: they index the same glyph,
 // and a k=1 layout and a k=2 layout put different tiles at the same index.
-fn int effective_radius(int rad, int box_h) {
-	int ky_max = box_h / 2;
+fn sz effective_radius(sz rad, sz box_h) {
+	sz ky_max = box_h / 2;
 	if (ky_max < 1) ky_max = 1;
 	while (rad > 0 && radius_cells_y(radius_px(rad)) > ky_max) rad--;
 	return rad;
 }
 
-fn void Model.sync_ring(Model* self, int b) {
+fn void Model.sync_ring(Model* self, sz b) {
 	if (!self.tgp_ok) return;
-	int rad = effective_radius(self.radius[b], BOX_H);
+	sz rad = effective_radius(self.radius[b], BOX_H);
 	bool sel = b == self.selected;
 	if (self.ring_radius[b] == rad && self.ring_selected[b] == sel) return;
 
@@ -248,11 +248,11 @@ fn void Model.sync_ring(Model* self, int b) {
 	bool had_old = self.ring_radius[b] >= 0;
 	tgp::Glyph old = self.rings[b];
 
-	int r = radius_px(rad);
-	int kx = radius_cells_x(r);
-	int ky = radius_cells_y(r);
-	int body = body_rows(ky);
-	int n = tile_count_rows(kx, ky, body);
+	sz r = radius_px(rad);
+	sz kx = radius_cells_x(r);
+	sz ky = radius_cells_y(r);
+	sz body = body_rows(ky);
+	sz n = tile_count_rows(kx, ky, body);
 	char[] frames = mem::new_array(char, (sz)n * TILE_BYTES);
 	// Full-height slice: the gradient must be continuous down the whole box,
 	// so every body row is cut from its own surface row rather than tiling
@@ -294,7 +294,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	// Radius steps up across the grid, so the whole range is visible at once
 	// -- including the radii that need a two-cell-wide corner block -- rather
 	// than every box starting the same and needing +/- to tell apart.
-	for (int b = 0; b < BOX_COUNT; b++) {
+	for (sz b = 0; b < BOX_COUNT; b++) {
 		self.radius[b] = (b * (RADII - 1) + (BOX_COUNT - 1) / 2) / (BOX_COUNT - 1);
 		self.ring_radius[b] = -1;
 		self.ring_selected[b] = false;
@@ -302,7 +302,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	}
 	if (self.tgp_ok) {
 		self.gfx = tgp::new_session();
-		for (int b = 0; b < BOX_COUNT; b++) self.sync_ring(b);
+		for (sz b = 0; b < BOX_COUNT; b++) self.sync_ring(b);
 	}
 	// tgp transmits lazily on the first tick after the alt screen is active;
 	// view() alone runs before that flag is set, so prod it once.
@@ -315,16 +315,16 @@ fn milktea::Msg on_gfx() {
 
 // select rebuilds the two boxes whose border changes: the one gaining the
 // selection ring and the one losing it.
-fn void Model.select(Model* self, int b) {
+fn void Model.select(Model* self, sz b) {
 	if (b == self.selected || b < 0 || b >= BOX_COUNT) return;
-	int prev = self.selected;
+	sz prev = self.selected;
 	self.selected = b;
 	self.sync_ring(prev);
 	self.sync_ring(b);
 }
 
-fn void Model.adjust_radius(Model* self, int delta) {
-	int r = self.radius[self.selected] + delta;
+fn void Model.adjust_radius(Model* self, sz delta) {
+	sz r = self.radius[self.selected] + delta;
 	if (r < 0) r = 0;
 	if (r > RADII - 1) r = RADII - 1;
 	self.radius[self.selected] = r;
@@ -339,7 +339,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.MOUSE) {
 		if (msg.mouse.action != milktea::MouseAction.MOUSE_PRESS) return null;
 		if (msg.mouse.button != milktea::MouseButton.MOUSE_LEFT) return null;
-		int b = self.box_at(msg.mouse.col, msg.mouse.row);
+		sz b = self.box_at(msg.mouse.col, msg.mouse.row);
 		if (b >= 0) self.select(b);
 		return milktea::tick(1, &on_gfx);
 	}
@@ -384,9 +384,9 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 // box_at returns the box under a cell coordinate, or -1. Uses the rects the
 // last view() solved, so it follows the layout automatically.
-fn int Model.box_at(Model* self, int col, int row) {
+fn sz Model.box_at(Model* self, sz col, sz row) {
 	if (!self.hit_valid) return -1;
-	for (int b = 0; b < BOX_COUNT; b++) {
+	for (sz b = 0; b < BOX_COUNT; b++) {
 		xray::Rect r = self.hit[b];
 		if (col >= r.x && col < r.x + r.w && row >= r.y && row < r.y + r.h) return b;
 	}
@@ -407,24 +407,24 @@ fn void Model.on_destroy(Model* self) @dynamic {
 // (row 0, col 0) diacritic: a placeholder cell with no diacritics inherits
 // its row from the left and INCREMENTS the column, so an undecorated run
 // would ask for columns that a 1x1 tile does not have and render blank.
-fn String tile_run(Model* m, int b, int kx, int ky, int slot, int ox, int oy, int n) {
+fn String tile_run(Model* m, sz b, sz kx, sz ky, sz slot, sz ox, sz oy, sz n) {
 	tgp::Glyph g = m.rings[b];
 	return tgp::placeholder_run(g.base_id + (uint)ring_frame(kx, ky, slot, ox, oy), n);
 }
 
-fn String tile_cell(Model* m, int b, int kx, int ky, int slot, int ox, int oy) {
+fn String tile_cell(Model* m, sz b, sz kx, sz ky, sz slot, sz ox, sz oy) {
 	return tile_run(m, b, kx, ky, slot, ox, oy, 1);
 }
 
 // hrun_run emits n cells of the top/bottom run tile for corner row oy.
-fn String hrun_run(Model* m, int b, int kx, int ky, int oy, bool bottom, int n) {
+fn String hrun_run(Model* m, sz b, sz kx, sz ky, sz oy, bool bottom, sz n) {
 	tgp::Glyph g = m.rings[b];
 	return tgp::placeholder_run(
 		g.base_id + (uint)hrun_tile_index(kx, ky, oy, bottom), n);
 }
 
 // row_run emits n cells of one body-row tile (0 left, 1 centre, 2 right).
-fn String row_run(Model* m, int b, int kx, int ky, int row, int which, int n) {
+fn String row_run(Model* m, sz b, sz kx, sz ky, sz row, sz which, sz n) {
 	tgp::Glyph g = m.rings[b];
 	return tgp::placeholder_run(g.base_id + (uint)ring_row_frame(kx, ky, row, which), n);
 }
@@ -439,50 +439,50 @@ fn String row_run(Model* m, int b, int kx, int ky, int row, int which, int n) {
 // below, and the corner. A separate pass, before the box, so the shadow is not
 // clipped by the box's own tiles -- which is what made it invisible when it
 // lived inside them.
-fn void append_shadow_at(DString* out, Model* m, int b, xray::Rect rect) {
+fn void append_shadow_at(DString* out, Model* m, sz b, xray::Rect rect) {
 	if (!m.gfx_active() || m.shadow_radius[b] < 0) return;
 	uint base = m.shadows[b].base_id;
-	int rad = effective_radius(m.radius[b], BOX_H);
-	int kx = radius_cells_x(radius_px(rad));
-	int ky = radius_cells_y(radius_px(rad));
+	sz rad = effective_radius(m.radius[b], BOX_H);
+	sz kx = radius_cells_x(radius_px(rad));
+	sz ky = radius_cells_y(radius_px(rad));
 
-	int col = rect.x + rect.w;   // the column right of the box
-	int mid_rows = rect.h - 2 * ky;
+	sz col = rect.x + rect.w;   // the column right of the box
+	sz mid_rows = rect.h - 2 * ky;
 	if (mid_rows < 0) mid_rows = 0;
 
 	// Right column: the curve at each end, the straight tile repeated between.
-	for (int oy = 0; oy < ky; oy++) {
+	for (sz oy = 0; oy < ky; oy++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", rect.y + oy + 1, col + 1));
 		out.append_string(tgp::placeholder_string(base + (uint)shadow_right_top(oy)));
 	}
-	for (int i = 0; i < mid_rows; i++) {
+	for (sz i = 0; i < mid_rows; i++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", rect.y + ky + i + 1, col + 1));
 		out.append_string(tgp::placeholder_string(base + (uint)shadow_right_mid(ky)));
 	}
-	for (int oy = 0; oy < ky; oy++) {
+	for (sz oy = 0; oy < ky; oy++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", rect.y + rect.h - ky + oy + 1, col + 1));
 		out.append_string(tgp::placeholder_string(base + (uint)shadow_right_bot(ky, oy)));
 	}
 
 	// Bottom row: the shadow is offset right, so it starts one cell in.
-	int row = rect.y + rect.h;
-	int mid_cols = rect.w - 2 * kx;
+	sz row = rect.y + rect.h;
+	sz mid_cols = rect.w - 2 * kx;
 	if (mid_cols < 0) mid_cols = 0;
 	out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
-	for (int ox = 0; ox < kx; ox++) {
+	for (sz ox = 0; ox < kx; ox++) {
 		out.append_string(tgp::placeholder_string(base + (uint)shadow_bottom_left(kx, ky, ox)));
 	}
 	if (mid_cols > 0) {
 		out.append_string(tgp::placeholder_run(base + (uint)shadow_bottom_mid(kx, ky), mid_cols));
 	}
-	for (int ox = 0; ox < kx; ox++) {
+	for (sz ox = 0; ox < kx; ox++) {
 		out.append_string(tgp::placeholder_string(base + (uint)shadow_bottom_right(kx, ky, ox)));
 	}
 	// The outer corner where the two runs meet.
 	out.append_string(tgp::placeholder_string(base + (uint)shadow_corner(kx, ky)));
 }
 
-fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
+fn void append_box_at(DString* out, Model* m, sz b, xray::Rect rect) {
 	BoxDef d = BOX_DEFS[b];
 	glaze::Color bg = glaze::color_hex(d.bg);
 	// A text cell always paints an opaque background -- there is no
@@ -493,11 +493,11 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 	glaze::Style title_flat = glaze::style().foreground(glaze::color_hex(d.line)).background(bg).with_bold(true);
 
 	// Same clamp the glyph was built with: see effective_radius.
-	int rad = effective_radius(m.radius[b], rect.h);
+	sz rad = effective_radius(m.radius[b], rect.h);
 	bool on = m.gfx_active();
-	int kx = on ? radius_cells_x(radius_px(rad)) : 1;
-	int ky = on ? radius_cells_y(radius_px(rad)) : 1;
-	int inner = rect.w - 2 * kx;
+	sz kx = on ? radius_cells_x(radius_px(rad)) : 1;
+	sz ky = on ? radius_cells_y(radius_px(rad)) : 1;
+	sz inner = rect.w - 2 * kx;
 	if (inner < 1) inner = 1;
 
 	// With graphics the neon border marks the selection, so the title needs
@@ -510,7 +510,7 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 		string::tformat("r%dpx", radius_px(rad)),
 	};
 
-	int row = rect.y;
+	sz row = rect.y;
 
 	if (!on) {
 		// Text fallback: the same layout in box-drawing characters.
@@ -519,8 +519,8 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
 		out.append_string(line_st.render(string::tformat("╭%s╮", rule)));
 		row++;
-		int text_w = rect.w - 2;
-		for (int r = 0; r < 3; r++) {
+		sz text_w = rect.w - 2;
+		for (sz r = 0; r < 3; r++) {
 			out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
 			out.append_string(line_st.render("│"));
 			glaze::Style st = r == 0 ? title_flat : text_flat;
@@ -534,11 +534,11 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 	}
 
 	// Top corner-block rows: kx cells across, ky rows down.
-	for (int oy = 0; oy < ky; oy++) {
+	for (sz oy = 0; oy < ky; oy++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
-		for (int ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_TL, ox, oy));
+		for (sz ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_TL, ox, oy));
 		out.append_string(hrun_run(m, b, kx, ky, oy, false, inner));
-		for (int ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_TR, ox, oy));
+		for (sz ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_TR, ox, oy));
 		row++;
 	}
 
@@ -551,10 +551,10 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 	// the corner rows span kx cells; here the extra width is interior, so the
 	// centre run absorbs it. Repeating the edge tile kx times would draw the
 	// stroke kx times.
-	int side_inner = rect.w - 2;
+	sz side_inner = rect.w - 2;
 	if (side_inner < 1) side_inner = 1;
-	int body = body_rows(ky);
-	for (int r = 0; r < body; r++) {
+	sz body = body_rows(ky);
+	for (sz r = 0; r < body; r++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
 		out.append_string(row_run(m, b, kx, ky, r, 0, 1));
 		out.append_string(row_run(m, b, kx, ky, r, 1, side_inner));
@@ -562,11 +562,11 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 
 		// Centre the three labels in the available body rows; a tall corner
 		// leaves fewer rows, so the outer labels drop first.
-		int li = r - (body - 3) / 2;
+		sz li = r - (body - 3) / 2;
 		String label = li >= 0 && li < 3 ? labels[li] : "";
 		if (label.len > 0) {
 			String cut = clip(label, side_inner);
-			int pad = (side_inner - (int)cut.len) / 2;
+			sz pad = (side_inner - (sz)cut.len) / 2;
 			out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1 + pad + 1));
 			// Sample the ramp at this row's centre, matching the tile under it.
 			float t = ((float)(ky + r) + 0.5f) / (float)rect.h;
@@ -581,11 +581,11 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 	}
 
 	// Bottom corner-block rows.
-	for (int oy = 0; oy < ky; oy++) {
+	for (sz oy = 0; oy < ky; oy++) {
 		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, rect.x + 1));
-		for (int ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_BL, ox, oy));
+		for (sz ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_BL, ox, oy));
 		out.append_string(hrun_run(m, b, kx, ky, oy, true, inner));
-		for (int ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_BR, ox, oy));
+		for (sz ox = 0; ox < kx; ox++) out.append_string(tile_cell(m, b, kx, ky, SLOT_BR, ox, oy));
 		row++;
 	}
 }
@@ -597,31 +597,31 @@ fn void append_box_at(DString* out, Model* m, int b, xray::Rect rect) {
 // on why the boxes are not tree content.
 fn void solve_grid(xray::Rect area, xray::Rect[] rects) {
 	xray::Node* grid = xray::vstack().with_gap(GRID_GAP);
-	for (int r = 0; r < ROWS; r++) {
+	for (sz r = 0; r < ROWS; r++) {
 		xray::Node* row = xray::hstack().with_gap(GRID_GAP * 2).fill(1);
-		for (int c = 0; c < COLS; c++) row.add(xray::vstack().fill(1));
+		for (sz c = 0; c < COLS; c++) row.add(xray::vstack().fill(1));
 		grid.add(row);
 	}
 	grid.solve(area);
 
-	for (int r = 0; r < ROWS; r++) {
+	for (sz r = 0; r < ROWS; r++) {
 		xray::Node* row = grid.children[r];
-		for (int c = 0; c < COLS; c++) rects[r * COLS + c] = row.child_rect(c);
+		for (sz c = 0; c < COLS; c++) rects[r * COLS + c] = row.child_rect(c);
 	}
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.gfx_active()) self.gfx.flush();
 
-	int sw = milktea::screen_width();
-	int sh = milktea::screen_height();
+	sz sw = milktea::screen_width();
+	sz sh = milktea::screen_height();
 
 	DString out = dstring::temp();
 
 	// Fill the screen with the backdrop first: the shadow tiles blend against
 	// it, and a black terminal would swallow them.
 	glaze::Style screen_st = glaze::style().background(glaze::color_hex(SCREEN_BG));
-	for (int y = 0; y < sh; y++) {
+	for (sz y = 0; y < sh; y++) {
 		out.append_string(string::tformat("\x1b[%d;1H", y + 1));
 		out.append_string(screen_st.render(repeat_str(" ", sw)));
 	}
@@ -643,31 +643,31 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.background(glaze::color_hex(SCREEN_BG))
 		.render(sub));
 
-	int top = 4;
+	sz top = 4;
 	// Every box is sized for the largest corner block in use, so the grid
 	// keeps a stable geometry as the radius changes and rows never collide.
-	int kmax = 1;
+	sz kmax = 1;
 	if (self.gfx_active()) {
-		for (int b = 0; b < BOX_COUNT; b++) {
-			int k = radius_cells_y(radius_px(self.radius[b]));
+		for (sz b = 0; b < BOX_COUNT; b++) {
+			sz k = radius_cells_y(radius_px(self.radius[b]));
 			if (k > kmax) kmax = k;
 		}
 	}
 	// Box height is FIXED: a larger corner radius consumes rows of the box
 	// rather than growing it, so changing the radius re-rounds the corners
 	// without moving the grid.
-	int box_h = BOX_H;
-	int grid_h = ROWS * (box_h + GRID_GAP);
+	sz box_h = BOX_H;
+	sz grid_h = ROWS * (box_h + GRID_GAP);
 	// A corner block cannot be taller than half the box, or the top and
 	// bottom blocks would overlap.
-	int khi = (box_h - 1) / 2;
+	sz khi = (box_h - 1) / 2;
 	if (kmax > khi) kmax = khi;
 	xray::Rect area = xray::new_rect(2, top, sw - 4, grid_h);
 
 	xray::Rect[BOX_COUNT] rects;
 	solve_grid(area, rects[..]);
 
-	for (int b = 0; b < BOX_COUNT; b++) {
+	for (sz b = 0; b < BOX_COUNT; b++) {
 		xray::Rect rr = rects[b];
 		// Each box is a fixed height; the solved rect gives x/width.
 		rr.h = box_h;
@@ -678,7 +678,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	}
 	self.hit_valid = true;
 
-	int foot = top + grid_h + 1;
+	sz foot = top + grid_h + 1;
 	if (foot > sh - 1) foot = sh - 1;
 	out.append_string(string::tformat("\x1b[%d;1H", foot + 1));
 	out.append_string(glaze::style()

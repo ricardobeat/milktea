@@ -15,12 +15,12 @@ extern fn long c3_time_ms_long();
 
 // ── Game Constants ─────────────────────────────────────────────────────────────
 
-const int FRAME_MS = 25; // 40 FPS
-const int MAX_BLOCKS = 32;
-const int MAX_PIGS = 8;
-const int MAX_PARTICLES = 160;
-const int MAX_TRAIL = 40;
-const int MAX_LEVELS = 3;
+const sz FRAME_MS = 25; // 40 FPS
+const sz MAX_BLOCKS = 32;
+const sz MAX_PIGS = 8;
+const sz MAX_PARTICLES = 160;
+const sz MAX_TRAIL = 40;
+const sz MAX_LEVELS = 3;
 
 enum GameState : char {
 	INTRO,      // Animated splash screen
@@ -51,7 +51,7 @@ enum BlockMaterial : char {
 struct TrailPoint {
 	float x;
 	float y;
-	int life;
+	sz life;
 	bool active;
 }
 
@@ -60,8 +60,8 @@ struct Particle {
 	float y;
 	float vx;
 	float vy;
-	int life;
-	int max_life;
+	sz life;
+	sz max_life;
 	xray::Color color;
 	bool active;
 }
@@ -87,7 +87,7 @@ struct Pig {
 	float radius;
 	float hp;
 	float max_hp;
-	int blink_timer;
+	sz blink_timer;
 	bool alive;
 }
 
@@ -100,7 +100,7 @@ struct ActiveBird {
 	BirdType type;
 	bool launched;
 	bool used_ability;
-	int flight_ticks;
+	sz flight_ticks;
 	bool alive;
 }
 
@@ -109,13 +109,13 @@ struct ActiveBird {
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 struct AvianAssaultModel {
-	int term_w;
-	int term_h;
-	int ticks;
+	sz term_w;
+	sz term_h;
+	sz ticks;
 
 	GameState state;
-	int current_level;
-	int menu_selected; // 0: Play, 1: Level Select, 2: Help, 3: Quit
+	sz current_level;
+	sz menu_selected; // 0: Play, 1: Level Select, 2: Help, 3: Quit
 
 	// Slingshot Base Position (in pixel coords)
 	float sling_x;
@@ -133,7 +133,7 @@ struct AvianAssaultModel {
 	// Birds inventory
 	ActiveBird bird;
 	BirdType[3] birds_queue;
-	int birds_left;
+	sz birds_left;
 
 	// Entities
 	Block[MAX_BLOCKS] blocks;
@@ -141,10 +141,10 @@ struct AvianAssaultModel {
 	Particle[MAX_PARTICLES] particles;
 	TrailPoint[MAX_TRAIL] trail;
 
-	int score;
-	int high_score;
-	int settle_timer;
-	int flash_timer;
+	sz score;
+	sz high_score;
+	sz settle_timer;
+	sz flash_timer;
 
 	xray::PixelBuffer* vbuf;
 	xray::Cell[] view_cells;
@@ -157,14 +157,14 @@ fn float rnd_float(float min, float max) {
 	return min + r * (max - min);
 }
 
-fn int rnd_int(int min, int max) {
+fn sz rnd_int(sz min, sz max) {
 	if (max <= min) return min;
 	return min + (rand() % (max - min + 1));
 }
 
 // ── Particle & Trail Helpers ──────────────────────────────────────────────────
 
-fn void AvianAssaultModel.spawn_particle(&self, float x, float y, float vx, float vy, int life, xray::Color c) {
+fn void AvianAssaultModel.spawn_particle(&self, float x, float y, float vx, float vy, sz life, xray::Color c) {
 	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		if (!self.particles[i].active) {
 			self.particles[i] = (Particle){
@@ -182,8 +182,8 @@ fn void AvianAssaultModel.spawn_particle(&self, float x, float y, float vx, floa
 	}
 }
 
-fn void AvianAssaultModel.spawn_explosion(&self, float cx, float cy, int count, xray::Color c1, xray::Color c2) {
-	for (int i = 0; i < count; i++) {
+fn void AvianAssaultModel.spawn_explosion(&self, float cx, float cy, sz count, xray::Color c1, xray::Color c2) {
+	for (sz i = 0; i < count; i++) {
 		float ang = rnd_float(0.0f, 6.28318f);
 		float spd = rnd_float(1.5f, 6.5f);
 		float vx = math::cos(ang) * spd;
@@ -226,7 +226,7 @@ fn void AvianAssaultModel.update_particles(&self) {
 
 // ── Level Construction ────────────────────────────────────────────────────────
 
-fn void AvianAssaultModel.load_level(&self, int lvl) {
+fn void AvianAssaultModel.load_level(&self, sz lvl) {
 	self.current_level = lvl;
 	self.state = GameState.AIMING;
 	self.birds_left = 3;
@@ -240,7 +240,7 @@ fn void AvianAssaultModel.load_level(&self, int lvl) {
 	for (sz i = 0; i < MAX_BLOCKS; i++) self.blocks[i].alive = false;
 	for (sz i = 0; i < MAX_PIGS; i++) self.pigs[i].alive = false;
 
-	int ground_y = (int)self.vbuf.height - 10;
+	sz ground_y = (sz)self.vbuf.height - 10;
 	self.sling_x = 24.0f;
 	self.sling_y = (float)(ground_y - 18);
 	self.drag_x = self.sling_x;
@@ -264,7 +264,7 @@ fn void AvianAssaultModel.load_level(&self, int lvl) {
 	}
 	self.prepare_next_bird();
 
-	int target_x = (int)self.vbuf.width - 45;
+	sz target_x = (sz)self.vbuf.width - 45;
 	if (target_x < 65) target_x = 65;
 
 	// Construct structures
@@ -360,7 +360,7 @@ fn void AvianAssaultModel.spawn_pig(&self, float x, float y, float radius, float
 
 fn void AvianAssaultModel.prepare_next_bird(&self) {
 	if (self.birds_left <= 0) return;
-	int idx = 3 - self.birds_left;
+	sz idx = 3 - self.birds_left;
 	BirdType type = self.birds_queue[idx];
 
 	float rad = 3.5f;
@@ -444,7 +444,7 @@ fn void AvianAssaultModel.trigger_bomb_explosion(&self, float cx, float cy) {
 // ── Physics Simulation ────────────────────────────────────────────────────────
 
 fn void AvianAssaultModel.update_physics(&self) {
-	int ground_y = (int)self.vbuf.height - 10;
+	sz ground_y = (sz)self.vbuf.height - 10;
 	float gravity = 0.32f;
 
 	// 1. Update Bird
@@ -516,7 +516,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 		}
 
 		// Bird stopped or out of bounds
-		if (self.bird.x > (float)((int)self.vbuf.width + 10) || self.bird.x < -20.0f ||
+		if (self.bird.x > (float)((sz)self.vbuf.width + 10) || self.bird.x < -20.0f ||
 			(math::abs(self.bird.vx) < 0.15f && math::abs(self.bird.vy) < 0.2f && self.bird.y >= (float)(ground_y - 6))) {
 			self.state = GameState.SETTLING;
 			self.settle_timer = 40;
@@ -585,7 +585,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 	}
 
 	// 3. Update Pigs (Movement, Gravity & Stacking on Blocks/Floor)
-	int alive_pigs = 0;
+	sz alive_pigs = 0;
 	for (sz i = 0; i < MAX_PIGS; i++) {
 		if (!self.pigs[i].alive) continue;
 		Pig* p = &self.pigs[i];
@@ -815,7 +815,7 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 
 			case LEVEL_WON:
 				if (k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'n' || k.rune == 'N'))) {
-					int next_lvl = (self.current_level + 1) % MAX_LEVELS;
+					sz next_lvl = (self.current_level + 1) % MAX_LEVELS;
 					self.load_level(next_lvl);
 				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'm' || k.rune == 'q'))) {
 					self.state = GameState.MENU;
@@ -845,41 +845,41 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 // ── Rendering: Background, Entities, Slingshot & UI ───────────────────────────
 
 fn void AvianAssaultModel.draw_background(&self) {
-	int pw = (int)self.vbuf.width;
-	int ph = (int)self.vbuf.height;
-	int ground_y = ph - 10;
+	sz pw = (sz)self.vbuf.width;
+	sz ph = (sz)self.vbuf.height;
+	sz ground_y = ph - 10;
 
 	// Sky gradient
 	xray::Color sky_top = xray::color_rgb(45, 95, 185);
 	xray::Color sky_bot = xray::color_rgb(160, 220, 250);
 
-	for (int y = 0; y < ground_y; y++) {
+	for (sz y = 0; y < ground_y; y++) {
 		float t = (float)y / (float)ground_y;
-		int r = (int)((float)sky_top.r * (1.0f - t) + (float)sky_bot.r * t);
-		int g = (int)((float)sky_top.g * (1.0f - t) + (float)sky_bot.g * t);
-		int b = (int)((float)sky_top.b * (1.0f - t) + (float)sky_bot.b * t);
+		sz r = (sz)((float)sky_top.r * (1.0f - t) + (float)sky_bot.r * t);
+		sz g = (sz)((float)sky_top.g * (1.0f - t) + (float)sky_bot.g * t);
+		sz b = (sz)((float)sky_top.b * (1.0f - t) + (float)sky_bot.b * t);
 		xray::Color sky_line = xray::color_rgb((char)r, (char)g, (char)b);
 
 		sz row_off = (sz)y * (sz)pw;
-		for (int x = 0; x < pw; x++) {
+		for (sz x = 0; x < pw; x++) {
 			self.vbuf.pixels[row_off + (sz)x] = sky_line;
 		}
 	}
 
 	// Distant Mountains
 	xray::Color mtn_c = xray::color_rgb(110, 150, 180);
-	for (int x = 0; x < pw; x++) {
-		int my = ground_y - 12 - (int)(math::sin((float)x * 0.03f) * 8.0f + math::cos((float)x * 0.07f) * 4.0f);
-		for (int y = my; y < ground_y; y++) {
+	for (sz x = 0; x < pw; x++) {
+		sz my = ground_y - 12 - (sz)(math::sin((float)x * 0.03f) * 8.0f + math::cos((float)x * 0.07f) * 4.0f);
+		for (sz y = my; y < ground_y; y++) {
 			self.vbuf.set_pixel(x, y, mtn_c);
 		}
 	}
 
 	// Rolling Hills
 	xray::Color hill_c = xray::color_rgb(85, 175, 75);
-	for (int x = 0; x < pw; x++) {
-		int hy = ground_y - 6 - (int)(math::sin((float)x * 0.05f) * 4.0f);
-		for (int y = hy; y < ground_y; y++) {
+	for (sz x = 0; x < pw; x++) {
+		sz hy = ground_y - 6 - (sz)(math::sin((float)x * 0.05f) * 4.0f);
+		for (sz y = hy; y < ground_y; y++) {
 			self.vbuf.set_pixel(x, y, hill_c);
 		}
 	}
@@ -892,9 +892,9 @@ fn void AvianAssaultModel.draw_background(&self) {
 }
 
 fn void AvianAssaultModel.draw_slingshot(&self) {
-	int ground_y = (int)self.vbuf.height - 10;
-	int sx = (int)self.sling_x;
-	int sy = (int)self.sling_y;
+	sz ground_y = (sz)self.vbuf.height - 10;
+	sz sx = (sz)self.sling_x;
+	sz sy = (sz)self.sling_y;
 
 	xray::Color wood_c = xray::color_rgb(120, 70, 30);
 	xray::Color wood_dark = xray::color_rgb(75, 40, 15);
@@ -913,8 +913,8 @@ fn void AvianAssaultModel.draw_slingshot(&self) {
 	float bird_y = self.is_dragging ? self.drag_y : (self.state == GameState.AIMING ? self.sling_y : self.sling_y);
 
 	if (self.state == GameState.AIMING) {
-		self.vbuf.draw_line(sx - 6, sy - 7, (int)bird_x, (int)bird_y, rubber_c);
-		self.vbuf.draw_line(sx + 5, sy - 7, (int)bird_x, (int)bird_y, rubber_c);
+		self.vbuf.draw_line(sx - 6, sy - 7, (sz)bird_x, (sz)bird_y, rubber_c);
+		self.vbuf.draw_line(sx + 5, sy - 7, (sz)bird_x, (sz)bird_y, rubber_c);
 
 		// Trajectory trajectory guide dots
 		float p_vx, p_vy;
@@ -931,19 +931,19 @@ fn void AvianAssaultModel.draw_slingshot(&self) {
 		float sim_x = bird_x;
 		float sim_y = bird_y;
 		xray::Color dot_c = xray::color_rgba(255, 255, 255, 180);
-		for (int t = 0; t < 16; t++) {
+		for (sz t = 0; t < 16; t++) {
 			sim_x += p_vx * 2.0f;
 			sim_y += p_vy * 2.0f;
 			p_vy += 0.32f * 2.0f;
 			if (sim_y >= (float)ground_y) break;
-			self.vbuf.blend_pixel((int)sim_x, (int)sim_y, dot_c);
+			self.vbuf.blend_pixel((sz)sim_x, (sz)sim_y, dot_c);
 		}
 	}
 }
 
 fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType type) {
-	int cx = (int)bx;
-	int cy = (int)by;
+	sz cx = (sz)bx;
+	sz cy = (sz)by;
 
 	xray::Color body_c = xray::color_rgb(230, 40, 30);
 	if (type == BirdType.CHUCK) body_c = xray::color_rgb(255, 215, 0);
@@ -956,8 +956,8 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 
 	if (type == BirdType.RED) {
 		// 7x7 round body
-		for (int dy = -3; dy <= 3; dy++) {
-			for (int dx = -3; dx <= 3; dx++) {
+		for (sz dy = -3; dy <= 3; dy++) {
+			for (sz dx = -3; dx <= 3; dx++) {
 				if (dx * dx + dy * dy <= 10) {
 					self.vbuf.set_pixel(cx + dx, cy + dy, body_c);
 				}
@@ -974,9 +974,9 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 		self.vbuf.set_pixel(cx + 4, cy + 1, beak_c);
 	} else if (type == BirdType.CHUCK) {
 		// Triangle body pointing right
-		for (int dx = -3; dx <= 4; dx++) {
-			int h = (4 - dx) / 2 + 1;
-			for (int dy = -h; dy <= h; dy++) {
+		for (sz dx = -3; dx <= 4; dx++) {
+			sz h = (4 - dx) / 2 + 1;
+			for (sz dy = -h; dy <= h; dy++) {
 				self.vbuf.set_pixel(cx + dx, cy + dy, body_c);
 			}
 		}
@@ -987,8 +987,8 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 		self.vbuf.set_pixel(cx + 5, cy + 1, beak_c);
 	} else {
 		// Bomb (Larger round body with fuse)
-		for (int dy = -4; dy <= 4; dy++) {
-			for (int dx = -4; dx <= 4; dx++) {
+		for (sz dy = -4; dy <= 4; dy++) {
+			for (sz dx = -4; dx <= 4; dx++) {
 				if (dx * dx + dy * dy <= 17) {
 					self.vbuf.set_pixel(cx + dx, cy + dy, body_c);
 				}
@@ -1007,17 +1007,17 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 }
 
 fn void AvianAssaultModel.draw_pig_sprite(&self, Pig* p) {
-	int cx = (int)p.x;
-	int cy = (int)p.y;
-	int r = (int)p.radius;
+	sz cx = (sz)p.x;
+	sz cy = (sz)p.y;
+	sz r = (sz)p.radius;
 
 	xray::Color skin_c = xray::color_rgb(115, 215, 55);
 	xray::Color snout_c = xray::color_rgb(85, 175, 35);
 	xray::Color eye_c = xray::color_rgb(255, 255, 255);
 	xray::Color pupil_c = xray::color_rgb(0, 0, 0);
 
-	for (int dy = -r; dy <= r; dy++) {
-		for (int dx = -r; dx <= r; dx++) {
+	for (sz dy = -r; dy <= r; dy++) {
+		for (sz dx = -r; dx <= r; dx++) {
 			if (dx * dx + dy * dy <= r * r) {
 				self.vbuf.set_pixel(cx + dx, cy + dy, skin_c);
 			}
@@ -1043,10 +1043,10 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 	for (sz i = 0; i < MAX_BLOCKS; i++) {
 		if (!self.blocks[i].alive) continue;
 		Block* b = &self.blocks[i];
-		int bx = (int)b.x;
-		int by = (int)b.y;
-		int bw = (int)b.w;
-		int bh = (int)b.h;
+		sz bx = (sz)b.x;
+		sz by = (sz)b.y;
+		sz bw = (sz)b.w;
+		sz bh = (sz)b.h;
 
 		xray::Color col = xray::color_rgb(180, 110, 50);
 		xray::Color border_c = xray::color_rgb(120, 70, 30);
@@ -1065,11 +1065,11 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), col);
 
 		// Dark border
-		for (int x = 0; x < bw; x++) {
+		for (sz x = 0; x < bw; x++) {
 			self.vbuf.set_pixel(bx + x, by, border_c);
 			self.vbuf.set_pixel(bx + x, by + bh - 1, border_c);
 		}
-		for (int y = 0; y < bh; y++) {
+		for (sz y = 0; y < bh; y++) {
 			self.vbuf.set_pixel(bx, by + y, border_c);
 			self.vbuf.set_pixel(bx + bw - 1, by + y, border_c);
 		}
@@ -1091,8 +1091,8 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		return milktea::view("");
 	}
 
-	int w = self.term_w;
-	int h = self.term_h;
+	sz w = self.term_w;
+	sz h = self.term_h;
 
 	// 1. Draw procedural world into pixel buffer
 	self.draw_background();
@@ -1102,7 +1102,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		xray::Color trail_c = xray::color_rgba(255, 255, 255, 140);
 		for (sz i = 0; i < MAX_TRAIL; i++) {
 			if (self.trail[i].active) {
-				self.vbuf.blend_pixel((int)self.trail[i].x, (int)self.trail[i].y, trail_c);
+				self.vbuf.blend_pixel((sz)self.trail[i].x, (sz)self.trail[i].y, trail_c);
 			}
 		}
 
@@ -1123,9 +1123,9 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		}
 
 		// Draw Birds queue on ground
-		int ground_y = (int)self.vbuf.height - 10;
-		for (int b = 0; b < self.birds_left - 1; b++) {
-			int idx = 3 - (self.birds_left - 1 - b);
+		sz ground_y = (sz)self.vbuf.height - 10;
+		for (sz b = 0; b < self.birds_left - 1; b++) {
+			sz idx = 3 - (self.birds_left - 1 - b);
 			if (idx >= 0 && idx < 3) {
 				self.draw_bird_sprite(self.sling_x - 12.0f - (float)(b * 9), (float)(ground_y - 4), self.birds_queue[idx]);
 			}
@@ -1134,7 +1134,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		// Draw particles
 		for (sz i = 0; i < MAX_PARTICLES; i++) {
 			if (self.particles[i].active) {
-				self.vbuf.set_pixel((int)self.particles[i].x, (int)self.particles[i].y, self.particles[i].color);
+				self.vbuf.set_pixel((sz)self.particles[i].x, (sz)self.particles[i].y, self.particles[i].color);
 			}
 		}
 	}
@@ -1149,12 +1149,12 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 
 	// 2. Convert PixelBuffer to terminal cells (half-blocks '▀')
 	xray::Style base = xray::default_style();
-	for (int vy = 0; vy < h; vy++) {
-		int py_top = vy * 2;
-		int py_bot = py_top + 1;
+	for (sz vy = 0; vy < h; vy++) {
+		sz py_top = vy * 2;
+		sz py_bot = py_top + 1;
 		sz row_offset = (sz)vy * (sz)w;
 
-		for (int vx = 0; vx < w; vx++) {
+		for (sz vx = 0; vx < w; vx++) {
 			xray::Color c_top = self.vbuf.get_pixel(vx, py_top);
 			xray::Color c_bot = self.vbuf.get_pixel(vx, py_bot);
 
@@ -1210,9 +1210,9 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 // ── Overlays ──────────────────────────────────────────────────────────────────
 
 fn void AvianAssaultModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
-	int title_y = h / 2 - 6;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
+	sz title_y = h / 2 - 6;
 
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
 	xray::Color c1 = xray::color_rgb(255, (char)(60 + pulse * 60), 30);
@@ -1232,43 +1232,43 @@ fn void AvianAssaultModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
 	String ass5  = "██║  ██║███████║███████║██║  ██║╚██████╔╝███████╗██║   ";
 	String ass6  = "╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ";
 
-	int lx1 = (w - 40) / 2;
+	sz lx1 = (w - 40) / 2;
 	if (lx1 < 0) lx1 = 0;
-	int lx2 = (w - 56) / 2;
+	sz lx2 = (w - 56) / 2;
 	if (lx2 < 0) lx2 = 0;
 
 	String[6] avian_lines = { logo1, logo2, logo3, logo4, logo5, logo6 };
-	for (int i = 0; i < 6; i++) {
+	for (sz i = 0; i < 6; i++) {
 		String styled = glaze::gradient_text(avian_lines[i], c1, c2, true);
 		canvas.render_ansi_string((sz)lx1, (sz)(title_y + i), styled, xray::default_style());
 	}
 
 	String[6] assault_lines = { ass1, ass2, ass3, ass4, ass5, ass6 };
-	for (int i = 0; i < 6; i++) {
+	for (sz i = 0; i < 6; i++) {
 		String styled = glaze::gradient_text(assault_lines[i], c2, c1, true);
 		canvas.render_ansi_string((sz)lx2, (sz)(title_y + 6 + i), styled, xray::default_style());
 	}
 
 	String sub = "░▒▓ RETRO PHYSICS ARCADE ▓▒░";
 	String sub_s = glaze::style().foreground(xray::color_rgb(255, 240, 200)).with_bold(true).render(sub);
-	int sx = (w - glaze::string_width(sub)) / 2;
+	sz sx = (w - glaze::string_width(sub)) / 2;
 	canvas.render_ansi_string((sz)sx, (sz)(title_y + 13), sub_s, xray::default_style());
 
 	if ((self.ticks / 10) % 2 == 0) {
 		String press = "Press any key to enter...";
 		String press_s = glaze::style().foreground(xray::color_rgb(255, 230, 100)).render(press);
-		int px = (w - glaze::string_width(press)) / 2;
+		sz px = (w - glaze::string_width(press)) / 2;
 		canvas.render_ansi_string((sz)px, (sz)(title_y + 15), press_s, xray::default_style());
 	}
 }
 
 fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
-	int box_w = 46;
-	int box_h = 16;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
+	sz box_w = 46;
+	sz box_h = 16;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2;
 
 	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
 	// Red-to-Orange fiery gradient border
@@ -1281,8 +1281,8 @@ fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 
 	// 70% semi-transparent dark crimson/charcoal backdrop
 	xray::Color menu_tint = xray::color_rgba(28, 14, 16, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = menu_tint.blend_over(cl.style.fg);
 			cl.style.bg = menu_tint.blend_over(cl.style.bg);
@@ -1291,7 +1291,7 @@ fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 
 	String title = " ★ AVIAN ASSAULT ★ ";
 	String title_s = glaze::gradient_text(title, xray::color_rgb(255, 220, 80), xray::color_rgb(255, 75, 45), true);
-	int tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
 
 	DString lvl_str = dstring::temp();
@@ -1304,7 +1304,7 @@ fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 		"Exit",
 	};
 
-	for (int i = 0; i < 4; i++) {
+	for (sz i = 0; i < 4; i++) {
 		bool sel = (i == self.menu_selected);
 		DString line = dstring::temp();
 		if (sel) {
@@ -1324,24 +1324,24 @@ fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
 		if (sel) s = s.background(bg);
 
 		String rendered = s.render(line.str_view());
-		int ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
+		sz ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
 		canvas.render_ansi_string((sz)ox, (sz)(inner.y + 3 + i * 2), rendered, xray::default_style());
 	}
 
 	DString hs_str = dstring::temp();
 	hs_str.append_string(string::tformat("🏆 High Score: %d", self.high_score));
 	String hs_s = glaze::style().foreground(xray::color_rgb(255, 185, 40)).with_bold(true).render(hs_str.str_view());
-	int hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
+	sz hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
 	canvas.render_ansi_string((sz)hx, (sz)(inner.y + inner.h - 2), hs_s, xray::default_style());
 }
 
 fn void AvianAssaultModel.render_won_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
-	int box_w = 42;
-	int box_h = 16;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
+	sz box_w = 42;
+	sz box_h = 16;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2;
 
 	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
 	xray::Rect inner = canvas.draw_gradient_border(
@@ -1352,8 +1352,8 @@ fn void AvianAssaultModel.render_won_overlay(&self, ScreenBuffer* canvas) {
 	);
 
 	xray::Color won_tint = xray::color_rgba(10, 25, 15, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = won_tint.blend_over(cl.style.fg);
 			cl.style.bg = won_tint.blend_over(cl.style.bg);
@@ -1362,14 +1362,14 @@ fn void AvianAssaultModel.render_won_overlay(&self, ScreenBuffer* canvas) {
 
 	String title = " ★ LEVEL CLEARED! ★ ";
 	String title_s = glaze::gradient_text(title, xray::color_rgb(120, 255, 120), xray::color_rgb(255, 230, 80), true);
-	int tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
 
 	// 3 Star rating based on birds remaining
 	String stars = "⭐⭐⭐";
 	if (self.birds_left == 1) stars = "⭐⭐";
 	if (self.birds_left == 0) stars = "⭐";
-	int sx = inner.x + (inner.w - glaze::string_width(stars)) / 2;
+	sz sx = inner.x + (inner.w - glaze::string_width(stars)) / 2;
 	canvas.render_ansi_string((sz)sx, (sz)(inner.y + 3), stars, xray::default_style());
 
 	DString sc = dstring::temp();
@@ -1384,17 +1384,17 @@ fn void AvianAssaultModel.render_won_overlay(&self, ScreenBuffer* canvas) {
 
 	String prompt = "[SPACE] Next Level  |  [M] Menu";
 	String prompt_s = glaze::style().foreground(xray::color_rgb(220, 240, 255)).render(prompt);
-	int px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
+	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
 	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
 }
 
 fn void AvianAssaultModel.render_lost_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
-	int box_w = 40;
-	int box_h = 15;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
+	sz box_w = 40;
+	sz box_h = 15;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2;
 
 	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
 	xray::Rect inner = canvas.draw_gradient_border(
@@ -1405,8 +1405,8 @@ fn void AvianAssaultModel.render_lost_overlay(&self, ScreenBuffer* canvas) {
 	);
 
 	xray::Color lost_tint = xray::color_rgba(25, 10, 15, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = lost_tint.blend_over(cl.style.fg);
 			cl.style.bg = lost_tint.blend_over(cl.style.bg);
@@ -1415,27 +1415,27 @@ fn void AvianAssaultModel.render_lost_overlay(&self, ScreenBuffer* canvas) {
 
 	String title = " 💀 LEVEL FAILED 💀 ";
 	String title_s = glaze::style().foreground(xray::color_rgb(255, 70, 70)).with_bold(true).render(title);
-	int tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
 
 	String msg = "You ran out of birds!";
 	String msg_s = glaze::style().foreground(xray::color_rgb(240, 200, 200)).render(msg);
-	int mx = inner.x + (inner.w - glaze::string_width(msg)) / 2;
+	sz mx = inner.x + (inner.w - glaze::string_width(msg)) / 2;
 	canvas.render_ansi_string((sz)mx, (sz)(inner.y + 4), msg_s, xray::default_style());
 
 	String prompt = "[SPACE] Retry  |  [M] Menu";
 	String prompt_s = glaze::style().foreground(xray::color_rgb(220, 240, 255)).render(prompt);
-	int px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
+	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
 	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
 }
 
 fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
-	int w = (int)canvas.width;
-	int h = (int)canvas.height;
-	int box_w = 48;
-	int box_h = 17;
-	int bx = (w - box_w) / 2;
-	int by = (h - box_h) / 2;
+	sz w = (sz)canvas.width;
+	sz h = (sz)canvas.height;
+	sz box_w = 48;
+	sz box_h = 17;
+	sz bx = (w - box_w) / 2;
+	sz by = (h - box_h) / 2;
 
 	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
 	xray::Rect inner = canvas.draw_gradient_border(
@@ -1446,8 +1446,8 @@ fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 	);
 
 	xray::Color help_tint = xray::color_rgba(12, 16, 28, 178);
-	for (int y = inner.y; y < inner.y + inner.h; y++) {
-		for (int x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = inner.y; y < inner.y + inner.h; y++) {
+		for (sz x = inner.x; x < inner.x + inner.w; x++) {
 			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
 			cl.style.fg = help_tint.blend_over(cl.style.fg);
 			cl.style.bg = help_tint.blend_over(cl.style.bg);
@@ -1456,7 +1456,7 @@ fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 	String title = " HOW TO PLAY ";
 	String title_s = glaze::gradient_text(title, xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true);
-	int tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
+	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
 	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
 
 	String[5] instructions = {
@@ -1467,14 +1467,14 @@ fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 		"  - 💣 Black Bomb: Explosive blast wave",
 	};
 
-	for (int i = 0; i < 5; i++) {
+	for (sz i = 0; i < 5; i++) {
 		String line_s = glaze::style().foreground(xray::color_rgb(220, 230, 245)).render(instructions[i]);
 		canvas.render_ansi_string((sz)(inner.x + 2), (sz)(inner.y + 2 + i * 2), line_s, xray::default_style());
 	}
 
 	String back = "[Press SPACE or ESC to Return]";
 	String back_s = glaze::style().foreground(xray::color_rgb(255, 215, 100)).render(back);
-	int back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
+	sz back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
 	canvas.render_ansi_string((sz)back_x, (sz)(inner.y + inner.h - 2), back_s, xray::default_style());
 }
 

@@ -44,7 +44,7 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 		glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye"));
 
 	glaze::Style footer_style = glaze::style().foreground(glaze::color_hex("#a0a0a0"));
-	int last_row = milktea::screen_height() > 1 ? milktea::screen_height() - 1 : 0;
+	sz last_row = milktea::screen_height() > 1 ? milktea::screen_height() - 1 : 0;
 
 	// root is a zstack, so children paint in the order they are added and
 	// .at() pins each one at an absolute cell. Swapping which card is added

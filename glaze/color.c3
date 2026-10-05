@@ -42,7 +42,7 @@ fn void Color.write_sgr_params(self, DString* out, bool foreground) {
 				out.appendf(foreground ? "9%d" : "10%d", self.index - 8);
 			}
 		case ANSI256:
-			out.appendf(foreground ? "38;5;%d" : "48;5;%d", (int)self.index);
+			out.appendf(foreground ? "38;5;%d" : "48;5;%d", (sz)self.index);
 		case TRUECOLOR:
 			out.appendf(foreground ? "38;2;%d;%d;%d" : "48;2;%d;%d;%d", self.r, self.g, self.b);
 	}

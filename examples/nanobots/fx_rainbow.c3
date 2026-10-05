@@ -7,12 +7,12 @@ module nanobots;
 
 import xray;
 
-const int RAINBOW_LEN = 8;          // distinct hues in the wave palette
-const int RAINBOW_WAVE = @dur(40);  // ticks for the wave to cross the word
-const int RAINBOW_HOLD = @dur(8);   // brief beat at full colour before fading
-const int RAINBOW_FADE = @dur(40);  // ticks a cell takes to fade out
+const sz RAINBOW_LEN = 8;          // distinct hues in the wave palette
+const sz RAINBOW_WAVE = @dur(40);  // ticks for the wave to cross the word
+const sz RAINBOW_HOLD = @dur(8);   // brief beat at full colour before fading
+const sz RAINBOW_FADE = @dur(40);  // ticks a cell takes to fade out
 
-fn xray::Color rainbow_color(int h) {
+fn xray::Color rainbow_color(sz h) {
 	switch (h) {
 		case 0: return xray::color_rgb(255, 45, 45);    // red
 		case 1: return xray::color_rgb(255, 140, 20);   // orange
@@ -27,7 +27,7 @@ fn xray::Color rainbow_color(int h) {
 
 // The scene's vertical background gradient at a given row, so glyphs sit on
 // the right backdrop (no black) and the fade melts into the scene.
-fn xray::Color rainbow_bg(Model* self, int row) {
+fn xray::Color rainbow_bg(Model* self, sz row) {
 	float b = self.h > 1 ? (float)row / (float)(self.h - 1) : 0.0f;
 	return xray::color_rgb(
 		(char)(6.0f + 12.0f * b),
@@ -37,14 +37,14 @@ fn xray::Color rainbow_bg(Model* self, int row) {
 
 // Scan order from the top-left glyph to the bottom-right one. Row-major over
 // the text box, so the wave always starts at the top-left.
-fn int rainbow_order(Model* self, Particle* p) {
+fn sz rainbow_order(Model* self, Particle* p) {
 	return (p.row - self.text_y) * self.text_w + (p.col - self.text_x);
 }
 
 // A position-hashed hue so adjacent cells are far apart on the wheel: a
 // column/row step of 5 or 3 hues (mod the palette) is never contiguous.
-fn int rainbow_hue(Model* self, Particle* p) {
-	int h = (p.row - self.text_y) * 11 + (p.col - self.text_x) * 5;
+fn sz rainbow_hue(Model* self, Particle* p) {
+	sz h = (p.row - self.text_y) * 11 + (p.col - self.text_x) * 5;
 	return h % RAINBOW_LEN;
 }
 
@@ -57,30 +57,30 @@ fn void rainbow_setup(void* raw) {
 
 fn void rainbow_step(void* raw) {
 	Model* self = (Model*)raw;
-	int age = self.frame - self.phase_frame;
-	int max_o = (self.text_h - 1) * self.text_w + (self.text_w - 1);
+	sz age = self.frame - self.phase_frame;
+	sz max_o = (self.text_h - 1) * self.text_w + (self.text_w - 1);
 	if (max_o < 1) max_o = 1;
 	float fade_dw = (float)RAINBOW_FADE / (float)max_o;
-	int last_fade_start = RAINBOW_WAVE + RAINBOW_HOLD + (int)((float)max_o * fade_dw);
+	sz last_fade_start = RAINBOW_WAVE + RAINBOW_HOLD + (sz)((float)max_o * fade_dw);
 	if (age >= last_fade_start + RAINBOW_FADE) self.restart_cycle();
 }
 
 fn void rainbow_render(void* raw) {
 	Model* self = (Model*)raw;
 	xray::ScreenBuffer* sb = self.canvas;
-	int age = self.frame - self.phase_frame;
-	int max_o = (self.text_h - 1) * self.text_w + (self.text_w - 1);
+	sz age = self.frame - self.phase_frame;
+	sz max_o = (self.text_h - 1) * self.text_w + (self.text_w - 1);
 	if (max_o < 1) max_o = 1;
 	float dw = (float)RAINBOW_WAVE / (float)max_o;
 	float fade_dw = (float)RAINBOW_FADE / (float)max_o;
 
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
-		int col = p.col;
-		int row = p.row;
+		sz col = p.col;
+		sz row = p.row;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
-		int o = rainbow_order(self, p);
+		sz o = rainbow_order(self, p);
 		String g = glyph_at(self.rows, p.row_src, p.byte_off, p.byte_len);
 		xray::Color bg = rainbow_bg(self, row);
 
@@ -94,7 +94,7 @@ fn void rainbow_render(void* raw) {
 
 		// The glyph keeps its shape; only its colour changes.
 		xray::Color c = rainbow_color(rainbow_hue(self, p));
-		int fade_start = RAINBOW_WAVE + RAINBOW_HOLD + (int)((float)o * fade_dw);
+		sz fade_start = RAINBOW_WAVE + RAINBOW_HOLD + (sz)((float)o * fade_dw);
 		if (age >= fade_start) {
 			// Fade toward the background colour, not black, so the cell
 			// melts into the scene as it goes.

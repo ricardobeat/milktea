@@ -10,8 +10,8 @@ const int MSG_CLEAR_ERROR = 1;
 
 struct PickerModel {
 	boba::FilePicker fp;
-	int width;
-	int height;
+	sz width;
+	sz height;
 	bool has_error;
 	String error_msg;
 }

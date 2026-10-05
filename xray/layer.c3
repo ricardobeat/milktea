@@ -9,12 +9,12 @@ struct Shadow {
 	// or one row. With it on the grid is half-cells, and a unit is one column
 	// or one half-row: shadow(1, 1) then sits one column right and half a row
 	// down.
-	int offset_x;
-	int offset_y;
+	sz offset_x;
+	sz offset_y;
 	char opacity;
 	Color color;
 	bool enabled;
-	int blur; // blur radius in cells (0 = hard edge)
+	sz blur; // blur radius in cells (0 = hard edge)
 	// Draw the fringe with half blocks, doubling its vertical resolution and
 	// halving the offset grid. Safe only over blank space; see shadow().
 	bool half_blocks;
@@ -35,7 +35,7 @@ struct Shadow {
 // the spaces in text that an earlier node drew underneath it. Use it where the
 // shadow falls on empty background. With it off the fringe tints backgrounds
 // only, and text under the shadow darkens.
-fn Shadow shadow(int offset_x = 1, int offset_y = 1, char opacity = 128, int blur = 0, bool half_blocks = false) {
+fn Shadow shadow(sz offset_x = 1, sz offset_y = 1, char opacity = 128, sz blur = 0, bool half_blocks = false) {
 	// offset_y is stored in half-rows whichever grid the caller used, so the
 	// renderer has one vertical unit to work in.
 	return {
@@ -56,16 +56,16 @@ fn Shadow Shadow.with_color(self, Color c) {
 }
 
 struct InnerShadow {
-	int top;
-	int right;
-	int bottom;
-	int left;
+	sz top;
+	sz right;
+	sz bottom;
+	sz left;
 	char opacity;
 	Color color;
 	bool enabled;
 }
 
-fn InnerShadow inner_shadow(int top = 0, int right = 0, int bottom = 0, int left = 0, char opacity = 60) {
+fn InnerShadow inner_shadow(sz top = 0, sz right = 0, sz bottom = 0, sz left = 0, char opacity = 60) {
 	return {
 		.top = top,
 		.right = right,
@@ -90,15 +90,15 @@ struct LayerStyle {
 
 // Distance from point (col, row) to the edge of rect (rx, ry, rw, rh).
 // Returns 0 if inside, positive distance if outside.
-fn int shadow_edge_dist(int col, int row, int rx, int ry, int rw, int rh) {
-	int dx = 0;
+fn sz shadow_edge_dist(sz col, sz row, sz rx, sz ry, sz rw, sz rh) {
+	sz dx = 0;
 	if (col < rx) {
 		dx = rx - col;
 	} else if (col >= rx + rw) {
 		dx = col - (rx + rw) + 1;
 	}
 
-	int dy = 0;
+	sz dy = 0;
 	if (row < ry) {
 		dy = ry - row;
 	} else if (row >= ry + rh) {
@@ -127,17 +127,17 @@ const String HALF_BLOCK_UPPER = "▀";
 // would hold a corner cell at the same alpha as the cells straight out from
 // each edge, drawing the fringe as nested rectangles with a visible X where
 // their diagonals meet.
-fn int shadow_edge_dist_half(int col, int half_row, int rx, int ry, int rw, int rh) {
-	int dx = 0;
+fn sz shadow_edge_dist_half(sz col, sz half_row, sz rx, sz ry, sz rw, sz rh) {
+	sz dx = 0;
 	if (col < rx) {
 		dx = rx - col;
 	} else if (col >= rx + rw) {
 		dx = col - (rx + rw) + 1;
 	}
 
-	int top    = ry * 2;
-	int bottom = (ry + rh) * 2;
-	int dy     = 0;
+	sz top    = ry * 2;
+	sz bottom = (ry + rh) * 2;
+	sz dy     = 0;
 	if (half_row < top) {
 		dy = top - half_row;
 	} else if (half_row >= bottom) {
@@ -153,10 +153,10 @@ fn int shadow_edge_dist_half(int col, int half_row, int rx, int ry, int rw, int 
 // isqrt is the integer square root, rounded to nearest. Newton's method; the
 // arguments here are a few hundred at most, so it converges in a handful of
 // iterations.
-fn int isqrt(int n) {
+fn sz isqrt(sz n) {
 	if (n <= 0) return 0;
-	int x = n;
-	int y = (x + 1) / 2;
+	sz x = n;
+	sz y = (x + 1) / 2;
 	while (y < x) {
 		x = y;
 		y = (x + n / x) / 2;
@@ -167,16 +167,16 @@ fn int isqrt(int n) {
 
 // shadow_alpha_at is the fringe falloff: full opacity inside the shadow's core,
 // fading to nothing over the blur radius. Distance is in half-cell units.
-fn int shadow_alpha_at(int dist_half, int blur, int opacity) {
+fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) {
 	if (dist_half <= 0) return opacity;
-	int span = blur * 2;
+	sz span = blur * 2;
 	if (dist_half > span) return 0;
 	// Quadratic, so the fringe holds its weight against the panel edge and then
 	// drops away, reaching the background well inside the blur radius.
 	// blend_over is linear in alpha, so this curve is the curve on screen.
-	int t     = span - dist_half + 1;
-	int range = span + 1;
-	return opacity * t * t / (range * range);
+	sz t     = span - dist_half + 1;
+	sz range = span + 1;
+	return (int)((sz)opacity * t * t / (range * range));
 }
 
 // shadow_half blends one half of a half-block cell over what is under it.
@@ -210,42 +210,42 @@ fn bool Cell.can_half_block(&self) {
 	return self.style.attrs == none;
 }
 
-fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, InnerShadow s) {
+fn void ScreenBuffer.render_inner_shadow(&self, sz x, sz y, sz w, sz h, InnerShadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
-	for (int row = y; row < y + h; row++) {
-		if (row < 0 || row >= (int)self.height) continue;
-		for (int col = x; col < x + w; col++) {
-			if (col < 0 || col >= (int)self.width) continue;
+	for (sz row = y; row < y + h; row++) {
+		if (row < 0 || row >= (sz)self.height) continue;
+		for (sz col = x; col < x + w; col++) {
+			if (col < 0 || col >= (sz)self.width) continue;
 
-			int min_dist = w > h ? w : h;
+			sz min_dist = w > h ? w : h;
 
 			if (s.top > 0) {
-				int d = row - y;
+				sz d = row - y;
 				if (d < s.top && d < min_dist) min_dist = d;
 			}
 			if (s.bottom > 0) {
-				int d = (y + h - 1) - row;
+				sz d = (y + h - 1) - row;
 				if (d < s.bottom && d < min_dist) min_dist = d;
 			}
 			if (s.left > 0) {
-				int d = col - x;
+				sz d = col - x;
 				if (d < s.left && d < min_dist) min_dist = d;
 			}
 			if (s.right > 0) {
-				int d = (x + w - 1) - col;
+				sz d = (x + w - 1) - col;
 				if (d < s.right && d < min_dist) min_dist = d;
 			}
 
-			int max_edge = s.top;
+			sz max_edge = s.top;
 			if (s.right > max_edge) max_edge = s.right;
 			if (s.bottom > max_edge) max_edge = s.bottom;
 			if (s.left > max_edge) max_edge = s.left;
 
 			if (min_dist >= max_edge) continue;
 
-			int t     = max_edge - min_dist;
-			int alpha = (int)s.opacity * t * t / (max_edge * max_edge);
+			sz t     = max_edge - min_dist;
+			int alpha = (int)((sz)s.opacity * t * t / (max_edge * max_edge));
 			if (alpha <= 0) continue;
 
 			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
@@ -258,12 +258,12 @@ fn void ScreenBuffer.render_inner_shadow(&self, int x, int y, int w, int h, Inne
 	}
 }
 
-fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) {
+fn void ScreenBuffer.render_shadow(&self, sz x, sz y, sz w, sz h, Shadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
 	// offset_x is in double columns on the whole-cell grid and single columns on
 	// the half-cell one (see Shadow).
-	int sx = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
+	sz sx = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
 	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
 
 
@@ -271,17 +271,17 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 
 	// can express it.
 
-	int sy         = y + s.offset_y / 2;
-	int extra_half = s.offset_y - (s.offset_y / 2) * 2;
+	sz sy         = y + s.offset_y / 2;
+	sz extra_half = s.offset_y - (s.offset_y / 2) * 2;
 
 	if (s.blur == 0) {
 		Color blend_color = s.color;
 		blend_color.a = s.opacity;
 
-		for (int row = sy; row < sy + h; row++) {
-			for (int col = sx; col < sx + w; col++) {
+		for (sz row = sy; row < sy + h; row++) {
+			for (sz col = sx; col < sx + w; col++) {
 				if (col >= x && col < x + w && row >= y && row < y + h) continue;
-				if (col < 0 || row < 0 || col >= (int)self.width || row >= (int)self.height) continue;
+				if (col < 0 || row < 0 || col >= (sz)self.width || row >= (sz)self.height) continue;
 
 				Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
 				dst.style.bg = blend_color.blend_over(dst.style.bg);
@@ -294,19 +294,19 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 
 	// Blurred shadow: the core shadow area gets full opacity, then opacity
 	// falls off over `blur` cells beyond the core edges.
-	int blur = s.blur;
+	sz blur = s.blur;
 
 	// Core shadow plus the blur margin on all sides, and one more row at the
 	// bottom when a half-row offset pushes the fringe into it.
-	int ext_top    = sy - blur;
-	int ext_bottom = sy + h + blur + extra_half;
-	int ext_left   = sx - blur;
-	int ext_right  = sx + w + blur;
+	sz ext_top    = sy - blur;
+	sz ext_bottom = sy + h + blur + extra_half;
+	sz ext_left   = sx - blur;
+	sz ext_right  = sx + w + blur;
 
-	for (int row = ext_top; row < ext_bottom; row++) {
-		if (row < 0 || row >= (int)self.height) continue;
-		for (int col = ext_left; col < ext_right; col++) {
-			if (col < 0 || col >= (int)self.width) continue;
+	for (sz row = ext_top; row < ext_bottom; row++) {
+		if (row < 0 || row >= (sz)self.height) continue;
+		for (sz col = ext_left; col < ext_right; col++) {
+			if (col < 0 || col >= (sz)self.width) continue;
 			// Skip cells inside the content overlay region
 			if (col >= x && col < x + w && row >= y && row < y + h) continue;
 
@@ -319,12 +319,12 @@ fn void ScreenBuffer.render_shadow(&self, int x, int y, int w, int h, Shadow s) 
 			int top_a = shadow_alpha_at(
 				shadow_edge_dist_half(col, row * 2 - extra_half, sx, sy, w, h),
 				blur,
-				(int)s.opacity
+				(sz)s.opacity
 			);
 			int bot_a = shadow_alpha_at(
 				shadow_edge_dist_half(col, row * 2 + 1 - extra_half, sx, sy, w, h),
 				blur,
-				(int)s.opacity
+				(sz)s.opacity
 			);
 
 			if (top_a <= 0 && bot_a <= 0) continue;

@@ -278,7 +278,7 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 		uint cp;
 		sz char_len = utf8_decode(text[i..], &cp);
 
-		int cw = char_width(cp);
+		sz cw = char_width(cp);
 
 		// Zero-width codepoint (combining mark, variation selector, etc.):
 		// append its bytes to the previous cell so the terminal can render
@@ -713,12 +713,12 @@ fn void ScreenBuffer.render_ansi_string(
 					sz col_val = 0;
 					for (sz s = 0; s < semicolon; s++) {
 						if (params[s] >= '0' && params[s] <= '9') {
-							row_val = row_val * 10 + (sz)(params[s] - '0');
+							row_val = row_val * 10 + (sz)(sz)(params[s] - '0');
 						}
 					}
 					for (sz s = semicolon + 1; s < params.len; s++) {
 						if (params[s] >= '0' && params[s] <= '9') {
-							col_val = col_val * 10 + (sz)(params[s] - '0');
+							col_val = col_val * 10 + (sz)(sz)(params[s] - '0');
 						}
 					}
 					r = (row_val > 0) ? row_val - 1 : 0;
@@ -763,7 +763,7 @@ fn void ScreenBuffer.render_ansi_string(
 		sz char_len = utf8_decode(text[i..], &cp);
 		if (char_len == 0) break;
 
-		int cw = char_width(cp);
+		sz cw = char_width(cp);
 
 		// Zero-width codepoint: append combining bytes to previous cell if room.
 		// See set_string for the full rationale.
@@ -809,10 +809,10 @@ fn Style apply_sgr(String params, Style current) @local {
 	sz i = 0;
 	while (i < params.len) {
 		// Parse one numeric parameter
-		int val      = 0;
+		sz val      = 0;
 		bool has_val = false;
 		while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-			val = val * 10 + (params[i] - '0');
+			val = val * 10 + (sz)(params[i] - '0');
 			has_val = true;
 			i++;
 		}
@@ -821,30 +821,30 @@ fn Style apply_sgr(String params, Style current) @local {
 
 		// Handle sub-sequences: 38;... (fg extended) and 48;... (bg extended)
 		if (val == 38 && i < params.len && params[i] >= '0' && params[i] <= '9') {
-			int sub = 0;
+			sz sub = 0;
 			while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-				sub = sub * 10 + (params[i] - '0');
+				sub = sub * 10 + (sz)(params[i] - '0');
 				i++;
 			}
 			if (i < params.len && params[i] == ';') i++;
 			if (sub == 5) {
 				// 38;5;N — 256-color foreground
-				int idx = 0;
+				sz idx = 0;
 				while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-					idx = idx * 10 + (params[i] - '0');
+					idx = idx * 10 + (sz)(params[i] - '0');
 					i++;
 				}
 				if (i < params.len && params[i] == ';') i++;
 				s.fg = color_256((char)idx);
 			} else if (sub == 2) {
 				// 38;2;R;G;B — truecolor foreground
-				int r = 0;
-				int g = 0;
-				int b = 0;
-				for (int ch = 0; ch < 3; ch++) {
-					int v = 0;
+				sz r = 0;
+				sz g = 0;
+				sz b = 0;
+				for (sz ch = 0; ch < 3; ch++) {
+					sz v = 0;
 					while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-						v = v * 10 + (params[i] - '0');
+						v = v * 10 + (sz)(params[i] - '0');
 						i++;
 					}
 					if (i < params.len && params[i] == ';') i++;
@@ -862,30 +862,30 @@ fn Style apply_sgr(String params, Style current) @local {
 		}
 
 		if (val == 48 && i < params.len && params[i] >= '0' && params[i] <= '9') {
-			int sub = 0;
+			sz sub = 0;
 			while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-				sub = sub * 10 + (params[i] - '0');
+				sub = sub * 10 + (sz)(params[i] - '0');
 				i++;
 			}
 			if (i < params.len && params[i] == ';') i++;
 			if (sub == 5) {
 				// 48;5;N — 256-color background
-				int idx = 0;
+				sz idx = 0;
 				while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-					idx = idx * 10 + (params[i] - '0');
+					idx = idx * 10 + (sz)(params[i] - '0');
 					i++;
 				}
 				if (i < params.len && params[i] == ';') i++;
 				s.bg = color_256((char)idx);
 			} else if (sub == 2) {
 				// 48;2;R;G;B — truecolor background
-				int r = 0;
-				int g = 0;
-				int b = 0;
-				for (int ch = 0; ch < 3; ch++) {
-					int v = 0;
+				sz r = 0;
+				sz g = 0;
+				sz b = 0;
+				for (sz ch = 0; ch < 3; ch++) {
+					sz v = 0;
 					while (i < params.len && params[i] >= '0' && params[i] <= '9') {
-						v = v * 10 + (params[i] - '0');
+						v = v * 10 + (sz)(params[i] - '0');
 						i++;
 					}
 					if (i < params.len && params[i] == ';') i++;
@@ -907,7 +907,7 @@ fn Style apply_sgr(String params, Style current) @local {
 	return s;
 }
 
-fn void apply_sgr_code(Style* s, int code) @local {
+fn void apply_sgr_code(Style* s, sz code) @local {
 	switch (code) {
 		case 0: *s = default_style();
 		case 1: s.attrs.bold = true;
@@ -974,16 +974,16 @@ fn void apply_sgr_code(Style* s, int code) @local {
 // fill_rect fills a rectangle in the screen buffer with a space cell using the given style.
 fn void ScreenBuffer.fill_rect(&self, Rect r, Style style) {
 	if (r.w <= 0 || r.h <= 0) return;
-	int x0 = r.x < 0 ? 0 : r.x;
-	int y0 = r.y < 0 ? 0 : r.y;
-	int x1 = r.x + r.w;
-	int y1 = r.y + r.h;
-	if (x1 > (int)self.width) x1 = (int)self.width;
-	if (y1 > (int)self.height) y1 = (int)self.height;
+	sz x0 = r.x < 0 ? 0 : r.x;
+	sz y0 = r.y < 0 ? 0 : r.y;
+	sz x1 = r.x + r.w;
+	sz y1 = r.y + r.h;
+	if (x1 > (sz)self.width) x1 = (sz)self.width;
+	if (y1 > (sz)self.height) y1 = (sz)self.height;
 	if (x0 >= x1 || y0 >= y1) return;
 
-	for (int row = y0; row < y1; row++) {
-		for (int col = x0; col < x1; col++) {
+	for (sz row = y0; row < y1; row++) {
+		for (sz col = x0; col < x1; col++) {
 			self.set_cell((sz)col, (sz)row, new_cell(" ", 1, style));
 		}
 	}
@@ -1094,14 +1094,14 @@ fn Rect ScreenBuffer.draw_border(&self, Rect r, Border b, Style style) {
 	// Top row
 	DString top = dstring::temp();
 	top.append_string(b.top_left);
-	for (int i = 0; i < r.w - 2; i++) top.append_string(b.top);
+	for (sz i = 0; i < r.w - 2; i++) top.append_string(b.top);
 	top.append_string(b.top_right);
 	self.set_string(x0, y0, top.str_view(), style);
 
 	// Bottom row
 	DString bot = dstring::temp();
 	bot.append_string(b.bottom_left);
-	for (int i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
+	for (sz i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
 	bot.append_string(b.bottom_right);
 	self.set_string(x0, y1, bot.str_view(), style);
 
@@ -1122,7 +1122,7 @@ fn Rect ScreenBuffer.draw_border(&self, Rect r, Border b, Style style) {
 // per-channel sRGB lerp dips in lightness mid-ramp and reads as a seam;
 // LUV keeps the ramp even. Non-truecolor endpoints have no RGB to blend,
 // so fall back to picking the nearer end.
-fn Color lerp_color(Color a, Color b, int t, int max_t) @local {
+fn Color lerp_color(Color a, Color b, sz t, sz max_t) @local {
 	if (max_t <= 0) return a;
 	if (a.kind != ColorKind.TRUECOLOR || b.kind != ColorKind.TRUECOLOR) {
 		return t * 2 < max_t ? a : b;
@@ -1138,13 +1138,13 @@ fn Color lerp_color(Color a, Color b, int t, int max_t) @local {
 // text cells keep their foreground but gain the gradient background.
 fn void ScreenBuffer.fill_gradient_v(&self, Rect r, Color c1, Color c2) {
 	if (r.w <= 0 || r.h <= 0) return;
-	int max_t = r.h > 1 ? r.h - 1 : 1;
-	for (int row = 0; row < r.h; row++) {
-		int abs_row = r.y + row;
+	sz max_t = r.h > 1 ? r.h - 1 : 1;
+	for (sz row = 0; row < r.h; row++) {
+		sz abs_row = r.y + row;
 		if (abs_row < 0 || (sz)abs_row >= self.height) continue;
 		Color c = lerp_color(c1, c2, row, max_t);
-		for (int col = 0; col < r.w; col++) {
-			int abs_col = r.x + col;
+		for (sz col = 0; col < r.w; col++) {
+			sz abs_col = r.x + col;
 			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
 			self.cells[(sz)abs_row * self.width + (sz)abs_col].style.bg = c;
 		}
@@ -1162,18 +1162,18 @@ fn void ScreenBuffer.fill_gradient_ellipse(&self, Rect r, Color c1, Color c2, fl
 	if (r.w <= 0 || r.h <= 0) return;
 	float rxi = rx > 0.0f ? 1.0f / rx : 1.0f;
 	float ryi = ry > 0.0f ? 1.0f / ry : 1.0f;
-	for (int row = 0; row < r.h; row++) {
-		int abs_row = r.y + row;
+	for (sz row = 0; row < r.h; row++) {
+		sz abs_row = r.y + row;
 		if (abs_row < 0 || (sz)abs_row >= self.height) continue;
 		float dy = ((float)abs_row - cy) * ryi;
 		sz rowbase = (sz)abs_row * self.width;
-		for (int col = 0; col < r.w; col++) {
-			int abs_col = r.x + col;
+		for (sz col = 0; col < r.w; col++) {
+			sz abs_col = r.x + col;
 			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
 			float dx = ((float)abs_col - cx) * rxi;
 			float t = math::sqrt(dx * dx + dy * dy);
 			if (t > 1.0f) t = 1.0f;
-			self.cells[rowbase + (sz)abs_col].style.bg = lerp_color(c1, c2, (int)(t * 1000.0f), 1000);
+			self.cells[rowbase + (sz)abs_col].style.bg = lerp_color(c1, c2, (sz)(t * 1000.0f), 1000);
 		}
 	}
 }
@@ -1186,25 +1186,25 @@ fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Col
 	sz y0 = (sz)r.y;
 	sz x1 = (sz)(r.x + r.w - 1);
 	sz y1 = (sz)(r.y + r.h - 1);
-	int max_t = r.h > 1 ? r.h - 1 : 1;
+	sz max_t = r.h > 1 ? r.h - 1 : 1;
 
 	// Top row: c1
 	DString top = dstring::temp();
 	top.append_string(b.top_left);
-	for (int i = 0; i < r.w - 2; i++) top.append_string(b.top);
+	for (sz i = 0; i < r.w - 2; i++) top.append_string(b.top);
 	top.append_string(b.top_right);
 	self.set_string(x0, y0, top.str_view(), (Style){ .fg = c1 });
 
 	// Bottom row: c2
 	DString bot = dstring::temp();
 	bot.append_string(b.bottom_left);
-	for (int i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
+	for (sz i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
 	bot.append_string(b.bottom_right);
 	self.set_string(x0, y1, bot.str_view(), (Style){ .fg = c2 });
 
 	// Sides: interpolate per row
 	for (sz row = y0 + 1; row < y1; row++) {
-		Color c = lerp_color(c1, c2, (int)(row - y0), max_t);
+		Color c = lerp_color(c1, c2, (sz)(row - y0), max_t);
 		Style sty = { .fg = c };
 		self.set_string(x0, row, b.left, sty);
 		self.set_string(x1, row, b.right, sty);

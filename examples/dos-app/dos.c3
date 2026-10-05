@@ -13,17 +13,17 @@ import std::io;
 
 // Chrome the layout reserves: the menu bar and status bar are one row each,
 // and the content panel sits inside a one-row, two-column margin.
-const int BAR_ROWS       = 1;
-const int CONTENT_MARGIN = 1;
+const sz BAR_ROWS       = 1;
+const sz CONTENT_MARGIN = 1;
 
-const int TAB_COUNT = 3;
+const sz TAB_COUNT = 3;
 
 struct DosModel {
 	Menu menu;
 	Dialog about;
 	Picker theme_picker;
 	ThemeSet themes;
-	int active_tab;
+	sz active_tab;
 	String status_msg;
 }
 
@@ -40,7 +40,7 @@ fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 
 	self.themes = load_themes();
 	self.theme_picker = new_picker("Color Theme", "  OK  ", "Cancel");
-	for (int i = 0; i < self.themes.count; i++) {
+	for (sz i = 0; i < self.themes.count; i++) {
 		self.theme_picker.add_choice(self.themes.themes[i].name);
 	}
 
@@ -170,7 +170,7 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 	if (k.code == milktea::KeyCode.RUNE) {
 		if (k.rune == 'q') return milktea::quit();
 		if (k.rune >= '1' && k.rune <= '0' + TAB_COUNT) {
-			self.active_tab = (int)(k.rune - '1');
+			self.active_tab = (sz)(k.rune - '1');
 			return null;
 		}
 	}

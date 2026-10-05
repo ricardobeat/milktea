@@ -5,8 +5,8 @@ module nanobots;
 import xray;
 
 struct FxCollapse {
-	int[] stack_top;
-	int fade_start;
+	sz[] stack_top;
+	sz fade_start;
 }
 
 fn FxCollapse* collapse_data(Model* self) => (FxCollapse*)self.fx_state;
@@ -14,10 +14,10 @@ fn FxCollapse* collapse_data(Model* self) => (FxCollapse*)self.fx_state;
 fn void collapse_setup(void* raw) {
 	Model* self = (Model*)raw;
 	FxCollapse* s = mem::new(FxCollapse);
-	s.stack_top = mem::new_array(int, (sz)self.w);
+	s.stack_top = mem::new_array(sz, (sz)self.w);
 	s.fade_start = 0;
-	for (int c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
-	for (int i = 0; i < self.total; i++) {
+	for (sz c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -36,7 +36,7 @@ fn void collapse_setup(void* raw) {
 fn void collapse_step(void* raw) {
 	Model* self = (Model*)raw;
 	FxCollapse* s = collapse_data(self);
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue;
@@ -48,7 +48,7 @@ fn void collapse_step(void* raw) {
 		float max_x = (float)(self.w - 1);
 		if (p.x < 0)     { p.x = 0;     p.vx = -p.vx * 0.4f; }
 		if (p.x > max_x) { p.x = max_x; p.vx = -p.vx * 0.4f; }
-		int c = (int)p.x;
+		sz c = (sz)p.x;
 		if (c < 0) c = 0;
 		if (c >= self.w) c = self.w - 1;
 		p.fall_col = c;

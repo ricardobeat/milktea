@@ -23,8 +23,8 @@ import std::core::mem;
 // has_cursor = false when it is not, rather than relying on paint order.
 interface Content {
 	fn String render(Rect r);
-	fn int measure(int width) @optional;
-	fn int measure_width(int height) @optional;
+	fn sz measure(sz width) @optional;
+	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;
 }
 
@@ -36,13 +36,13 @@ interface Content {
 // 
 // blink alternates on the interval the cursor asked for; a callback that
 // animates on its own clock can ignore it.
-alias DrawCursorFn = fn String(int x, int y, bool blink, String under);
+alias DrawCursorFn = fn String(sz x, sz y, bool blink, String under);
 
 // ClickFn fires when a mouse press lands inside (on_click) or outside
 // (on_click_outside) the node's solved rect. ctx is whatever the caller
 // passed to .on_click()/.on_click_outside() — typically `self` from the
 // component that built the node, cast back on the way in.
-alias ClickFn = fn void(void* ctx, int col, int row);
+alias ClickFn = fn void(void* ctx, sz col, sz row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
@@ -51,7 +51,7 @@ alias ClickFn = fn void(void* ctx, int col, int row);
 // position and the layout supplies the origin. A caret scrolled out of view
 // reports no cursor rather than one clamped to the edge, which would sit on a
 // line it is not on.
-fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = { }) {
+fn ContentCursor place_cursor(Rect text, sz col, sz row, CursorStyle cs = { }) {
 	if (col < 0 || row < 0 || row >= text.h || col >= text.w) return { };
 	return {
 		.x = text.x + col,
@@ -72,11 +72,11 @@ fn ContentCursor place_cursor(Rect text, int col, int row, CursorStyle cs = { })
 // shape is an index into whatever shapes the host defines
 // (milktea::CursorShape); xray does not name them.
 struct CursorStyle {
-	int shape;
+	sz shape;
 	bool blink;
 	String color;
 	DrawCursorFn draw;
-	int blink_ms;
+	sz blink_ms;
 }
 
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
@@ -86,16 +86,16 @@ struct CursorStyle {
 // the given shape and blink. Setting it paints the cursor into the grid
 // instead, and the terminal cursor stays hidden.
 struct ContentCursor {
-	int x;
-	int y;
+	sz x;
+	sz y;
 	bool has_cursor;
 	DrawCursorFn draw;
 	// Milliseconds per blink phase for a drawn cursor. 0 uses the default.
-	int blink_ms;
+	sz blink_ms;
 	// Terminal cursor appearance, used only when draw is null. shape is an
 	// index into whatever shapes the host defines (milktea::CursorShape);
 	// color is a hex string such as "#ff6600", empty for the default.
-	int shape;
+	sz shape;
 	bool blink;
 	String color;
 }
@@ -127,7 +127,7 @@ enum NodeDirection : char {
 	STACK,
 }
 
-const int MAX_NODE_CHILDREN = 32;
+const sz MAX_NODE_CHILDREN = 32;
 
 // Node is one box in a layout tree. It is either a container (children, a
 // direction) or a leaf (content), never usefully both — a node with content
@@ -144,14 +144,14 @@ struct Node {
 	Constraint size_h;
 
 	Node*[MAX_NODE_CHILDREN] children;
-	int child_count;
+	sz child_count;
 
 	NodeDirection direction;
 	JustifyContent justify;
 	AlignItems align;
-	int gap;
+	sz gap;
 
-	int pad_top, pad_right, pad_bottom, pad_left;
+	sz pad_top, pad_right, pad_bottom, pad_left;
 
 	Content content;
 
@@ -163,7 +163,7 @@ struct Node {
 	char alpha_value;
 
 	// Fixed offset inside the parent, used only when pinned (see at()).
-	int offset_x, offset_y;
+	sz offset_x, offset_y;
 	bool pinned;
 
 	// Displacement applied *after* placement, whether that placement came
@@ -171,12 +171,12 @@ struct Node {
 	// not change the node's size, so shifting a node does not stretch its
 	// background — which is what makes it the right primitive for animating
 	// position.
-	int shift_x, shift_y;
+	sz shift_x, shift_y;
 
 	// Milliseconds until this node wants to be painted again, or 0 for
 	// "never on my account". paint collects the smallest non-zero value in
 	// the tree so the runtime can schedule one repaint for all of them.
-	int repaint_ms;
+	sz repaint_ms;
 
 	Rect computed_rect;
 
@@ -263,12 +263,12 @@ fn Node* Node.height(&self, Constraint c) {
 // uses) and only falls back to n when that comes out smaller. Meant for a
 // panel whose natural size should usually win but that would look cramped
 // below some width — a modal with a one-word body, say.
-fn Node* Node.min_width(&self, int n) {
+fn Node* Node.min_width(&self, sz n) {
 	self.size_w = min_fit(n, &node_measure_w, self);
 	return self;
 }
 
-fn Node* Node.min_height(&self, int n) {
+fn Node* Node.min_height(&self, sz n) {
 	self.size_h = min_fit(n, &node_measure_h, self);
 	return self;
 }
@@ -276,7 +276,7 @@ fn Node* Node.min_height(&self, int n) {
 // fill gives this node a share of whatever space is left over on its parent's
 // main axis, weighted against its siblings. Which axis that is depends on the
 // parent, so it sets both and the parent uses the one it lays out along.
-fn Node* Node.fill(&self, int weight) {
+fn Node* Node.fill(&self, sz weight) {
 	self.size_w = fill(weight);
 	self.size_h = fill(weight);
 	return self;
@@ -292,12 +292,12 @@ fn Node* Node.with_align(&self, AlignItems a) {
 	return self;
 }
 
-fn Node* Node.with_gap(&self, int g) {
+fn Node* Node.with_gap(&self, sz g) {
 	self.gap = g;
 	return self;
 }
 
-fn Node* Node.with_padding(&self, int top, int right, int bottom, int left) {
+fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 	self.pad_top = top;
 	self.pad_right = right;
 	self.pad_bottom = bottom;
@@ -327,7 +327,7 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 // 
 // Only meaningful in a stack, where every child gets the parent's whole rect
 // to place itself in; a row or column decides its children's offsets itself.
-fn Node* Node.at(&self, int x, int y) {
+fn Node* Node.at(&self, sz x, sz y) {
 	self.offset_x = x;
 	self.offset_y = y;
 	self.pinned = true;
@@ -354,7 +354,7 @@ fn Node* Node.center(&self) {
 // 
 // The displacement is applied after the child's rect is solved, so it can push
 // a node past its parent's edge; the painter clips whatever lands outside.
-fn Node* Node.offset(&self, int dx, int dy) {
+fn Node* Node.offset(&self, sz dx, sz dy) {
 	self.shift_x = dx;
 	self.shift_y = dy;
 	return self;
@@ -383,7 +383,7 @@ fn Node* Node.alpha(&self, char a) {
 // repaint_after asks the runtime to paint this tree again in ms milliseconds.
 // Content that animates on its own — a border cycling colors — calls this so
 // the app does not have to run a timer for it.
-fn Node* Node.repaint_after(&self, int ms) {
+fn Node* Node.repaint_after(&self, sz ms) {
 	self.repaint_ms = ms;
 	return self;
 }
@@ -409,9 +409,9 @@ fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
 
 fn Rect Node.rect(&self) => self.computed_rect;
 
-fn Rect Node.child_rect(&self, int idx) {
+fn Rect Node.child_rect(&self, sz idx) {
 	if (idx < 0 || idx >= self.child_count) return { };
 	return self.children[idx].computed_rect;
 }
 
-fn int Node.count(&self) => self.child_count;
+fn sz Node.count(&self) => self.child_count;

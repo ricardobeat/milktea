@@ -9,7 +9,7 @@ import std::core::dstring;
 const int MSG_SPIN = 1;
 
 struct SpinnerModel {
-	int frame;
+	sz frame;
 }
 
 fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {

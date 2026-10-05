@@ -9,7 +9,7 @@ import boba;
 // Fixed is test content of a known size that records the rect it was rendered
 // at, so a test can assert on layout without parsing the painted output.
 struct Fixed (xray::Content) {
-	int w, h;
+	sz w, h;
 	String fill;
 	xray::Rect got;
 	bool want_cursor;
@@ -18,22 +18,22 @@ struct Fixed (xray::Content) {
 fn String Fixed.render(&self, xray::Rect r) @dynamic {
 	self.got = r;
 	DString out = dstring::temp();
-	for (int y = 0; y < r.h; y++) {
+	for (sz y = 0; y < r.h; y++) {
 		if (y > 0) out.append_char('\n');
-		for (int x = 0; x < r.w; x++) out.append_string(self.fill);
+		for (sz x = 0; x < r.w; x++) out.append_string(self.fill);
 	}
 	return out.str_view();
 }
 
-fn int Fixed.measure(&self, int width) @dynamic => self.h;
-fn int Fixed.measure_width(&self, int height) @dynamic => self.w;
+fn sz Fixed.measure(&self, sz width) @dynamic => self.h;
+fn sz Fixed.measure_width(&self, sz height) @dynamic => self.w;
 
 fn xray::ContentCursor Fixed.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.want_cursor) return { };
 	return { .x = r.x + 1, .y = r.y + 2, .has_cursor = true };
 }
 
-fn Fixed* fixed(int w, int h, String fill = "x") {
+fn Fixed* fixed(sz w, sz h, String fill = "x") {
 	Fixed* f = mem::tnew(Fixed);
 	f.w = w;
 	f.h = h;
@@ -204,7 +204,7 @@ fn void test_invisible_node_still_requests_repaint() @test {
 	assert(res.repaint_ms == 16, "invisible node's repaint survives, got %d", res.repaint_ms);
 	xray::Cell* c = sb.cell_at(1, 1);
 	assert(c.content[0] == ' ' && c.style.bg.kind != xray::ColorKind.TRUECOLOR,
-		"alpha 0 painted nothing, bg=%d", (int)c.style.bg.kind);
+		"alpha 0 painted nothing, bg=%d", (sz)c.style.bg.kind);
 }
 
 fn void test_natural_height_sums_children() @test {
@@ -509,10 +509,10 @@ fn void test_offset_in_a_column_leaves_siblings_alone() @test {
 fn void test_shadow_fades_with_node_alpha() @test {
 	// Same tree twice, once opaque and once half-faded, comparing the shadow
 	// cell just outside the node's own rect.
-	int[2] alphas = { 255, 128 };
-	int[2] darkness;
+	sz[2] alphas = { 255, 128 };
+	sz[2] darkness;
 
-	for (int k = 0; k < 2; k++) {
+	for (sz k = 0; k < 2; k++) {
 		Fixed* f = fixed(6, 2);
 		xray::Node* n = xray::content_node(f).width(xray::cells(6)).height(xray::cells(2)).at(1, 1)
 			.shadow(xray::shadow(1, 1, 255, 0).with_color(xray::color_rgb(0, 0, 0)));
@@ -537,7 +537,7 @@ fn void test_shadow_fades_with_node_alpha() @test {
 		// (7,3) is inside the shadow (node spans x 1..6, y 1..2; shadow is
 		// offset by 1) and outside the node itself.
 		xray::Cell* shade = sb.cell_at(7, 3);
-		darkness[k] = 255 - (int)shade.style.bg.r;
+		darkness[k] = 255 - (sz)shade.style.bg.r;
 	}
 
 	assert(darkness[0] > 0, "opaque node casts a shadow (got %d)", darkness[0]);
@@ -567,7 +567,7 @@ fn void test_shadow_unaffected_by_unset_alpha() @test {
 	sb.paint(r);
 
 	xray::Cell* shade = sb.cell_at(7, 3);
-	assert(shade.style.bg.r < 100, "unset alpha leaves the shadow at full strength, got r=%d", (int)shade.style.bg.r);
+	assert(shade.style.bg.r < 100, "unset alpha leaves the shadow at full strength, got r=%d", (sz)shade.style.bg.r);
 }
 // A blurred shadow fades out over its blur radius: darkest against the panel,
 // gone by the far edge of the fringe, and never darkening on the way out. The
@@ -589,12 +589,12 @@ fn void test_blurred_shadow_fades_out() @test {
 	}
 	sb.paint(r);
 
-	int core = (int)sb.cell_at(6, 4).style.bg.r;
+	sz core = (sz)sb.cell_at(6, 4).style.bg.r;
 	assert(core < 100, "the shadow core is dark, got %d", core);
 
-	int prev = core;
+	sz prev = core;
 	for (sz y = 5; y <= 9; y++) {
-		int v = (int)sb.cell_at(6, y).style.bg.r;
+		sz v = (sz)sb.cell_at(6, y).style.bg.r;
 		assert(v >= prev, "the fringe never darkens on the way out: %d then %d", prev, v);
 		prev = v;
 	}
@@ -622,13 +622,13 @@ fn void test_half_block_shadow_doubles_vertical_resolution() @test {
 
 	// A split cell carries two colours, so the gradient passes through a value
 	// between the ones its neighbours could reach on their own.
-	int splits = 0;
+	sz splits = 0;
 	for (sz y = 4; y <= 9; y++) {
 		xray::Cell* c = sb.cell_at(6, y);
 		if (c.content_str() != "▀") continue;
 		splits++;
 		assert(c.style.fg.r
-			!= c.style.bg.r, "a split cell's halves differ, got %d twice at row %d", (int)c.style.fg.r, y);
+			!= c.style.bg.r, "a split cell's halves differ, got %d twice at row %d", (sz)c.style.fg.r, y);
 	}
 	assert(splits > 0, "the fringe uses half blocks, got %d split cells", splits);
 }
@@ -680,8 +680,8 @@ fn void test_shadow_corners_are_rounded() @test {
 
 	// The shadow's rect is x6..13, y4..6. Two cells out from the bottom edge is
 	// darker than two cells out diagonally past the corner.
-	int below  = 255 - (int)sb.cell_at(10, 8).style.bg.r;
-	int corner = 255 - (int)sb.cell_at(15, 8).style.bg.r;
+	sz below  = 255 - (sz)sb.cell_at(10, 8).style.bg.r;
+	sz corner = 255 - (sz)sb.cell_at(15, 8).style.bg.r;
 	assert(below > 0, "the fringe reaches below the shadow, got %d", below);
 	assert(corner < below, "the corner fades faster than the edge: corner=%d edge=%d", corner, below);
 }

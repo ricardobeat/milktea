@@ -166,10 +166,10 @@ fn double Tween.value(&self) {
 
 // lerp interpolates between two ints by this tween's current value, rounding
 // to nearest. Handy for a slide: `t.lerp(start_y, target_y)`.
-fn int Tween.lerp(&self, int from, int to) {
+fn sz Tween.lerp(&self, sz from, sz to) {
 	double v   = self.value();
 	double out = (double)from + ((double)to - (double)from) * v;
-	return (int)(out < 0.0 ? out - 0.5 : out + 0.5);
+	return (sz)(out < 0.0 ? out - 0.5 : out + 0.5);
 }
 
 // lerpf interpolates between two doubles by this tween's current value.
@@ -193,6 +193,6 @@ fn char Tween.alpha(&self) {
 	double v = self.value();
 	if (v <= 0.0) return 0;
 	if (v >= 1.0) return 255;
-	int a = 1 + (int)(254.0 * v + 0.5);
+	sz a = 1 + (sz)(254.0 * v + 0.5);
 	return (char)a;
 }

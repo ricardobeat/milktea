@@ -67,17 +67,17 @@ struct Voxel {
 	char b;
 }
 
-const int MAX_VOXELS = 32768;
+const sz MAX_VOXELS = 32768;
 
 // ── GLB geometry ─────────────────────────────────────────────────────────────
 
 struct GlbModel {
 	Voxel[MAX_VOXELS] voxels;
-	int voxel_count;
-	int width;
-	int height;
-	int frame;
-	int[MAX_VOXELS] last_visible;
+	sz voxel_count;
+	sz width;
+	sz height;
+	sz frame;
+	sz[MAX_VOXELS] last_visible;
 	xray::Cell[] cells;
 	Pixel[] pixels;
 	Pixel[] prev_pixels;
@@ -94,20 +94,20 @@ struct GlbModel {
 faultdef GLB_OPEN_FAILED, GLB_BAD_MAGIC, GLB_JSON_ERROR, GLB_MESH_NOT_FOUND;
 
 struct AccessorInfo {
-	int bv_index;
-	int byte_offset;
-	int count;
-	int component_type;
-	int num_components;
+	sz bv_index;
+	sz byte_offset;
+	sz count;
+	sz component_type;
+	sz num_components;
 }
 
 struct BufferViewInfo {
-	int byte_offset;
-	int byte_length;
-	int byte_stride;
+	sz byte_offset;
+	sz byte_length;
+	sz byte_stride;
 }
 
-fn int components_for_type(char* type_str) {
+fn sz components_for_type(char* type_str) {
 	if (type_str[0] == 'S') return 1;
 	if (type_str[0] == 'V' && type_str[3] == '2') return 2;
 	if (type_str[0] == 'V' && type_str[3] == '3') return 3;
@@ -127,8 +127,8 @@ fn float read_f32(char* buf, sz offset) {
 	return f;
 }
 
-fn void parse_accessor(stb_json::Cursor* accessors_arr, int idx, AccessorInfo* out) {
-	stb_json::Cursor acc = stb_json::stbj_move_cursor_index(accessors_arr, idx);
+fn void parse_accessor(stb_json::Cursor* accessors_arr, sz idx, AccessorInfo* out) {
+	stb_json::Cursor acc = stb_json::stbj_move_cursor_index(accessors_arr, (int)idx);
 	out.bv_index = stb_json::stbj_read_int_name(&acc, "bufferView", -1);
 	out.byte_offset = stb_json::stbj_read_int_name(&acc, "byteOffset", 0);
 	out.count = stb_json::stbj_read_int_name(&acc, "count", 0);
@@ -148,8 +148,8 @@ fn void parse_accessor(stb_json::Cursor* accessors_arr, int idx, AccessorInfo* o
 	}
 }
 
-fn void parse_bufview(stb_json::Cursor* bvs_arr, int idx, BufferViewInfo* out) {
-	stb_json::Cursor bv = stb_json::stbj_move_cursor_index(bvs_arr, idx);
+fn void parse_bufview(stb_json::Cursor* bvs_arr, sz idx, BufferViewInfo* out) {
+	stb_json::Cursor bv = stb_json::stbj_move_cursor_index(bvs_arr, (int)idx);
 	out.byte_offset = stb_json::stbj_read_int_name(&bv, "byteOffset", 0);
 	out.byte_length = stb_json::stbj_read_int_name(&bv, "byteLength", 0);
 	out.byte_stride = stb_json::stbj_read_int_name(&bv, "byteStride", 0);
@@ -177,14 +177,14 @@ fn GlbModel*? load_glb(String path) {
 	}
 
 	stb_json::Cursor meshes = stb_json::stbj_move_cursor_name(&root, "meshes");
-	stb_json::Cursor mesh0  = stb_json::stbj_move_cursor_index(&meshes, 0);
+	stb_json::Cursor mesh0  = stb_json::stbj_move_cursor_index(&meshes, (int)0);
 	stb_json::Cursor prims  = stb_json::stbj_move_cursor_name(&mesh0, "primitives");
-	stb_json::Cursor prim0  = stb_json::stbj_move_cursor_index(&prims, 0);
+	stb_json::Cursor prim0  = stb_json::stbj_move_cursor_index(&prims, (int)0);
 	stb_json::Cursor attrs  = stb_json::stbj_move_cursor_name(&prim0, "attributes");
 
-	int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
-	int uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
-	int idx_acc_idx = stb_json::stbj_read_int_name(&prim0, "indices", -1);
+	sz pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
+	sz uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
+	sz idx_acc_idx = stb_json::stbj_read_int_name(&prim0, "indices", -1);
 
 	if (pos_acc_idx < 0 || idx_acc_idx < 0) return GLB_MESH_NOT_FOUND~;
 
@@ -224,7 +224,7 @@ fn GlbModel*? load_glb(String path) {
 	float max_y = -1e9f;
 	float min_z =  1e9f;
 	float max_z = -1e9f;
-	for (int i = 0; i < pos_acc.count; i++) {
+	for (sz i = 0; i < pos_acc.count; i++) {
 		sz base = pos_base + (sz)i * pos_stride;
 		float x = read_f32(bin, base);
 		float y = read_f32(bin, base + 4);
@@ -241,15 +241,15 @@ fn GlbModel*? load_glb(String path) {
 	float center_z = (min_z + max_z) / 2.0f;
 
 	// Allocate occupancy grid
-	int gx0        = (int)(min_x - center_x) - 1;
-	int gy0        = (int)(min_y - center_y) - 1;
-	int gz0        = (int)(min_z - center_z) - 1;
-	int gx1        = (int)(max_x - center_x) + 2;
-	int gy1        = (int)(max_y - center_y) + 2;
-	int gz1        = (int)(max_z - center_z) + 2;
-	int gdx        = gx1 - gx0;
-	int gdy        = gy1 - gy0;
-	int gdz        = gz1 - gz0;
+	sz gx0        = (sz)(min_x - center_x) - 1;
+	sz gy0        = (sz)(min_y - center_y) - 1;
+	sz gz0        = (sz)(min_z - center_z) - 1;
+	sz gx1        = (sz)(max_x - center_x) + 2;
+	sz gy1        = (sz)(max_y - center_y) + 2;
+	sz gz1        = (sz)(max_z - center_z) + 2;
+	sz gdx        = gx1 - gx0;
+	sz gdy        = gy1 - gy0;
+	sz gdz        = gz1 - gz0;
 	sz grid_size   = (sz)(gdx * gdy * gdz);
 	bool* occupied = mem::new_array(bool, grid_size);
 	char* colors   = mem::new_array(char, grid_size * 3);
@@ -257,18 +257,18 @@ fn GlbModel*? load_glb(String path) {
 	defer mem::free(colors);
 
 	// Voxelize: snap each triangle centroid to integer grid
-	int tri_count = idx_acc.count / 3;
-	for (int ti = 0; ti < tri_count; ti++) {
-		int i0, i1, i2;
+	sz tri_count = idx_acc.count / 3;
+	for (sz ti = 0; ti < tri_count; ti++) {
+		sz i0, i1, i2;
 		if (idx32) {
-			i0 = (int)read_u32(bin, idx_base + (sz)ti * 12);
-			i1 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 4);
-			i2 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 8);
+			i0 = (sz)read_u32(bin, idx_base + (sz)ti * 12);
+			i1 = (sz)read_u32(bin, idx_base + (sz)ti * 12 + 4);
+			i2 = (sz)read_u32(bin, idx_base + (sz)ti * 12 + 8);
 		} else {
 			char* p = bin + idx_base + (sz)ti * 6;
-			i0 = (int)((uint)p[0] | ((uint)p[1] << 8));
-			i1 = (int)((uint)p[2] | ((uint)p[3] << 8));
-			i2 = (int)((uint)p[4] | ((uint)p[5] << 8));
+			i0 = (sz)((uint)p[0] | ((uint)p[1] << 8));
+			i1 = (sz)((uint)p[2] | ((uint)p[3] << 8));
+			i2 = (sz)((uint)p[4] | ((uint)p[5] << 8));
 		}
 
 		sz b0 = pos_base + (sz)i0 * pos_stride;
@@ -279,9 +279,9 @@ fn GlbModel*? load_glb(String path) {
 		float cy3 = (read_f32(bin, b0 + 4) + read_f32(bin, b1 + 4) + read_f32(bin, b2 + 4)) / 3.0f - center_y;
 		float cz3 = (read_f32(bin, b0 + 8) + read_f32(bin, b1 + 8) + read_f32(bin, b2 + 8)) / 3.0f - center_z;
 
-		int gx = (int)(cx3 + 0.5f) - gx0;
-		int gy = (int)(cy3 + 0.5f) - gy0;
-		int gz = (int)(cz3 + 0.5f) - gz0;
+		sz gx = (sz)(cx3 + 0.5f) - gx0;
+		sz gy = (sz)(cy3 + 0.5f) - gy0;
+		sz gz = (sz)(cz3 + 0.5f) - gz0;
 
 		if (gx < 0 || gx >= gdx || gy < 0 || gy >= gdy || gz < 0 || gz >= gdz) continue;
 		sz gidx = (sz)(gx + gy * gdx + gz * gdx * gdy);
@@ -304,9 +304,9 @@ fn GlbModel*? load_glb(String path) {
 	}
 
 	// 6 face directions
-	int[6] nox   = { 0, 0, 0, 0, 1, -1 };
-	int[6] noy   = { 0, 0, 1, -1, 0, 0 };
-	int[6] noz   = { 1, -1, 0, 0, 0, 0 };
+	sz[6] nox   = { 0, 0, 0, 0, 1, -1 };
+	sz[6] noy   = { 0, 0, 1, -1, 0, 0 };
+	sz[6] noz   = { 1, -1, 0, 0, 0, 0 };
 	float[6] fnx = { 0, 0, 0, 0, 1, -1 };
 	float[6] fny = { 1, -1, 0, 0, 0, 0 };
 	float[6] fnz = { 0, 0, 1, -1, 0, 0 };
@@ -332,9 +332,9 @@ fn GlbModel*? load_glb(String path) {
 	GlbModel* model = mem::new(GlbModel);
 	model.voxel_count = 0;
 
-	for (int igz = 0; igz < gdz; igz++) {
-		for (int igy = 0; igy < gdy; igy++) {
-			for (int igx = 0; igx < gdx; igx++) {
+	for (sz igz = 0; igz < gdz; igz++) {
+		for (sz igy = 0; igy < gdy; igy++) {
+			for (sz igx = 0; igx < gdx; igx++) {
 				sz gidx = (sz)(igx + igy * gdx + igz * gdx * gdy);
 				if (!occupied[gidx]) continue;
 
@@ -346,10 +346,10 @@ fn GlbModel*? load_glb(String path) {
 				char cg2 = colors[gidx * 3 + 1];
 				char cb  = colors[gidx * 3 + 2];
 
-				for (int f = 0; f < 6; f++) {
-					int nx3        = igx + nox[f];
-					int ny3        = igy + noy[f];
-					int nz3        = igz + noz[f];
+				for (sz f = 0; f < 6; f++) {
+					sz nx3        = igx + nox[f];
+					sz ny3        = igy + noy[f];
+					sz nz3        = igz + noz[f];
 					bool neighbour = false;
 					if (nx3 >= 0 && nx3 < gdx && ny3 >= 0 && ny3 < gdy && nz3 >= 0 && nz3 < gdz) {
 						neighbour = occupied[(sz)(nx3 + ny3 * gdx + nz3 * gdx * gdy)];
@@ -389,10 +389,10 @@ enum AppMode {
 
 struct App {
 	AppMode mode;
-	int width;
-	int height;
-	int frame;
-	int key_tick;
+	sz width;
+	sz height;
+	sz frame;
+	sz key_tick;
 	int sound_pid;
 
 	// PNG image data
@@ -427,7 +427,7 @@ fn xray::Cell[] App.ensure_cells(&self, sz needed) {
 }
 
 fn void App.play_sound(App* self) {
-	int pid = fork();
+	sz pid = fork();
 	if (pid == 0) {
 		char[512] sh_cmd;
 		char* p   = &sh_cmd;
@@ -476,7 +476,7 @@ fn void App.play_sound(App* self) {
 		argv[3] = null;
 		execvp(&sh_cmd, &argv);
 	} else if (pid > 0) {
-		self.sound_pid = pid;
+		self.sound_pid = (int)pid;
 	}
 }
 
@@ -628,15 +628,15 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn int clamp_color(int v) {
+fn sz clamp_color(sz v) {
 	if (v < 0) return 0;
 	if (v > 255) return 255;
 	return v;
 }
 
 fn milktea::View App.view(App* self) @dynamic {
-	int w = self.width;
-	int h = self.height;
+	sz w = self.width;
+	sz h = self.height;
 	if (w < 2) w = 80;
 	if (h < 2) h = 24;
 
@@ -645,21 +645,21 @@ fn milktea::View App.view(App* self) @dynamic {
 		xray::Cell[] cells = self.ensure_cells((sz)(w * h));
 
 		xray::Style base_style = xray::default_style();
-		int pixel_rows         = h * 2;
+		sz pixel_rows         = h * 2;
 
-		for (int y = 0; y < h; y++) {
-			for (int x = 0; x < w; x++) {
+		for (sz y = 0; y < h; y++) {
+			for (sz x = 0; x < w; x++) {
 				// Map terminal cell to image pixel (nearest-neighbor scaling)
-				int img_px     = (int)((double)x / (double)w * (double)self.img_w);
-				int img_py_top = (int)((double)(y * 2) / (double)pixel_rows * (double)self.img_h);
-				int img_py_bot = (int)((double)(y * 2 + 1) / (double)pixel_rows * (double)self.img_h);
+				sz img_px     = (sz)((double)x / (double)w * (double)self.img_w);
+				sz img_py_top = (sz)((double)(y * 2) / (double)pixel_rows * (double)self.img_h);
+				sz img_py_bot = (sz)((double)(y * 2 + 1) / (double)pixel_rows * (double)self.img_h);
 
-				if (img_px >= self.img_w) img_px = self.img_w - 1;
-				if (img_py_top >= self.img_h) img_py_top = self.img_h - 1;
-				if (img_py_bot >= self.img_h) img_py_bot = self.img_h - 1;
+				if (img_px >= (sz)self.img_w) img_px = (sz)self.img_w - 1;
+				if (img_py_top >= (sz)self.img_h) img_py_top = (sz)self.img_h - 1;
+				if (img_py_bot >= (sz)self.img_h) img_py_bot = (sz)self.img_h - 1;
 
-				int top_idx = (img_py_top * self.img_w + img_px) * 3;
-				int bot_idx = (img_py_bot * self.img_w + img_px) * 3;
+				sz top_idx = (img_py_top * self.img_w + img_px) * 3;
+				sz bot_idx = (img_py_bot * self.img_w + img_px) * 3;
 
 				char tr  = self.img_data[top_idx];
 				char tg  = self.img_data[top_idx + 1];
@@ -690,7 +690,7 @@ fn milktea::View App.view(App* self) @dynamic {
 		self.model.cam_yaw = self.cam_yaw;
 		self.model.cam_pitch = self.cam_pitch;
 
-		int ph    = h * 2;
+		sz ph    = h * 2;
 		sz ptotal = (sz)(w * ph);
 
 		for (sz i = 0; i < ptotal; i++) {
@@ -715,9 +715,9 @@ fn milktea::View App.view(App* self) @dynamic {
 		light_y /= light_len;
 		light_z /= light_len;
 
-		int cur_frame = self.model.frame;
+		sz cur_frame = self.model.frame;
 
-		for (int v = 0; v < self.model.voxel_count; v++) {
+		for (sz v = 0; v < self.model.voxel_count; v++) {
 			Vec3 p = self.model.voxels[v].pos;
 			Vec3 n = self.model.voxels[v].normal;
 
@@ -773,7 +773,7 @@ fn milktea::View App.view(App* self) @dynamic {
 
 			float[4] cu = { -1, -1, 1, 1 };
 			float[4] cv = { -1, 1, -1, 1 };
-			for (int ci = 0; ci < 4; ci++) {
+			for (sz ci = 0; ci < 4; ci++) {
 				float cx3 = p.x + cu[ci] * tu.x + cv[ci] * tv.x;
 				float cy3 = p.y + cu[ci] * tu.y + cv[ci] * tv.y;
 				float cz3 = p.z + cu[ci] * tu.z + cv[ci] * tv.z;
@@ -826,10 +826,10 @@ fn milktea::View App.view(App* self) @dynamic {
 			char pg = (char)((float)self.model.voxels[v].g * brightness * cg);
 			char pb = (char)((float)self.model.voxels[v].b * brightness * cb);
 
-			int x0 = (int)min_sx;
-			int x1 = (int)max_sx;
-			int y0 = (int)min_sy;
-			int y1 = (int)max_sy;
+			sz x0 = (sz)min_sx;
+			sz x1 = (sz)max_sx;
+			sz y0 = (sz)min_sy;
+			sz y1 = (sz)max_sy;
 			if (x0 == x1) {
 				x0--;
 				x1++;
@@ -839,9 +839,9 @@ fn milktea::View App.view(App* self) @dynamic {
 				y1++;
 			}
 
-			for (int py = y0; py <= y1; py++) {
+			for (sz py = y0; py <= y1; py++) {
 				if (py < 0 || py >= ph) continue;
-				for (int px = x0; px <= x1; px++) {
+				for (sz px = x0; px <= x1; px++) {
 					if (px < 0 || px >= w) continue;
 					sz idx = (sz)(py * w + px);
 					if (p.z < self.model.depth[idx]) {
@@ -853,20 +853,20 @@ fn milktea::View App.view(App* self) @dynamic {
 		}
 
 		// AA pass
-		int[4] adx = { 1, -1, 0, 0 };
-		int[4] ady = { 0, 0, 1, -1 };
-		for (int py = 0; py < ph; py++) {
-			for (int px = 0; px < w; px++) {
+		sz[4] adx = { 1, -1, 0, 0 };
+		sz[4] ady = { 0, 0, 1, -1 };
+		for (sz py = 0; py < ph; py++) {
+			for (sz px = 0; px < w; px++) {
 				sz idx = (sz)(py * w + px);
 				if (self.model.depth[idx] < 999.0f) continue;
 
 				float sum_r = 0.0f;
 				float sum_g = 0.0f;
 				float sum_b = 0.0f;
-				int count   = 0;
-				for (int d = 0; d < 4; d++) {
-					int nx = px + adx[d];
-					int ny = py + ady[d];
+				sz count   = 0;
+				for (sz d = 0; d < 4; d++) {
+					sz nx = px + adx[d];
+					sz ny = py + ady[d];
 					if (nx < 0 || nx >= w || ny < 0 || ny >= ph) continue;
 					sz nidx = (sz)(ny * w + nx);
 					if (self.model.depth[nidx] >= 999.0f) continue;
@@ -893,17 +893,17 @@ fn milktea::View App.view(App* self) @dynamic {
 			Pixel cur  = self.model.pixels[i];
 			Pixel prev = self.model.prev_pixels[i];
 			self.model.pixels[i] = (Pixel) {
-				(char)((int)cur.r * 4 / 5 + (int)prev.r / 5),
-				(char)((int)cur.g * 4 / 5 + (int)prev.g / 5),
-				(char)((int)cur.b * 4 / 5 + (int)prev.b / 5),
+				(char)((sz)cur.r * 4 / 5 + (sz)prev.r / 5),
+				(char)((sz)cur.g * 4 / 5 + (sz)prev.g / 5),
+				(char)((sz)cur.b * 4 / 5 + (sz)prev.b / 5),
 			};
 		}
 		mem::copy(self.model.prev_pixels.ptr, self.model.pixels.ptr, ptotal * Pixel::size);
 
 		// Combine into half-block cells
 		for (sz i = 0; i < (sz)(w * h); i++) self.model.cells[i] = xray::empty_cell();
-		for (int ty = 0; ty < h; ty++) {
-			for (int tx = 0; tx < w; tx++) {
+		for (sz ty = 0; ty < h; ty++) {
+			for (sz tx = 0; tx < w; tx++) {
 				sz top_idx      = (sz)((ty * 2) * w + tx);
 				sz bot_idx      = (sz)((ty * 2 + 1) * w + tx);
 				bool top_filled = self.model.depth[top_idx] < 999.0f;
@@ -929,8 +929,8 @@ fn milktea::View App.view(App* self) @dynamic {
 	for (sz i = 0; i < (sz)(w * h); i++) cells[i] = xray::empty_cell();
 	String msg    = "Loading...";
 	xray::Cell lc = xray::new_cell(msg, (char)msg.len, txt_style);
-	int start_x   = (w - (int)msg.len) / 2;
-	if (start_x >= 0 && start_x + (int)msg.len <= w) {
+	sz start_x   = (w - (sz)msg.len) / 2;
+	if (start_x >= 0 && start_x + (sz)msg.len <= w) {
 		for (sz i = 0; i < msg.len; i++) {
 			cells[(sz)(h / 2) * w + (sz)(start_x) + i] = xray::new_cell(msg[i:1], 1, txt_style);
 		}

@@ -13,8 +13,8 @@ fn int main(String[] args) {
 	// Parse --debug and --profile flags from args
 	bool debug       = false;
 	bool memprofile  = false;
-	int script_idx   = 1;
-	for (int i = 1; i < args.len; i++) {
+	sz script_idx   = 1;
+	for (sz i = 1; i < args.len; i++) {
 		if (args[i] == "--debug") {
 			debug = true;
 		} else if (args[i] == "--profile") {

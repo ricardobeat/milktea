@@ -90,8 +90,8 @@ fn WinSize get_window_size() {
 // at all. Exact outer-terminal values need DCS passthrough, which is not
 // attempted here.
 
-int g_cell_w_px = 0;
-int g_cell_h_px = 0;
+sz g_cell_w_px = 0;
+sz g_cell_h_px = 0;
 bool g_cell_px_known = false;
 bool g_tgp_replied = false;
 
@@ -107,7 +107,7 @@ bool g_term_bg_known = false;
 // startup; keep it small.
 const sz PROBE_TIMEOUT_MS = 150;
 
-fn void report_cell_size_reply(int height, int width) {
+fn void report_cell_size_reply(sz height, sz width) {
 	if (height <= 0 || width <= 0) return;
 	g_cell_h_px = height;
 	g_cell_w_px = width;

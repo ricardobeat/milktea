@@ -5,7 +5,7 @@ import glaze;
 import std::io;
 
 struct TabsModel {
-	int active_tab;
+	sz active_tab;
 }
 
 fn milktea::Cmd TabsModel.init(TabsModel* self) @dynamic {
@@ -59,7 +59,7 @@ fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
 		.align(glaze::Position.LEFT, glaze::Position.TOP);
 
 	String[3] tab_views;
-	for (int i = 0; i < 3; i++) {
+	for (sz i = 0; i < 3; i++) {
 		tab_views[i] = i == self.active_tab
 			? active_style.render(TAB_NAMES[i])
 			: inactive_style.render(TAB_NAMES[i]);

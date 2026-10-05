@@ -34,15 +34,15 @@ struct Triangle {
 	char b;
 }
 
-const int MAX_TRIANGLES = 65536;
-const int MAX_MATERIALS = 128;
+const sz MAX_TRIANGLES = 65536;
+const sz MAX_MATERIALS = 128;
 
 struct GlbModel {
 	Triangle[MAX_TRIANGLES] triangles;
-	int triangle_count;
-	int width;
-	int height;
-	int frame;
+	sz triangle_count;
+	sz width;
+	sz height;
+	sz frame;
 	Pixel[] pixels;
 	float[] depth;
 	Cell[] view_cells; // owned by the model; the View borrows it after view() returns
@@ -60,16 +60,16 @@ struct GlbModel {
 faultdef GLB_OPEN_FAILED, GLB_BAD_MAGIC, GLB_JSON_ERROR;
 
 struct AccessorInfo {
-	int bv_index;
-	int byte_offset;
-	int count;
-	int component_type;
+	sz bv_index;
+	sz byte_offset;
+	sz count;
+	sz component_type;
 }
 
 struct BufferViewInfo {
-	int byte_offset;
-	int byte_length;
-	int byte_stride;
+	sz byte_offset;
+	sz byte_length;
+	sz byte_stride;
 }
 
 fn uint read_u32(char* buf, sz offset) {
@@ -84,16 +84,16 @@ fn float read_f32(char* buf, sz offset) {
 	return f;
 }
 
-fn void parse_accessor(stb_json::Cursor* accessors_arr, int idx, AccessorInfo* out) {
-	stb_json::Cursor acc = stb_json::stbj_move_cursor_index(accessors_arr, idx);
+fn void parse_accessor(stb_json::Cursor* accessors_arr, sz idx, AccessorInfo* out) {
+	stb_json::Cursor acc = stb_json::stbj_move_cursor_index(accessors_arr, (int)idx);
 	out.bv_index = stb_json::stbj_read_int_name(&acc, "bufferView", -1);
 	out.byte_offset = stb_json::stbj_read_int_name(&acc, "byteOffset", 0);
 	out.count = stb_json::stbj_read_int_name(&acc, "count", 0);
 	out.component_type = stb_json::stbj_read_int_name(&acc, "componentType", 5126);
 }
 
-fn void parse_bufview(stb_json::Cursor* bvs_arr, int idx, BufferViewInfo* out) {
-	stb_json::Cursor bv = stb_json::stbj_move_cursor_index(bvs_arr, idx);
+fn void parse_bufview(stb_json::Cursor* bvs_arr, sz idx, BufferViewInfo* out) {
+	stb_json::Cursor bv = stb_json::stbj_move_cursor_index(bvs_arr, (int)idx);
 	out.byte_offset = stb_json::stbj_read_int_name(&bv, "byteOffset", 0);
 	out.byte_length = stb_json::stbj_read_int_name(&bv, "byteLength", 0);
 	out.byte_stride = stb_json::stbj_read_int_name(&bv, "byteStride", 0);
@@ -119,7 +119,7 @@ fn GlbModel*? load_glb(String path) {
 	if (stb_json::stbj_any_error(&root) != 0) return GLB_JSON_ERROR~;
 
 	stb_json::Cursor meshes = stb_json::stbj_move_cursor_name(&root, "meshes");
-	int mesh_count = stb_json::stbj_count_values(&meshes);
+	sz mesh_count = stb_json::stbj_count_values(&meshes);
 
 	stb_json::Cursor accessors = stb_json::stbj_move_cursor_name(&root, "accessors");
 	stb_json::Cursor bvs       = stb_json::stbj_move_cursor_name(&root, "bufferViews");
@@ -127,12 +127,12 @@ fn GlbModel*? load_glb(String path) {
 	// Parse materials
 	char[MAX_MATERIALS * 3] mat_color;
 	char[MAX_MATERIALS] mat_present;
-	for (int mi = 0; mi < MAX_MATERIALS; mi++) mat_present[mi] = (char)0;
+	for (sz mi = 0; mi < MAX_MATERIALS; mi++) mat_present[mi] = (char)0;
 	stb_json::Cursor materials = stb_json::stbj_move_cursor_name(&root, "materials");
-	int mat_count = stb_json::stbj_count_values(&materials);
+	sz mat_count = stb_json::stbj_count_values(&materials);
 	if (mat_count > MAX_MATERIALS) mat_count = MAX_MATERIALS;
-	for (int mi = 0; mi < mat_count; mi++) {
-		stb_json::Cursor mat = stb_json::stbj_move_cursor_index(&materials, mi);
+	for (sz mi = 0; mi < mat_count; mi++) {
+		stb_json::Cursor mat = stb_json::stbj_move_cursor_index(&materials, (int)mi);
 		stb_json::Cursor pbr = stb_json::stbj_move_cursor_name(&mat, "pbrMetallicRoughness");
 		if (stb_json::stbj_any_error(&pbr) != 0) {
 			mat_color[mi * 3] = (char)255;
@@ -160,14 +160,14 @@ fn GlbModel*? load_glb(String path) {
 	float min_y = 1e9f; float max_y = -1e9f;
 	float min_z = 1e9f; float max_z = -1e9f;
 
-	for (int mi = 0; mi < mesh_count; mi++) {
-		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, mi);
+	for (sz mi = 0; mi < mesh_count; mi++) {
+		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, (int)mi);
 		stb_json::Cursor prims = stb_json::stbj_move_cursor_name(&mesh, "primitives");
-		int prim_count = stb_json::stbj_count_values(&prims);
-		for (int pi = 0; pi < prim_count; pi++) {
-			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, pi);
+		sz prim_count = stb_json::stbj_count_values(&prims);
+		for (sz pi = 0; pi < prim_count; pi++) {
+			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, (int)pi);
 			stb_json::Cursor attrs = stb_json::stbj_move_cursor_name(&prim, "attributes");
-			int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
+			sz pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
 			if (pos_acc_idx < 0) continue;
 			AccessorInfo pa;
 			parse_accessor(&accessors, pos_acc_idx, &pa);
@@ -175,7 +175,7 @@ fn GlbModel*? load_glb(String path) {
 			parse_bufview(&bvs, pa.bv_index, &pbv);
 			sz pbase   = (sz)(pbv.byte_offset + pa.byte_offset);
 			sz pstride = (sz)(pbv.byte_stride > 0 ? pbv.byte_stride : 12);
-			for (int i = 0; i < pa.count; i++) {
+			for (sz i = 0; i < pa.count; i++) {
 				sz base = pbase + (sz)i * pstride;
 				float x = read_f32(bin, base);
 				float y = read_f32(bin, base + 4);
@@ -202,18 +202,18 @@ fn GlbModel*? load_glb(String path) {
 	GlbModel* model = mem::new(GlbModel);
 	model.triangle_count = 0;
 
-	for (int mi = 0; mi < mesh_count; mi++) {
-		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, mi);
+	for (sz mi = 0; mi < mesh_count; mi++) {
+		stb_json::Cursor mesh  = stb_json::stbj_move_cursor_index(&meshes, (int)mi);
 		stb_json::Cursor prims = stb_json::stbj_move_cursor_name(&mesh, "primitives");
-		int prim_count = stb_json::stbj_count_values(&prims);
-		for (int pi = 0; pi < prim_count; pi++) {
+		sz prim_count = stb_json::stbj_count_values(&prims);
+		for (sz pi = 0; pi < prim_count; pi++) {
 			if (model.triangle_count >= MAX_TRIANGLES) break;
-			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, pi);
+			stb_json::Cursor prim  = stb_json::stbj_move_cursor_index(&prims, (int)pi);
 			stb_json::Cursor attrs = stb_json::stbj_move_cursor_name(&prim, "attributes");
-			int pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
-			int idx_acc_idx = stb_json::stbj_read_int_name(&prim, "indices", -1);
-			int mat_idx     = stb_json::stbj_read_int_name(&prim, "material", -1);
-			int uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
+			sz pos_acc_idx = stb_json::stbj_read_int_name(&attrs, "POSITION", -1);
+			sz idx_acc_idx = stb_json::stbj_read_int_name(&prim, "indices", -1);
+			sz mat_idx     = stb_json::stbj_read_int_name(&prim, "material", -1);
+			sz uv_acc_idx  = stb_json::stbj_read_int_name(&attrs, "TEXCOORD_0", -1);
 			if (pos_acc_idx < 0 || idx_acc_idx < 0) continue;
 
 			AccessorInfo pos_acc; parse_accessor(&accessors, pos_acc_idx, &pos_acc);
@@ -236,19 +236,19 @@ fn GlbModel*? load_glb(String path) {
 				uv_stride = (sz)(uv_bv.byte_stride > 0 ? uv_bv.byte_stride : 8);
 			}
 
-			int tri_count = idx_acc.count / 3;
-			for (int ti = 0; ti < tri_count; ti++) {
+			sz tri_count = idx_acc.count / 3;
+			for (sz ti = 0; ti < tri_count; ti++) {
 				if (model.triangle_count >= MAX_TRIANGLES) break;
-				int i0, i1, i2;
+				sz i0, i1, i2;
 				if (idx32) {
-					i0 = (int)read_u32(bin, idx_base + (sz)ti * 12);
-					i1 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 4);
-					i2 = (int)read_u32(bin, idx_base + (sz)ti * 12 + 8);
+					i0 = (sz)read_u32(bin, idx_base + (sz)ti * 12);
+					i1 = (sz)read_u32(bin, idx_base + (sz)ti * 12 + 4);
+					i2 = (sz)read_u32(bin, idx_base + (sz)ti * 12 + 8);
 				} else {
 					char* p = bin + idx_base + (sz)ti * 6;
-					i0 = (int)((uint)p[0] | ((uint)p[1] << 8));
-					i1 = (int)((uint)p[2] | ((uint)p[3] << 8));
-					i2 = (int)((uint)p[4] | ((uint)p[5] << 8));
+					i0 = (sz)((uint)p[0] | ((uint)p[1] << 8));
+					i1 = (sz)((uint)p[2] | ((uint)p[3] << 8));
+					i2 = (sz)((uint)p[4] | ((uint)p[5] << 8));
 				}
 				sz b0 = pos_base + (sz)i0 * pos_stride;
 				sz b1 = pos_base + (sz)i1 * pos_stride;
@@ -280,7 +280,7 @@ fn GlbModel*? load_glb(String path) {
 					cb = mat_color[mat_idx * 3 + 2];
 				} else if (has_uv) {
 					float u     = read_f32(bin, uv_base + (sz)i0 * uv_stride);
-					int pal_idx = (int)(u * 255.0f + 0.5f);
+					sz pal_idx = (sz)(u * 255.0f + 0.5f);
 					if (pal_idx < 0) pal_idx = 0;
 					if (pal_idx > 255) pal_idx = 255;
 					float t = (float)pal_idx / 255.0f;
@@ -313,7 +313,7 @@ fn void GlbModel.free(GlbModel* self) {
 	mem::free(self.view_cells.ptr);
 }
 
-fn void GlbModel.resize(GlbModel* self, int w, int h) {
+fn void GlbModel.resize(GlbModel* self, sz w, sz h) {
 	self.width = w;
 	self.height = h;
 	mem::free(self.pixels.ptr);
@@ -328,7 +328,7 @@ fn float edge_fn(float ax, float ay, float bx, float by, float px, float py) {
 	return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
-fn void GlbModel.rasterize_tri(GlbModel* self, int w, int ph,
+fn void GlbModel.rasterize_tri(GlbModel* self, sz w, sz ph,
 		float ax, float ay, float bbx, float bby, float ccx, float ccy,
 		float depth_z, Pixel col) {
 	float area = edge_fn(ax, ay, bbx, bby, ccx, ccy);
@@ -344,10 +344,10 @@ fn void GlbModel.rasterize_tri(GlbModel* self, int w, int ph,
 	float min_yy = ay; if (bby < min_yy) min_yy = bby; if (ccy < min_yy) min_yy = ccy;
 	float max_yy = ay; if (bby > max_yy) max_yy = bby; if (ccy > max_yy) max_yy = ccy;
 
-	int x0 = (int)math::floor(min_xx); if (x0 < 0) x0 = 0;
-	int x1 = (int)math::ceil(max_xx);  if (x1 >= w) x1 = w - 1;
-	int y0 = (int)math::floor(min_yy); if (y0 < 0) y0 = 0;
-	int y1 = (int)math::ceil(max_yy);  if (y1 >= ph) y1 = ph - 1;
+	sz x0 = (sz)math::floor(min_xx); if (x0 < 0) x0 = 0;
+	sz x1 = (sz)math::ceil(max_xx);  if (x1 >= w) x1 = w - 1;
+	sz y0 = (sz)math::floor(min_yy); if (y0 < 0) y0 = 0;
+	sz y1 = (sz)math::ceil(max_yy);  if (y1 >= ph) y1 = ph - 1;
 	if (x0 > x1 || y0 > y1) return;
 
 	bool tl_ab = (ay == bby && bbx > ax) || (bby < ay);
@@ -357,9 +357,9 @@ fn void GlbModel.rasterize_tri(GlbModel* self, int w, int ph,
 	float bias_bc = tl_bc ? 0.0f : -0.0001f;
 	float bias_ca = tl_ca ? 0.0f : -0.0001f;
 
-	for (int py = y0; py <= y1; py++) {
+	for (sz py = y0; py <= y1; py++) {
 		float pcy = (float)py + 0.5f;
-		for (int px = x0; px <= x1; px++) {
+		for (sz px = x0; px <= x1; px++) {
 			float pcx = (float)px + 0.5f;
 			if (edge_fn(ax, ay, bbx, bby, pcx, pcy) + bias_ab < 0.0f) continue;
 			if (edge_fn(bbx, bby, ccx, ccy, pcx, pcy) + bias_bc < 0.0f) continue;
@@ -376,9 +376,9 @@ fn void GlbModel.rasterize_tri(GlbModel* self, int w, int ph,
 // ── 3D rendering ─────────────────────────────────────────────────────────────
 
 fn void GlbModel.render(GlbModel* self) {
-	int w  = self.width;
-	int h  = self.height;
-	int ph = h * 2;
+	sz w  = self.width;
+	sz h  = self.height;
+	sz ph = h * 2;
 	sz ptotal = (sz)(w * ph);
 
 	for (sz i = 0; i < ptotal; i++) {
@@ -403,7 +403,7 @@ fn void GlbModel.render(GlbModel* self) {
 	float light_len = (float)math::sqrt(light_x * light_x + light_y * light_y + light_z * light_z);
 	light_x /= light_len; light_y /= light_len; light_z /= light_len;
 
-	for (int t = 0; t < self.triangle_count; t++) {
+	for (sz t = 0; t < self.triangle_count; t++) {
 		Triangle* tri = &self.triangles[t];
 
 		// Model rotation

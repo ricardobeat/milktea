@@ -4,37 +4,37 @@ import nineslice;
 // Every tile of a radius must map to a distinct frame inside the glyph's
 // reserved range. A collision or overflow here is silent at runtime.
 fn void test_ring_frames_unique_and_in_range() @test {
-	for (int rad = 0; rad < nineslice::RADII; rad++) {
-		int ky = nineslice::radius_cells_y(nineslice::radius_px(rad));
-		int kx = nineslice::radius_cells_x(nineslice::radius_px(rad));
+	for (sz rad = 0; rad < nineslice::RADII; rad++) {
+		sz ky = nineslice::radius_cells_y(nineslice::radius_px(rad));
+		sz kx = nineslice::radius_cells_x(nineslice::radius_px(rad));
 		assert(ky <= nineslice::MAX_KY, "radius %d needs ky=%d > MAX_KY", rad, ky);
-		int body = nineslice::body_rows(ky);
-		int n = nineslice::tile_count_rows(kx, ky, body);
+		sz body = nineslice::body_rows(ky);
+		sz n = nineslice::tile_count_rows(kx, ky, body);
 		bool[64] seen;
 
-		int[4] corners = { nineslice::SLOT_TL, nineslice::SLOT_TR,
+		sz[4] corners = { nineslice::SLOT_TL, nineslice::SLOT_TR,
 		                   nineslice::SLOT_BL, nineslice::SLOT_BR };
-		for (int c = 0; c < 4; c++) {
-			for (int oy = 0; oy < ky; oy++) {
-				for (int ox = 0; ox < kx; ox++) {
-					int f = nineslice::tile_index(kx, ky, corners[c], ox, oy);
+		for (sz c = 0; c < 4; c++) {
+			for (sz oy = 0; oy < ky; oy++) {
+				for (sz ox = 0; ox < kx; ox++) {
+					sz f = nineslice::tile_index(kx, ky, corners[c], ox, oy);
 					assert(f >= 0 && f < n, "corner frame %d outside %d", f, n);
 					assert(!seen[f], "duplicate corner frame %d", f);
 					seen[f] = true;
 				}
 			}
 		}
-		for (int oy = 0; oy < ky; oy++) {
-			for (int w = 0; w < 2; w++) {
-				int f = nineslice::hrun_tile_index(kx, ky, oy, w == 1);
+		for (sz oy = 0; oy < ky; oy++) {
+			for (sz w = 0; w < 2; w++) {
+				sz f = nineslice::hrun_tile_index(kx, ky, oy, w == 1);
 				assert(f >= 0 && f < n, "hrun frame %d outside %d", f, n);
 				assert(!seen[f], "duplicate hrun frame %d", f);
 				seen[f] = true;
 			}
 		}
-		for (int row = 0; row < body; row++) {
-			for (int which = 0; which < 3; which++) {
-				int f = nineslice::row_tile_index(kx, ky, row, which);
+		for (sz row = 0; row < body; row++) {
+			for (sz which = 0; which < 3; which++) {
+				sz f = nineslice::row_tile_index(kx, ky, row, which);
 				assert(f >= 0 && f < n, "row frame %d outside %d", f, n);
 				assert(!seen[f], "duplicate row frame %d", f);
 				seen[f] = true;
@@ -49,13 +49,13 @@ fn void test_ring_frames_unique_and_in_range() @test {
 // resolve to no image, and the terminal draws the placeholder codepoint and
 // its diacritics as literal combining marks over every cell.
 fn void test_glyph_layout_matches_view() @test {
-	int box_h = nineslice::BOX_H;
-	for (int raw = 0; raw < nineslice::RADII; raw++) {
-		int rad = nineslice::effective_radius(raw, box_h);
-		int kx = nineslice::radius_cells_x(nineslice::radius_px(rad));
-		int ky = nineslice::radius_cells_y(nineslice::radius_px(rad));
-		int body = nineslice::body_rows(ky);
-		int n = nineslice::tile_count_rows(kx, ky, body);
+	sz box_h = nineslice::BOX_H;
+	for (sz raw = 0; raw < nineslice::RADII; raw++) {
+		sz rad = nineslice::effective_radius(raw, box_h);
+		sz kx = nineslice::radius_cells_x(nineslice::radius_px(rad));
+		sz ky = nineslice::radius_cells_y(nineslice::radius_px(rad));
+		sz body = nineslice::body_rows(ky);
+		sz n = nineslice::tile_count_rows(kx, ky, body);
 
 		// Corners must not overlap vertically...
 		assert(2 * ky <= box_h,
@@ -67,7 +67,7 @@ fn void test_glyph_layout_matches_view() @test {
 		assert(body == box_h - 2 * ky, "radius %d: body %d unexpected", raw, body);
 
 		// Every index the view can request must exist in the glyph.
-		int hi = nineslice::row_tile_index(kx, ky, body - 1, 2);
+		sz hi = nineslice::row_tile_index(kx, ky, body - 1, 2);
 		assert(hi < n, "radius %d: view wants index %d, glyph holds %d", raw, hi, n);
 	}
 }
@@ -75,8 +75,8 @@ fn void test_glyph_layout_matches_view() @test {
 // The full declared radius range must actually be reachable: a radius the
 // clamp silently walks down is a radius the demo cannot show.
 fn void test_full_radius_range_reachable() @test {
-	int box_h = nineslice::BOX_H;
-	for (int raw = 0; raw < nineslice::RADII; raw++) {
+	sz box_h = nineslice::BOX_H;
+	for (sz raw = 0; raw < nineslice::RADII; raw++) {
 		assert(nineslice::effective_radius(raw, box_h) == raw,
 			"radius index %d (%dpx) is clamped away", raw, nineslice::radius_px(raw));
 	}

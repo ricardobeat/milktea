@@ -11,9 +11,9 @@ const int MSG_TIMER = 2;
 const int MSG_STEP  = 3;
 
 struct Model {
-	int spin_frame;
-	int seconds;
-	int step;
+	sz spin_frame;
+	sz seconds;
+	sz step;
 }
 
 fn milktea::Msg on_spin() {

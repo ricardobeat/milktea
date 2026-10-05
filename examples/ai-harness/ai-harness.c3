@@ -173,7 +173,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			self.log.view.handle_key(k);
 			// Scrolling back turns off follow; scrolling to the end turns it
 			// on again, so new output resumes tracking without a keybind.
-			int maxo = self.log.view.total_lines - self.log.view.height;
+			sz maxo = self.log.view.total_lines - self.log.view.height;
 			if (maxo < 0) maxo = 0;
 			self.log.follow = self.log.view.offset >= maxo;
 			return null;
@@ -211,7 +211,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 
 fn void Model.on_destroy(&self) @dynamic {
 	self.log.text.free();
-	for (int i = 0; i < self.session.history_count; i++) {
+	for (sz i = 0; i < self.session.history_count; i++) {
 		self.session.history[i].json.free();
 	}
 }

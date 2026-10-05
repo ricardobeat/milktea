@@ -27,8 +27,8 @@ enum MouseMode : int {
 // x, y are 0-indexed relative to the top-left corner of the View content.
 // color is an optional hex color string (e.g. "#ff6600"). Empty = terminal default.
 struct Cursor {
-	int x;
-	int y;
+	sz x;
+	sz y;
 	CursorShape shape;
 	bool blink;
 	String color;
@@ -36,16 +36,16 @@ struct Cursor {
 
 struct Overlay {
 	String content;
-	int x;
-	int y;
-	int w;
-	int h;
+	sz x;
+	sz y;
+	sz w;
+	sz h;
 	bool transparent;
 	char alpha; // 0 = opaque (default), 1-254 = blended
 	xray::LayerStyle layer_style;
 }
 
-const int MAX_OVERLAYS = 8;
+const sz MAX_OVERLAYS = 8;
 
 struct View {
 	String content;
@@ -57,7 +57,7 @@ struct View {
 	sz cells_height;
 	String mouse_cursor;
 	Overlay[MAX_OVERLAYS] overlays;
-	int overlay_count;
+	sz overlay_count;
 	bool report_key_events;
 	bool mouse_pixels;
 }
@@ -80,21 +80,21 @@ fn View cell_view(xray::Cell[] cells, sz width, sz height) {
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
-fn Cursor new_cursor(int x, int y) {
+fn Cursor new_cursor(sz x, sz y) {
 	return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
 }
 
 // View builder methods — enable fluent declarative View construction.
 // Example: return view("hello").set_cursor(5, 3).set_mouse_mode(mode);
 
-fn View View.set_cursor(self, int x, int y) {
+fn View View.set_cursor(self, sz x, sz y) {
 	View v = self;
 	v.has_cursor = true;
 	v.cursor = new_cursor(x, y);
 	return v;
 }
 
-fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink) {
+fn View View.set_cursor_shape(self, sz x, sz y, CursorShape shape, bool blink) {
 	View v = self;
 	v.has_cursor = true;
 	v.cursor = { .x = x, .y = y, .shape = shape, .blink = blink };
@@ -159,7 +159,7 @@ fn View View.set_mouse_pixels(self, bool on) {
 //   the overlay. The drop-shadow is composited under the overlay content;
 //   the inner-shadow is composited on top (inside the overlay bounds).
 //   Both fields default to disabled (zero-value LayerStyle).
-fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0,
+fn View View.add_overlay(self, sz x, sz y, sz w, sz h, String content, char alpha = 0,
 	bool transparent = false, xray::LayerStyle layer_style = {})
 {
 	View v = self;
@@ -231,8 +231,8 @@ enum MsgKind : char {
 }
 
 struct WindowSizeMsg {
-	int width;
-	int height;
+	sz width;
+	sz height;
 }
 
 struct Msg {
@@ -279,7 +279,7 @@ interface Model {
 // Constants
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
-const int MAX_CLICK_TARGETS = 32;
+const sz MAX_CLICK_TARGETS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
@@ -317,7 +317,7 @@ struct Program {
 	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
 	// timers/send_queue/pending.
 	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
-	int click_target_count;
+	sz click_target_count;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -334,15 +334,15 @@ struct Program {
 
 	// Test / injection support
 	bool test_mode;
-	int inject_width;
-	int inject_height;
+	sz inject_width;
+	sz inject_height;
 	DString* output_buf;
 	char[] inject_input;
 	sz inject_input_pos;
 	// Ring buffer for Send()-injected messages.
 	Msg[MAX_BATCH] send_queue;
-	int send_head;
-	int send_tail;
+	sz send_head;
+	sz send_tail;
 	// Mutex protecting send_queue / send_head / send_tail.
 	// Initialized lazily inside run() so send() is safe to call before
 	// the program is started (send_accepting guards against that path).
@@ -356,7 +356,7 @@ struct Program {
 	// send_accepting and then waits for this to reach zero before destroying
 	// the mutex — clearing the flag alone only stops *new* entrants, and a
 	// sender already past the check would otherwise lock a destroyed mutex.
-	Atomic{int} send_inflight;
+	Atomic{sz} send_inflight;
 
 	// Threaded input reader
 	thread::Thread reader_thread;
@@ -507,7 +507,7 @@ fn int input_reader_fn(void* arg) {
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 
-		int r = poll(&pfd, 1, 50); // 50ms timeout
+		sz r = poll(&pfd, 1, 50); // 50ms timeout
 		if (r <= 0) continue;
 
 		sz n = read(STDIN_FILENO, &tmp[0], 256);
@@ -542,14 +542,14 @@ Program* g_program = null;
 // Models that need to *react* to a resize (recompute a cached layout, reflow
 // text) should still handle MsgKind.WINDOW_SIZE; these accessors only remove
 // the need to store the size in order to read it back.
-fn int screen_width() {
+fn sz screen_width() {
 	if (g_program == null) return 80;
-	return (int)g_program.cached_ws.ws_col;
+	return (sz)g_program.cached_ws.ws_col;
 }
 
-fn int screen_height() {
+fn sz screen_height() {
 	if (g_program == null) return 24;
-	return (int)g_program.cached_ws.ws_row;
+	return (sz)g_program.cached_ws.ws_row;
 }
 
 // dispatch_click fires on_click/on_click_outside hooks (see xray::Node.on_click,
@@ -557,7 +557,7 @@ fn int screen_height() {
 // frame — called for every MOUSE_PRESS before the raw MouseMsg reaches
 // model.update(), by dispatch() in the normal event loop and directly by any
 // backend (e.g. a GUI renderer) that drives a Model outside Program.run().
-fn void dispatch_click(int col, int row) {
+fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
 	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);
 }
@@ -630,12 +630,12 @@ fn sz monotonic_ms() {
 // 0 + cell_size_known() == false means the terminal never answered (e.g.
 // alacritty, GNU Screen); callers should fall back to a guess like 10x20.
 // Refreshed on WINDOW_SIZE by a fresh CSI 16 t query.
-fn int cell_width_px() {
-	return (int)g_cell_w_px;
+fn sz cell_width_px() {
+	return (sz)g_cell_w_px;
 }
 
-fn int cell_height_px() {
-	return (int)g_cell_h_px;
+fn sz cell_height_px() {
+	return (sz)g_cell_h_px;
 }
 
 fn bool cell_size_known() {
@@ -655,9 +655,9 @@ fn bool kitty_graphics_supported() {
 // it stay silent, so check terminal_background_known() first — the returned
 // color is black when nothing answered, which is the safe assumption for a
 // dark terminal but a wrong one for a light theme.
-fn int terminal_background_r() => g_term_bg_r;
-fn int terminal_background_g() => g_term_bg_g;
-fn int terminal_background_b() => g_term_bg_b;
+fn sz terminal_background_r() => g_term_bg_r;
+fn sz terminal_background_g() => g_term_bg_g;
+fn sz terminal_background_b() => g_term_bg_b;
 
 fn bool terminal_background_known() {
 	return g_term_bg_known;
@@ -668,7 +668,7 @@ fn bool terminal_background_known() {
 // ============================================================
 
 // with_window_size sets a fixed window size, bypassing the TTY query.
-fn void with_window_size(Program* self, int w, int h) {
+fn void with_window_size(Program* self, sz w, sz h) {
 	self.inject_width = w;
 	self.inject_height = h;
 }
@@ -717,7 +717,7 @@ fn void Program.send(Program* self, Msg msg) {
 	defer self.send_inflight.sub(1);
 
 	self.send_mu.lock();
-	int next = (self.send_head + 1) % (int)MAX_BATCH;
+	sz next = (self.send_head + 1) % (sz)MAX_BATCH;
 	bool dropped = next == self.send_tail;
 	if (!dropped) {
 		self.send_queue[self.send_head] = msg;
@@ -737,7 +737,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 		return false;
 	}
 	*out = self.send_queue[self.send_tail];
-	self.send_tail = (self.send_tail + 1) % (int)MAX_BATCH;
+	self.send_tail = (self.send_tail + 1) % (sz)MAX_BATCH;
 	self.send_mu.unlock();
 	return true;
 }
@@ -753,7 +753,7 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
 	Cmd c     = model.update(m);
-	int chain = 0;
+	sz chain = 0;
 	while (c != null && chain < MAX_BATCH) {
 		Msg next = c();
 		if (next.kind == MsgKind.QUIT) return true;
@@ -801,25 +801,25 @@ fn void Program.apply_mouse_pixels(Program* self, MouseMsg* mouse) {
 	if (ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0) {
 		return;
 	}
-	if (mouse.col < (int)ws.ws_col && mouse.row < (int)ws.ws_row) {
+	if (mouse.col < (sz)ws.ws_col && mouse.row < (sz)ws.ws_row) {
 		// Coordinates already fit inside the cell grid — terminal is still
 		// sending cell coordinates (mode 1016 unsupported/ignored).
 		return;
 	}
 
-	int raw_x = mouse.col;
-	int raw_y = mouse.row;
+	sz raw_x = mouse.col;
+	sz raw_y = mouse.row;
 
 	double cell_w = (double)ws.ws_xpixel / (double)ws.ws_col;
 	double cell_h = (double)ws.ws_ypixel / (double)ws.ws_row;
 
-	int cell_col = (int)((double)raw_x / cell_w);
-	int cell_row = (int)((double)raw_y / cell_h);
+	sz cell_col = (sz)((double)raw_x / cell_w);
+	sz cell_row = (sz)((double)raw_y / cell_h);
 
 	if (cell_col < 0) cell_col = 0;
-	if (cell_col >= (int)ws.ws_col) cell_col = (int)ws.ws_col - 1;
+	if (cell_col >= (sz)ws.ws_col) cell_col = (sz)ws.ws_col - 1;
 	if (cell_row < 0) cell_row = 0;
-	if (cell_row >= (int)ws.ws_row) cell_row = (int)ws.ws_row - 1;
+	if (cell_row >= (sz)ws.ws_row) cell_row = (sz)ws.ws_row - 1;
 
 	mouse.px = raw_x;
 	mouse.py = raw_y;
@@ -1136,7 +1136,7 @@ fn void? Program.run(Program* self) {
 		}
 	}
 
-	Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
+	Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (sz)initial_ws.ws_col, (sz)initial_ws.ws_row } };
 	if (dispatch(self, self.model, init_wmsg)) return;
 
 	// Render initial view
@@ -1197,7 +1197,7 @@ fn void? Program.run(Program* self) {
 			if (self.renderer != null) {
 				self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
 			}
-			Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)ws.ws_col, (int)ws.ws_row } };
+			Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (sz)ws.ws_col, (sz)ws.ws_row } };
 			if (dispatch(self, self.model, wm)) return;
 			dirty = true;
 		}
@@ -1516,7 +1516,7 @@ fn sz view_content_rows(View v) {
 	}
 	// Overlays are positioned against the same origin and may extend past
 	// the content, so the block has to be tall enough to contain them.
-	for (int oi = 0; oi < v.overlay_count; oi++) {
+	for (sz oi = 0; oi < v.overlay_count; oi++) {
 		sz bottom = (sz)v.overlays[oi].y + (sz)v.overlays[oi].h;
 		if (bottom > rows) rows = bottom;
 	}
@@ -1551,7 +1551,7 @@ fn sz view_content_cols(View v) {
 		cur += 1;
 	}
 	if (cur > widest) widest = cur;
-	for (int oi = 0; oi < v.overlay_count; oi++) {
+	for (sz oi = 0; oi < v.overlay_count; oi++) {
 		sz right = (sz)v.overlays[oi].x + (sz)v.overlays[oi].w;
 		if (right > widest) widest = right;
 	}
@@ -1755,7 +1755,7 @@ fn void Program.render_current_view(Program* self) {
 				}
 
 				// Render overlays
-				for (int oi = 0; oi < v.overlay_count; oi++) {
+				for (sz oi = 0; oi < v.overlay_count; oi++) {
 					Overlay o = v.overlays[oi];
 
 					// Render shadow before content so it appears underneath
@@ -1837,8 +1837,8 @@ fn void Program.render_current_view(Program* self) {
 				// Emit cursor positioning and shape after the diff frame
 				if (v.has_cursor) {
 					DString cursor_seq = dstring::temp();
-					int term_row       = v.cursor.y + 1;
-					int term_col       = v.cursor.x + 1;
+					sz term_row       = v.cursor.y + 1;
+					sz term_col       = v.cursor.x + 1;
 					cursor_seq.append_string(cursor_to(term_row, term_col));
 					// Set cursor color via OSC 12
 					if (v.cursor.color.len > 0) {

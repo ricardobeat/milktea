@@ -1679,7 +1679,7 @@ fn void test_pixel_buffer_fill_rect_gradient() @test {
 
 	assert(pb.get_pixel(0, 0).eq(color_rgb(0, 0, 0)));
 	assert(pb.get_pixel(0, 2).eq(color_rgb(255, 255, 255)));
-	int mr = (int)pb.get_pixel(0, 1).r;
+	sz mr = (sz)pb.get_pixel(0, 1).r;
 	assert(mr > 0 && mr < 255);
 }
 
@@ -1710,8 +1710,8 @@ fn void test_pixel_buffer_draw_line_gradient() @test {
 
 	assert(pb.get_pixel(0, 0).r == 0);
 	assert(pb.get_pixel(5, 0).r == 255);
-	int c2 = (int)pb.get_pixel(2, 0).r;
-	int c3 = (int)pb.get_pixel(3, 0).r;
+	sz c2 = (sz)pb.get_pixel(2, 0).r;
+	sz c3 = (sz)pb.get_pixel(3, 0).r;
 	assert(c2 < c3);
 }
 

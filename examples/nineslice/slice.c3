@@ -31,8 +31,8 @@ module nineslice;
 import std::math;
 import std::core::mem;
 
-const int GX = 16; // cell width in px
-const int GY = 34; // cell height in px -- matches rounded/, see its note on
+const sz GX = 16; // cell width in px
+const sz GY = 34; // cell height in px -- matches rounded/, see its note on
                    // terminals rendering cells slightly taller than 2:1.
 const sz TILE_BYTES = (sz)(GX * GY * 4);
 
@@ -41,43 +41,43 @@ const sz TILE_BYTES = (sz)(GX * GY * 4);
 // needs a 2x2 block of corner tiles. That is the payoff of slicing a surface
 // rather than authoring each corner cell -- a per-cell renderer caps the
 // radius at one cell, because a larger arc would leave the cell entirely.
-const int RADII = 8;
-fn int radius_px(int idx) => (idx + 1) * 4;
+const sz RADII = 8;
+fn sz radius_px(sz idx) => (idx + 1) * 4;
 
 // Largest corner block over the whole radius range, and the tile count at
 // that size. Every radius reserves MAX_TILES frames so a radius indexes the
 // frame axis at a fixed stride, regardless of how many tiles it actually
 // uses.
-const int MAX_KX = 2;
-const int MAX_KY = 1;
-const int MAX_TILES = 4 * MAX_KX * MAX_KY + 4;
+const sz MAX_KX = 2;
+const sz MAX_KY = 1;
+const sz MAX_TILES = 4 * MAX_KX * MAX_KY + 4;
 // Frames reserved per radius: the largest corner blocks, both h-runs, and
 // L/C/R for every body row. Fixed so a radius indexes at a constant stride.
-const int MAX_BODY = 3;
-const int FRAMES_PER_RADIUS = 4 * MAX_KX * MAX_KY + 2 * MAX_KY + 3 * MAX_BODY;
+const sz MAX_BODY = 3;
+const sz FRAMES_PER_RADIUS = 4 * MAX_KX * MAX_KY + 2 * MAX_KY + 3 * MAX_BODY;
 
 // Cells a radius spans, per axis. A cell is 16x34px -- roughly 1:2 -- so a
 // corner arc that needs two cells across still fits in one cell down. Deriving
 // both from the width would make a wide radius eat box rows it does not
 // actually need.
-fn int radius_cells_x(int r) => (r + GX - 1) / GX;
-fn int radius_cells_y(int r) => (r + GY - 1) / GY;
+fn sz radius_cells_x(sz r) => (r + GX - 1) / GX;
+fn sz radius_cells_y(sz r) => (r + GY - 1) / GY;
 
 // Tile slots in the 3x3 ring, in transmission order. Corner blocks with k > 1
 // occupy k*k tiles each starting at the corner's slot base.
-const int SLOT_TL = 0;
-const int SLOT_TR = 1;
-const int SLOT_BL = 2;
-const int SLOT_BR = 3;
-const int SLOT_T  = 4;
-const int SLOT_B  = 5;
-const int SLOT_L  = 6;
-const int SLOT_R  = 7;
-const int SLOT_COUNT = 8;
+const sz SLOT_TL = 0;
+const sz SLOT_TR = 1;
+const sz SLOT_BL = 2;
+const sz SLOT_BR = 3;
+const sz SLOT_T  = 4;
+const sz SLOT_B  = 5;
+const sz SLOT_L  = 6;
+const sz SLOT_R  = 7;
+const sz SLOT_COUNT = 8;
 
 // Border placement relative to the box edge.
-const int STROKE_NONE   = 0; // plain fill, no border drawn
-const int STROKE_INSET  = 1; // stroke sits inset px inside the box edge
+const sz STROKE_NONE   = 0; // plain fill, no border drawn
+const sz STROKE_INSET  = 1; // stroke sits inset px inside the box edge
 
 struct BoxStyle {
 	uint bg;
@@ -94,7 +94,7 @@ struct BoxStyle {
 	// character looks like over a colored background, where the glyph's own
 	// side bearing leaves a margin of background outside the line.
 	float inset;
-	int stroke;
+	sz stroke;
 	// Draw only the backdrop and the shadow, not the box itself. Used for the
 	// separate shadow pass, whose tiles sit outside the box and must not
 	// carry any of its fill.
@@ -137,21 +137,21 @@ fn float sd_round_rect(float px, float py, float w, float h, float r) {
 }
 
 // put alpha-composites one coverage sample into an RGBA8 surface.
-fn void put(char* buf, int stride_px, int x, int y, float r, float g, float b, float a) {
+fn void put(char* buf, sz stride_px, sz x, sz y, float r, float g, float b, float a) {
 	if (a <= 0) return;
-	int i = (y * stride_px + x) * 4;
-	float da = (float)((int)buf[i + 3] & 0xff) / 255.0f;
+	sz i = (y * stride_px + x) * 4;
+	float da = (float)((sz)buf[i + 3] & 0xff) / 255.0f;
 	float oa = a + da * (1.0f - a);
 	if (oa <= 0) return;
-	float dr = (float)((int)buf[i] & 0xff) / 255.0f;
-	float dg = (float)((int)buf[i + 1] & 0xff) / 255.0f;
-	float db = (float)((int)buf[i + 2] & 0xff) / 255.0f;
+	float dr = (float)((sz)buf[i] & 0xff) / 255.0f;
+	float dg = (float)((sz)buf[i + 1] & 0xff) / 255.0f;
+	float db = (float)((sz)buf[i + 2] & 0xff) / 255.0f;
 	float w = da * (1.0f - a) / oa;
 	float wa = a / oa;
-	buf[i]     = (char)(int)(255.0f * fclamp(r * wa + dr * w, 0, 1));
-	buf[i + 1] = (char)(int)(255.0f * fclamp(g * wa + dg * w, 0, 1));
-	buf[i + 2] = (char)(int)(255.0f * fclamp(b * wa + db * w, 0, 1));
-	buf[i + 3] = (char)(int)(oa * 255.0f);
+	buf[i]     = (char)(sz)(255.0f * fclamp(r * wa + dr * w, 0, 1));
+	buf[i + 1] = (char)(sz)(255.0f * fclamp(g * wa + dg * w, 0, 1));
+	buf[i + 2] = (char)(sz)(255.0f * fclamp(b * wa + db * w, 0, 1));
+	buf[i + 3] = (char)(sz)(oa * 255.0f);
 }
 
 // render_surface rasterizes the whole rounded box into an RGBA8 surface of
@@ -162,11 +162,11 @@ fn void put(char* buf, int stride_px, int x, int y, float r, float g, float b, f
 // for a drop shadow to fall outside it without being clipped. The box stays at
 // the surface origin: a drop shadow offsets down-right, so padding the other
 // two sides would only waste tiles.
-fn void render_surface(char[] surf, int cols, int rows, int r, BoxStyle st, int pad_x = 0, int pad_y = 0) {
+fn void render_surface(char[] surf, sz cols, sz rows, sz r, BoxStyle st, sz pad_x = 0, sz pad_y = 0) {
 	for (sz i = 0; i < surf.len; i++) surf[i] = 0;
 
-	int w = cols * GX;
-	int h = rows * GY;
+	sz w = cols * GX;
+	sz h = rows * GY;
 	char* buf = &surf[0];
 
 	float br = (float)((st.bg >> 16) & 0xff) / 255.0f;
@@ -193,18 +193,18 @@ fn void render_surface(char[] surf, int cols, int rows, int r, BoxStyle st, int 
 	float g2g = (float)((st.bg2 >> 8) & 0xff) / 255.0f;
 	float g2b = (float)(st.bg2 & 0xff) / 255.0f;
 	bool has_shadow = st.shadow_alpha > 0;
-	float sh_a_max = (float)((int)st.shadow_alpha & 0xff) / 255.0f;
+	float sh_a_max = (float)((sz)st.shadow_alpha & 0xff) / 255.0f;
 
 	// Opaque backdrop first: everything else composites over it.
 	float kr = (float)((st.backdrop >> 16) & 0xff) / 255.0f;
 	float kg = (float)((st.backdrop >> 8) & 0xff) / 255.0f;
 	float kb = (float)(st.backdrop & 0xff) / 255.0f;
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) put(buf, w, x, y, kr, kg, kb, 1.0f);
+	for (sz y = 0; y < h; y++) {
+		for (sz x = 0; x < w; x++) put(buf, w, x, y, kr, kg, kb, 1.0f);
 	}
 
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
+	for (sz y = 0; y < h; y++) {
+		for (sz x = 0; x < w; x++) {
 			// Box-local coordinates: the box sits inset by the shadow padding.
 			float fx = (float)x + 0.5f - bx;
 			float fy = (float)y + 0.5f - by;
@@ -248,8 +248,8 @@ fn void render_surface(char[] surf, int cols, int rows, int r, BoxStyle st, int 
 // A vertical ramp has no horizontal variation, so one pixel column is enough
 // and the terminal stretches it to any box width; the height sets how finely
 // the ramp is sampled before the terminal resamples it.
-const int STRIP_W = 1;
-const int STRIP_H = 256;
+const sz STRIP_W = 1;
+const sz STRIP_H = 256;
 const sz STRIP_BYTES = (sz)(STRIP_W * STRIP_H * 4);
 
 // render_gradient_strip draws the box's fill ramp into a STRIP_W x STRIP_H
@@ -265,13 +265,13 @@ fn void render_gradient_strip(char[] out, BoxStyle st) {
 	float b1 = (float)(st.bg2 & 0xff) / 255.0f;
 	if (!st.grad) { r1 = r0; g1 = g0; b1 = b0; }
 
-	for (int y = 0; y < STRIP_H; y++) {
+	for (sz y = 0; y < STRIP_H; y++) {
 		float t = (float)y / (float)(STRIP_H - 1);
-		for (int x = 0; x < STRIP_W; x++) {
+		for (sz x = 0; x < STRIP_W; x++) {
 			sz i = (sz)((y * STRIP_W + x) * 4);
-			out[i]     = (char)(int)(255.0f * (r0 + (r1 - r0) * t));
-			out[i + 1] = (char)(int)(255.0f * (g0 + (g1 - g0) * t));
-			out[i + 2] = (char)(int)(255.0f * (b0 + (b1 - b0) * t));
+			out[i]     = (char)(sz)(255.0f * (r0 + (r1 - r0) * t));
+			out[i + 1] = (char)(sz)(255.0f * (g0 + (g1 - g0) * t));
+			out[i + 2] = (char)(sz)(255.0f * (b0 + (b1 - b0) * t));
 			out[i + 3] = (char)255;
 		}
 	}
@@ -298,15 +298,15 @@ fn uint gradient_at(BoxStyle st, float t) {
 }
 
 // blit_tile copies one GX x GY cell out of the surface at cell (cx, cy).
-fn void blit_tile(char[] dst, char[] surf, int cols, int cx, int cy) {
-	int stride = cols * GX;
-	for (int y = 0; y < GY; y++) {
-		int sy = cy * GY + y;
-		for (int x = 0; x < GX; x++) {
-			int sx = cx * GX + x;
+fn void blit_tile(char[] dst, char[] surf, sz cols, sz cx, sz cy) {
+	sz stride = cols * GX;
+	for (sz y = 0; y < GY; y++) {
+		sz sy = cy * GY + y;
+		for (sz x = 0; x < GX; x++) {
+			sz sx = cx * GX + x;
 			sz si = (sz)((sy * stride + sx) * 4);
 			sz di = (sz)((y * GX + x) * 4);
-			for (int c = 0; c < 4; c++) dst[di + (sz)c] = surf[si + (sz)c];
+			for (sz c = 0; c < 4; c++) dst[di + (sz)c] = surf[si + (sz)c];
 		}
 	}
 }
@@ -321,7 +321,7 @@ fn void blit_tile(char[] dst, char[] surf, int cols, int cx, int cy) {
 // Horizontal invariance still holds (the ramp is a function of y alone), so
 // the top/bottom runs and each row's centre are still ONE tile tiled across.
 // Cost is 4k^2 + 2 + 3*body tiles instead of 4k^2 + 4.
-fn int tile_count(int k) => 4 * k * k + 4;
+fn sz tile_count(sz k) => 4 * k * k + 4;
 
 // tile_count_rows is the tile budget for a box with `body` interior rows: the
 // corner blocks, k top-run and k bottom-run tiles, and L/C/R per body row.
@@ -330,14 +330,14 @@ fn int tile_count(int k) => 4 * k * k + 4;
 // multi-cell corner block the top edge spans k surface rows, and reusing a
 // single tile down all of them repeats that row's pixels -- which draws an
 // inset border k times as parallel lines.
-fn int tile_count_rows(int kx, int ky, int body) => 4 * kx * ky + 2 * ky + 3 * body;
+fn sz tile_count_rows(sz kx, sz ky, sz body) => 4 * kx * ky + 2 * ky + 3 * body;
 
 // Slot indices within one radius's tile block. Corner blocks come first
 // (kx*ky each), then the two horizontal-run bands (ky tiles each, one per
 // corner row), then L/C/R for every body row.
-fn int tile_index(int kx, int ky, int slot, int ox, int oy) {
+fn sz tile_index(sz kx, sz ky, sz slot, sz ox, sz oy) {
 	if (slot <= SLOT_BR) return slot * kx * ky + oy * kx + ox;
-	int base = 4 * kx * ky;
+	sz base = 4 * kx * ky;
 	switch (slot) {
 		case SLOT_T: return base;
 		case SLOT_B: return base + ky;
@@ -349,13 +349,13 @@ fn int tile_index(int kx, int ky, int slot, int ox, int oy) {
 // Top/bottom run tile for corner row oy. The runs need one tile PER corner
 // row: with a multi-row corner block the edge spans ky surface rows, and
 // reusing a single tile down all of them repeats that row's pixels.
-fn int hrun_tile_index(int kx, int ky, int oy, bool bottom) {
+fn sz hrun_tile_index(sz kx, sz ky, sz oy, bool bottom) {
 	return 4 * kx * ky + (bottom ? ky : 0) + oy;
 }
 
 // Per-body-row slots (0 = left, 1 = centre, 2 = right), after the corners
 // and the two h-run bands.
-fn int row_tile_index(int kx, int ky, int row, int which) {
+fn sz row_tile_index(sz kx, sz ky, sz row, sz which) {
 	return 4 * kx * ky + 2 * ky + row * 3 + which;
 }
 
@@ -370,8 +370,8 @@ fn int row_tile_index(int kx, int ky, int row, int which) {
 //
 // Tiles are laid out as a (w+1) x (h+1) grid minus the interior the box
 // covers: the right column, the bottom row, and their corner.
-const int SHADOW_COLS = 1; // extra cells right of the box
-const int SHADOW_ROWS = 1; // extra cells below the box
+const sz SHADOW_COLS = 1; // extra cells right of the box
+const sz SHADOW_ROWS = 1; // extra cells below the box
 
 // The shadow follows the box's silhouette, so it is rounded at the corners
 // too and cannot be three straight tiles. It is sliced like the box: kx x ky
@@ -383,25 +383,25 @@ const int SHADOW_ROWS = 1; // extra cells below the box
 //               tiled down, then ky more (bottom-right curve)
 //   bottom run: kx corner tiles (bottom-left curve), a straight tile tiled
 //               across, then kx more (bottom-right curve)
-fn int shadow_tile_count(int kx, int ky) => 2 * ky + 1 + 2 * kx + 1 + 1;
+fn sz shadow_tile_count(sz kx, sz ky) => 2 * ky + 1 + 2 * kx + 1 + 1;
 
 // Right column: ky top tiles, one straight, ky bottom tiles.
-fn int shadow_right_top(int oy) => oy;
-fn int shadow_right_mid(int ky) => ky;
-fn int shadow_right_bot(int ky, int oy) => ky + 1 + oy;
+fn sz shadow_right_top(sz oy) => oy;
+fn sz shadow_right_mid(sz ky) => ky;
+fn sz shadow_right_bot(sz ky, sz oy) => ky + 1 + oy;
 // Bottom row follows.
-fn int shadow_bottom_left(int kx, int ky, int ox) => 2 * ky + 1 + ox;
-fn int shadow_bottom_mid(int kx, int ky) => 2 * ky + 1 + kx;
-fn int shadow_bottom_right(int kx, int ky, int ox) => 2 * ky + 1 + kx + 1 + ox;
+fn sz shadow_bottom_left(sz kx, sz ky, sz ox) => 2 * ky + 1 + ox;
+fn sz shadow_bottom_mid(sz kx, sz ky) => 2 * ky + 1 + kx;
+fn sz shadow_bottom_right(sz kx, sz ky, sz ox) => 2 * ky + 1 + kx + 1 + ox;
 // The outer corner where the two runs meet.
-fn int shadow_corner(int kx, int ky) => 2 * ky + 1 + 2 * kx + 1;
+fn sz shadow_corner(sz kx, sz ky) => 2 * ky + 1 + 2 * kx + 1;
 
 // slice_shadow rasterizes just the shadow of a box_w x box_h cell box and
 // cuts the parts that fall outside it. The box itself is not drawn: these
 // tiles are shadow over backdrop only.
-fn void slice_shadow(char[] out, int box_w, int box_h, int kx, int ky, int r, BoxStyle st) {
-	int cells_w = box_w + SHADOW_COLS;
-	int rows = box_h + SHADOW_ROWS;
+fn void slice_shadow(char[] out, sz box_w, sz box_h, sz kx, sz ky, sz r, BoxStyle st) {
+	sz cells_w = box_w + SHADOW_COLS;
+	sz rows = box_h + SHADOW_ROWS;
 	if (box_w < 3 || box_h < 3) return;
 	char[] surf = mem::new_array(char, (sz)(cells_w * GX) * (sz)(rows * GY) * 4);
 	defer mem::free(&surf[0]);
@@ -415,7 +415,7 @@ fn void slice_shadow(char[] out, int box_w, int box_h, int kx, int ky, int r, Bo
 	render_surface(surf, cells_w, rows, r, sh, GX * SHADOW_COLS, GY * SHADOW_ROWS);
 
 	// Right column: the curve at each end, a straight tile between.
-	for (int oy = 0; oy < ky; oy++) {
+	for (sz oy = 0; oy < ky; oy++) {
 		blit_tile(out[(sz)shadow_right_top(oy) * TILE_BYTES:TILE_BYTES],
 			surf, cells_w, box_w, oy);
 		blit_tile(out[(sz)shadow_right_bot(ky, oy) * TILE_BYTES:TILE_BYTES],
@@ -425,7 +425,7 @@ fn void slice_shadow(char[] out, int box_w, int box_h, int kx, int ky, int r, Bo
 		surf, cells_w, box_w, box_h / 2);
 
 	// Bottom row: same, horizontally.
-	for (int ox = 0; ox < kx; ox++) {
+	for (sz ox = 0; ox < kx; ox++) {
 		blit_tile(out[(sz)shadow_bottom_left(kx, ky, ox) * TILE_BYTES:TILE_BYTES],
 			surf, cells_w, ox, box_h);
 		blit_tile(out[(sz)shadow_bottom_right(kx, ky, ox) * TILE_BYTES:TILE_BYTES],
@@ -438,21 +438,21 @@ fn void slice_shadow(char[] out, int box_w, int box_h, int kx, int ky, int r, Bo
 		surf, cells_w, box_w, box_h);
 }
 
-fn void slice_box_rows(char[] out, int kx, int ky, int body, int r, BoxStyle st) {
-	int cells_w = 2 * kx + 1;
-	int box_w = cells_w;
-	int rows = 2 * ky + body;
-	int box_rows = rows;
+fn void slice_box_rows(char[] out, sz kx, sz ky, sz body, sz r, BoxStyle st) {
+	sz cells_w = 2 * kx + 1;
+	sz box_w = cells_w;
+	sz rows = 2 * ky + body;
+	sz box_rows = rows;
 	char[] surf = mem::new_array(char, (sz)(cells_w * GX) * (sz)(rows * GY) * 4);
 	defer mem::free(&surf[0]);
 
 	render_surface(surf, cells_w, rows, r, st);
 
 	// Corner blocks: kx wide by ky tall.
-	for (int oy = 0; oy < ky; oy++) {
-		for (int ox = 0; ox < kx; ox++) {
-			int fx = box_w - kx;
-			int fy = box_rows - ky;
+	for (sz oy = 0; oy < ky; oy++) {
+		for (sz ox = 0; ox < kx; ox++) {
+			sz fx = box_w - kx;
+			sz fy = box_rows - ky;
 			blit_tile(out[(sz)tile_index(kx, ky, SLOT_TL, ox, oy) * TILE_BYTES:TILE_BYTES], surf, cells_w, ox, oy);
 			blit_tile(out[(sz)tile_index(kx, ky, SLOT_TR, ox, oy) * TILE_BYTES:TILE_BYTES], surf, cells_w, fx + ox, oy);
 			blit_tile(out[(sz)tile_index(kx, ky, SLOT_BL, ox, oy) * TILE_BYTES:TILE_BYTES], surf, cells_w, ox, fy + oy);
@@ -461,8 +461,8 @@ fn void slice_box_rows(char[] out, int kx, int ky, int body, int r, BoxStyle st)
 	}
 
 	// Top and bottom runs: one tile per corner row, each tiled horizontally.
-	int mid = kx;
-	for (int oy = 0; oy < ky; oy++) {
+	sz mid = kx;
+	for (sz oy = 0; oy < ky; oy++) {
 		blit_tile(out[(sz)hrun_tile_index(kx, ky, oy, false) * TILE_BYTES:TILE_BYTES],
 			surf, cells_w, mid, oy);
 		blit_tile(out[(sz)hrun_tile_index(kx, ky, oy, true) * TILE_BYTES:TILE_BYTES],
@@ -471,8 +471,8 @@ fn void slice_box_rows(char[] out, int kx, int ky, int body, int r, BoxStyle st)
 
 	// Body rows: left edge, interior, right edge -- each from its own surface
 	// row, which is what makes the gradient continuous.
-	for (int i = 0; i < body; i++) {
-		int sy = ky + i;
+	for (sz i = 0; i < body; i++) {
+		sz sy = ky + i;
 		blit_tile(out[(sz)row_tile_index(kx, ky, i, 0) * TILE_BYTES:TILE_BYTES], surf, cells_w, 0, sy);
 		blit_tile(out[(sz)row_tile_index(kx, ky, i, 1) * TILE_BYTES:TILE_BYTES], surf, cells_w, mid, sy);
 		blit_tile(out[(sz)row_tile_index(kx, ky, i, 2) * TILE_BYTES:TILE_BYTES], surf, cells_w, box_w - 1, sy);

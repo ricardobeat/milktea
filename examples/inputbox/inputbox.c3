@@ -52,11 +52,11 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = milktea::screen_width();
-	int h = milktea::screen_height();
+	sz w = milktea::screen_width();
+	sz h = milktea::screen_height();
 
 	String inp_content = string::tformat("> %s█", self.input.str_view());
-	String help_text   = string::tformat("  input len: %d chars", (int)self.input.len());
+	String help_text   = string::tformat("  input len: %d chars", (sz)self.input.len());
 
 	xray::Rect title_r, output_r, input_r, hint_r;
 	layout::vstack(layout::screen(w, h), {

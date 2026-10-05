@@ -2,7 +2,7 @@ module alt_probe @test;
 import milktea;
 import std::io;
 
-struct Probe { int n; }
+struct Probe { sz n; }
 fn milktea::Cmd Probe.init(&self) @dynamic => null;
 fn milktea::Cmd Probe.update(&self, milktea::Msg msg) @dynamic => milktea::quit();
 fn milktea::View Probe.view(&self) @dynamic => milktea::view("x");

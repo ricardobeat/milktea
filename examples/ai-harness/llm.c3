@@ -14,7 +14,7 @@ import http_shim;
 
 struct Result {
 	int status;
-	int ok;        // 1 = assistant content, 0 = error
+	sz ok;        // 1 = assistant content, 0 = error
 	DString body;  // assistant content or error message
 	DString reasoning; // thinking traces (may be empty)
 }
@@ -32,12 +32,12 @@ struct HistoryEntry {
 
 // Callback types — all invoked from the background thread.
 // StreamCb: called for each content delta. Return non-zero to cancel.
-alias StreamCb = fn int(void* ctx, String delta);
+alias StreamCb = fn sz(void* ctx, String delta);
 // ToolCb: called after a tool action executes (for logging).
 alias ToolCb   = fn void(void* ctx, String description);
 // BashCb: called to request bash approval. Must block until answered.
 // Return 1 to approve, 0 to deny.
-alias BashCb   = fn int(void* ctx, String command);
+alias BashCb   = fn sz(void* ctx, String command);
 // DoneCb: called when the full agent loop finishes. Caller owns result fields.
 alias DoneCb   = fn void(void* ctx, Result* result);
 
@@ -46,8 +46,8 @@ alias DoneCb   = fn void(void* ctx, Result* result);
 struct Job {
 	Config config;
 	HistoryEntry* history;
-	int history_count;
-	Atomic{int}* cancel;
+	sz history_count;
+	Atomic{sz}* cancel;
 	StreamCb on_stream;
 	ToolCb on_tool;
 	BashCb on_bash;
@@ -58,15 +58,15 @@ struct Job {
 struct StreamCtx {
 	DString accumulated;
 	DString line_buf;
-	Atomic{int}* cancel;
+	Atomic{sz}* cancel;
 	StreamCb on_stream;
 	void* ctx;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const int MAX_ROUNDS = 10;
-const int RESP_BUF_SIZE = 65536;
+const sz MAX_ROUNDS = 10;
+const sz RESP_BUF_SIZE = 65536;
 
 const String SYSTEM_PROMPT =
 	"You are a helpful AI assistant. You can use the bash, view_file, and edit_file "
@@ -114,7 +114,7 @@ fn void json_escape(DString* out, String input) {
 			case '\f': out.append_string("\\f");
 			default:
 				if (c < 0x20) {
-					out.append_string(string::tformat("\\u%04x", (int)c));
+					out.append_string(string::tformat("\\u%04x", (sz)c));
 				} else {
 					out.append_char(c);
 				}
@@ -133,12 +133,12 @@ fn String cbuf_str(char* buf) {
 	return (String)buf[:cbuf_len(buf)];
 }
 
-fn DString build_request_body(String model, DString* local_msgs, int local_count) {
+fn DString build_request_body(String model, DString* local_msgs, sz local_count) {
 	DString body = dstring::new(mem);
 	body.append_string("{\"model\":\"");
 	body.append_string(model);
 	body.append_string("\",\"messages\":[");
-	for (int i = 0; i < local_count; i++) {
+	for (sz i = 0; i < local_count; i++) {
 		if (i > 0) body.append_char(',');
 		body.append_string(local_msgs[i].str_view());
 	}
@@ -148,9 +148,9 @@ fn DString build_request_body(String model, DString* local_msgs, int local_count
 	return body;
 }
 
-fn int count_substring(String haystack, String needle) {
+fn sz count_substring(String haystack, String needle) {
 	if (needle.len == 0 || needle.len > haystack.len) return 0;
-	int count = 0;
+	sz count = 0;
 	for (sz i = 0; i <= haystack.len - needle.len; i++) {
 		bool match = true;
 		for (sz j = 0; j < needle.len; j++) {
@@ -196,7 +196,7 @@ fn String run_edit_file(String path, String old_string, String new_string) {
 	if (try content = file_data) {
 		String content_str = (String)content;
 
-		int count = count_substring(content_str, old_string);
+		sz count = count_substring(content_str, old_string);
 		if (count == 0) {
 			return string::tformat("Error: old_string not found in %s", path);
 		}
@@ -221,7 +221,7 @@ fn String run_edit_file(String path, String old_string, String new_string) {
 fn String run_bash_exec(String cmd) {
 	char[RESP_BUF_SIZE] out;
 	int exit_code = -1;
-	int ok = http_shim::mimo_run_command((char*)cmd.ptr, &out[0], RESP_BUF_SIZE, &exit_code);
+	sz ok = http_shim::mimo_run_command((char*)cmd.ptr, &out[0], RESP_BUF_SIZE, &exit_code);
 	if (!ok) {
 		return string::tformat("Failed to run command: %s", cmd);
 	}
@@ -233,8 +233,8 @@ fn String run_bash_exec(String cmd) {
 
 // ── Tool call parsing ──────────────────────────────────────────────────────
 
-fn bool parse_tool_calls(char* resp_body, int resp_len,
-	DString* local_msgs, int* local_count, Job* job,
+fn bool parse_tool_calls(char* resp_body, sz resp_len,
+	DString* local_msgs, sz* local_count, Job* job,
 	DString* out_content, DString* out_reasoning, DString* out_err) {
 
 	Object* doc = null;
@@ -271,7 +271,7 @@ fn bool parse_tool_calls(char* resp_body, int resp_len,
 	String reasoning = message.get_string("reasoning_content") ?? "";
 
 	Object* tool_calls = message.get("tool_calls") ?? null;
-	int tc_count = (tool_calls != null && tool_calls.is_array()) ? (int)tool_calls.len() : 0;
+	sz tc_count = (tool_calls != null && tool_calls.is_array()) ? (sz)tool_calls.len() : 0;
 
 	if (tc_count == 0) {
 		*out_content = dstring::new(mem);
@@ -283,7 +283,7 @@ fn bool parse_tool_calls(char* resp_body, int resp_len,
 
 	DString assistant_json = dstring::new(mem);
 	assistant_json.append_string("{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[");
-	for (int i = 0; i < tc_count; i++) {
+	for (sz i = 0; i < tc_count; i++) {
 		if (i > 0) assistant_json.append_char(',');
 		Object* tc = tool_calls.get_at(i);
 		String tc_id = tc.get_string("id") ?? "call_0";
@@ -304,7 +304,7 @@ fn bool parse_tool_calls(char* resp_body, int resp_len,
 	local_msgs[*local_count] = assistant_json;
 	*local_count += 1;
 
-	for (int i = 0; i < tc_count; i++) {
+	for (sz i = 0; i < tc_count; i++) {
 		Object* tc = tool_calls.get_at(i);
 		String tc_id = tc.get_string("id") ?? "call_0";
 		Object* func = tc.get("function") ?? null;
@@ -333,7 +333,7 @@ fn bool parse_tool_calls(char* resp_body, int resp_len,
 			job.on_tool(job.ctx, string::tformat("edit_file: %s", path_str));
 		} else if (fn_name == "bash") {
 			String cmd = args ? (args.get_string("command") ?? "") : "";
-			int approved = job.on_bash(job.ctx, cmd);
+			sz approved = job.on_bash(job.ctx, cmd);
 			if (approved) {
 				result = run_bash_exec(cmd);
 				job.on_tool(job.ctx, string::tformat("$ %s", cmd));
@@ -431,9 +431,9 @@ fn int agent_loop(void* arg) {
 
 fn void agent_loop_real(Job* job) {
 	DString* local_msgs = mem::new_array(DString, 128);
-	int local_count = 0;
+	sz local_count = 0;
 
-	for (int i = 0; i < job.history_count && i < 128; i++) {
+	for (sz i = 0; i < job.history_count && i < 128; i++) {
 		local_msgs[i] = dstring::new(mem);
 		local_msgs[i].append_string(job.history[i].json.str_view());
 		local_count++;
@@ -444,7 +444,7 @@ fn void agent_loop_real(Job* job) {
 	DString err_text = {};
 	int last_status = 0;
 
-	for (int round = 0; round < MAX_ROUNDS; round++) {
+	for (sz round = 0; round < MAX_ROUNDS; round++) {
 		if (job.cancel.load() != 0) break;
 
 		DString body_str = build_request_body(
@@ -458,7 +458,7 @@ fn void agent_loop_real(Job* job) {
 		sctx.ctx = job.ctx;
 
 		int status = 0;
-		int ok = http_shim::mimo_http_post_stream(
+		sz ok = http_shim::mimo_http_post_stream(
 			((ZString)&job.config.url[0]).str_view().zstr_copy(mem),
 			((ZString)&job.config.api_key[0]).str_view().zstr_copy(mem),
 			body_str.zstr_view(),
@@ -491,14 +491,14 @@ fn void agent_loop_real(Job* job) {
 
 		String acc = sctx.accumulated.str_view();
 		bool needs_round = parse_tool_calls(
-			(char*)acc.ptr, (int)acc.len, &local_msgs[0], &local_count, job,
+			(char*)acc.ptr, (sz)acc.len, &local_msgs[0], &local_count, job,
 			&final_content, &final_reasoning, &err_text);
 		sctx.accumulated.free();
 
 		if (!needs_round) break;
 	}
 
-	for (int i = 0; i < local_count; i++) {
+	for (sz i = 0; i < local_count; i++) {
 		local_msgs[i].free();
 	}
 	mem::free(local_msgs);
@@ -525,8 +525,8 @@ fn void agent_loop_real(Job* job) {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-fn void start(Config config, HistoryEntry* history, int history_count,
-	Atomic{int}* cancel,
+fn void start(Config config, HistoryEntry* history, sz history_count,
+	Atomic{sz}* cancel,
 	StreamCb on_stream, ToolCb on_tool, BashCb on_bash, DoneCb on_done,
 	void* ctx) {
 

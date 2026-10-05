@@ -15,8 +15,8 @@ enum SpinnerKind {
 
 struct SpinnerFrames {
 	String[8] frames;
-	int count;
-	int interval_ms;
+	sz count;
+	sz interval_ms;
 }
 
 fn SpinnerFrames spinner_frames(SpinnerKind kind) {
@@ -35,7 +35,7 @@ fn SpinnerFrames spinner_frames(SpinnerKind kind) {
 // Call view() to get the current frame string to include in your view.
 struct Spinner (xray::Content) {
 	SpinnerKind kind;
-	int frame;
+	sz frame;
 	glaze::Color fg;
 }
 
@@ -90,7 +90,7 @@ fn String Spinner.current_frame(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Spinner.render(&self, xray::Rect r) @dynamic => self.view();
-fn int Spinner.measure(&self, int width) @dynamic => 1;
-fn int Spinner.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn sz Spinner.measure(&self, sz width) @dynamic => 1;
+fn sz Spinner.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Spinner.node(&self) => xray::content_node(self);

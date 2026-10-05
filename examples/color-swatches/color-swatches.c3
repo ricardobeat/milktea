@@ -10,22 +10,22 @@ import xray::layout;
 import std::core::dstring;
 import std::io;
 
-const int MAX_GLITTER = 256;
+const sz MAX_GLITTER = 256;
 const String[6] SPARKLES = { "✦", "✧", "·", "˖", "°", "•" };
 
 struct Particle {
-	int col;
-	int row;
+	sz col;
+	sz row;
 	glaze::Color color;
-	int life; // frames remaining
+	sz life; // frames remaining
 	bool active;
 }
 
 struct Model {
 	Particle[MAX_GLITTER] glitter;
-	int glitter_count;
-	int spawn_idx; // round-robin index
-	int color_phase;
+	sz glitter_count;
+	sz spawn_idx; // round-robin index
+	sz color_phase;
 	// Reused cell buffer, owned by the model. The View borrows its cell array
 	// until the framework has copied it into the renderer, so the buffer must
 	// outlive view() — building a fresh screen per frame and freeing it here
@@ -39,7 +39,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.TICK) {
-		for (int i = 0; i < MAX_GLITTER; i++) {
+		for (sz i = 0; i < MAX_GLITTER; i++) {
 			if (self.glitter[i].active) {
 				self.glitter[i].life--;
 				if (self.glitter[i].life <= 0) self.glitter[i].active = false;
@@ -55,8 +55,8 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	}
 	if (msg.kind == milktea::MsgKind.MOUSE) {
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
-			for (int j = 0; j < 3; j++) {
-				int idx = self.spawn_idx % MAX_GLITTER;
+			for (sz j = 0; j < 3; j++) {
+				sz idx = self.spawn_idx % MAX_GLITTER;
 				self.glitter[idx].col = msg.mouse.col + (j - 1);
 				self.glitter[idx].row = msg.mouse.row;
 				self.glitter[idx].color = glaze::hcl((double)(self.color_phase % 360), 100.0, 65.0);
@@ -72,8 +72,8 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(&self) @dynamic {
-	int w = milktea::screen_width();
-	int h = milktea::screen_height();
+	sz w = milktea::screen_width();
+	sz h = milktea::screen_height();
 
 	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#ffffff")).with_bold(true);
 	glaze::Style label_s = glaze::style().foreground(glaze::color_hex("#888888"));
@@ -83,40 +83,40 @@ fn milktea::View Model.view(&self) @dynamic {
 	glaze::Color blue = glaze::color_hex("#0000ff");
 	glaze::Color grn  = glaze::color_hex("#00ff00");
 
-	int cols = w - 4;
+	sz cols = w - 4;
 	if (cols < 10) cols = 10;
 
 	// ── build gradient rows ──────────────────────────────────────────────
 
 	DString row1 = dstring::temp();
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row1.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			row1.append_string(glaze::style().foreground(glaze::blend_luv(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
 	DString row2 = dstring::temp();
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row2.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			row2.append_string(glaze::style().foreground(glaze::blend_hsl(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
 	DString row3 = dstring::temp();
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row3.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			row3.append_string(glaze::style().foreground(glaze::blend_hcl(red, blue, (double)i / (double)(cols - 1))).render("█"));
 		}
 	}
 
 	DString row4 = dstring::temp();
-	int third = cols / 3;
-	for (int pass = 0; pass < 2; pass++) {
+	sz third = cols / 3;
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row4.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			glaze::Color c;
 			if (i < third) {
 				c = glaze::blend_luv(red, grn, (double)i / (double)third);
@@ -130,26 +130,26 @@ fn milktea::View Model.view(&self) @dynamic {
 	}
 
 	DString row5 = dstring::temp();
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row5.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			row5.append_string(glaze::style().foreground(glaze::hsl((double)i / (double)cols, 1.0, 0.5)).render("█"));
 		}
 	}
 
 	DString row6 = dstring::temp();
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row6.append_string("\n  ");
-		for (int i = 0; i < cols; i++) {
+		for (sz i = 0; i < cols; i++) {
 			row6.append_string(glaze::style().foreground(glaze::hcl((double)i / (double)cols * 360.0, 100.0, 60.0)).render("█"));
 		}
 	}
 
 	DString row7 = dstring::temp();
 	String[8] hex_colors = { "#ff0000", "#ff8800", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#8800ff", "#ff00ff" };
-	for (int pass = 0; pass < 2; pass++) {
+	for (sz pass = 0; pass < 2; pass++) {
 		if (pass == 1) row7.append_string("\n  ");
-		for (int i = 0; i < 8; i++) {
+		for (sz i = 0; i < 8; i++) {
 			row7.append_string(glaze::style().foreground(glaze::color_hex(hex_colors[i])).render("████"));
 		}
 	}
@@ -265,7 +265,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	screen.render_ansi_string(0, 0, content, xray::default_style());
 
 	// Overlay glitter particles — fg blends additively, bg inherited from content
-	for (int i = 0; i < MAX_GLITTER; i++) {
+	for (sz i = 0; i < MAX_GLITTER; i++) {
 		Particle* p = &self.glitter[i];
 		if (!p.active) continue;
 		if (p.col < 0 || p.col >= w || p.row < 0 || p.row >= h) continue;
@@ -276,9 +276,9 @@ fn milktea::View Model.view(&self) @dynamic {
 		double fade = (double)p.life / 20.0;
 		if (fade > 1.0) fade = 1.0;
 
-		char pr = (char)(int)((double)p.color.r * fade);
-		char pg = (char)(int)((double)p.color.g * fade);
-		char pb = (char)(int)((double)p.color.b * fade);
+		char pr = (char)(sz)((double)p.color.r * fade);
+		char pg = (char)(sz)((double)p.color.g * fade);
+		char pb = (char)(sz)((double)p.color.b * fade);
 
 		String ch = SPARKLES[i % 6];
 		xray::Style s = xray::default_style()

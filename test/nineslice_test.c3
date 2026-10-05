@@ -9,7 +9,7 @@ import tgp;
 fn void test_placeholder_run_single_color_span() @test {
 	String s = tgp::placeholder_run(4096, 5);
 	// One color set, one reset, five placeholder codepoints.
-	int sets = 0; int resets = 0; int cells = 0;
+	sz sets = 0; sz resets = 0; sz cells = 0;
 	for (sz i = 0; i < s.len; i++) {
 		if (i + 7 < s.len && s[i] == 0x1b && s[i+1] == '[' && s[i+2] == '3' && s[i+3] == '8') sets++;
 		if (i + 4 < s.len && s[i] == 0x1b && s[i+1] == '[' && s[i+2] == '3' && s[i+3] == '9') resets++;

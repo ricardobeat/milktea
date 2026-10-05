@@ -6,9 +6,9 @@ import xray;
 
 struct FxImplode {
 	float line_y;
-	int line_frame;
-	int crt_stage;
-	int crt_stage_frame;
+	sz line_frame;
+	sz crt_stage;
+	sz crt_stage_frame;
 	float crt_dot;
 	float crt_swell;
 }
@@ -16,7 +16,7 @@ struct FxImplode {
 fn FxImplode* implode_data(Model* self) => (FxImplode*)self.fx_state;
 
 fn bool impl_on_line(Model* self, FxImplode* s) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		float dy = p.y - s.line_y;
@@ -34,7 +34,7 @@ fn void implode_setup(void* raw) {
 	s.crt_stage_frame = self.frame;
 	s.crt_dot = 0.0f;
 	s.crt_swell = 1.0f;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -58,7 +58,7 @@ fn void implode_step(void* raw) {
 	FxImplode* s = implode_data(self);
 
 	// Stage timings are what make this a shutdown rather than a collapse.
-	int held = self.frame - s.crt_stage_frame;
+	sz held = self.frame - s.crt_stage_frame;
 	if (s.crt_stage == 0) {
 		float t = (float)held / (float)SWELL_DURATION;
 		if (t > 1.0f) t = 1.0f;
@@ -93,7 +93,7 @@ fn void implode_step(void* raw) {
 		}
 	}
 
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (s.crt_stage == 0) {
@@ -126,7 +126,7 @@ fn void implode_render(void* raw) {
 	Model* self = (Model*)raw;
 	FxImplode* s = implode_data(self);
 	xray::ScreenBuffer* sb = self.canvas;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		float px = p.x;
@@ -134,8 +134,8 @@ fn void implode_render(void* raw) {
 			float scx = (float)self.text_x + (float)self.text_w * 0.5f;
 			px = scx + (p.x - scx) * s.crt_swell;
 		}
-		int col = (int)px;
-		int row = (int)p.y;
+		sz col = (sz)px;
+		sz row = (sz)p.y;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		xray::Color c = gradient_color(self, p.col);
@@ -154,8 +154,8 @@ fn void implode_render(void* raw) {
 		sb.set_cell((sz)col, (sz)row, xray::new_cell(g, 1, is));
 	}
 	if (s.crt_dot > 0.0f) {
-		int dc = (int)((float)self.text_x + (float)self.text_w * 0.5f);
-		int dr = (int)s.line_y;
+		sz dc = (sz)((float)self.text_x + (float)self.text_w * 0.5f);
+		sz dr = (sz)s.line_y;
 		if (dc >= 0 && dc < self.w && dr >= 0 && dr < self.h) {
 			float v = s.crt_dot;
 			xray::Color dcol = xray::color_rgb(

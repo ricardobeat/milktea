@@ -45,7 +45,7 @@ const String OSC_CURSOR_COLOR_RESET = "\x1b]112\x1b\\";
 // cursor_style_seq returns the ANSI escape to set cursor shape.
 // Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
 fn String cursor_style_seq(CursorShape shape, bool blink) {
-	int style = ((int)shape * 2) + 1;
+	sz style = ((sz)shape * 2) + 1;
 	if (!blink) style++;
 	return string::tformat("\x1b[%d q", style);
 }
@@ -113,8 +113,8 @@ fn void render_view_to(View v, DString* out) {
 	// After SGR_CLEAR_HOME, content starts at terminal position (1,1),
 	// so we add 1 to convert to 1-indexed terminal coordinates.
 	if (v.has_cursor) {
-		int term_row = v.cursor.y + 1;
-		int term_col = v.cursor.x + 1;
+		sz term_row = v.cursor.y + 1;
+		sz term_col = v.cursor.x + 1;
 		out.append_string(cursor_to(term_row, term_col));
 
 		// Set cursor color via OSC 12
@@ -232,6 +232,6 @@ fn void disable_mouse_pixels() {
 	write_stdout((char[])SGR_MOUSE_PIXELS_OFF);
 }
 
-fn String cursor_to(int row, int col) {
+fn String cursor_to(sz row, sz col) {
 	return string::tformat("\x1b[%d;%dH", row, col);
 }

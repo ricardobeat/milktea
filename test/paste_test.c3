@@ -8,8 +8,8 @@ import boba;
 // ============================================================
 
 struct PasteProbeModel {
-	int paste_count;
-	int key_count;
+	sz paste_count;
+	sz key_count;
 	// Store the last paste text in a fixed buffer for assertions.
 	// Tests inject at most a few hundred bytes, so 256 is plenty.
 	char[256] last_paste_buf;
@@ -176,8 +176,8 @@ fn void test_paste_textinput_no_newline_inserts_all() @test {
 // that quuits on a key instead.
 
 struct PasteThenKeyModel {
-	int paste_count;
-	int key_count;
+	sz paste_count;
+	sz key_count;
 	char[64] last_paste_buf;
 	sz last_paste_len;
 }

@@ -6,7 +6,7 @@ import glaze;
 
 // Stopwatch is a count-up timer component.
 // Embed it in your model; call tick() on TICK messages, return view() in your View.
-const int STOPWATCH_INTERVAL_MS = 10;
+const sz STOPWATCH_INTERVAL_MS = 10;
 
 struct Stopwatch (xray::Content) {
 	long elapsed_ms;
@@ -72,10 +72,10 @@ fn void Stopwatch.resume(&self) {
 // view returns the rendered stopwatch string.
 fn String Stopwatch.view(&self) {
 	long total_secs = self.elapsed_ms / 1000;
-	int hours   = (int)(total_secs / 3600);
-	int minutes = (int)((total_secs % 3600) / 60);
-	int secs    = (int)(total_secs % 60);
-	int cs      = (int)((self.elapsed_ms % 1000) / 10);
+	sz hours   = (sz)(total_secs / 3600);
+	sz minutes = (sz)((total_secs % 3600) / 60);
+	sz secs    = (sz)(total_secs % 60);
+	sz cs      = (sz)((self.elapsed_ms % 1000) / 10);
 
 	DString out = dstring::temp();
 	if (hours > 0) {
@@ -96,7 +96,7 @@ fn String Stopwatch.view(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Stopwatch.render(&self, xray::Rect r) @dynamic => self.view();
-fn int Stopwatch.measure(&self, int width) @dynamic => 1;
-fn int Stopwatch.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn sz Stopwatch.measure(&self, sz width) @dynamic => 1;
+fn sz Stopwatch.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Stopwatch.node(&self) => xray::content_node(self);

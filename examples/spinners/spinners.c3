@@ -16,7 +16,7 @@ struct SpinnersModel {
 	tgp::Glyph ball;
 	tgp::Glyph orbit;
 	tgp::Glyph cube;
-	int frame;
+	sz frame;
 }
 
 fn milktea::Cmd SpinnersModel.init(SpinnersModel* self) @dynamic {
@@ -86,7 +86,7 @@ fn void SpinnersModel.on_destroy(SpinnersModel* self) @dynamic {
 struct SpinnerDef {
 	String name;
 	String[8] frames;
-	int count;
+	sz count;
 }
 
 fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
@@ -133,8 +133,8 @@ fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
 	content.append_char('\n');
 
 	String[6] spin_views;
-	for (int i = 0; i < 6; i++) {
-		int idx     = self.frame % spinners[i].count;
+	for (sz i = 0; i < 6; i++) {
+		sz idx     = self.frame % spinners[i].count;
 		String spin = spinners[i].frames[idx];
 		String name = spinners[i].name;
 		spin_views[i] = string::tformat(

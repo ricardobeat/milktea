@@ -7,11 +7,11 @@ import std::core::string;
 import std::core::dstring;
 
 struct BounceModel {
-	int ball_x;
-	int ball_y;
-	int dx;
-	int dy;
-	int ticks;
+	sz ball_x;
+	sz ball_y;
+	sz dx;
+	sz dy;
+	sz ticks;
 }
 
 fn milktea::Cmd BounceModel.init(BounceModel* self) @dynamic {
@@ -28,8 +28,8 @@ fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic
 		self.ticks++;
 
 		// Bounce area is smaller than the terminal
-		int arena_w = milktea::screen_width() - 4;
-		int arena_h = milktea::screen_height() - 6;
+		sz arena_w = milktea::screen_width() - 4;
+		sz arena_h = milktea::screen_height() - 6;
 		if (arena_w < 5) arena_w = 5;
 		if (arena_h < 3) arena_h = 3;
 
@@ -66,8 +66,8 @@ fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic
 }
 
 fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
-	int arena_w = milktea::screen_width() - 4;
-	int arena_h = milktea::screen_height() - 6;
+	sz arena_w = milktea::screen_width() - 4;
+	sz arena_h = milktea::screen_height() - 6;
 	if (arena_w < 5) arena_w = 5;
 	if (arena_h < 3) arena_h = 3;
 
@@ -76,9 +76,9 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 
 	// Build arena content (ball row + empty rows)
 	DString content = dstring::temp();
-	for (int y = 0; y < arena_h; y++) {
+	for (sz y = 0; y < arena_h; y++) {
 		if (y == self.ball_y) {
-			for (int x = 0; x < arena_w; x++) {
+			for (sz x = 0; x < arena_w; x++) {
 				if (x == self.ball_x) {
 					content.append_string(ball);
 				} else {
@@ -86,7 +86,7 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 				}
 			}
 		} else {
-			for (int x = 0; x < arena_w; x++) {
+			for (sz x = 0; x < arena_w; x++) {
 				content.append_char(' ');
 			}
 		}

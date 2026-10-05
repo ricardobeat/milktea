@@ -11,7 +11,7 @@ struct PaintResult {
 	// Smallest repaint interval any node asked for, in milliseconds, or 0 if
 	// none did. The runtime schedules one timer from this rather than each
 	// node running its own.
-	int repaint_ms;
+	sz repaint_ms;
 }
 
 // paint walks a solved tree and draws it into buf.
@@ -35,7 +35,7 @@ fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = nu
 }
 
 // Default blink period for a drawn cursor, in milliseconds per phase.
-const int CURSOR_BLINK_MS = 500;
+const sz CURSOR_BLINK_MS = 500;
 
 // draw_cursor runs a self-painting cursor's callback, last, once the grid is
 // finished. It has to be last because the callback is handed the character
@@ -49,7 +49,7 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 	if (!c.has_cursor || c.draw == null) return;
 	if (c.x < 0 || c.y < 0 || (sz)c.x >= self.width || (sz)c.y >= self.height) return;
 
-	int period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
+	sz period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
 	bool blink = ((now_ms / (long)period) % 2) == 0;
 
 	Cell* cell   = self.cell_at((sz)c.x, (sz)c.y);
@@ -112,7 +112,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		}
 	}
 
-	for (int i = 0; i < n.child_count; i++) {
+	for (sz i = 0; i < n.child_count; i++) {
 		self.paint_node(n.children[i], res, scratch);
 	}
 
@@ -135,7 +135,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 // skips such a node's subtree entirely.)
 fn char scale_opacity(char opacity, char alpha) @local {
 	if (alpha == 255) return opacity;
-	return (char)(((int)opacity * (int)alpha + 127) / 255);
+	return (char)(((sz)opacity * (sz)alpha + 127) / 255);
 }
 
 // paint_blended renders content into a scratch buffer and blends its colors

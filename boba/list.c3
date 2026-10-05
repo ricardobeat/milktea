@@ -8,24 +8,24 @@ import std::core::dstring;
 // ListItem represents a single item in a list.
 // Rows the list reserves for its own chrome rather than items: a title row
 // and the pagination row beneath.
-const int LIST_CHROME_ROWS = 2;
+const sz LIST_CHROME_ROWS = 2;
 
 struct ListItem {
 	String title;
 	String description;
-	int id;
+	sz id;
 }
 
 // List is a scrollable list component with optional selection.
 struct List (xray::Content) {
 	ListItem[64] items;
-	int item_count;
-	int cursor;
-	int selected; // index of selected item (-1 if none)
+	sz item_count;
+	sz cursor;
+	sz selected; // index of selected item (-1 if none)
 	bool selectable; // if true, Enter sets selected; off by default
-	int width;
-	int height;
-	int scroll_offset;
+	sz width;
+	sz height;
+	sz scroll_offset;
 	glaze::Style cursor_style;
 	glaze::Style selected_style;
 	glaze::Style item_style;
@@ -59,7 +59,7 @@ fn void List.add_item(&self, String title, String description) {
 }
 
 // set_size updates the viewport dimensions.
-fn void List.set_size(&self, int width, int height) {
+fn void List.set_size(&self, sz width, sz height) {
 	self.width = width;
 	self.height = height;
 }
@@ -67,7 +67,7 @@ fn void List.set_size(&self, int width, int height) {
 // handle_key processes list navigation keybindings.
 // Returns true if the key was consumed.
 fn bool List.handle_key(&self, milktea::KeyMsg k) {
-	int available = self.height - 2;
+	sz available = self.height - 2;
 	if (available < 1) available = 1;
 
 	switch (k.code) {
@@ -105,13 +105,13 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 // view returns the rendered list string.
 // visible_rows is how many items fit in the list's height, leaving room for
 // the chrome the view draws around them.
-fn int List.visible_rows(&self) {
-	int n = self.height - LIST_CHROME_ROWS;
+fn sz List.visible_rows(&self) {
+	sz n = self.height - LIST_CHROME_ROWS;
 	return n < 1 ? 1 : n;
 }
 
 fn String List.view(&self) {
-	int available = self.visible_rows();
+	sz available = self.visible_rows();
 
 	// Adjust scroll offset
 	if (self.cursor < self.scroll_offset) self.scroll_offset = self.cursor;
@@ -119,10 +119,10 @@ fn String List.view(&self) {
 
 	DString out = dstring::temp();
 
-	int end = self.scroll_offset + available;
+	sz end = self.scroll_offset + available;
 	if (end > self.item_count) end = self.item_count;
 
-	for (int i = self.scroll_offset; i < end; i++) {
+	for (sz i = self.scroll_offset; i < end; i++) {
 		ListItem item = self.items[i];
 		if (self.cursor == i) {
 			out.append_string(self.cursor_style.render(string::tformat("%s%s", self.cursor_prefix, item.title)));
@@ -142,12 +142,12 @@ fn String List.view_with_pagination(&self) {
 	DString out = dstring::temp();
 	out.append_string(self.view());
 
-	int available = self.visible_rows();
-	int total_pages  = (self.item_count + available - 1) / available;
-	int current_page = self.scroll_offset / available;
+	sz available = self.visible_rows();
+	sz total_pages  = (self.item_count + available - 1) / available;
+	sz current_page = self.scroll_offset / available;
 
 	out.append_char('\n');
-	for (int p = 0; p < total_pages; p++) {
+	for (sz p = 0; p < total_pages; p++) {
 		if (p > 0) out.append_char(' ');
 		if (p == current_page) {
 			out.append_string(self.cursor_style.render("\xe2\x80\xa2")); // •
@@ -171,7 +171,7 @@ fn String List.render(&self, xray::Rect r) @dynamic {
 
 // A list fills whatever it is given rather than asking for a size, so it
 // reports what it was last laid out at.
-fn int List.measure(&self, int width) @dynamic => self.height;
-fn int List.measure_width(&self, int height) @dynamic => self.width;
+fn sz List.measure(&self, sz width) @dynamic => self.height;
+fn sz List.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* List.node(&self) => xray::content_node(self);

@@ -7,13 +7,13 @@ import std::core::string;
 import std::core::dstring;
 
 struct Model {
-	int mouse_row;
-	int mouse_col;
+	sz mouse_row;
+	sz mouse_col;
 	milktea::MouseButton last_button;
 	milktea::MouseAction last_action;
 	bool dragging;
 	String[32] trail;
-	int trail_count;
+	sz trail_count;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -105,7 +105,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		out.append_char('\n');
 		out.append_string(title_style.render("Click Trail:"));
 		out.append_char('\n');
-		for (int i = 0; i < self.trail_count; i++) {
+		for (sz i = 0; i < self.trail_count; i++) {
 			out.append_string(self.trail[i]);
 			if (i < self.trail_count - 1) {
 				out.append_string(" -> ");

@@ -64,13 +64,13 @@ FireColor[37] fire_palette = {
 struct Particle {
 	Vec3 pos;
 	Vec3 vel;
-	int fire_idx;
+	sz fire_idx;
 	bool alive;
 }
 
 struct RenderVoxel {
 	Vec3 pos;
-	int fire_idx;
+	sz fire_idx;
 }
 
 struct Pixel {
@@ -79,22 +79,22 @@ struct Pixel {
 	char b;
 }
 
-const int MAX_PARTICLES   =  2048;
-const int SPAWN_PER_FRAME =  12;
+const sz MAX_PARTICLES   =  2048;
+const sz SPAWN_PER_FRAME =  12;
 const float SPREAD_Z      =  4.0f;
 const float BASE_Y        = -6.0f;
 
 struct Fire3DModel {
 	Particle[] particles;
-	int active_count;
+	sz active_count;
 	RenderVoxel[] render_voxels;
-	int render_count;
+	sz render_count;
 	float rotation_x;
 	float rotation_y;
 	float rotation_z;
-	int width;
-	int height;
-	int frame;
+	sz width;
+	sz height;
+	sz frame;
 	xray::Cell[] cells;
 	Pixel[] pixels;
 	float[] depth;
@@ -124,7 +124,7 @@ fn float rand_float() => (float)(rand() % 10000) / 10000.0f;
 
 fn void spawn_particle(Fire3DModel* self) {
 	float spread_x = (float)self.width * 0.15f;
-	for (int i = 0; i < MAX_PARTICLES; i++) {
+	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		if (!self.particles[i].alive) {
 			float rx    = (rand_float() * 2.0f - 1.0f) * spread_x;
 			float rz    = (rand_float() * 2.0f - 1.0f) * SPREAD_Z;
@@ -142,7 +142,7 @@ fn void spawn_particle(Fire3DModel* self) {
 
 fn void update_particles(Fire3DModel* self) {
 	self.active_count = 0;
-	for (int i = 0; i < MAX_PARTICLES; i++) {
+	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 
@@ -159,7 +159,7 @@ fn void update_particles(Fire3DModel* self) {
 		p.vel.z *= 0.98f;
 
 		// decay fire
-		int decay = rand() % 3;
+		sz decay = rand() % 3;
 		p.fire_idx -= decay;
 		if (p.fire_idx < 0) {
 			p.alive = false;
@@ -180,7 +180,7 @@ fn void build_render_voxels(Fire3DModel* self) {
 	self.render_count = 0;
 	float half = 0.4f;
 
-	for (int i = 0; i < MAX_PARTICLES; i++) {
+	for (sz i = 0; i < MAX_PARTICLES; i++) {
 		if (!self.particles[i].alive) continue;
 		if (self.render_count >= 8192) break;
 
@@ -269,7 +269,7 @@ fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic
 		self.frame++;
 
 		// spawn new particles
-		for (int i = 0; i < SPAWN_PER_FRAME; i++) {
+		for (sz i = 0; i < SPAWN_PER_FRAME; i++) {
 			spawn_particle(self);
 		}
 
@@ -296,8 +296,8 @@ fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic
 }
 
 fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
-	int w    = self.width;
-	int h    = self.height;
+	sz w    = self.width;
+	sz h    = self.height;
 	sz total = (sz)(w * h);
 
 	for (sz i = 0; i < total; i++) {
@@ -310,9 +310,9 @@ fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 	float cx   = (float)w / 2.0f;
 	float cy   = (float)h / 2.0f;
 
-	for (int v = 0; v < self.render_count; v++) {
+	for (sz v = 0; v < self.render_count; v++) {
 		Vec3 p = self.render_voxels[v].pos;
-		int fi = self.render_voxels[v].fire_idx;
+		sz fi = self.render_voxels[v].fire_idx;
 
 		p = p.rotate_x(self.rotation_x);
 		p = p.rotate_y(self.rotation_y);
@@ -325,8 +325,8 @@ fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 		float sx =  p.x * sc * 2.0f + cx;
 		float sy = -p.y * sc + cy;
 
-		int ix = (int)sx;
-		int iy = (int)sy;
+		sz ix = (sz)sx;
+		sz iy = (sz)sy;
 		if (ix < 0 || ix >= w || iy < 0 || iy >= h) continue;
 
 		sz idx = (sz)(iy * w + ix);
@@ -339,21 +339,21 @@ fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 	}
 
 	// AA pass
-	int[4] ddx = { 1, -1, 0, 0 };
-	int[4] ddy = { 0, 0, 1, -1 };
-	for (int py = 0; py < h; py++) {
-		for (int px = 0; px < w; px++) {
+	sz[4] ddx = { 1, -1, 0, 0 };
+	sz[4] ddy = { 0, 0, 1, -1 };
+	for (sz py = 0; py < h; py++) {
+		for (sz px = 0; px < w; px++) {
 			sz idx = (sz)(py * w + px);
 			if (self.depth[idx] < 999.0f) continue;
 
 			float sum_r = 0.0f;
 			float sum_g = 0.0f;
 			float sum_b = 0.0f;
-			int count   = 0;
+			sz count   = 0;
 
-			for (int d = 0; d < 4; d++) {
-				int nx2 = px + ddx[d];
-				int ny2 = py + ddy[d];
+			for (sz d = 0; d < 4; d++) {
+				sz nx2 = px + ddx[d];
+				sz ny2 = py + ddy[d];
 				if (nx2 < 0 || nx2 >= w || ny2 < 0 || ny2 >= h) continue;
 				sz nidx = (sz)(ny2 * w + nx2);
 				if (self.depth[nidx] >= 999.0f) continue;

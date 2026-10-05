@@ -9,12 +9,12 @@ import xray;
 // after the first off phase and only resumes when something else — a
 // keystroke — forces a frame.
 
-fn String blink_cursor(int x, int y, bool blink, String under) {
+fn String blink_cursor(sz x, sz y, bool blink, String under) {
 	return blink ? "*" : "";
 }
 
 struct Field (xray::Content) {
-	int unused;
+	sz unused;
 }
 
 fn String Field.render(&self, xray::Rect r) @dynamic => "ab";
@@ -25,7 +25,7 @@ fn xray::ContentCursor Field.cursor(&self, xray::Rect r) @dynamic {
 
 struct BlinkModel {
 	Field field;
-	int ticks;
+	sz ticks;
 }
 
 fn milktea::Cmd BlinkModel.init(&self) @dynamic => null;

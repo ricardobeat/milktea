@@ -19,7 +19,7 @@ fn void vortex_setup(void* raw) {
 	s.hole_x = rand_range(8.0f, (float)self.w - 8.0f);
 	s.hole_y = rand_range(4.0f, (float)self.h - 4.0f);
 	s.hole_r = 0.0f;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -38,7 +38,7 @@ fn void vortex_setup(void* raw) {
 fn void vortex_step(void* raw) {
 	Model* self = (Model*)raw;
 	FxVortex* s = vortex_data(self);
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue;
@@ -86,11 +86,11 @@ fn void vortex_render(void* raw) {
 		xray::Color ring = xray::color_rgb(255, 64, 160);
 		xray::Style ring_s = xray::default_style().set_fg(ring).set_bg(xray::color_transparent());
 		xray::Style void_s = xray::default_style().set_fg(xray::color_rgb(10, 4, 14)).set_bg(xray::color_transparent());
-		int span = (int)s.hole_r + 2;
-		for (int dy = -span; dy <= span; dy++) {
-			for (int dx = -span * 2; dx <= span * 2; dx++) {
-				int col = (int)s.hole_x + dx;
-				int row = (int)s.hole_y + dy;
+		sz span = (sz)s.hole_r + 2;
+		for (sz dy = -span; dy <= span; dy++) {
+			for (sz dx = -span * 2; dx <= span * 2; dx++) {
+				sz col = (sz)s.hole_x + dx;
+				sz row = (sz)s.hole_y + dy;
 				if (col < 0 || col >= self.w) continue;
 				if (row < 0 || row >= self.h) continue;
 				float fx = (float)dx * 0.5f;

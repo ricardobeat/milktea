@@ -14,9 +14,9 @@ enum PaginatorType {
 
 // Pagination is a page navigation component.
 struct Pagination (xray::Content) {
-	int page; // current page (0-indexed)
-	int per_page; // items per page
-	int total_items; // total number of items
+	sz page; // current page (0-indexed)
+	sz per_page; // items per page
+	sz total_items; // total number of items
 	PaginatorType kind;
 	glaze::Style active_style;
 	glaze::Style inactive_style;
@@ -24,7 +24,7 @@ struct Pagination (xray::Content) {
 }
 
 // new_pagination creates a pagination component.
-fn Pagination new_pagination(int per_page, int total_items) {
+fn Pagination new_pagination(sz per_page, sz total_items) {
 	Pagination p = { };
 	p.per_page = per_page;
 	p.total_items = total_items;
@@ -43,21 +43,21 @@ fn Pagination Pagination.with_kind(self, PaginatorType kind) {
 }
 
 // total_pages returns the total number of pages.
-fn int Pagination.total_pages(&self) {
+fn sz Pagination.total_pages(&self) {
 	if (self.per_page <= 0) return 1;
-	int tp = (self.total_items + self.per_page - 1) / self.per_page;
+	sz tp = (self.total_items + self.per_page - 1) / self.per_page;
 	if (tp < 1) tp = 1;
 	return tp;
 }
 
 // page_start returns the index of the first item on the current page.
-fn int Pagination.page_start(&self) {
+fn sz Pagination.page_start(&self) {
 	return self.page * self.per_page;
 }
 
 // page_end returns the index past the last item on the current page.
-fn int Pagination.page_end(&self) {
-	int end = self.page * self.per_page + self.per_page;
+fn sz Pagination.page_end(&self) {
+	sz end = self.page * self.per_page + self.per_page;
 	if (end > self.total_items) end = self.total_items;
 	return end;
 }
@@ -73,8 +73,8 @@ fn void Pagination.next_page(&self) {
 }
 
 // goto_page jumps to a specific page (0-indexed).
-fn void Pagination.goto_page(&self, int p) {
-	int tp = self.total_pages();
+fn void Pagination.goto_page(&self, sz p) {
+	sz tp = self.total_pages();
 	if (p < 0) p = 0;
 	if (p >= tp) p = tp - 1;
 	self.page = p;
@@ -103,12 +103,12 @@ fn bool Pagination.handle_key(&self, milktea::KeyMsg k) {
 
 // view returns the rendered pagination string.
 fn String Pagination.view(&self) {
-	int tp      = self.total_pages();
+	sz tp      = self.total_pages();
 	DString out = dstring::temp();
 
 	switch (self.kind) {
 		case DOTS:
-			for (int i = 0; i < tp; i++) {
+			for (sz i = 0; i < tp; i++) {
 				if (i > 0) out.append_char(' ');
 				if (i == self.page) {
 					out.append_string(self.active_style.render("\xe2\x97\x89")); // ◉
@@ -117,7 +117,7 @@ fn String Pagination.view(&self) {
 				}
 			}
 		case NUMBERS:
-			for (int i = 0; i < tp; i++) {
+			for (sz i = 0; i < tp; i++) {
 				if (i > 0) out.append_char(' ');
 				String num = string::tformat("%d", i + 1);
 				if (i == self.page) {
@@ -136,7 +136,7 @@ fn String Pagination.view(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Pagination.render(&self, xray::Rect r) @dynamic => self.view();
-fn int Pagination.measure(&self, int width) @dynamic => 1;
-fn int Pagination.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn sz Pagination.measure(&self, sz width) @dynamic => 1;
+fn sz Pagination.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Pagination.node(&self) => xray::content_node(self);

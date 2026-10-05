@@ -9,7 +9,7 @@ import std::core::dstring;
 
 struct InputsModel {
 	boba::TextInput[3] inputs;
-	int focus;
+	sz focus;
 	bool submitted;
 }
 
@@ -68,9 +68,9 @@ const String[3] LABELS = { "Nickname:", "Email:", "Password:" };
 
 // Rows the form leaves between its parts: after the title, before the button,
 // and before the hint line.
-const int SECTION_GAP = 1;
+const sz SECTION_GAP = 1;
 // Columns between a label and its input.
-const int LABEL_GAP = 1;
+const sz LABEL_GAP = 1;
 
 fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
@@ -78,7 +78,7 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 	glaze::Style hint_s  = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	milktea::Node* form = milktea::vstack();
-	for (int i = 0; i < 3; i++) {
+	for (sz i = 0; i < 3; i++) {
 		self.inputs[i].focused = i == self.focus;
 		form.add(milktea::hstack()
 			.height(milktea::cells(1))
@@ -104,10 +104,10 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 
 // label_cols is the width of the label column: the longest label, so the
 // inputs line up without anyone counting characters.
-fn int label_cols() {
-	int widest = 0;
+fn sz label_cols() {
+	sz widest = 0;
 	foreach (l : LABELS) {
-		int w = glaze::string_width(l);
+		sz w = glaze::string_width(l);
 		if (w > widest) widest = w;
 	}
 	return widest;

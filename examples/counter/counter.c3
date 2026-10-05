@@ -5,7 +5,7 @@ import glaze;
 import std::io;
 
 struct Counter {
-	int value;
+	sz value;
 }
 
 fn milktea::Cmd Counter.init(Counter* self) @dynamic {

@@ -53,8 +53,8 @@ fn void capture(String escape) {
 	g_captured_buf.append_string(escape);
 }
 
-fn int count_occurrences(String hay, String needle) {
-	int count = 0;
+fn sz count_occurrences(String hay, String needle) {
+	sz count = 0;
 	for (sz i = 0; i + needle.len <= hay.len; i++) {
 		bool match = true;
 		for (sz j = 0; j < needle.len; j++) {
@@ -193,7 +193,7 @@ fn void test_place_scaled_under_text() @test {
 		assert(count_occurrences(out, "r=4") == 1);
 
 		// Resize: one replacement put, and no new transmit.
-		int transmits_before = count_occurrences(out, "\x1b_Ga=t,");
+		sz transmits_before = count_occurrences(out, "\x1b_Ga=t,");
 		s.resize(id, 20, 6);
 		s.sync();
 		out = g_captured_buf.str_view();
@@ -231,6 +231,6 @@ fn void test_transmit_is_compressed() @test {
 		String out = g_captured_buf.str_view();
 		assert(count_occurrences(out, "o=z") == 1, "payload was not compressed");
 		// 4KB raw -> base64 would be ~5.5KB; compressed must be far smaller.
-		assert(out.len < 2048, "compressed transmit still %d bytes", (int)out.len);
+		assert(out.len < 2048, "compressed transmit still %d bytes", (sz)out.len);
 	};
 }

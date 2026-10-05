@@ -7,13 +7,13 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MAX_EDITORS = 4;
-const int BUF_SIZE    = 4096;
+const sz MAX_EDITORS = 4;
+const sz BUF_SIZE    = 4096;
 
 struct Editor {
 	char[BUF_SIZE] buf;
 	sz len;
-	int cursor;
+	sz cursor;
 	bool focused;
 	String label;
 	String placeholder;
@@ -42,7 +42,7 @@ fn String Editor.text(Editor* self) {
 	return (String)self.buf[:self.len];
 }
 
-fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor) {
+fn String Editor.view(Editor* self, sz height, sz pane_width, bool show_cursor) {
 	glaze::Style focused = glaze::style().with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#3b82f6"))
 		.with_width(pane_width)
@@ -53,7 +53,7 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 	glaze::Style s = self.focused ? focused : unfocused;
 
 	// Content width available for text (inside padding and borders)
-	int content_width = pane_width - 4; // 2 padding + 2 border chars
+	sz content_width = pane_width - 4; // 2 padding + 2 border chars
 	if (content_width < 1) content_width = 1;
 
 	// Cursor line highlight styles
@@ -81,25 +81,25 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 	// Show lines up to height, with word wrapping
 	String txt      = self.text();
 	sz line_num     = 1;
-	int lines_shown = 0;
-	int max_lines   = height - 4;
+	sz lines_shown = 0;
+	sz max_lines   = height - 4;
 	if (max_lines < 1) max_lines = 1;
 
 	// Find which line cursor is on for scrolling
-	int cursor_line = 0;
+	sz cursor_line = 0;
 	for (sz i = 0; i < self.len; i++) {
 		if (i == (sz)self.cursor) break;
 		if (self.buf[i] == '\n') cursor_line++;
 	}
 
 	// Skip lines before cursor to keep it visible
-	int skip = 0;
+	sz skip = 0;
 	if (cursor_line > max_lines - 2) {
 		skip = cursor_line - max_lines + 2;
 	}
 
 	sz line_start    = 0;
-	int logical_line = 0;
+	sz logical_line = 0;
 	for (sz i = 0; i <= txt.len; i++) {
 		bool at_end     = i == txt.len;
 		bool at_newline = !at_end && txt[i] == '\n';
@@ -110,7 +110,7 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 			while (seg_start < i) {
 				sz seg_end    = seg_start;
 				sz last_break = seg_start;
-				int col       = 0;
+				sz col       = 0;
 				while (seg_end < i && col < content_width) {
 					if (txt[seg_end] == ' ') last_break = seg_end + 1;
 					col++;
@@ -132,9 +132,9 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 					}
 					if (is_cursor_line) {
 						// Pad cursor line to full content width so highlight extends across
-						int used = 3 + (int)(seg_end - seg_start);
+						sz used = 3 + (sz)(seg_end - seg_start);
 						if (show_cursor && (sz)self.cursor >= seg_start && (sz)self.cursor <= seg_end) used++;
-						for (int p = used; p < content_width; p++) line_buf.append_char(' ');
+						for (sz p = used; p < content_width; p++) line_buf.append_char(' ');
 						content.append_string(cline_style.render(line_buf.str_view()));
 					} else {
 						content.append_string(line_buf.str_view());
@@ -151,14 +151,14 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 			if (at_newline && (sz)self.cursor == i + 1 && logical_line + 1 >= skip && lines_shown < max_lines) {
 				bool is_cursor_line = self.focused && logical_line + 1 == cursor_line;
 				DString line_buf    = dstring::temp();
-				line_buf.append_string(string::tformat("%2d ", (int)(line_num + 1)));
+				line_buf.append_string(string::tformat("%2d ", (sz)(line_num + 1)));
 				if (is_cursor_line && show_cursor) {
 					line_buf.append_string(cursor_block);
 				}
 				if (is_cursor_line) {
 					// Pad cursor line to full content width
-					int used = 4; // "NN " + cursor block
-					for (int p = used; p < content_width; p++) line_buf.append_char(' ');
+					sz used = 4; // "NN " + cursor block
+					for (sz p = used; p < content_width; p++) line_buf.append_char(' ');
 					content.append_string(cline_style.render(line_buf.str_view()));
 				} else {
 					content.append_string(line_buf.str_view());
@@ -178,9 +178,9 @@ fn String Editor.view(Editor* self, int height, int pane_width, bool show_cursor
 
 struct SplitModel {
 	Editor[4] editors;
-	int count;
-	int focus;
-	int cursor_blink;
+	sz count;
+	sz focus;
+	sz cursor_blink;
 }
 
 fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
@@ -257,18 +257,18 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	bool show_cursor     = self.cursor_blink != 0;
 
-	int edit_h = milktea::screen_height() - 3;
+	sz edit_h = milktea::screen_height() - 3;
 	if (edit_h < 5) edit_h = 5;
 
 	xray::Constraint[4] pane_cs;
-	for (int i = 0; i < self.count; i++) pane_cs[i] = xray::fill(1);
+	for (sz i = 0; i < self.count; i++) pane_cs[i] = xray::fill(1);
 	xray::Rect[4] pane_rects;
 	xray::layout_h(xray::new_rect(0, 0, milktea::screen_width(), edit_h), pane_cs[0:self.count], pane_rects[0:self.count]);
 
 	DString out = dstring::temp();
 	String[4] views;
-	for (int i = 0; i < self.count; i++) {
-		int pane_w = pane_rects[i].w < 10 ? 10 : pane_rects[i].w;
+	for (sz i = 0; i < self.count; i++) {
+		sz pane_w = pane_rects[i].w < 10 ? 10 : pane_rects[i].w;
 		views[i] = self.editors[i].view(edit_h, pane_w, show_cursor);
 	}
 
@@ -276,7 +276,7 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 		out.append_string(views[0]);
 	} else {
 		String joined = views[0];
-		for (int i = 1; i < self.count; i++) {
+		for (sz i = 1; i < self.count; i++) {
 			joined = glaze::join_horizontal(joined, views[i], 0);
 		}
 		out.append_string(joined);

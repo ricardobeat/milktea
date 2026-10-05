@@ -31,17 +31,17 @@ const String[8] PALETTE_HEX = {
 
 // Pixel bitmap. width × height pixels, each cell is a color index (0-7) or -1 for empty.
 struct Canvas {
-	int[] pixels;
-	int width;
-	int height;
+	sz[] pixels;
+	sz width;
+	sz height;
 }
 
-fn void Canvas.resize(Canvas* self, int width, int height) {
+fn void Canvas.resize(Canvas* self, sz width, sz height) {
 	self.width = width < 1 ? 1 : width;
 	self.height = height < 1 ? 1 : height;
 	sz total = (sz)self.width * (sz)self.height;
 	if (self.pixels.ptr != null) mem::free(self.pixels.ptr);
-	self.pixels = mem::new_array(int, total);
+	self.pixels = mem::new_array(sz, total);
 	for (sz i = 0; i < total; i++) self.pixels[i] = -1;
 }
 
@@ -49,21 +49,21 @@ fn void Canvas.clear(Canvas* self) {
 	for (sz i = 0; i < self.pixels.len; i++) self.pixels[i] = -1;
 }
 
-fn void Canvas.set_pixel(Canvas* self, int x, int y, int color) {
+fn void Canvas.set_pixel(Canvas* self, sz x, sz y, sz color) {
 	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return;
 	self.pixels[(sz)y * (sz)self.width + (sz)x] = color;
 }
 
-fn int Canvas.get_pixel(Canvas* self, int x, int y) {
+fn sz Canvas.get_pixel(Canvas* self, sz x, sz y) {
 	if (x < 0 || x >= self.width || y < 0 || y >= self.height) return -1;
 	return self.pixels[(sz)y * (sz)self.width + (sz)x];
 }
 
-fn void Canvas.draw_circle(Canvas* self, int cx, int cy, int radius, int color) {
-	for (int dy = -radius; dy <= radius; dy++) {
-		for (int dx = -radius; dx <= radius; dx++) {
-			int dist_sq   = dx * dx + dy * dy;
-			int radius_sq = radius * radius;
+fn void Canvas.draw_circle(Canvas* self, sz cx, sz cy, sz radius, sz color) {
+	for (sz dy = -radius; dy <= radius; dy++) {
+		for (sz dx = -radius; dx <= radius; dx++) {
+			sz dist_sq   = dx * dx + dy * dy;
+			sz radius_sq = radius * radius;
 			if (dist_sq < radius_sq || (dist_sq <= radius_sq + 2 * radius && dist_sq <= radius_sq + radius)) {
 				self.set_pixel(cx + dx, cy + dy, color);
 			}
@@ -71,14 +71,14 @@ fn void Canvas.draw_circle(Canvas* self, int cx, int cy, int radius, int color) 
 	}
 }
 
-fn void Canvas.draw_line(Canvas* self, int x0, int y0, int x1, int y1, int radius, int color) {
-	int dx     = x1 - x0;
-	int dy     = y1 - y0;
-	int steps  = dx < 0 ? -dx : dx;
-	int dy_abs = dy < 0 ? -dy : dy;
+fn void Canvas.draw_line(Canvas* self, sz x0, sz y0, sz x1, sz y1, sz radius, sz color) {
+	sz dx     = x1 - x0;
+	sz dy     = y1 - y0;
+	sz steps  = dx < 0 ? -dx : dx;
+	sz dy_abs = dy < 0 ? -dy : dy;
 	if (steps < dy_abs) steps = dy_abs;
 	if (steps < 1) steps = 1;
-	for (int i = 0; i <= steps; i++) {
+	for (sz i = 0; i <= steps; i++) {
 		self.draw_circle(x0 + (dx * i) / steps, y0 + (dy * i) / steps, radius, color);
 	}
 }
@@ -86,8 +86,8 @@ fn void Canvas.draw_line(Canvas* self, int x0, int y0, int x1, int y1, int radiu
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 struct Model {
-	int term_width;
-	int term_height;
+	sz term_width;
+	sz term_height;
 
 	Canvas canvas;
 	xray::Rect palette_rect; // left sidebar
@@ -95,15 +95,15 @@ struct Model {
 
 	char selected_color; // 0-7
 	PaintTool tool;
-	int stroke_width; // 1-3
-	int eraser_width; // 1-3
+	sz stroke_width; // 1-3
+	sz eraser_width; // 1-3
 
 	bool was_pressing;
-	int last_draw_row; // in canvas pixel coords
-	int last_draw_col;
+	sz last_draw_row; // in canvas pixel coords
+	sz last_draw_col;
 
-	int hover_row;
-	int hover_col;
+	sz hover_row;
+	sz hover_col;
 }
 
 // ── Tea Model ─────────────────────────────────────────────────────────────────
@@ -136,15 +136,15 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	}
 
 	if (msg.kind == milktea::MsgKind.MOUSE) {
-		int col = msg.mouse.col;
-		int row = msg.mouse.row;
+		sz col = msg.mouse.col;
+		sz row = msg.mouse.row;
 
 		self.hover_col = col;
 		self.hover_row = row;
 
 		// ── Color palette ────────────────────────────────────────────────────
 		if (self.palette_rect.contains(col, row)) {
-			int color_idx = (row - self.palette_rect.y) / 3;
+			sz color_idx = (row - self.palette_rect.y) / 3;
 			if (color_idx < 8) {
 				self.selected_color = (char)color_idx;
 				return null;
@@ -181,18 +181,18 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		}
 
 		// ── Canvas ───────────────────────────────────────────────────────────
-		int ccol = col - self.canvas_rect.x;
+		sz ccol = col - self.canvas_rect.x;
 		// Each terminal row = 2 canvas pixel rows; map here, once.
 
 
 
-		int crow       = (row - self.canvas_rect.y) * 2;
+		sz crow       = (row - self.canvas_rect.y) * 2;
 		bool in_canvas = ccol >= 0 && ccol < self.canvas.width && crow >= 0 && crow < self.canvas.height;
 
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && in_canvas) {
 			self.was_pressing = true;
-			int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-			int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
+			sz radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
+			sz color  = (self.tool == PaintTool.PAINT) ? (sz)self.selected_color : -1;
 			self.canvas.draw_circle(ccol, crow, radius, color);
 			self.last_draw_col = ccol;
 			self.last_draw_row = crow;
@@ -200,8 +200,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		}
 
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.was_pressing && in_canvas) {
-			int radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-			int color  = (self.tool == PaintTool.PAINT) ? (int)self.selected_color : -1;
+			sz radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
+			sz color  = (self.tool == PaintTool.PAINT) ? (sz)self.selected_color : -1;
 			if (self.last_draw_col >= 0 && self.last_draw_row >= 0) {
 				self.canvas.draw_line(self.last_draw_col, self.last_draw_row, ccol, crow, radius, color);
 			} else {
@@ -245,7 +245,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 				if (self.stroke_width > 1) self.stroke_width--;
 				if (self.eraser_width > 1) self.eraser_width--;
 			} else if (k.rune >= 'a' && k.rune <= 'c') {
-				self.stroke_width = (int)(k.rune - 'a') + 1;
+				self.stroke_width = (sz)(k.rune - 'a') + 1;
 			}
 		default:
 	}
@@ -258,7 +258,7 @@ fn String build_palette_column(Model* self) {
 	DString out     = dstring::temp();
 	String bg_empty = PALETTE_HEX[0];
 
-	for (int color_idx = 0; color_idx < 8; color_idx++) {
+	for (sz color_idx = 0; color_idx < 8; color_idx++) {
 		bool selected  = (color_idx == self.selected_color);
 		String cell_bg = PALETTE_HEX[color_idx];
 		String fg      = (color_idx == 7) ? "#000000" : "#ffffff";
@@ -266,7 +266,7 @@ fn String build_palette_column(Model* self) {
 		glaze::Style s = glaze::style().foreground(glaze::color_hex(fg))
 			.background(glaze::color_hex(cell_bg));
 
-		for (int row = 0; row < 3; row++) {
+		for (sz row = 0; row < 3; row++) {
 			String content = (selected && row == 1) ? "  ✓  " : "     ";
 			out.append_string(s.render(content));
 			out.append_char('\n');
@@ -285,7 +285,7 @@ fn String build_tools_toolbar(Model* self) {
 
 	out.append_string(self.tool == PaintTool.PAINT ? "[*Paint*]" : "[ Paint ]");
 	out.append_string(" | ");
-	for (int w = 1; w <= 3; w++) {
+	for (sz w = 1; w <= 3; w++) {
 		bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
 		glaze::Style s = glaze::style().foreground(glaze::color_hex(active ? "#000000" : "#888888"))
 			.background(glaze::color_hex(active ? "#55ffff" : "#222222"));
@@ -299,12 +299,12 @@ fn String build_tools_toolbar(Model* self) {
 	return out.str_view();
 }
 
-fn String build_top_bar(Model* self, int width) {
+fn String build_top_bar(Model* self, sz width) {
 	String tools  = build_tools_toolbar(self);
-	int remaining = width - 1 - glaze::string_width(tools);
+	sz remaining = width - 1 - glaze::string_width(tools);
 	if (remaining > 0) {
 		DString pad = dstring::temp();
-		for (int i = 0; i < remaining; i++) pad.append_char(' ');
+		for (sz i = 0; i < remaining; i++) pad.append_char(' ');
 		return glaze::join_horizontal(tools, pad.str_view(), 0);
 	}
 	return tools;
@@ -315,14 +315,14 @@ fn String build_canvas_view(Canvas* c) {
 	String bg_empty = PALETTE_HEX[0];
 
 	// Two canvas pixel rows per terminal row via half-block characters.
-	for (int py = 0; py < c.height; py += 2) {
+	for (sz py = 0; py < c.height; py += 2) {
 		glaze::Style sep = glaze::style().foreground(glaze::color_hex("#444444"))
 			.background(glaze::color_hex(bg_empty));
 		out.append_string(sep.render("|"));
 
-		for (int px = 0; px < c.width; px++) {
-			int top    = c.get_pixel(px, py);
-			int bottom = c.get_pixel(px, py + 1);
+		for (sz px = 0; px < c.width; px++) {
+			sz top    = c.get_pixel(px, py);
+			sz bottom = c.get_pixel(px, py + 1);
 
 			String top_hex    = (top >= 0) ? PALETTE_HEX[top] : bg_empty;
 			String bottom_hex = (bottom >= 0) ? PALETTE_HEX[bottom] : bg_empty;

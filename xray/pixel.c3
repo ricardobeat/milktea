@@ -48,19 +48,19 @@ fn void PixelBuffer.clear(&self, Color c) {
 }
 
 // set_pixel writes a pixel, ignoring out-of-bounds coordinates.
-fn void PixelBuffer.set_pixel(&self, int col, int row, Color c) {
+fn void PixelBuffer.set_pixel(&self, sz col, sz row, Color c) {
 	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return;
 	self.pixels[(sz)row * self.width + (sz)col] = c;
 }
 
 // get_pixel returns the pixel at (col, row), or none if out of bounds.
-fn Color PixelBuffer.get_pixel(&self, int col, int row) {
+fn Color PixelBuffer.get_pixel(&self, sz col, sz row) {
 	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return color_none();
 	return self.pixels[(sz)row * self.width + (sz)col];
 }
 
 // blend_pixel alpha-blends `c` over the pixel already at (col, row).
-fn void PixelBuffer.blend_pixel(&self, int col, int row, Color c) {
+fn void PixelBuffer.blend_pixel(&self, sz col, sz row, Color c) {
 	if (col < 0 || row < 0 || (sz)col >= self.width || (sz)row >= self.height) return;
 	sz idx = (sz)row * self.width + (sz)col;
 	self.pixels[idx] = c.blend_over(self.pixels[idx]);
@@ -69,7 +69,7 @@ fn void PixelBuffer.blend_pixel(&self, int col, int row, Color c) {
 // _gradient_color resolves the fill color at step t of max_t: the flat
 // color c when `to` is unset, otherwise a gradient interpolated toward
 // `to` in the chosen space.
-fn Color _gradient_color(Color c, Color to, BlendSpace space, int t, int max_t) @local {
+fn Color _gradient_color(Color c, Color to, BlendSpace space, sz t, sz max_t) @local {
 	if (to.is_none() || max_t <= 0) return c;
 	return blend_gradient(c, to, space, (double)t / (double)max_t);
 }
@@ -78,14 +78,14 @@ fn Color _gradient_color(Color c, Color to, BlendSpace space, int t, int max_t) 
 // to `to` (bottom) when `to` is set. Clips to the grid.
 fn void PixelBuffer.fill_rect(&self, Rect r, Color c, Color to = { }, BlendSpace space = BlendSpace.LUV) {
 	if (r.w <= 0 || r.h <= 0) return;
-	int max_t = r.h > 1 ? r.h - 1 : 1;
-	for (int row = 0; row < r.h; row++) {
-		int abs_row = r.y + row;
+	sz max_t = r.h > 1 ? r.h - 1 : 1;
+	for (sz row = 0; row < r.h; row++) {
+		sz abs_row = r.y + row;
 		if (abs_row < 0 || (sz)abs_row >= self.height) continue;
 		Color col = _gradient_color(c, to, space, row, max_t);
 		sz base = (sz)abs_row * self.width;
-		for (int col_i = 0; col_i < r.w; col_i++) {
-			int abs_col = r.x + col_i;
+		for (sz col_i = 0; col_i < r.w; col_i++) {
+			sz abs_col = r.x + col_i;
 			if (abs_col < 0 || (sz)abs_col >= self.width) continue;
 			self.pixels[base + (sz)abs_col] = col;
 		}
@@ -95,21 +95,21 @@ fn void PixelBuffer.fill_rect(&self, Rect r, Color c, Color to = { }, BlendSpace
 // fill_ellipse fills a solid ellipse centred at (cx, cy) with the given
 // radii, or with a gradient from c at the centre toward `to` at the rim
 // when `to` is set. Clips to the grid.
-fn void PixelBuffer.fill_ellipse(&self, int cx, int cy, int rx, int ry, Color c, Color to = { }, BlendSpace space = BlendSpace.LUV) {
+fn void PixelBuffer.fill_ellipse(&self, sz cx, sz cy, sz rx, sz ry, Color c, Color to = { }, BlendSpace space = BlendSpace.LUV) {
 	if (rx <= 0 || ry <= 0) return;
 	bool grad = !to.is_none();
-	int x0 = cx - rx;
+	sz x0 = cx - rx;
 	if (x0 < 0) x0 = 0;
-	int y0 = cy - ry;
+	sz y0 = cy - ry;
 	if (y0 < 0) y0 = 0;
-	int x1 = cx + rx;
-	if (x1 >= (int)self.width) x1 = (int)self.width - 1;
-	int y1 = cy + ry;
-	if (y1 >= (int)self.height) y1 = (int)self.height - 1;
-	for (int y = y0; y <= y1; y++) {
+	sz x1 = cx + rx;
+	if (x1 >= (sz)self.width) x1 = (sz)self.width - 1;
+	sz y1 = cy + ry;
+	if (y1 >= (sz)self.height) y1 = (sz)self.height - 1;
+	for (sz y = y0; y <= y1; y++) {
 		float fdy = ((float)y - (float)cy) / (float)ry;
 		sz base = (sz)y * self.width;
-		for (int x = x0; x <= x1; x++) {
+		for (sz x = x0; x <= x1; x++) {
 			float fdx = ((float)x - (float)cx) / (float)rx;
 			float t = math::sqrt(fdx * fdx + fdy * fdy);
 			if (!grad && t > 1.0f) continue;
@@ -126,14 +126,14 @@ fn void PixelBuffer.fill_ellipse(&self, int cx, int cy, int rx, int ry, Color c,
 // draw_line walks a line from (x0, y0) to (x1, y1), writing one pixel
 // per step; with `to` set the color interpolates from c at the start to
 // `to` at the end.
-fn void PixelBuffer.draw_line(&self, int x0, int y0, int x1, int y1, Color c, Color to = { }, BlendSpace space = BlendSpace.LUV) {
-	int dx = x1 - x0;
-	int dy = y1 - y0;
-	int steps = dx < 0 ? -dx : dx;
-	int dy_abs = dy < 0 ? -dy : dy;
+fn void PixelBuffer.draw_line(&self, sz x0, sz y0, sz x1, sz y1, Color c, Color to = { }, BlendSpace space = BlendSpace.LUV) {
+	sz dx = x1 - x0;
+	sz dy = y1 - y0;
+	sz steps = dx < 0 ? -dx : dx;
+	sz dy_abs = dy < 0 ? -dy : dy;
 	if (steps < dy_abs) steps = dy_abs;
 	if (steps < 1) steps = 1;
-	for (int i = 0; i <= steps; i++) {
+	for (sz i = 0; i <= steps; i++) {
 		Color col = _gradient_color(c, to, space, i, steps);
 		self.set_pixel(x0 + (dx * i) / steps, y0 + (dy * i) / steps, col);
 	}

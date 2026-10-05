@@ -148,14 +148,14 @@ fn void test_alpha_bounds_a_fade() @test {
 	// fully opaque. Paint skips alpha-0 nodes, so a fade-out's final frame
 	// clears the screen instead of leaving a 1/255 ghost.
 	Tween tw = milktea::tween(100, Easing.LINEAR);
-	assert(tw.alpha() == 0, "first frame alpha is 0, got %d", (int)tw.alpha());
+	assert(tw.alpha() == 0, "first frame alpha is 0, got %d", (sz)tw.alpha());
 	tw.step(100);
-	assert(tw.alpha() == 255, "final alpha is 255, got %d", (int)tw.alpha());
+	assert(tw.alpha() == 255, "final alpha is 255, got %d", (sz)tw.alpha());
 
 	Tween rev = milktea::tween_reversed(100, Easing.LINEAR);
-	assert(rev.alpha() == 255, "reverse starts opaque, got %d", (int)rev.alpha());
+	assert(rev.alpha() == 255, "reverse starts opaque, got %d", (sz)rev.alpha());
 	rev.step(100);
-	assert(rev.alpha() == 0, "reverse ends invisible, got %d", (int)rev.alpha());
+	assert(rev.alpha() == 0, "reverse ends invisible, got %d", (sz)rev.alpha());
 }
 
 fn void test_alpha_clamps_overshoot() @test {
@@ -166,10 +166,10 @@ fn void test_alpha_clamps_overshoot() @test {
 	for (sz i = 5; i <= 100; i += 5) {
 		tw.elapsed_ms = i;
 		char a = tw.alpha();
-		assert(a >= 1 && a <= 255, "alpha stays in 1..255, got %d at %d", (int)a, i);
+		assert(a >= 1 && a <= 255, "alpha stays in 1..255, got %d at %d", (sz)a, i);
 	}
 	tw.elapsed_ms = 0;
-	assert(tw.alpha() == 0, "value 0 is invisible, got %d", (int)tw.alpha());
+	assert(tw.alpha() == 0, "value 0 is invisible, got %d", (sz)tw.alpha());
 }
 
 fn void test_lerp_color_interpolates() @test {

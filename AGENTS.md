@@ -147,6 +147,28 @@ self.canvas.render_ansi_string(inner.x, inner.y, glaze_string, ...);
 return self.canvas.view();
 ```
 
+## `sz` or `int`
+
+Sizes, lengths, indices and screen geometry are `sz` (C3's signed
+pointer-sized type, `ssize_t`). That covers `Rect`, every constraint, node and
+`ScreenBuffer` dimension, `screen_width()`/`screen_height()`, and cell counts.
+Prefer it: C3 made sizes signed precisely so this arithmetic needs no casts,
+and `sz` is what the allocator and `read`/`write` already speak.
+
+`int` is for values that are not sizes:
+
+- **C ABI scalars** — fds, signums, return codes, `poll` timeouts, thread entry
+  points (`ThreadFn` is `fn int(void*)`), and anything an `extern fn` names.
+  Cast at the boundary, in the call, not by widening the field.
+- **Colour channels** — `alpha`, `opacity`, and the RGB components.
+- **Rates and discriminants** — `fps`, `Msg.tag`.
+
+`WinSize` keeps `ushort`, because it is the real `struct winsize` from
+`TIOCGWINSZ`; `get_window_size()` widens once on the way out.
+
+Adding a geometry parameter? Make it `sz`. If the compiler asks for a cast to
+`int`, you have found an ABI boundary — cast there and leave the geometry alone.
+
 ## Tests
 
 All tests live in `test/` (kept out of the library dirs so `milktea/**`, `tgp/**`

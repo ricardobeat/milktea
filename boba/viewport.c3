@@ -8,10 +8,10 @@ import std::core::mem;
 import std::collections::list;
 
 struct Viewport (xray::Content) {
-	int offset;
-	int width;
-	int height;
-	int total_lines;
+	sz offset;
+	sz width;
+	sz height;
+	sz total_lines;
 	std::collections::list::List{String} lines;
 	bool mouse_wheel_enabled;
 	bool show_scrollbar;
@@ -21,15 +21,15 @@ struct Viewport (xray::Content) {
 
 	// Selection state
 	bool sel_active;
-	int sel_start_row;
-	int sel_start_col;
-	int sel_end_row;
-	int sel_end_col;
+	sz sel_start_row;
+	sz sel_start_col;
+	sz sel_end_row;
+	sz sel_end_col;
 	bool has_selection;
 	glaze::Style selection_style;
 }
 
-fn Viewport new_viewport(int width, int height) {
+fn Viewport new_viewport(sz width, sz height) {
 	Viewport v = { };
 	v.width = width;
 	v.height = height;
@@ -51,9 +51,9 @@ fn Viewport Viewport.with_mouse_wheel(self) {
 	return v;
 }
 
-fn void Viewport.set_content(&self, int total_lines) {
+fn void Viewport.set_content(&self, sz total_lines) {
 	self.total_lines = total_lines;
-	int max_offset = self.total_lines - self.height;
+	sz max_offset = self.total_lines - self.height;
 	if (max_offset < 0) max_offset = 0;
 	if (self.offset > max_offset) self.offset = max_offset;
 }
@@ -61,14 +61,14 @@ fn void Viewport.set_content(&self, int total_lines) {
 fn void Viewport.add_line(&self, String line) {
 	if (!self.lines.is_initialized()) self.lines.init(mem);
 	self.lines.push(line);
-	self.total_lines = (int)self.lines.len();
+	self.total_lines = (sz)self.lines.len();
 }
 
 fn void Viewport.set_lines(&self, String[] src) {
 	if (!self.lines.is_initialized()) self.lines.init(mem);
 	self.lines.clear();
 	self.lines.push_all(src);
-	self.total_lines = (int)self.lines.len();
+	self.total_lines = (sz)self.lines.len();
 }
 
 // free releases the backing line storage. Call when the Viewport itself is
@@ -84,7 +84,7 @@ fn void Viewport.scroll_up(&self) {
 
 // scroll_down scrolls down by one line.
 fn void Viewport.scroll_down(&self) {
-	int max_offset = self.total_lines - self.height;
+	sz max_offset = self.total_lines - self.height;
 	if (max_offset < 0) max_offset = 0;
 	if (self.offset < max_offset) self.offset++;
 }
@@ -98,7 +98,7 @@ fn void Viewport.page_up(&self) {
 // page_down scrolls down by one page.
 fn void Viewport.page_down(&self) {
 	self.offset += self.height;
-	int max_offset = self.total_lines - self.height;
+	sz max_offset = self.total_lines - self.height;
 	if (max_offset < 0) max_offset = 0;
 	if (self.offset > max_offset) self.offset = max_offset;
 }
@@ -110,7 +110,7 @@ fn void Viewport.scroll_to_top(&self) {
 
 // scroll_to_bottom scrolls to the end.
 fn void Viewport.scroll_to_bottom(&self) {
-	int max_offset = self.total_lines - self.height;
+	sz max_offset = self.total_lines - self.height;
 	if (max_offset < 0) max_offset = 0;
 	self.offset = max_offset;
 }
@@ -154,12 +154,12 @@ fn bool Viewport.handle_key(&self, milktea::KeyMsg k) {
 }
 
 // view_line_range returns the visible line indices [start, end).
-fn int Viewport.view_line_start(&self) {
+fn sz Viewport.view_line_start(&self) {
 	return self.offset;
 }
 
-fn int Viewport.view_line_end(&self) {
-	int end = self.offset + self.height;
+fn sz Viewport.view_line_end(&self) {
+	sz end = self.offset + self.height;
 	if (end > self.total_lines) end = self.total_lines;
 	return end;
 }
@@ -168,7 +168,7 @@ fn int Viewport.view_line_end(&self) {
 fn bool Viewport.handle_mouse_msg(&self, milktea::MouseMsg msg) {
 	// Scrollbar occupies the rightmost 3 chars; don't select if clicking there
 	bool has_bar = self.show_scrollbar && self.total_lines > self.height;
-	int text_w = self.width - (has_bar ? 3 : 0);
+	sz text_w = self.width - (has_bar ? 3 : 0);
 	if (text_w < 1) text_w = 1;
 
 	bool is_scrollbar_area = has_bar && msg.col >= text_w;
@@ -186,8 +186,8 @@ fn bool Viewport.handle_mouse_msg(&self, milktea::MouseMsg msg) {
 	// Text selection with left button (not over scrollbar)
 	if (!is_scrollbar_area && msg.button == milktea::MouseButton.MOUSE_LEFT) {
 		// Convert screen-relative (msg.row, msg.col) to content-relative
-		int content_row = self.offset + msg.row;
-		int content_col = msg.col;
+		sz content_row = self.offset + msg.row;
+		sz content_col = msg.col;
 
 		if (msg.action == milktea::MouseAction.MOUSE_PRESS) {
 			// Start selection anchor
@@ -266,11 +266,11 @@ fn bool Viewport.handle_mouse(&self, String button, String action) {
 }
 
 // scroll_by scrolls by the given number of lines (negative = up, positive = down).
-fn void Viewport.scroll_by(&self, int lines) {
+fn void Viewport.scroll_by(&self, sz lines) {
 	if (lines < 0) {
-		for (int i = 0; i < -lines; i++) self.scroll_up();
+		for (sz i = 0; i < -lines; i++) self.scroll_up();
 	} else {
-		for (int i = 0; i < lines; i++) self.scroll_down();
+		for (sz i = 0; i < lines; i++) self.scroll_down();
 	}
 }
 
@@ -281,9 +281,9 @@ fn String base64_encode(String input) {
 	sz i = 0;
 	while (i < input.len) {
 		sz remaining = input.len - i;
-		int b0 = (int)input[i] & 0xff;
-		int b1 = remaining > 1 ? ((int)input[i + 1] & 0xff) : 0;
-		int b2 = remaining > 2 ? ((int)input[i + 2] & 0xff) : 0;
+		sz b0 = (sz)input[i] & 0xff;
+		sz b1 = remaining > 1 ? ((sz)input[i + 1] & 0xff) : 0;
+		sz b2 = remaining > 2 ? ((sz)input[i + 2] & 0xff) : 0;
 
 		out.append_char(B64_CHARS[(b0 >> 2) & 0x3f]);
 		out.append_char(B64_CHARS[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0f)]);
@@ -301,15 +301,15 @@ fn String Viewport.get_selected_text(&self) {
 	if (!self.has_selection) return "";
 
 	DString out = dstring::temp();
-	int start_row = self.sel_start_row;
-	int start_col = self.sel_start_col;
-	int end_row = self.sel_end_row;
-	int end_col = self.sel_end_col;
+	sz start_row = self.sel_start_row;
+	sz start_col = self.sel_start_col;
+	sz end_row = self.sel_end_row;
+	sz end_col = self.sel_end_col;
 
 	// Normalize: ensure start <= end
 	if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
-		int tr = start_row;
-		int tc = start_col;
+		sz tr = start_row;
+		sz tc = start_col;
 		start_row = end_row;
 		start_col = end_col;
 		end_row = tr;
@@ -317,12 +317,12 @@ fn String Viewport.get_selected_text(&self) {
 	}
 
 	// Extract text line by line
-	for (int row = start_row; row <= end_row && row < self.total_lines; row++) {
+	for (sz row = start_row; row <= end_row && row < self.total_lines; row++) {
 		String line = self.lines[row];
-		int line_len = (int)line.len;
+		sz line_len = (sz)line.len;
 
-		int col_start = (row == start_row) ? start_col : 0;
-		int col_end = (row == end_row) ? end_col : line_len;
+		sz col_start = (row == start_row) ? start_col : 0;
+		sz col_end = (row == end_row) ? end_col : line_len;
 
 		if (col_start < 0) col_start = 0;
 		if (col_end > line_len) col_end = line_len;
@@ -359,18 +359,18 @@ fn void Viewport.copy_to_clipboard(&self) {
 }
 
 // is_in_selection checks if a content-relative position falls within the selection.
-fn bool Viewport.is_in_selection(&self, int row, int col) {
+fn bool Viewport.is_in_selection(&self, sz row, sz col) {
 	if (!self.has_selection) return false;
 
-	int start_row = self.sel_start_row;
-	int start_col = self.sel_start_col;
-	int end_row = self.sel_end_row;
-	int end_col = self.sel_end_col;
+	sz start_row = self.sel_start_row;
+	sz start_col = self.sel_start_col;
+	sz end_row = self.sel_end_row;
+	sz end_col = self.sel_end_col;
 
 	// Normalize: ensure start <= end
 	if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
-		int tr = start_row;
-		int tc = start_col;
+		sz tr = start_row;
+		sz tc = start_col;
 		start_row = end_row;
 		start_col = end_col;
 		end_row = tr;
@@ -385,22 +385,22 @@ fn bool Viewport.is_in_selection(&self, int row, int col) {
 }
 fn String Viewport.view(&self) {
 	DString out = dstring::temp();
-	int start = self.offset;
-	int end = start + self.height;
+	sz start = self.offset;
+	sz end = start + self.height;
 	if (end > self.total_lines) end = self.total_lines;
 
 	bool has_bar = self.show_scrollbar && self.total_lines > self.height;
-	int text_w = self.width - (has_bar ? 3 : 0); // 2 gap + 1 bar char
+	sz text_w = self.width - (has_bar ? 3 : 0); // 2 gap + 1 bar char
 	if (text_w < 1) text_w = 1;
 
-	int thumb_pos = 0;
+	sz thumb_pos = 0;
 	if (has_bar && self.total_lines > self.height) {
 		thumb_pos = (self.offset * (self.height - 1)) / (self.total_lines - self.height);
 	}
 
-	for (int i = start; i < end; i++) {
+	for (sz i = start; i < end; i++) {
 		String line = self.lines[i];
-		int line_w = glaze::string_width(line);
+		sz line_w = glaze::string_width(line);
 
 		// Render content with selection highlighting
 		if (line_w <= text_w) {
@@ -416,7 +416,7 @@ fn String Viewport.view(&self) {
 
 		if (has_bar) {
 			out.append_string("  ");
-			int row = i - start;
+			sz row = i - start;
 			if (row == thumb_pos) {
 				out.append_string(self.thumb_style.render("┃"));
 			} else {
@@ -431,9 +431,9 @@ fn String Viewport.view(&self) {
 }
 
 // render_line_with_selection renders a line with selection highlighting and pads to width.
-fn String Viewport.render_line_with_selection(&self, int row, String line, int pad_to_width) {
+fn String Viewport.render_line_with_selection(&self, sz row, String line, sz pad_to_width) {
 	DString out = dstring::temp();
-	int col = 0;
+	sz col = 0;
 
 	// Render character by character with selection styling. Stepping one BYTE
 	// at a time wrapped each byte of a multi-byte character in its own SGR
@@ -456,17 +456,17 @@ fn String Viewport.render_line_with_selection(&self, int row, String line, int p
 	}
 
 	// Pad remainder with spaces
-	int line_w = glaze::string_width(line);
-	for (int p = line_w; p < pad_to_width; p++) {
+	sz line_w = glaze::string_width(line);
+	for (sz p = line_w; p < pad_to_width; p++) {
 		out.append_char(' ');
 	}
 
 	return out.str_view();
 }
 
-fn int Viewport.scroll_percent(&self) {
+fn sz Viewport.scroll_percent(&self) {
 	if (self.total_lines <= self.height) return 100;
-	int max_offset = self.total_lines - self.height;
+	sz max_offset = self.total_lines - self.height;
 	if (max_offset <= 0) return 100;
 	return (self.offset * 100) / max_offset;
 }
@@ -479,7 +479,7 @@ fn String Viewport.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int Viewport.measure(&self, int width) @dynamic => self.height;
-fn int Viewport.measure_width(&self, int height) @dynamic => self.width;
+fn sz Viewport.measure(&self, sz width) @dynamic => self.height;
+fn sz Viewport.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* Viewport.node(&self) => xray::content_node(self);

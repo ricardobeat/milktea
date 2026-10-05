@@ -26,13 +26,13 @@ struct Pixel {
 
 struct VoxelModel {
 	Voxel[8192] voxels;
-	int voxel_count;
+	sz voxel_count;
 	float rotation_x;
 	float rotation_y;
 	float rotation_z;
-	int width;
-	int height;
-	int frame;
+	sz width;
+	sz height;
+	sz frame;
 	xray::Cell[] cells; // w * h terminal cells (output)
 	Pixel[] pixels; // w * h*2 pixel colors (double-height render buffer)
 	float[] depth; // w * h*2 depth buffer
@@ -71,8 +71,8 @@ fn milktea::Cmd VoxelModel.init(VoxelModel* self) @dynamic {
 	return null;
 }
 
-const int GRID_W = 25;
-const int GRID_H = 5;
+const sz GRID_W = 25;
+const sz GRID_H = 5;
 
 // Each row is 25 chars: █ = filled, space = empty
 const String[5] ROWS = {
@@ -83,12 +83,12 @@ const String[5] ROWS = {
 	"   ██    ███████ ██   ██ ",
 };
 
-fn bool grid_set(int x, int y) {
+fn bool grid_set(sz x, sz y) {
 	if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return false;
 	// each █ is 3 UTF-8 bytes (0xe2 0x96 0x88), space is 1 byte
 	// scan the row counting logical columns
 	String row = ROWS[y];
-	int col    = 0;
+	sz col    = 0;
 	sz i       = 0;
 	while (i < row.len && col <= x) {
 		char b = row[i];
@@ -112,9 +112,9 @@ fn void push_face(VoxelModel* self, float x, float y, float z, Vec3 normal, Vec3
 	self.voxels[self.voxel_count++] = { .pos = vec3(x, y, z), .normal = normal, .tan_u = u, .tan_v = v, };
 }
 
-const int DEPTH = 3;
+const sz DEPTH = 3;
 
-fn bool voxel_set(int x, int y, int z) {
+fn bool voxel_set(sz x, sz y, sz z) {
 	if (z < 0 || z >= DEPTH) return false;
 	return grid_set(x, y);
 }
@@ -124,9 +124,9 @@ fn void create_voxels(VoxelModel* self) {
 	float oy =  (float)GRID_H / 2.0f;
 	float oz = -(float)DEPTH / 2.0f;
 
-	for (int gy = 0; gy < GRID_H; gy++) {
-		for (int gx = 0; gx < GRID_W; gx++) {
-			for (int gz = 0; gz < DEPTH; gz++) {
+	for (sz gy = 0; gy < GRID_H; gy++) {
+		for (sz gx = 0; gx < GRID_W; gx++) {
+			for (sz gz = 0; gz < DEPTH; gz++) {
 				if (!voxel_set(gx, gy, gz)) continue;
 
 				float x =  (float)gx + ox;
@@ -203,8 +203,8 @@ fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
-	int w    = self.width;
-	int h    = self.height;
+	sz w    = self.width;
+	sz h    = self.height;
 	sz total = (sz)(w * h);
 
 	for (sz i = 0; i < total; i++) {
@@ -226,7 +226,7 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 	light_y /= light_len;
 	light_z /= light_len;
 
-	for (int v = 0; v < self.voxel_count; v++) {
+	for (sz v = 0; v < self.voxel_count; v++) {
 		Vec3 p = self.voxels[v].pos;
 		Vec3 n = self.voxels[v].normal;
 
@@ -262,7 +262,7 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 
 		float[4] cu = { -1, -1, 1, 1 };
 		float[4] cv = { -1, 1, -1, 1 };
-		for (int ci = 0; ci < 4; ci++) {
+		for (sz ci = 0; ci < 4; ci++) {
 			float cx3 = p.x + cu[ci] * tu.x + cv[ci] * tv.x;
 			float cy3 = p.y + cu[ci] * tu.y + cv[ci] * tv.y;
 			float cz3 = p.z + cu[ci] * tu.z + cv[ci] * tv.z;
@@ -277,10 +277,10 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 			if (csy > max_sy) max_sy = csy;
 		}
 
-		int x0 = (int)min_sx;
-		int x1 = (int)max_sx;
-		int y0 = (int)min_sy;
-		int y1 = (int)max_sy;
+		sz x0 = (sz)min_sx;
+		sz x1 = (sz)max_sx;
+		sz y0 = (sz)min_sy;
+		sz y1 = (sz)max_sy;
 
 		float sx   = (min_sx + max_sx) / 2.0f;
 		float sy   = (min_sy + max_sy) / 2.0f;
@@ -297,9 +297,9 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 		char b            = (char)(brightness * 255.0f);
 		xray::Style style = xray::default_style().set_fg(xray::color_rgb(r, g, b));
 
-		for (int py = y0; py <= y1; py++) {
+		for (sz py = y0; py <= y1; py++) {
 			if (py < 0 || py >= h) continue;
-			for (int px = x0; px <= x1; px++) {
+			for (sz px = x0; px <= x1; px++) {
 				if (px < 0 || px >= w) continue;
 				sz idx = (sz)(py * w + px);
 				if (p.z < self.depth[idx]) {
@@ -313,21 +313,21 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 	// post-process AA: for each empty pixel, sum contributions from filled neighbours.
 	// gaps between letters get contributions from both sides = brighter fringe.
 	// outer silhouette gets contribution from only one side = dimmer fringe.
-	int[4] dx = { 1, -1, 0, 0 };
-	int[4] dy = { 0, 0, 1, -1 };
-	for (int py = 0; py < h; py++) {
-		for (int px = 0; px < w; px++) {
+	sz[4] dx = { 1, -1, 0, 0 };
+	sz[4] dy = { 0, 0, 1, -1 };
+	for (sz py = 0; py < h; py++) {
+		for (sz px = 0; px < w; px++) {
 			sz idx = (sz)(py * w + px);
 			if (self.depth[idx] < 999.0f) continue; // filled, skip
 
 			float sum_r = 0.0f;
 			float sum_g = 0.0f;
 			float sum_b = 0.0f;
-			int count   = 0;
+			sz count   = 0;
 
-			for (int d = 0; d < 4; d++) {
-				int nx = px + dx[d];
-				int ny = py + dy[d];
+			for (sz d = 0; d < 4; d++) {
+				sz nx = px + dx[d];
+				sz ny = py + dy[d];
 				if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
 				sz nidx = (sz)(ny * w + nx);
 				if (self.depth[nidx] >= 999.0f) continue;

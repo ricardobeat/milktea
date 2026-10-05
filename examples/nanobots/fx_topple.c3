@@ -12,8 +12,8 @@ struct FxTopple {
 	float topple_angle;
 	float topple_vel;
 	bool topple_shattered;
-	int[] stack_top;
-	int fade_start;
+	sz[] stack_top;
+	sz fade_start;
 }
 
 fn FxTopple* topple_data(Model* self) => (FxTopple*)self.fx_state;
@@ -31,7 +31,7 @@ fn void tpos(Model* self, FxTopple* s, Particle* p, float* ox, float* oy) {
 }
 
 fn void tscatter(Model* self, FxTopple* s) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		float rx = 0;
@@ -57,9 +57,9 @@ fn void topple_setup(void* raw) {
 	s.topple_vel = 0.0f;
 	s.topple_shattered = false;
 	s.fade_start = 0;
-	s.stack_top = mem::new_array(int, (sz)self.w);
-	for (int c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
-	for (int i = 0; i < self.total; i++) {
+	s.stack_top = mem::new_array(sz, (sz)self.w);
+	for (sz c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -93,7 +93,7 @@ fn void topple_step(void* raw) {
 	}
 
 	// After the crash, blocks behave exactly like the FALL pile.
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (p.resting) continue;
@@ -104,7 +104,7 @@ fn void topple_step(void* raw) {
 		float mx = (float)(self.w - 1);
 		if (p.x < 0)  { p.x = 0;  p.vx = -p.vx * 0.4f; }
 		if (p.x > mx) { p.x = mx; p.vx = -p.vx * 0.4f; }
-		int c = (int)p.x;
+		sz c = (sz)p.x;
 		if (c < 0) c = 0;
 		if (c >= self.w) c = self.w - 1;
 		float floor_y = (float)(s.stack_top[c] - 1) * 0.5f;
@@ -139,14 +139,14 @@ fn void topple_render(void* raw) {
 	}
 	// Still one rigid slab: draw every block at its rotated position.
 	xray::ScreenBuffer* sb = self.canvas;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		float rx = 0;
 		float ry = 0;
 		tpos(self, s, p, &rx, &ry);
-		int col = (int)rx;
-		int row = (int)ry;
+		sz col = (sz)rx;
+		sz row = (sz)ry;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		xray::Style ts = xray::default_style().set_fg(gradient_color(self, p.col)).set_bg(xray::color_transparent());

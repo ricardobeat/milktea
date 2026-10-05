@@ -9,15 +9,15 @@ import std::core::dstring;
 // FilePicker is a file browser component.
 struct FilePicker (xray::Content) {
 	char[64][64] names;
-	int[64] name_lens;
+	sz[64] name_lens;
 	bool[64] is_dirs;
-	int count;
-	int cursor;
-	int scroll;
+	sz count;
+	sz cursor;
+	sz scroll;
 	String current_dir;
 	String selected;
-	int width;
-	int height;
+	sz width;
+	sz height;
 	glaze::Style cursor_style;
 	glaze::Style dir_style;
 	glaze::Style file_style;
@@ -61,19 +61,19 @@ fn void FilePicker.load_dir(&self, String path) {
 		char[64 * 64] name_buf;
 		int[64] dir_flags;
 
-		int n = c3_list_dir(&path_buf[0], &name_buf[0], &dir_flags[0], 64);
+		sz n = c3_list_dir(&path_buf[0], &name_buf[0], &dir_flags[0], 64);
 
-		for (int i = 0; i < n && self.count < 64; i++) {
+		for (sz i = 0; i < n && self.count < 64; i++) {
 			self.is_dirs[self.count] = (dir_flags[i] != 0);
 
-			int offset = i * 64;
+			sz offset = i * 64;
 			sz j       = 0;
 			while (j < 63 && name_buf[offset + j] != 0) {
 				self.names[self.count][j] = name_buf[offset + j];
 				j++;
 			}
 			self.names[self.count][j] = 0;
-			self.name_lens[self.count] = (int)j;
+			self.name_lens[self.count] = (sz)j;
 
 			// Skip hidden files (except . and ..)
 			if (j > 0 && self.names[self.count][0] == '.'
@@ -137,17 +137,17 @@ fn String FilePicker.view(&self) {
 	out.append_string(self.title_style.render(string::tformat("Files: %s", self.current_dir)));
 	out.append_char('\n');
 
-	int visible = self.height - 4;
+	sz visible = self.height - 4;
 	if (visible < 1) visible = 1;
 
 	// Adjust scroll
 	if (self.cursor < self.scroll) self.scroll = self.cursor;
 	if (self.cursor >= self.scroll + visible) self.scroll = self.cursor - visible + 1;
 
-	int end = self.scroll + visible;
+	sz end = self.scroll + visible;
 	if (end > self.count) end = self.count;
 
-	for (int i = self.scroll; i < end; i++) {
+	for (sz i = self.scroll; i < end; i++) {
 		String name   = (String)self.names[i][:self.name_lens[i]];
 		String suffix = self.is_dirs[i] ? "/" : "";
 		String marker = (i == self.cursor) ? "> " : "  ";
@@ -175,7 +175,7 @@ fn String FilePicker.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int FilePicker.measure(&self, int width) @dynamic => self.height;
-fn int FilePicker.measure_width(&self, int height) @dynamic => self.width;
+fn sz FilePicker.measure(&self, sz width) @dynamic => self.height;
+fn sz FilePicker.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* FilePicker.node(&self) => xray::content_node(self);

@@ -8,7 +8,7 @@ import std::core::dstring;
 
 
 struct FullscreenModel {
-	int countdown;
+	sz countdown;
 }
 
 fn milktea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
