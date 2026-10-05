@@ -93,7 +93,7 @@ fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
-	if (self.width == 0 || self.height == 0) return milktea::new_view("");
+	if (self.width == 0 || self.height == 0) return milktea::view("");
 	if (!self.matrix_init) self.compute_colors();
 
 	int w      = self.width;
@@ -139,12 +139,12 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)view_h);
+	return milktea::cell_view(self.view_cells, w, view_h);
 }
 
 fn int main() {
 	SpaceModel* m = mem::new(SpaceModel);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

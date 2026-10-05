@@ -686,6 +686,6 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.background(glaze::color_hex(SCREEN_BG))
 		.render("click or arrows select   -/+ radius   t graphics on/off   q quit"));
 
-	return milktea::new_alt_screen_view(out.str_view())
+	return milktea::view(out.str_view())
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_CELL_MOTION);
 }

@@ -96,10 +96,10 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	out.append_string(joined);
 	out.append_char('\n');
 	out.append_string(hint.render("TAB switch focus | n reset | q quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

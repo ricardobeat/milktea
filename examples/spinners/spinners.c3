@@ -106,10 +106,10 @@ fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
 	content.append_char('\n');
 	content.append_string(label.render("Press q or ESC to quit"));
 
-	return milktea::new_alt_screen_view(box_style.render(content.str_view()));
+	return milktea::view(box_style.render(content.str_view()));
 }
 
 fn int main() {
 	SpinnersModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

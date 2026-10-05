@@ -177,12 +177,12 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)vh);
+	return milktea::cell_view(self.cells, w, vh);
 }
 
 fn int main() {
 	Model* m = mem::new(Model);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

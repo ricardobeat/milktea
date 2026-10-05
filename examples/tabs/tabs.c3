@@ -69,7 +69,7 @@ fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
 	String content = content_style.render(TAB_CONTENTS[self.active_tab]);
 	String hint    = "\n  ← → / h l  switch tabs    q  quit";
 
-	return milktea::new_view(
+	return milktea::view(
 		glaze::join_vertical(glaze::Position.LEFT, tabbar,
 			glaze::join_vertical(glaze::Position.LEFT, content, hint)));
 }

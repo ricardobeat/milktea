@@ -1178,7 +1178,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 
 	// set_mouse_mode(ALL_MOTION) lets the runtime manage mouse tracking, so
 	// free-look works by moving the mouse without holding any button.
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h)
+	return milktea::cell_view(self.cells, w, h)
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION)
 		.set_report_key_events(true)
 		.set_mouse_pixels(true);
@@ -1186,7 +1186,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 
 fn int main(String[] args) {
 	Minecraft* app = mem::new(Minecraft);
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

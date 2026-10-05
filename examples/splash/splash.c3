@@ -154,10 +154,10 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)rows);
+	return milktea::cell_view(self.view_cells, w, rows);
 }
 
 fn int main() {
 	SplashModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

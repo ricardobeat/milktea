@@ -473,7 +473,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		render_debug_overlay(self.screen, w, h);
 	}
 
-	milktea::View view = milktea::new_alt_cell_view(self.screen.cells[0:self.screen.width * self.screen.height], self.screen.width, self.screen.height);
+	milktea::View view = self.screen.view();
 	view.mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION;
 
 	int cx, cy;

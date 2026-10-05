@@ -513,12 +513,12 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 fn int main() {
 	SuperSplashModel* m = mem::new(SuperSplashModel);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

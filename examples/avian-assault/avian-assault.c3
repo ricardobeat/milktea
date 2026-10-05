@@ -1088,7 +1088,7 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 
 fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::new_alt_screen_view("");
+		return milktea::view("");
 	}
 
 	int w = self.term_w;
@@ -1204,7 +1204,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		default:
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)h).set_mouse_cursor("crosshair");
+	return milktea::cell_view(self.view_cells, w, h).set_mouse_cursor("crosshair");
 }
 
 // ── Overlays ──────────────────────────────────────────────────────────────────
@@ -1487,7 +1487,7 @@ fn int main() {
 		milktea::disable_mouse();
 	}
 
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

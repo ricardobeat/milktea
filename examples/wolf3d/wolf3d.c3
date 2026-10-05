@@ -271,12 +271,12 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 fn int main(String[] args) {
 	Wolf3D* app = mem::new(Wolf3D);
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

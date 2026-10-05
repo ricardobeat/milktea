@@ -4,31 +4,6 @@ import std::core::mem;
 import xray;
 import glaze;
 
-// new_cell_view creates an alt-screen View backed by a direct xray::Cell grid.
-// The grid is temp-allocated (via mem::talloc_array) and initialised to
-// xray::empty_cell() so every slot renders as a plain space with no style.
-//
-// Because view() is called inside @pool() in render_current_view, the
-// temp allocation is automatically reclaimed at the end of each frame — no
-// explicit free needed. Do not call new_cell_view outside a @pool() context.
-fn View new_cell_view(int w, int h) {
-	sz total = (sz)w * (sz)h;
-	// Use the temp allocator so the grid is freed automatically at the end of
-	// the enclosing @pool() block (which wraps render_current_view). This
-	// prevents one Cell-grid leak per frame when view() rebuilds it every call.
-	xray::Cell* ptr = mem::talloc_array(xray::Cell, total);
-	xray::Cell empty = xray::empty_cell();
-	for (sz i = 0; i < total; i++) {
-		ptr[i] = empty;
-	}
-	return {
-		.cells        = ptr[:total],
-		.cells_width  = (sz)w,
-		.cells_height = (sz)h,
-		.alt_screen   = true,
-	};
-}
-
 // View.draw renders styled content into the view's cell grid at the position
 // and dimensions given by rect.
 //
@@ -42,7 +17,7 @@ fn View new_cell_view(int w, int h) {
 // The method uses a value receiver and returns a copy of self so calls can be
 // chained:
 //
-//   return new_cell_view(w, h)
+//   return cell_view(cells, w, h)
 //       .draw(header_rect, title_style, "My App")
 //       .draw(body_rect,   body_style,  body_text);
 //

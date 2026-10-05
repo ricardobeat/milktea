@@ -93,7 +93,7 @@ fn milktea::View Counter.view(Counter* self) @dynamic {
         .with_border(glaze::ROUNDED);
 
     String content = string::tformat("Counter: %d\nUse ↑↓ to change, q to quit", self.value);
-    return milktea::new_view(box.render(content));
+    return milktea::view(box.render(content));
 }
 ```
 
@@ -358,7 +358,7 @@ If all you do in that handler is copy the size into two fields, delete it and ca
 Enable mouse tracking by returning a view with mouse mode set:
 
 ```c3
-return milktea::new_alt_screen_view(doc)
+return milktea::view(doc)
     .set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 ```
 
@@ -405,12 +405,24 @@ milktea automatically pushes the [kitty keyboard protocol](https://sw.kovidgoyal
 
 ## View types
 
-| Function | When to use |
-|----------|-------------|
-| `milktea::new_view(s)` | Inline output — appended below previous content |
-| `milktea::new_alt_screen_view(s)` | Full-screen — uses the alternate buffer, hides cursor |
+A view carries content; whether that content lands on the alternate screen is a
+program option, not a property of the view.
 
-Most real apps want `new_alt_screen_view`. Use `new_view` for simple one-shot tools.
+| Function | Content |
+|----------|---------|
+| `milktea::view(s)` | A string, styled with glaze |
+| `milktea::cell_view(cells, w, h)` | A cell grid you own |
+| `buf.view()` | The grid inside an `xray::ScreenBuffer` |
+| `milktea::draw(root)` | A solved node tree |
+
+Run full-screen by passing the option to `@run`:
+
+```c3
+return milktea::@run(&model, { .alt_screen = true });
+```
+
+Most real apps want that. Leave it off for one-shot tools that should print
+inline and leave the scrollback intact.
 
 ---
 

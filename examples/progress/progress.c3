@@ -117,10 +117,10 @@ fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
 		content.append_string(hint.render("  |  f fast  |  s slow  |  r restart  |  q quit"));
 	}
 
-	return milktea::new_alt_screen_view(box_style.render(content.str_view()));
+	return milktea::view(box_style.render(content.str_view()));
 }
 
 fn int main() {
 	ProgressModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

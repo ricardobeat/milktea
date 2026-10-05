@@ -51,7 +51,6 @@ struct View {
 	String content;
 	Cursor cursor;
 	bool has_cursor;
-	bool alt_screen;
 	MouseMode mouse_mode;
 	xray::Cell[] cells;
 	sz cells_width;
@@ -63,19 +62,21 @@ struct View {
 	bool mouse_pixels;
 }
 
-// new_view creates a View with the given content and default settings (no cursor, no alt screen).
-fn View new_view(String content) {
+// view creates a View displaying the given string.
+//
+// Whether the string lands on the alternate screen or inline is a property of
+// the program: see Options.alt_screen and @run.
+fn View view(String content) {
 	return { .content = content };
 }
 
-// new_alt_screen_view creates a View with alt screen enabled.
-fn View new_alt_screen_view(String content) {
-	return { .content = content, .alt_screen = true };
-}
-
-// new_alt_cell_view creates an alt-screen View backed by a direct cell grid.
-fn View new_alt_cell_view(xray::Cell[] cells, sz width, sz height) {
-	return { .cells = cells, .cells_width = width, .cells_height = height, .alt_screen = true };
+// cell_view creates a View backed by a caller-owned cell grid.
+//
+// The slice must stay alive until the frame is rendered; the usual owner is a
+// field on the model. For a grid held in an xray::ScreenBuffer, buf.view()
+// takes the geometry from the buffer itself.
+fn View cell_view(xray::Cell[] cells, sz width, sz height) {
+	return { .cells = cells, .cells_width = width, .cells_height = height };
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
@@ -84,7 +85,7 @@ fn Cursor new_cursor(int x, int y) {
 }
 
 // View builder methods — enable fluent declarative View construction.
-// Example: return new_view("hello").set_cursor(5, 3).set_alt_screen(true);
+// Example: return view("hello").set_cursor(5, 3).set_mouse_mode(mode);
 
 fn View View.set_cursor(self, int x, int y) {
 	View v = self;
@@ -103,12 +104,6 @@ fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink)
 fn View View.set_cursor_color(self, String color) {
 	View v = self;
 	v.cursor.color = color;
-	return v;
-}
-
-fn View View.set_alt_screen(self, bool on) {
-	View v = self;
-	v.alt_screen = on;
 	return v;
 }
 
@@ -213,16 +208,6 @@ fn bool should_support_sync_output() {
 	if (screen != null) return true;
 
 	return false;
-}
-
-// viewf creates a formatted View (shorthand for new_view + string::tformat).
-fn View viewf(String fmt, args...) {
-	return new_view(string::tformat(fmt, ...args));
-}
-
-// view_alto creates an alt-screen View with formatted content.
-fn View view_alto(String fmt, args...) {
-	return new_alt_screen_view(string::tformat(fmt, ...args));
 }
 
 enum MsgKind : char {
@@ -1609,13 +1594,6 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 fn void Program.render_current_view(Program* self) {
 	@pool() {
 		View v = self.model.view();
-		if (v.alt_screen && !self.in_alt_screen) {
-			self.emit_sgr(SGR_ALT_ON);
-			self.in_alt_screen = true;
-		} else if (!v.alt_screen && self.in_alt_screen) {
-			self.emit_sgr(SGR_ALT_OFF);
-			self.in_alt_screen = false;
-		}
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (v.mouse_mode != self.mouse_mode) {
 			if (v.mouse_mode == MOUSE_MODE_NONE) {
@@ -1672,11 +1650,11 @@ fn void Program.render_current_view(Program* self) {
 			// Use xray renderer for differential output
 			xray::Renderer* r = self.renderer;
 			if (r != null) {
-				// Select the coordinate model for this view. An alt-screen
-				// view owns the terminal and addresses it absolutely; an
-				// inline view shares the screen with the user's scrollback
-				// and must position relative to where it started.
-				xray::PositionMode want = v.alt_screen
+				// Select the coordinate model. An alt-screen program owns
+				// the terminal and addresses it absolutely; an inline one
+				// shares the screen with the user's scrollback and must
+				// position relative to where it started.
+				xray::PositionMode want = self.options.alt_screen
 					? xray::PositionMode.ABSOLUTE
 					: xray::PositionMode.RELATIVE;
 				if (r.screen.position_mode != want) r.set_position_mode(want);
@@ -1684,7 +1662,7 @@ fn void Program.render_current_view(Program* self) {
 				// An inline buffer is exactly as tall as its content: the
 				// rows below it are the user's, not ours to paint or clear.
 				// Alt-screen keeps the full terminal height.
-				if (!v.alt_screen) {
+				if (!self.options.alt_screen) {
 					sz want_rows = view_content_rows(v);
 					if (want_rows < 1) want_rows = 1;
 					// Never exceed the terminal: a block taller than the
@@ -1876,7 +1854,7 @@ fn void Program.render_current_view(Program* self) {
 					}
 					cursor_seq.append_string(SGR_SHOW_CURSOR);
 					write_stdout((char[])cursor_seq.str_view());
-				} else if (v.alt_screen) {
+				} else if (self.options.alt_screen) {
 					// Park the hidden cursor at top-left to prevent artifacts in some terminals
 					write_stdout("\x1b[1;1H");
 				}

@@ -47,7 +47,7 @@ fn void TestModel.on_destroy(TestModel* self) @dynamic {
 }
 
 fn milktea::View TestModel.view(TestModel* self) @dynamic {
-	return milktea::new_view(string::tformat("count=%d", self.counter));
+	return milktea::view(string::tformat("count=%d", self.counter));
 }
 
 // ============================================================
@@ -160,7 +160,7 @@ fn milktea::Cmd SizeTrackerModel.update(SizeTrackerModel* self, milktea::Msg msg
 }
 
 fn milktea::View SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
-	return milktea::new_view(string::tformat("%dx%d", self.last_w, self.last_h));
+	return milktea::view(string::tformat("%dx%d", self.last_w, self.last_h));
 }
 
 fn void SizeTrackerModel.on_mount(SizeTrackerModel* self) @dynamic {
@@ -234,7 +234,7 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	return milktea::new_view("");
+	return milktea::view("");
 }
 
 // test_tick_fires verifies tick() delivers TICK messages and the model
@@ -321,7 +321,7 @@ fn milktea::Cmd ZeroIntervalModel.update(ZeroIntervalModel* self, milktea::Msg m
 }
 
 fn milktea::View ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
-	return milktea::new_view("ok");
+	return milktea::view("ok");
 }
 
 fn void ZeroIntervalModel.on_mount(ZeroIntervalModel* self) @dynamic { }
@@ -349,7 +349,7 @@ fn void test_every_zero_no_crash() @test {
 // args leaves transparent=false and layer_style zero-initialised, preserving
 // backward-compatible behaviour for all existing call sites.
 fn void test_add_overlay_defaults() @test {
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(1, 2, 10, 5, "hello");
 
 	assert(v.overlay_count == 1);
@@ -372,7 +372,7 @@ fn void test_add_overlay_transparent_and_shadow() @test {
 		.shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2),
 	};
 
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(0, 0, 20, 8, "popup", transparent: true, layer_style: ls);
 
 	assert(v.overlay_count == 1);
@@ -394,7 +394,7 @@ fn void test_add_overlay_inner_shadow() @test {
 		.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
 	};
 
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(0, 0, 30, 10, "panel", layer_style: ls);
 
 	assert(v.overlay_count == 1);
@@ -423,7 +423,7 @@ fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) 
 }
 
 fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
-	return milktea::new_view("still here");
+	return milktea::view("still here");
 }
 
 // test_test_mode_terminates_without_quit pins down that the event loop ends
@@ -468,7 +468,7 @@ fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea:
 
 fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
 	self.frames++;
-	milktea::View v = milktea::new_alt_screen_view("base content");
+	milktea::View v = milktea::view("base content");
 	// Off the top-left corner, and off the right/bottom edge. alpha != 0
 	// selects the per-cell blending path, which does its own destination
 	// bounds check rather than going through ScreenBuffer.set_cell.
@@ -508,7 +508,7 @@ fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dyn
 }
 
 fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
-	return milktea::new_view("race");
+	return milktea::view("race");
 }
 
 fn int send_race_sender(void* arg) @private {
@@ -576,7 +576,7 @@ fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) 
 fn milktea::View ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
 	self.w_in_view = milktea::screen_width();
 	self.h_in_view = milktea::screen_height();
-	return milktea::new_view("size");
+	return milktea::view("size");
 }
 
 // The accessors report the program's injected size from inside update/view,
@@ -722,7 +722,7 @@ fn milktea::Cmd CellModel.update(CellModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View CellModel.view(CellModel* self) @dynamic {
-	return milktea::new_alt_cell_view(self.cells, self.w, self.h);
+	return milktea::cell_view(self.cells, self.w, self.h);
 }
 
 // A View carries cells_width/cells_height separately from the cells slice, so

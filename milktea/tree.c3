@@ -115,26 +115,25 @@ fn Node* text(glaze::Style style, String s) {
 
 // draw solves the tree against the whole terminal and paints it.
 fn View draw(Node* root) {
-	return draw_in(root, screen_width(), screen_height(), true);
+	return draw_in(root, screen_width(), screen_height());
 }
 
-// draw_inline sizes the tree to its content and paints it below whatever is
-// already on screen, leaving the user's scrollback alone. The block is capped
-// at the terminal height: taller than that cannot be addressed relatively
-// without scrolling.
+// draw_inline sizes the tree to its content height, so the painted block is
+// only as tall as the tree needs. The block is capped at the terminal height:
+// taller than that cannot be addressed relatively without scrolling.
 fn View draw_inline(Node* root) {
 	int w = screen_width();
 	int h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
-	return draw_in(root, w, h, false);
+	return draw_in(root, w, h);
 }
 
-fn View draw_in(Node* root, int w, int h, bool alt) @local {
+fn View draw_in(Node* root, int w, int h) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
-	if (root == null || w < 1 || h < 1 || g_program == null) return new_view("");
+	if (root == null || w < 1 || h < 1 || g_program == null) return view("");
 
 	if (g_program.draw_buf == null) {
 		g_program.draw_buf = xray::new_screen_buffer((sz)w, (sz)h);
@@ -157,7 +156,6 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 		.cells        = buf.cells,
 		.cells_width  = (sz)w,
 		.cells_height = (sz)h,
-		.alt_screen   = alt,
 	};
 	// A drawn cursor is already in the grid, so the terminal cursor stays
 	// hidden — showing both would put two cursors on screen.

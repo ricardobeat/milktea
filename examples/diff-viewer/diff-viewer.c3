@@ -162,7 +162,7 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	);
 	out.append_string(footer);
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
@@ -197,5 +197,5 @@ fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {
 
 fn int main() {
 	DiffModel model = { };
-	return milktea::@run(&model);
+	return milktea::@run(&model, { .alt_screen = true });
 }

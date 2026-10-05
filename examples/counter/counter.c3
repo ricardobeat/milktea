@@ -37,7 +37,7 @@ fn milktea::View Counter.view(Counter* self) @dynamic {
 	String label   = string::tformat("Counter: %d", self.value);
 	String hint    = "\nUse ↑↓ to change, q to quit";
 	String content = string::tformat("%s%s", label, hint);
-	return milktea::new_view(box.render(content));
+	return milktea::view(box.render(content));
 }
 
 fn int main() {

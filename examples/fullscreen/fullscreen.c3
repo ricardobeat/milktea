@@ -57,11 +57,11 @@ fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(label.render("Press ESC or q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	FullscreenModel m = { .countdown = 10 };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

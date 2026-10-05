@@ -115,14 +115,14 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	out.append_string("\n\n");
 	out.append_string(hint_style.render("Click/drag to track  |  c to clear  |  q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
 	milktea::enable_mouse();
 
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;

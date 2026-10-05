@@ -114,11 +114,11 @@ fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
 		)
 	);
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	ViewportModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

@@ -114,10 +114,10 @@ fn milktea::View BounceModel.view(BounceModel* self) @dynamic {
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	out.append_string(hint.render("Bouncing ball  |  q/ESC quit"));
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	BounceModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

@@ -291,12 +291,12 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 			)
 		)
 	);
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	SplitModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

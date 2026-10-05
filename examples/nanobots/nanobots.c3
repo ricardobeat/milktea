@@ -902,7 +902,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.fx_active) {
 		self.fx.render(self);
 		draw_badge(self);
-		return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+		return sb.view();
 	}
 
 	// In flight a bot is a half block, so it moves at twice the vertical
@@ -953,12 +953,12 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// Effect name badge, top right, shown briefly after TAB.
 	draw_badge(self);
 
-	return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+	return sb.view();
 }
 
 fn int main() {
 	Model m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

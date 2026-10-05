@@ -60,9 +60,10 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
   which `dispatch()` calls and chains through `update()` again.
 - `View` — either `content: String` (parsed by xray's ANSI parser) or a
   direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus cursor
-  state, alt-screen flag, mouse mode, and up to `MAX_OVERLAYS` (8)
-  `Overlay` entries for floating content (menus, shadows) over the base
-  view. Built fluently: `new_view(s).set_cursor(x, y).set_alt_screen(true)`.
+  state, mouse mode, and up to `MAX_OVERLAYS` (8) `Overlay` entries for
+  floating content (menus, shadows) over the base view. Built fluently:
+  `view(s).set_cursor(x, y).set_mouse_mode(mode)`. The alternate screen
+  is a program option (`Options.alt_screen`), entered once before `init()`.
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`

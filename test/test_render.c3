@@ -68,18 +68,11 @@ fn void test_cursor_style_bar_steady() @test {
 // View / Cursor construction helpers
 // ============================================================
 
-fn void test_new_view_defaults() @test {
-	View v = new_view("hello");
+fn void test_view_defaults() @test {
+	View v = view("hello");
 	assert(v.content == "hello");
 	assert(!v.has_cursor);
-	assert(!v.alt_screen);
-}
-
-fn void test_new_alt_screen_view() @test {
-	View v = new_alt_screen_view("hello");
-	assert(v.content == "hello");
-	assert(!v.has_cursor);
-	assert(v.alt_screen);
+	assert(v.cells.ptr == null);
 }
 
 fn void test_new_cursor_defaults() @test {
@@ -95,7 +88,7 @@ fn void test_new_cursor_defaults() @test {
 // ============================================================
 
 fn void test_render_no_cursor() @test {
-	View v      = new_view("hello");
+	View v      = view("hello");
 	DString out = dstring::temp();
 	render_view_to(v, &out);
 	String result = out.str_view();
@@ -111,7 +104,7 @@ fn void test_render_no_cursor() @test {
 // ============================================================
 
 fn void test_render_newline_conversion() @test {
-	View v      = new_view("a\nb");
+	View v      = view("a\nb");
 	DString out = dstring::temp();
 	render_view_to(v, &out);
 	String result = out.str_view();
@@ -130,7 +123,7 @@ fn void test_render_newline_conversion() @test {
 fn void test_render_cursor_position_simple() @test {
 	// Content: "hello" (one line, no \n)
 	// Cursor at x=3, y=0 → terminal (1, 4)
-	View v = new_view("hello");
+	View v = view("hello");
 	v.has_cursor = true;
 	v.cursor = new_cursor(3, 0);
 
@@ -144,7 +137,7 @@ fn void test_render_cursor_position_simple() @test {
 fn void test_render_cursor_position_multiline() @test {
 	// Content: "line0\nline1\nline2"
 	// Cursor at x=2, y=2 → terminal (3, 3)
-	View v = new_view("line0\nline1\nline2");
+	View v = view("line0\nline1\nline2");
 	v.has_cursor = true;
 	v.cursor = new_cursor(2, 2);
 
@@ -158,7 +151,7 @@ fn void test_render_cursor_position_multiline() @test {
 fn void test_render_cursor_position_zero_indexed() @test {
 	// Content: "abc"
 	// Cursor at x=0, y=0 → terminal (1, 1)
-	View v = new_view("abc");
+	View v = view("abc");
 	v.has_cursor = true;
 	v.cursor = new_cursor(0, 0);
 
@@ -174,7 +167,7 @@ fn void test_render_cursor_position_zero_indexed() @test {
 // ============================================================
 
 fn void test_render_cursor_shape_block() @test {
-	View v = new_view("x");
+	View v = view("x");
 	v.has_cursor = true;
 	v.cursor = new_cursor(0, 0);
 	// blink block = style 1
@@ -187,7 +180,7 @@ fn void test_render_cursor_shape_block() @test {
 }
 
 fn void test_render_cursor_shape_bar_steady() @test {
-	View v = new_view("x");
+	View v = view("x");
 	v.has_cursor = true;
 	v.cursor = { .x = 0, .y = 0, .shape = CursorShape.CURSOR_BAR, .blink = false };
 	// bar steady = style 6
@@ -244,7 +237,7 @@ fn void test_textinputs_line_counting() @test {
 	// Now render with cursor at the position textinputs would use:
 	// label_cols[0] = 10, cursor_x for empty input = 0
 	// So cursor at x=10, y=3 → terminal (4, 11)
-	View v = new_alt_screen_view(content);
+	View v = view(content);
 	v.has_cursor = true;
 	v.cursor = new_cursor(10, 3);
 
@@ -263,7 +256,7 @@ fn void test_textinputs_cursor_after_typing() @test {
 	// → terminal (4, 13)
 	String content = "Sign Up\n       \n\nNickname: Jo\nEmail: Email\nPassword: Password\n\nhint";
 
-	View v = new_alt_screen_view(content);
+	View v = view(content);
 	v.has_cursor = true;
 	v.cursor = new_cursor(12, 3);
 
@@ -281,7 +274,7 @@ fn void test_textinputs_second_input() @test {
 	// → terminal (5, 8)
 	String content = "Sign Up\n       \n\nNickname: Nickname\nEmail: Email\nPassword: Password\n\nhint";
 
-	View v = new_alt_screen_view(content);
+	View v = view(content);
 	v.has_cursor = true;
 	v.cursor = new_cursor(7, 4);
 
@@ -307,7 +300,7 @@ fn void test_cursor_to_format() @test {
 // ============================================================
 
 fn void test_render_empty_content_with_cursor() @test {
-	View v = new_view("");
+	View v = view("");
 	v.has_cursor = true;
 	v.cursor = new_cursor(0, 0);
 

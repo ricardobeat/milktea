@@ -131,11 +131,11 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(status_text);
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	PasteModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

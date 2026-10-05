@@ -357,12 +357,12 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 fn int main() {
 	VoxelModel* model = mem::new(VoxelModel);
-	if (catch err = milktea::@run_program(model)) {
+	if (catch err = milktea::@run_program(model, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -679,7 +679,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
+		return milktea::cell_view(cells, w, h);
 	}
 
 	if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -919,7 +919,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return milktea::new_alt_cell_view(self.model.cells, (sz)w, (sz)h);
+		return milktea::cell_view(self.model.cells, w, h);
 	}
 
 	// Fallback: loading screen
@@ -935,7 +935,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			cells[(sz)(h / 2) * w + (sz)(start_x) + i] = xray::new_cell(msg[i:1], 1, txt_style);
 		}
 	}
-	return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
+	return milktea::cell_view(cells, w, h);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -943,7 +943,7 @@ fn milktea::View App.view(App* self) @dynamic {
 fn int main() {
 	App* app = mem::new(App);
 	milktea::enable_mouse();
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;

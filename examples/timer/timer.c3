@@ -64,11 +64,11 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(subtle.render("r to reset  |  q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	TimerModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

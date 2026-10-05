@@ -109,14 +109,20 @@ glaze's `.border()` (README → Borders) when you just want a box around a strin
 **Simple case** — build a string (with glaze), hand it to milktea. See README → "View types":
 
 ```c3
-return milktea::new_alt_screen_view(glaze_string);   // alt screen (typical TUI)
-return milktea::new_view(glaze_string);               // inline (no alt screen)
+return milktea::view(glaze_string);
 ```
 
 **Cell-grid case** — use this only when you need the xray `ScreenBuffer` for precise x,y placement:
 
 ```c3
-return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
+return self.canvas.view();                       // grid held in a ScreenBuffer
+return milktea::cell_view(self.cells, w, h);     // grid you allocated yourself
+```
+
+Alt screen is a program option, not a view flag:
+
+```c3
+return milktea::@run(&model, { .alt_screen = true });
 ```
 
 ## Typical view() pattern (cell-grid)
@@ -136,7 +142,7 @@ Rect inner = self.canvas.draw_border(zones[0], rounded_border(), border_sty);
 self.canvas.render_ansi_string(inner.x, inner.y, glaze_string, ...);
 
 // 5. return
-return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
+return self.canvas.view();
 ```
 
 ## Tests

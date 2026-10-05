@@ -749,7 +749,7 @@ fn void FlappyModel.draw_score_hud(&self) {
 
 fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::new_alt_screen_view("");
+		return milktea::view("");
 	}
 
 	int w = self.term_w;
@@ -832,7 +832,7 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 		default:
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.view_cells, w, h);
 }
 
 // ── Overlay UI Renders ────────────────────────────────────────────────────────
@@ -1106,7 +1106,7 @@ fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 fn int main() {
 	FlappyModel* m = mem::new(FlappyModel);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

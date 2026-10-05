@@ -60,7 +60,7 @@ fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
+	return milktea::cell_view(cells, w, h);
 }
 
 // ── File picker ───────────────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	out.append_string(hint_style.render("\u2191/\u2193 or j/k to navigate \u00b7 enter to open \u00b7 q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main(String[] args) {
@@ -460,7 +460,7 @@ fn int main(String[] args) {
 
 	milktea::enable_mouse();
 
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

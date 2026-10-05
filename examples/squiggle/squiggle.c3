@@ -128,10 +128,10 @@ fn milktea::View SquiggleModel.view(SquiggleModel* self) @dynamic {
 
 	for (int cx = 0; cx < BOX_W; cx++) out.append_string(self.cell(cx, BOX_H - 1));
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	SquiggleModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

@@ -235,23 +235,3 @@ fn void disable_mouse_pixels() {
 fn String cursor_to(int row, int col) {
 	return string::tformat("\x1b[%d;%dH", row, col);
 }
-
-fn String cursor_up(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dA", n);
-}
-
-fn String cursor_down(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dB", n);
-}
-
-fn String cursor_right(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dC", n);
-}
-
-fn String cursor_left(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dD", n);
-}

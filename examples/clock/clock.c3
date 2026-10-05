@@ -419,7 +419,7 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 		draw_cloud(sb, &self.clouds[i]);
 	}
 
-	return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+	return sb.view();
 }
 
 fn int main() {
@@ -427,7 +427,7 @@ fn int main() {
 	m.w = 80;
 	m.h = 24;
 	m.canvas = xray::new_screen_buffer(80, 24);
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

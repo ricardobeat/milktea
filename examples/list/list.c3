@@ -66,12 +66,12 @@ fn milktea::View ListModel.view(ListModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(hint_style.render("Up/Down navigate | Enter select | q quit"));
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	ListModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

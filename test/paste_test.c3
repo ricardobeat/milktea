@@ -50,7 +50,7 @@ fn void PasteProbeModel.on_mount(PasteProbeModel* self) @dynamic { }
 fn void PasteProbeModel.on_destroy(PasteProbeModel* self) @dynamic { }
 
 fn milktea::View PasteProbeModel.view(PasteProbeModel* self) @dynamic {
-	return milktea::new_view("paste-probe");
+	return milktea::view("paste-probe");
 }
 
 // Helper: return the last paste as a String view into the model's buffer.
@@ -213,7 +213,7 @@ fn void PasteThenKeyModel.on_mount(PasteThenKeyModel* self) @dynamic { }
 fn void PasteThenKeyModel.on_destroy(PasteThenKeyModel* self) @dynamic { }
 
 fn milktea::View PasteThenKeyModel.view(PasteThenKeyModel* self) @dynamic {
-	return milktea::new_view("paste-then-key");
+	return milktea::view("paste-then-key");
 }
 
 fn void test_paste_followed_by_key() @test {

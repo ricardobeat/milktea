@@ -804,7 +804,7 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 // ── Server Implementation ──────────────────────────────────────────────────

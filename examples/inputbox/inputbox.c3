@@ -80,7 +80,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, hint_v);
-	return milktea::new_alt_screen_view(doc);
+	return milktea::view(doc);
 }
 
 fn void Model.on_destroy(&self) @dynamic {
@@ -90,6 +90,6 @@ fn void Model.on_destroy(&self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

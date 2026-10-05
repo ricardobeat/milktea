@@ -363,7 +363,7 @@ fn String build_canvas_view(Canvas* c) {
 
 fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.term_width == 0 || self.term_height == 0) {
-		return milktea::new_alt_screen_view("");
+		return milktea::view("");
 	}
 
 	String top_bar      = build_top_bar(self, self.term_width);
@@ -372,7 +372,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String content_area = glaze::join_horizontal(palette, canvas_view, 0);
 	String content      = glaze::join_vertical(glaze::Position.LEFT, top_bar, content_area);
 
-	return milktea::new_alt_screen_view(content).set_mouse_cursor("crosshair");
+	return milktea::view(content).set_mouse_cursor("crosshair");
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ fn int main() {
 		milktea::disable_mouse();
 	}
 
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

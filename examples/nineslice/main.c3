@@ -6,5 +6,5 @@ import milktea;
 // the example's module without colliding with other examples' main().
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }
