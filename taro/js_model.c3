@@ -306,7 +306,15 @@ fn milktea::Cmd JsModel.init(&self) @dynamic {
 		}
 		self.rt.free_value(fn_val);
 	}
-	return self.js_tick_cmd();
+	// Always wake once after init. js_tick_cmd() can only see render-requested
+	// ticks that a *previous* view() registered, and no view has run yet, so a
+	// model whose only animation source is the view tree (an <draw animate>,
+	// an animated border, a frame sequence) would otherwise render one frame
+	// and go idle forever. The extra wakeup costs one no-op update; if nothing
+	// asks for a tick after that first view, js_tick_cmd() returns null and the
+	// program idles as before.
+	milktea::Cmd cmd = self.js_tick_cmd();
+	return cmd != null ? cmd : milktea::tick(1);
 }
 
 fn milktea::Cmd JsModel.update(&self, milktea::Msg msg) @dynamic {
