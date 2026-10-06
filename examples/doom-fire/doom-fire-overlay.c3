@@ -96,6 +96,11 @@ struct FireModel {
 	xray::Cell[] view_cells;
 	sz view_cols;
 	sz view_rows;
+	// Per-row decay, split into a whole part and a probability of one more.
+	// Calculated from the terminal height so the fire always reaches over the
+	// watermark; see set_fire_decay.
+	sz decay_whole;
+	float decay_frac;
 }
 
 fn void init_fire_cells() {
@@ -147,8 +152,9 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	self.fire = mem::new_array(sz, MAX_W * MAX_H);
 	for (sz i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
 	for (sz x = 0; x < self.width; x++) {
-		self.fire[(self.height / 2 - 1) * self.width + x] = 36;
+		self.fire[(self.height - 1) * self.width + x] = 36;
 	}
+	self.set_fire_decay();
 	self.view_cols = self.width;
 	self.view_rows = self.height / 2;
 	self.view_cells = mem::new_array(xray::Cell, (sz)(self.view_cols * self.view_rows));
@@ -157,6 +163,42 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	init_tea_mask();
 
 	return milktea::tick();
+}
+
+// MASK_AIM is where the fire is aimed, in pixel rows below the top of the
+// watermark. The blend only shows where flame and glyph share a cell, so the
+// fire has to reach into the text -- but aiming over the top of it drowns the
+// letters, and the tips overshoot this by a few rows anyway, so the aim sits
+// inside the text and lets the flicker do the rest.
+const sz MASK_AIM = 5;
+
+// mask_row returns the watermark's top row, in view rows. The view and the
+// fire both need it -- one to paint the glyphs, the other to know what it has
+// to cover -- so it is derived in one place from the view height.
+fn sz mask_row(sz view_rows) {
+	sz y = (view_rows - MASK_H) / 2 - 1;
+	if (y < 0) y = 0;
+	return y;
+}
+
+// set_fire_decay picks the per-row decay so the flame tops out in the same
+// place relative to the watermark whatever the terminal height.
+//
+// A pixel starts at 36 and loses `decay` per row, so it climbs about
+// 36/decay rows: aiming at a row means solving for the decay rather than
+// guessing it, which is what the old height-derived ratio did -- it left the
+// fire covering the text in a short terminal and falling short of it in a tall
+// one. The fractional part is applied as a probability, because a decay
+// rounded to a whole number can only hit a few reachable heights.
+fn void FireModel.set_fire_decay(FireModel* self) {
+	sz text_top = mask_row(self.height / 2) * 2;
+	sz target   = text_top + MASK_AIM;
+	if (target < 0) target = 0;
+	sz band = (self.height - 1) - target;
+	if (band < 1) band = 1;
+	float per        = 36.0f / (float)band;
+	self.decay_whole = (sz)per;
+	self.decay_frac  = per - (float)self.decay_whole;
 }
 
 fn void spread_pixel(FireModel* m, sz idx) {
@@ -169,10 +211,9 @@ fn void spread_pixel(FireModel* m, sz idx) {
 	sz rnd     = rand() % 5;
 	sz dst     = idx - rnd + 1;
 	sz buf_len = m.width * m.height;
-	float ratio = 2 - (float)m.height / 80;
 	if (dst - m.width >= 0 && dst - m.width < buf_len) {
-		float r     = (float)(rand() % 2) + (float)(rand() % 2);
-		sz decay   = (sz)(r * ratio + 0.4f);
+		sz decay = m.decay_whole;
+		if (m.decay_frac > 0 && (float)(rand() % 1000) / 1000.0f < m.decay_frac) decay++;
 		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.width] = new_val;
@@ -194,6 +235,7 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 			self.fire[(self.height - 1) * self.width + x] = 36;
 		}
 		// Reallocate view cell grid
+		self.set_fire_decay();
 		mem::free(self.view_cells.ptr);
 		self.view_cols = self.width;
 		self.view_rows = self.height / 2;
@@ -249,7 +291,7 @@ fn milktea::View FireModel.view(FireModel* self) @dynamic {
 
 	// Overlay TEA watermark where fire is cold
 	sz mask_x = (view_w - MASK_W) / 2;
-	sz mask_y = (view_h - MASK_H) / 2 - 1;
+	sz mask_y = mask_row(view_h);
 
 	for (sz my = 0; my < MASK_H; my++) {
 		sz vy = mask_y + my;
