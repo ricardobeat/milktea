@@ -403,6 +403,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/doom-fire-overlay": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/doom-fire/doom-fire-overlay.c3"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }

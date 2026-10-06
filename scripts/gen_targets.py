@@ -89,6 +89,15 @@ OVERRIDES = {
     "doom-fire-milktea": {
         "sources": ["milktea/**", "glaze/**", "dye/**", "examples/doom-fire/doom-fire-milktea.c3"],
     },
+    "doom-fire-overlay": {
+        "sources": [
+            "milktea/**",
+            "glaze/**",
+            "dye/**",
+            "xray/**",
+            "examples/doom-fire/doom-fire-overlay.c3",
+        ],
+    },
     "doom-fire-donut": {
         "sources": [
             "milktea/**",
@@ -136,8 +145,9 @@ OVERRIDES = {
 
 # doom-fire's directory produces multiple targets (not a 1:1 dir->target
 # mapping), so it's special-cased here instead of derived from a directory
-# listing.
-EXTRA_TARGETS_FROM_DOOM_FIRE_DIR = ["doom-fire-milktea"]
+# listing. Each variant is its own main() in module doom_fire, so they cannot
+# be compiled together -- hence one target per file rather than a glob.
+EXTRA_TARGETS_FROM_DOOM_FIRE_DIR = ["doom-fire-milktea", "doom-fire-overlay"]
 
 
 def sources_exist(name):
