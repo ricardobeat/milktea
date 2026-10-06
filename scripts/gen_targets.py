@@ -72,9 +72,7 @@ OVERRIDES = {
     "nineslice": {"extra_dirs": ["tgp"]},
     "squiggle": {"extra_dirs": ["tgp"]},
     "flappybird": {"extra_dirs": ["xray"]},
-    "undertea": {"extra_dirs": ["xray"]},
     "nanobots": {"extra_dirs": ["xray"]},
-    "tetris": {"extra_dirs": ["xray"]},
     "paint": {"extra_dirs": ["xray"]},
     "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
@@ -142,11 +140,33 @@ OVERRIDES = {
 EXTRA_TARGETS_FROM_DOOM_FIRE_DIR = ["doom-fire-milktea"]
 
 
+def sources_exist(name):
+    """Whether every concrete .c3 file an override names still exists.
+
+    A target whose OVERRIDES entry lists files by hand (rather than by glob)
+    outlives the files themselves: the directory can still be there while the
+    one .c3 the target compiles has been deleted or renamed. Globs are left
+    alone -- c3c is happy for a "dir/**" to match nothing.
+    """
+    explicit = OVERRIDES.get(name, {}).get("sources")
+    if not explicit:
+        return True
+    for src in explicit:
+        if "*" in src or not src.endswith(".c3"):
+            continue
+        if not os.path.exists(os.path.join(PROJECT_ROOT, src)):
+            return False
+    return True
+
+
 def discover_example_names():
-    """Directory names under examples/ that should produce a target.
+    """Target names that examples/ should still produce.
 
     Skips "lib" (a support-code dir pulled in by other targets, not a target
-    of its own) and any dir with no .c3 file in it.
+    of its own) and any dir with no .c3 file in it. A name whose override
+    names .c3 files by hand is dropped once those files are gone, which is how
+    the doom-fire directory's extra targets are checked -- their directory
+    outlives them.
     """
     names = []
     for entry in sorted(os.listdir(EXAMPLES_DIR)):
@@ -158,8 +178,10 @@ def discover_example_names():
         has_c3 = any(f.endswith(".c3") for f in os.listdir(path))
         if not has_c3:
             continue
+        if not sources_exist(entry):
+            continue
         names.append(entry)
-    names.extend(EXTRA_TARGETS_FROM_DOOM_FIRE_DIR)
+    names.extend(n for n in EXTRA_TARGETS_FROM_DOOM_FIRE_DIR if sources_exist(n))
     return names
 
 
@@ -227,9 +249,22 @@ def main():
             "(adding them, please review): " + ", ".join(sorted(new_names))
         )
 
-    # Preserve existing order for known targets; append any newly discovered
-    # ones (sorted) at the end of the examples run.
-    ordered_names = [k[len("examples/") :] for k in existing_example_keys]
+    # Drop targets whose example is gone. Without this an entry outlives the
+    # code it builds and `c3c build` fails on a directory that is not there.
+    stale_names = [n for n in existing_example_names if n not in set(discovered)]
+    if stale_names:
+        print(
+            "gen_targets: dropping targets whose examples/ sources are gone: "
+            + ", ".join(sorted(stale_names))
+        )
+
+    # Preserve existing order for surviving targets; append any newly
+    # discovered ones (sorted) at the end of the examples run.
+    ordered_names = [
+        k[len("examples/") :]
+        for k in existing_example_keys
+        if k[len("examples/") :] not in set(stale_names)
+    ]
     ordered_names.extend(sorted(new_names))
 
     if not existing_example_keys:
