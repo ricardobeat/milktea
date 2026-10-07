@@ -366,6 +366,35 @@ or anchored to a start time. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
 in/out/in-out family, and `EASE_OUT_BACK` — which deliberately overshoots past
 1 before settling, so clamp anything that must stay in range.
 
+## Springs
+
+A `Spring` eases toward a target that can change at any time, keeping its
+momentum through each change. It is solved exactly from the moment it was last
+updated, so reading it never writes it: `update()` aims it, `view()` reads it.
+
+```c3
+Spring s = milktea::spring(0, milktea::spring_smooth());
+s.update(target);    // aim from wherever it is now (in update())
+s.value();           // where it is now (in view())
+s.velocity();        // units per second
+s.moving();          // false once settled: stop re-arming the frame timer
+s.set(value, velocity = 0);  // jump, or fling with a velocity
+```
+
+The plain calls read `now()`; `update_at`, `value_at`, `velocity_at`,
+`moving_at` and `set_at` take the time explicitly. `Spring.rest` (default
+`SPRING_REST`, 0.01) is how close and slow counts as settled, in the value's
+own units.
+
+Parameters are `SpringParams { stiffness, damping }`, built with:
+
+| Function | Spring |
+|---|---|
+| `spring_feel(duration_ms, bounce = 0)` | Takes about `duration_ms`; `bounce` 0 settles without overshoot, 0..1 wobbles, < 0 is sluggish |
+| `spring_overshoot(duration_ms, overshoot)` | Swings `overshoot` (0.1 = 10%) past the target once |
+| `spring_physics(stiffness, damping)` | Raw physics, unit mass |
+| `spring_smooth()` / `spring_snappy()` / `spring_bouncy()` | Presets: bounce 0, 0.15, 0.3 at 500ms |
+
 `Motion` animates a node's entry: `slide_down(rows)`, `slide_up(rows)`,
 `slide_in(cols)`, `fade_in()`, and `.fade()` to add a fade to any of them. Apply
 with `milktea::animate(node, motion, &tween)`.
