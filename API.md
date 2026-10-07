@@ -242,12 +242,18 @@ alternate screen is a program option, not part of the view.
 .set_mouse_pixels(bool on)              // SGR-Pixels; fills MouseMsg.px/py
 .set_report_key_events(bool on)         // kitty repeat/release events
 .add_overlay(x, y, w, h, content, alpha = 0, ...)
+.repaint_after(sz ms)                   // paint again in ms, even with no message
 .draw(xray::Rect rect, glaze::Style style, String content)  // cell views
 ```
 
 `CursorShape` is `CURSOR_BLOCK`/`CURSOR_UNDERLINE`/`CURSOR_BAR`; `MouseMode` is
 `MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Up to
 `MAX_OVERLAYS` (8) overlays per view.
+
+`repaint_after(ms)` is how an animated view keeps itself moving: the runtime
+paints again after `ms`, delivering a `TICK` that `update` may ignore. It covers
+one frame, so ask from every `view` that still has motion and stop once it
+settles. A node tree's own `Node.repaint_after` requests feed into it.
 
 `View.draw(rect, style, content)` paints styled content into a cell-backed
 view's grid at `rect`, and returns the view so calls chain:

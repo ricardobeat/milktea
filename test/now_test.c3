@@ -61,3 +61,45 @@ fn void test_now_outside_a_program_reads_the_live_clock() @test {
 	sz t = now();
 	assert(t >= before && t <= time_ms());
 }
+
+// ── View.repaint_after ───────────────────────────────────────────────────────
+
+struct RepaintModel {
+	sz repaint_ms;
+}
+
+fn milktea::Cmd RepaintModel.init(RepaintModel* self) @dynamic => null;
+
+fn milktea::Cmd RepaintModel.update(RepaintModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == KEY && msg.key.rune == 'q') return quit();
+	return null;
+}
+
+fn milktea::View RepaintModel.view(RepaintModel* self) @dynamic {
+	return view("").repaint_after(self.repaint_ms);
+}
+
+fn sz repaint_timers(Program* p) {
+	sz n = 0;
+	foreach (t : p.timers) {
+		if (t.active && t.owner == p) n++;
+	}
+	return n;
+}
+
+fn void test_repaint_after_arms_one_timer() @test {
+	RepaintModel m = { .repaint_ms = 16 };
+	DString out = dstring::temp();
+	// Several keys render several frames; each re-arms rather than stacks.
+	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
+	p.run()!!;
+	assert(repaint_timers(&p) == 1, "got %d repaint timers", repaint_timers(&p));
+}
+
+fn void test_no_repaint_request_arms_nothing() @test {
+	RepaintModel m = { .repaint_ms = 0 };
+	DString out = dstring::temp();
+	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
+	p.run()!!;
+	assert(repaint_timers(&p) == 0, "got %d repaint timers", repaint_timers(&p));
+}
