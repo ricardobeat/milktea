@@ -6,27 +6,21 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int MSG_SPIN = 1;
+// The spinner has no state of its own: which frame shows is a function of the
+// clock, and the view asks to be painted again when the next one is due.
+const sz SPIN_MS = 80;
+const String[*] FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
 struct SpinnerModel {
-	sz frame;
+	String label;
 }
 
 fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {
-	self.frame = 0;
-	return milktea::tick(80, &on_spin);
-}
-
-fn milktea::Msg on_spin() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
+	self.label = "Loading...";
+	return null;
 }
 
 fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
-		self.frame++;
-		return milktea::tick(80, &on_spin);
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -41,18 +35,17 @@ fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynam
 }
 
 fn milktea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
-	String[12] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙" };
-	String spin       = frames[self.frame % 12];
+	String spin = FRAMES[milktea::now() / SPIN_MS % FRAMES.len];
 
 	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 
 	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
-	out.append_string(title.render(string::tformat("%s  Loading...", spin)));
+	out.append_string(title.render(string::tformat("%s  %s", spin, self.label)));
 	out.append_char('\n');
 	out.append_string(subtle.render("Press q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::view(out.str_view()).repaint_after(SPIN_MS);
 }
 
 fn int main() {
