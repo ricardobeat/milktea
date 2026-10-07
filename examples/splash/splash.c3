@@ -11,7 +11,7 @@ extern fn double c3_cos(double x);
 
 
 struct SplashModel {
-	sz frame;
+	sz started_ms; // the animation's clock starts at init
 	sz width;
 	sz height;
 	// Cell grid for direct rendering
@@ -20,7 +20,8 @@ struct SplashModel {
 }
 
 fn milktea::Cmd SplashModel.init(SplashModel* self) @dynamic {
-	return milktea::tick();
+	self.started_ms = milktea::now();
+	return null;
 }
 
 
@@ -34,10 +35,6 @@ fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic
 		self.view_cells_len = (sz)self.width * (sz)rows;
 		self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
 		return null;
-	}
-	if (msg.kind == milktea::MsgKind.TICK) {
-		self.frame++;
-		return milktea::tick();
 	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	return milktea::quit();
@@ -99,7 +96,8 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 	if (w < 2) w = 80;
 	if (h < 2) h = 24;
 
-	double t     = (double)self.frame * 0.03;
+	// The pattern's phase runs at 1.875 per second (0.03 per 16ms frame).
+	double t     = (double)(milktea::now() - self.started_ms) / 1000.0 * 1.875;
 	double angle = 0.7854 + t * 0.1;
 
 	sz rows = h;
@@ -154,7 +152,7 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, w, rows);
+	return milktea::cell_view(self.view_cells, w, rows).repaint_after(milktea::FRAME_MS);
 }
 
 fn int main() {

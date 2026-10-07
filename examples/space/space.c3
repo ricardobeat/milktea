@@ -11,8 +11,10 @@ extern fn void srand(uint seed);
 extern fn long c3_time_ms_long();
 
 
+// The field scrolls one column every SCROLL_MS, taken straight from the clock.
+const sz SCROLL_MS = 16;
+
 struct SpaceModel {
-	sz frame;
 	sz width;
 	sz height;
 	char* color_r;
@@ -26,7 +28,7 @@ struct SpaceModel {
 fn milktea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
 	ulong seed = (ulong)c3_time_ms_long();
 	srand((uint)seed);
-	return milktea::tick(16);
+	return null;
 }
 
 
@@ -74,11 +76,6 @@ fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
-		self.frame++;
-		return milktea::tick(16);
-	}
-
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
@@ -98,7 +95,7 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 
 	sz w      = self.width;
 	sz h      = self.height;
-	sz frame  = self.frame;
+	sz frame  = milktea::now() / SCROLL_MS;
 	sz view_h = h;
 
 	xray::Style base_style = xray::default_style();
@@ -139,7 +136,7 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, w, view_h);
+	return milktea::cell_view(self.view_cells, w, view_h).repaint_after(SCROLL_MS);
 }
 
 fn int main() {
