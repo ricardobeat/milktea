@@ -17,7 +17,7 @@ import xray;
 // 
 // The model's only job is to start the tween:
 // 
-//     self.anim = milktea::tween_at(milktea::time_ms(), 260);
+//     self.anim = milktea::tween_at(milktea::now(), 260);
 // 
 // This lives in milktea rather than xray because it needs a clock, and xray
 // deliberately has none — it takes now_ms from its caller (see
@@ -68,7 +68,7 @@ fn Motion fade_in() => { .from_dx = 0, .from_dy = 0, .fades = true };
 fn xray::Node* animate(xray::Node* node, Motion motion, Tween* tw) {
 	if (node == null || tw == null) return node;
 
-	bool running = tw.advance_to((long)time_ms());
+	bool running = tw.advance_to((long)now());
 
 	// The motion's offsets are where the node starts; the tween carries them
 	// to zero, so the node settles exactly on its solved position rather than

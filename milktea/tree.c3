@@ -144,7 +144,7 @@ fn View draw_in(Node* root, sz w, sz h) @local {
 	buf.clear();
 
 	root.solve(xray::new_rect(0, 0, w, h));
-	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)time_ms());
+	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)now());
 
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear
 	// and refill every draw() so a click always lands against what is
