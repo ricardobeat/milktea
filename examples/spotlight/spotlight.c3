@@ -6,11 +6,11 @@
 //
 //   in space — the falloff from the light's centre to its edge runs through
 //              an ease curve, so the pool has a bright core and a soft rim;
-//   in time  — the light rides a critically damped spring after the cursor,
-//              and holding a button blooms its radius outward for as long as
-//              the button stays down.
+//   in time  — the light rides a spring after the cursor, and holding a
+//              button blooms its radius outward for as long as it stays down.
 //
-// The frame timer only runs while something is still moving, so a resting
+// update() says where things should go and keeps a frame timer running while
+// anything is still moving; view() only reads where they are. A resting
 // spotlight costs nothing.
 module spotlight;
 
@@ -28,11 +28,14 @@ const sz DOT_SPACING_Y = 2; // rows between dots — half of X, since cells are 
 
 const double CELL_ASPECT = 2.0; // a cell is about twice as tall as it is wide
 
-const double RADIUS      = 34.0;  // light radius at rest, in columns
-const double BLOOM_SPEED = 30.0;  // columns per second the radius grows while held
-const double BLOOM_RAMP  = 0.6;   // seconds for the bloom to reach full speed
-const double FOLLOW_TIME = 0.16;  // how long the light lags the cursor, in seconds
-const double RADIUS_TIME = 0.22;  // how softly the radius chases its target
+const double RADIUS      = 34.0; // light radius at rest, in columns
+const double BLOOM_SPEED = 30.0; // columns per second the radius grows while held
+const double BLOOM_RAMP  = 0.6;  // seconds for the bloom to reach full speed
+
+// The light trails the cursor without overshooting it; the radius springs
+// back from a bloom with a little bounce, dipping just under its resting size.
+fn milktea::SpringParams follow_feel() => milktea::spring_feel(500);
+fn milktea::SpringParams radius_feel() => milktea::spring_feel(650, 0.2);
 
 // Dots from smallest to largest; the light picks one by intensity.
 const String[*] DOTS = { "·", "∙", "•", "●" };
@@ -42,42 +45,6 @@ const String COLOR_REST = "#2a2f3a";
 const String COLOR_MID  = "#4f7cac";
 const String COLOR_HOT  = "#ffe6a7";
 
-// ── Spring ───────────────────────────────────────────────────────────────────
-
-// A value that eases toward a target on a critically damped spring: it closes
-// in as fast as it can without overshooting. Unlike restarting a tween on every
-// mouse event, a spring carries its velocity across retargets, so a stream of
-// new targets blends into one smooth curve instead of a series of jolts.
-struct Spring {
-	double value;
-	double velocity;
-	double target;
-	double smooth_time; // roughly the seconds it takes to settle
-}
-
-fn Spring spring(double at, double smooth_time) {
-	return { .value = at, .target = at, .smooth_time = smooth_time };
-}
-
-// Advance by `dt` seconds using the spring's exact solution, so the motion
-// looks the same at any frame rate and never blows up on a long frame.
-fn void Spring.step(&self, double dt) {
-	double omega  = 2.0 / self.smooth_time;
-	double offset = self.value - self.target;
-	double drift  = self.velocity + omega * offset;
-	double decay  = math::exp(-omega * dt);
-	self.value    = self.target + (offset + drift * dt) * decay;
-	self.velocity = (self.velocity - omega * drift * dt) * decay;
-	if (self.at_rest()) {
-		self.value    = self.target;
-		self.velocity = 0.0;
-	}
-}
-
-fn bool Spring.at_rest(&self) {
-	return math::abs(self.value - self.target) < 0.01 && math::abs(self.velocity) < 0.01;
-}
-
 // ── Model ────────────────────────────────────────────────────────────────────
 
 struct Model {
@@ -85,21 +52,19 @@ struct Model {
 	sz width;
 	sz height;
 
-	Spring light_x;
-	Spring light_y;
-	Spring radius;
+	milktea::Spring light_x;
+	milktea::Spring light_y;
+	milktea::Spring radius; // the resting radius; a bloom adds on top of it
 
-	bool holding;     // a mouse button is down, so the bloom keeps growing
-	double held_for;  // seconds the button has been down
-	sz last_frame_ms; // when the previous frame was stepped; 0 while at rest
+	bool holding;  // a mouse button is down, so the bloom keeps growing
+	sz pressed_at; // when it went down
 
-	bool animating;  // a frame timer is armed
 	bool seen_mouse; // the light has been aimed by the cursor at least once
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
 	self.canvas = xray::new_screen_buffer(1, 1);
-	self.radius = spring(RADIUS, RADIUS_TIME);
+	self.radius = milktea::spring(RADIUS, radius_feel());
 	return null;
 }
 
@@ -109,14 +74,20 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			self.resize(msg.window_size.width, msg.window_size.height);
 		case MOUSE:
 			self.follow(msg.mouse);
-		case TICK:
-			self.animating = false; // this frame's timer has fired
-			self.step();
 		case KEY:
 			if (is_quit(msg.key)) return milktea::quit();
 		default:
 	}
-	return self.keep_animating();
+	return self.next_frame();
+}
+
+// Keep frames coming while anything moves. Cancel first, so a burst of mouse
+// events re-arms one timer rather than stacking one per event; each of those
+// events repaints anyway.
+fn milktea::Cmd Model.next_frame(&self) {
+	milktea::cancel(self);
+	if (!self.moving()) return null;
+	return milktea::tick(milktea::FRAME_MS, owner: self);
 }
 
 fn void Model.resize(&self, sz w, sz h) {
@@ -125,44 +96,45 @@ fn void Model.resize(&self, sz w, sz h) {
 	self.canvas.resize(w, h);
 	// Until the cursor shows up, rest the light in the middle of the screen.
 	if (!self.seen_mouse) {
-		self.light_x = spring((double)w / 2.0, FOLLOW_TIME);
-		self.light_y = spring((double)h / 2.0, FOLLOW_TIME);
+		self.light_x = milktea::spring(w / 2.0, follow_feel());
+		self.light_y = milktea::spring(h / 2.0, follow_feel());
 	}
 }
 
 fn void Model.follow(&self, milktea::MouseMsg m) {
 	self.seen_mouse = true;
-	self.light_x.target = (double)m.col;
-	self.light_y.target = (double)m.row;
+	self.light_x.update(m.col);
+	self.light_y.update(m.row);
 
 	if (is_wheel(m.button)) return;
 	switch (m.action) {
 		case MOUSE_PRESS:
-			self.holding  = true;
-			self.held_for = 0.0;
+			if (self.holding) return;
+			self.holding    = true;
+			self.pressed_at = milktea::now();
 		case MOUSE_RELEASE:
+			if (!self.holding) return;
+			// Hand the bloom back to the spring as it stands — its size and the
+			// speed it was growing at — so the light carries on outward for a
+			// moment before it is reeled back in.
+			double held = self.held();
+			self.radius.set(self.radius.value() + bloom(held), self.radius.velocity() + bloom_speed(held));
 			self.holding = false;
-			self.radius.target = RADIUS;
 		default:
 	}
 }
 
-// Advance everything by the real time since the last frame, so a late tick
-// moves the light further rather than slowing it down.
-fn void Model.step(&self) {
-	sz now = milktea::time_ms();
-	// Waking from rest there is no previous frame, so assume a nominal one.
-	sz elapsed = self.last_frame_ms == 0 ? milktea::FRAME_MS : now - self.last_frame_ms;
-	double dt = math::min((double)elapsed / 1000.0, 0.1); // never leap on a stall
-	self.last_frame_ms = now;
+// Seconds the button has been down.
+fn double Model.held(&self) => (double)(milktea::now() - self.pressed_at) / 1000.0;
 
-	if (self.holding) {
-		self.held_for += dt;
-		self.radius.target = RADIUS + bloom(self.held_for);
-	}
-	self.light_x.step(dt);
-	self.light_y.step(dt);
-	self.radius.step(dt);
+fn double Model.light_radius(&self) {
+	double r = self.radius.value();
+	return self.holding ? r + bloom(self.held()) : r;
+}
+
+fn bool Model.moving(&self) {
+	if (self.holding) return true;
+	return self.light_x.moving() || self.light_y.moving() || self.radius.moving();
 }
 
 // How far the bloom has spread after `held` seconds. The growth eases in over
@@ -175,20 +147,11 @@ fn double bloom(double held) {
 	return ramp + BLOOM_SPEED * (held - BLOOM_RAMP);
 }
 
-fn bool Model.settled(&self) {
-	if (self.holding) return false;
-	return self.light_x.at_rest() && self.light_y.at_rest() && self.radius.at_rest();
-}
-
-// Arm the frame timer when there is motion to show and none is armed yet.
-fn milktea::Cmd Model.keep_animating(&self) {
-	if (self.animating) return null;
-	if (self.settled()) {
-		self.last_frame_ms = 0;
-		return null;
-	}
-	self.animating = true;
-	return milktea::tick(milktea::FRAME_MS);
+// How fast the bloom is spreading after `held` seconds: bloom's slope.
+fn double bloom_speed(double held) {
+	if (held >= BLOOM_RAMP) return BLOOM_SPEED;
+	double u = held / BLOOM_RAMP;
+	return BLOOM_SPEED * u * u;
 }
 
 fn bool is_wheel(milktea::MouseButton b) => b == MOUSE_WHEEL_UP || b == MOUSE_WHEEL_DOWN;
@@ -214,9 +177,9 @@ fn milktea::View Model.view(&self) @dynamic {
 }
 
 fn void Model.draw_field(&self, xray::ScreenBuffer* canvas, xray::Rect area) {
-	double lx = self.light_x.value;
-	double ly = self.light_y.value;
-	double radius = self.radius.value;
+	double lx = self.light_x.value();
+	double ly = self.light_y.value();
+	double radius = self.light_radius();
 
 	// Centre the lattice so the margins match on every side.
 	sz x0 = area.x + (area.w - 1) % DOT_SPACING_X / 2;
