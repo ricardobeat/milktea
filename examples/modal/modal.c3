@@ -29,7 +29,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 					self.dismiss();
 				} else {
 					self.open = true;
-					self.anim = milktea::tween_at(milktea::time_ms(), 180, milktea::Easing.EASE_OUT_CUBIC);
+					self.anim = milktea::tween_at(milktea::now(), 180, milktea::Easing.EASE_OUT_CUBIC);
 				}
 			}
 		default:
@@ -39,7 +39,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 fn void Model.dismiss(Model* self) {
 	self.open = false;
-	self.anim = milktea::tween_at(milktea::time_ms(), 150, milktea::Easing.EASE_IN_CUBIC, true);
+	self.anim = milktea::tween_at(milktea::now(), 150, milktea::Easing.EASE_IN_CUBIC, true);
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
