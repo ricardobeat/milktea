@@ -88,8 +88,10 @@ fn bool component_interactive(Component c) {
 
 // ─── Preview — mount/unmount lifecycle ────────────────────────────────────────
 
+// The toast preview floats on a triangle wave read off the clock: one step
+// every FLOAT_TICK_MS, FLOAT_CYCLE steps to a full cycle (~3 seconds).
 const sz FLOAT_TICK_MS = 50;
-const sz FLOAT_CYCLE = 60; // steps per full cycle (~3 seconds)
+const sz FLOAT_CYCLE = 60;
 
 struct Preview {
 	Component kind;
@@ -107,7 +109,6 @@ struct Preview {
 	boba::Timer timer;
 	boba::Toast toast_hard;
 	boba::Toast toast_blur;
-	sz float_step;
 	boba::Viewport vp;
 }
 
@@ -117,7 +118,6 @@ fn void Preview.mount(&self, Component c) {
 	milktea::cancel(&self.timer);
 	milktea::cancel(&self.toast_hard);
 	milktea::cancel(&self.toast_blur);
-	milktea::cancel(&self.float_step);
 	self.kind = c;
 	switch (c) {
 		case FILE_PICKER:
@@ -185,8 +185,6 @@ fn void Preview.mount(&self, Component c) {
 			self.toast_blur.message = "Blurred shadow";
 			self.toast_blur.state = boba::ToastState.VISIBLE;
 			self.toast_blur.anim_step = boba::TOAST_ANIM_STEPS;
-			self.float_step = 0;
-			milktea::every(FLOAT_TICK_MS, owner: &self.float_step);
 		case VIEWPORT:
 			self.vp = boba::new_viewport(40, 10);
 			self.vp.show_scrollbar = true;
@@ -309,10 +307,6 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.preview.update(msg);
 		self.toast.update(msg);
-		if (msg.owner == &self.preview.float_step) {
-			self.preview.float_step = (self.preview.float_step + 1) % FLOAT_CYCLE;
-			milktea::tick(FLOAT_TICK_MS, owner: &self.preview.float_step);
-		}
 		return null;
 	}
 
@@ -544,7 +538,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.preview.kind == Component.TOAST) {
 		// Triangle wave: 0 → amplitude → 0 → -amplitude → 0
 		sz quarter = FLOAT_CYCLE / 4;
-		sz step = self.preview.float_step;
+		sz step = milktea::now() / FLOAT_TICK_MS % FLOAT_CYCLE;
 		sz float_offset;
 		if (step < quarter) {
 			float_offset = step * 3 / quarter;
@@ -574,6 +568,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		String blur_rendered = self.preview.toast_blur.style.render(self.preview.toast_blur.message);
 		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered,
 			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2) });
+		view = view.repaint_after(FLOAT_TICK_MS);
 	}
 
 	return view;
