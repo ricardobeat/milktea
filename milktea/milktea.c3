@@ -331,6 +331,10 @@ struct Program {
 	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
 	// which the lone ESC is flushed as a real keypress. 0 = no hold active.
 	sz esc_deadline_ms;
+	// The frame clock behind now(): stamped from `clock` right before every
+	// init(), update() and view() call, so one call reads one instant.
+	sz now_ms;
+	ClockFn clock; // null = the monotonic clock; see with_clock
 
 	// Test / injection support
 	bool test_mode;
@@ -526,6 +530,10 @@ fn int input_reader_fn(void* arg) {
 	return 0;
 }
 
+// ClockFn supplies the time behind now(), in milliseconds. The runtime uses
+// the monotonic clock; a test swaps in its own with with_clock.
+alias ClockFn = fn sz();
+
 // Global pointer to the currently running program.
 // Set during Program.run(), cleared on exit.
 // Safe because only one program can run at a time (one terminal).
@@ -625,6 +633,24 @@ fn sz monotonic_ms() {
 	return time_ms();
 }
 
+// now is the frame clock: the time of the init(), update() or view() call in
+// progress, in monotonic milliseconds. It stays fixed for the whole call, so
+// everything one view draws agrees on the instant it is drawing, and a value
+// set in update() is read back in view() against the same time base.
+//
+// Outside a running program (a unit test, direct rendering) there is no frame,
+// and now reads the live monotonic clock instead.
+fn sz now() {
+	if (g_program == null) return time_ms();
+	return g_program.now_ms;
+}
+
+// stamp_now advances the frame clock to the current time. Called right before
+// each model callback, never during one.
+fn void Program.stamp_now(&self) {
+	self.now_ms = self.clock ? self.clock() : time_ms();
+}
+
 // Cell-size accessors — the pixel size of one character cell, discovered via
 // the startup probe (CSI 16 t / OSC 1337) and refreshed by runtime replies.
 // 0 + cell_size_known() == false means the terminal never answered (e.g.
@@ -679,6 +705,13 @@ fn void with_window_size(Program* self, sz w, sz h) {
 fn void with_test_mode(Program* self, DString* output) {
 	self.test_mode = true;
 	self.output_buf = output;
+}
+
+// with_clock replaces the clock behind now(), so a test can render an
+// animation at chosen instants instead of whenever the test happens to run.
+// Timers keep the real clock: this only moves what the model sees.
+fn void with_clock(Program* self, ClockFn clock) {
+	self.clock = clock;
 }
 
 // with_input injects raw input bytes that the event loop will consume
@@ -752,12 +785,14 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
+	self.stamp_now();
 	Cmd c     = model.update(m);
 	sz chain = 0;
 	while (c != null && chain < MAX_BATCH) {
 		Msg next = c();
 		if (next.kind == MsgKind.QUIT) return true;
 		if (next.kind == MsgKind.NONE) break;
+		self.stamp_now();
 		c = model.update(next);
 		chain++;
 	}
@@ -1101,13 +1136,17 @@ fn void? Program.run(Program* self) {
 		self.in_alt_screen = true;
 	}
 
+	self.stamp_now();
 	Cmd c0 = self.model.init();
 	if (c0 != null) {
 		Msg m0 = c0();
 		if (m0.kind != MsgKind.NONE && dispatch(self, self.model, m0)) return;
 	}
 
-	if (&self.model.on_mount) self.model.on_mount();
+	if (&self.model.on_mount) {
+		self.stamp_now();
+		self.model.on_mount();
+	}
 
 	// Determine initial window size
 	WinSize initial_ws;
@@ -1593,6 +1632,7 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 // In non-test mode, uses xray's differential renderer with synchronized output.
 fn void Program.render_current_view(Program* self) {
 	@pool() {
+		self.stamp_now();
 		View v = self.model.view();
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (v.mouse_mode != self.mouse_mode) {

@@ -291,8 +291,13 @@ Callable from `init`, `update`, `view` and `on_mount`; main thread only.
 | `cell_size_known()` | Whether the terminal answered the probe |
 | `kitty_graphics_supported()` | Result of the `a=q` probe |
 | `in_alt_screen()` | Whether the alternate screen is showing |
-| `monotonic_ms()` | Monotonic milliseconds |
+| `now()` | The frame clock: monotonic ms, fixed for the current callback |
+| `monotonic_ms()` | Monotonic milliseconds, live |
 | `emit(String escape)` | Writes a raw escape through the renderer's tty path |
+
+`now()` is stamped once before each `init`, `update`, `view` and `on_mount`
+call, so everything one callback reads agrees on the time. Outside a running
+program it reads the live clock.
 
 The size is set before the first `view` and refreshed on resize, so there is no
 startup gap — you do not need to mirror it in the model. Handle
@@ -316,6 +321,7 @@ turns true.
 | `with_window_size(&p, w, h)` | Fixes the size (tests) |
 | `with_test_mode(&p, DString*)` | Captures output instead of writing to the tty |
 | `with_input(&p, char[])` | Preloads input bytes (tests) |
+| `with_clock(&p, ClockFn)` | Replaces the clock behind `now()` (tests) |
 
 ## Node tree
 
