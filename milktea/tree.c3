@@ -165,19 +165,7 @@ fn View draw_in(Node* root, sz w, sz h) @local {
 		if (res.cursor.color.len > 0) v = v.set_cursor_color(res.cursor.color);
 	}
 	// A node that animates asks to be painted again rather than making the
-	// app run a timer for it. Cancel first: view() runs every frame, so
-	// without it each frame would leave another timer behind. The buffer
-	// doubles as the owner token — one draw tree, one repaint timer.
-	cancel(buf);
-	if (res.repaint_ms > 0) {
-		// every(), not tick(): the deadline is snapped to the next multiple of
-		// the interval in absolute time, so the frame this arms lands on the
-		// same grid as the last one. tick() would wait the full interval from
-		// *now*, adding however long this frame took to every period — a rate
-		// that sags under load and drifts out of step with the terminal's own
-		// refresh. The repaint is re-armed from scratch each frame, so the
-		// snapping is what keeps successive frames evenly spaced.
-		every((sz)res.repaint_ms, &tick_msg, buf);
-	}
+	// app run a timer for it; the tree's soonest request becomes the view's.
+	v.repaint_ms = res.repaint_ms;
 	return v;
 }

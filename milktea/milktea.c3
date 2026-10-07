@@ -60,6 +60,7 @@ struct View {
 	sz overlay_count;
 	bool report_key_events;
 	bool mouse_pixels;
+	sz repaint_ms; // paint again after this long; 0 = wait for the next message
 }
 
 // view creates a View displaying the given string.
@@ -1627,6 +1628,22 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 	r.resize(cols, rows);
 }
 
+// schedule_repaint arms the timer behind a view's repaint_ms. Cancel first:
+// view() runs every frame, so without it each frame would leave another timer
+// behind. The program doubles as the owner token — one view, one repaint timer.
+fn void Program.schedule_repaint(&self, sz ms) {
+	cancel(self);
+	if (ms <= 0) return;
+	// every(), not tick(): the deadline is snapped to the next multiple of the
+	// interval in absolute time, so the frame this arms lands on the same grid
+	// as the last one. tick() would wait the full interval from *now*, adding
+	// however long this frame took to every period — a rate that sags under
+	// load and drifts out of step with the terminal's own refresh. The repaint
+	// is re-armed from scratch each frame, so the snapping is what keeps
+	// successive frames evenly spaced.
+	every(ms, &tick_msg, self);
+}
+
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
@@ -1634,6 +1651,7 @@ fn void Program.render_current_view(Program* self) {
 	@pool() {
 		self.stamp_now();
 		View v = self.model.view();
+		self.schedule_repaint(v.repaint_ms);
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (v.mouse_mode != self.mouse_mode) {
 			if (v.mouse_mode == MOUSE_MODE_NONE) {
