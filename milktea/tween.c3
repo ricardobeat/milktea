@@ -7,7 +7,7 @@ import dye;
 // renderer — and it runs in one of two modes.
 //
 // Clock-driven is the usual one, and needs no frame messages at all: build it
-// with `tween_at(time_ms(), ms)` and hand it to `milktea::animate` in view()
+// with `tween_at(now(), ms)` and hand it to `milktea::animate` in view()
 // (see animate.c3), which reads it against the paint clock and lets the node
 // tree ask for its own repaints.
 //
@@ -105,11 +105,11 @@ fn Tween tween_reversed(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
 }
 
 // tween_at builds a Tween that reads its progress from the clock, starting at
-// `now`. Pass milktea::time_ms() from update() when the animation begins; the
+// `now`. Pass milktea::now() from update() when the animation begins; the
 // tween then needs no frame messages at all, because `animate` re-reads it
 // against the paint clock on every frame:
 // 
-//     self.anim = tween_at(milktea::time_ms(), 260);
+//     self.anim = tween_at(milktea::now(), 260);
 // 
 // A clock-driven tween ignores step(). The two modes are deliberately
 // separate: a model that wants to drive frames itself keeps step(), and one
