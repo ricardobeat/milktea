@@ -180,8 +180,12 @@ struct SplitModel {
 	Editor[4] editors;
 	sz count;
 	sz focus;
-	sz cursor_blink;
 }
+
+// The cursor is on for one BLINK_MS and off for the next, read off the clock.
+const sz BLINK_MS = 500;
+
+fn bool cursor_on() => milktea::now() / BLINK_MS % 2 == 0;
 
 fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 	self.count = 2;
@@ -193,15 +197,11 @@ fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 	self.editors[1].placeholder = "type something";
 	self.editors[2].label = "Editor 3";
 	self.editors[3].label = "Editor 4";
-	return milktea::tick(500);
+	return null;
 }
 
 
 fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
-		self.cursor_blink = 1 - self.cursor_blink;
-		return milktea::tick(500);
-	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -255,7 +255,7 @@ fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
 
 fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
-	bool show_cursor     = self.cursor_blink != 0;
+	bool show_cursor     = cursor_on();
 
 	sz edit_h = milktea::screen_height() - 3;
 	if (edit_h < 5) edit_h = 5;
@@ -291,7 +291,7 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 			)
 		)
 	);
-	return milktea::view(out.str_view());
+	return milktea::view(out.str_view()).repaint_after(BLINK_MS);
 }
 
 fn int main() {

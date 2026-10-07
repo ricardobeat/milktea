@@ -16,8 +16,12 @@ struct ChatModel {
 	String[64] senders;
 	sz msg_count;
 	sz scroll;
-	sz cursor_blink;
 }
+
+// The cursor is on for one BLINK_MS and off for the next, read off the clock.
+const sz BLINK_MS = 500;
+
+fn bool cursor_on() => milktea::now() / BLINK_MS % 2 == 0;
 
 fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
 	// Add some initial messages
@@ -26,15 +30,11 @@ fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
 	self.messages[1] = "Type a message and press Enter to send.";
 	self.senders[1] = "system";
 	self.msg_count = 2;
-	return milktea::tick(500);
+	return null;
 }
 
 
 fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
-		self.cursor_blink = 1 - self.cursor_blink;
-		return milktea::tick(500);
-	}
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
@@ -157,13 +157,13 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	DString input_line = dstring::temp();
 	input_line.append_string("┃ ");
 	input_line.append_string(input_text);
-	if (self.cursor_blink != 0) {
+	if (cursor_on()) {
 		input_line.append_string("▎");
 	}
 	out.append_string(border.render(input_line.str_view()));
 	out.append_char('\n');
 	out.append_string(hint_style.render("ENTER send | ESC quit"));
-	return milktea::view(out.str_view());
+	return milktea::view(out.str_view()).repaint_after(BLINK_MS);
 }
 
 fn int main() {
