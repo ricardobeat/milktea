@@ -410,6 +410,13 @@
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/spotlight": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/spotlight/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
     }
   }
 }

@@ -74,6 +74,7 @@ OVERRIDES = {
     "flappybird": {"extra_dirs": ["xray"]},
     "nanobots": {"extra_dirs": ["xray"]},
     "paint": {"extra_dirs": ["xray"]},
+    "spotlight": {"extra_dirs": ["xray"]},
     "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d-server": {
