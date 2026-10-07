@@ -1647,14 +1647,18 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 fn void Program.schedule_repaint(&self, sz ms) {
 	cancel(self);
 	if (ms <= 0) return;
-	// every(), not tick(): the deadline is snapped to the next multiple of the
-	// interval in absolute time, so the frame this arms lands on the same grid
-	// as the last one. tick() would wait the full interval from *now*, adding
-	// however long this frame took to every period — a rate that sags under
-	// load and drifts out of step with the terminal's own refresh. The repaint
-	// is re-armed from scratch each frame, so the snapping is what keeps
-	// successive frames evenly spaced.
-	every(ms, &tick_msg, self);
+	// The deadline is snapped to the next multiple of the interval on the
+	// monotonic clock, rather than a full interval from now. Waiting the full
+	// interval would add however long this frame took to every period, a rate
+	// that sags under load; snapping keeps successive frames evenly spaced
+	// even though the repaint is re-armed from scratch each frame.
+	//
+	// Monotonic, not wall-clock like every(): an animation derives its phase
+	// from now(), which is monotonic, so a repaint on the same grid lands just
+	// past each phase boundary. A view showing frame now() / 80 and asking for
+	// repaint_after(80) then advances exactly one frame per repaint, never
+	// repeating or skipping one because the two clocks' grids are offset.
+	tick(snap_delay(time_ms(), ms), &tick_msg, self);
 }
 
 // render_current_view renders the model's current view, handling

@@ -103,3 +103,16 @@ fn void test_no_repaint_request_arms_nothing() @test {
 	p.run()!!;
 	assert(repaint_timers(&p) == 0, "got %d repaint timers", repaint_timers(&p));
 }
+
+fn void test_repaint_lands_on_the_monotonic_grid() @test {
+	// A view animating at now() / 80 must be repainted on multiples of 80 on
+	// the same clock, or frames repeat and skip where the grids disagree.
+	RepaintModel m = { .repaint_ms = 80 };
+	DString out = dstring::temp();
+	Program p = @test_program_input(&m, &out, 80, 24, "q");
+	p.run()!!;
+	foreach (t : p.timers) {
+		if (t.active && t.owner == &p) assert(t.deadline_ms % 80 == 0, "deadline %d is off the grid", t.deadline_ms);
+	}
+	assert(repaint_timers(&p) == 1);
+}
