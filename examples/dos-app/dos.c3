@@ -218,7 +218,7 @@ fn xray::Node* DosModel.content(&self) {
 		title.render(tab_titles[self.active_tab]),
 		body.render(tab_bodies[self.active_tab]));
 
-	return milktea::text(panel, inner);
+	return milktea::text(inner, panel);
 }
 
 fn xray::Node* DosModel.statusbar(&self) {
@@ -236,8 +236,8 @@ fn xray::Node* DosModel.statusbar(&self) {
 	// neither side needs its width computed.
 	return milktea::hstack()
 		.height(milktea::cells(BAR_ROWS))
-		.add(milktea::text(bar, hints).fill(1))
-		.add(milktea::text(info, right).width(milktea::cells(glaze::string_width(right))));
+		.add(milktea::text(hints, bar).fill(1))
+		.add(milktea::text(right, info).width(milktea::cells(glaze::string_width(right))));
 }
 
 fn int main() {

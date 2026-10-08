@@ -151,14 +151,14 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	};
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	xray::Node* panel_node = milktea::text(panel, "")
+	xray::Node* panel_node = milktea::text("", panel)
 		.min_width(self.min_cols)
 		.with_gap(1)
 		.center()
 		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
 	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
 
-	panel_node.add(milktea::text(title_s, self.title).height(milktea::cells(1)));
+	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));
 
 	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
 	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
@@ -170,7 +170,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.choice_slots[i] = { .picker = self, .index = i };
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
-		xray::Node* choice_node = milktea::text(on ? current : row, label).height(milktea::cells(1));
+		xray::Node* choice_node = milktea::text(label, on ? current : row).height(milktea::cells(1));
 		choice_node.on_click(&picker_choice_clicked, &self.choice_slots[i]);
 		list_node.add(choice_node);
 	}
@@ -183,7 +183,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
-		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
+		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
 		btn.on_click(&picker_button_clicked, &self.button_slots[i]);
 		buttons_row.add(btn);
 	}

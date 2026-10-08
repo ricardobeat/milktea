@@ -78,7 +78,7 @@ fn milktea::Cmd RepaintModel.update(RepaintModel* self, milktea::Msg msg) @dynam
 }
 
 fn milktea::View RepaintModel.view(RepaintModel* self) @dynamic {
-	return draw(root().add(text(glaze::style(), "tick")).animate(self.fps));
+	return draw(root().add(text("tick")).animate(self.fps));
 }
 
 fn sz repaint_timers(Program* p) {

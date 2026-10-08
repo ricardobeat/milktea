@@ -10,8 +10,8 @@ import xray;
 //   fn milktea::View Model.view(&self) @dynamic {
 //       return milktea::draw(milktea::root()
 //           .add(milktea::vstack()
-//               .add(milktea::text(title_s, "Title").with_height(1))
-//               .add(milktea::text(body_s, self.body).fill(1))));
+//               .add(milktea::text("Title", title_s).with_height(1))
+//               .add(milktea::text(self.body, body_s).fill(1))));
 //   }
 //
 // The string-building API (glaze::join_vertical over rects) still works and is
@@ -105,8 +105,8 @@ fn sz StyledText.measure_width(&self, sz height) @dynamic {
 	return widest + frame_width(self.style);
 }
 
-// text puts a styled string in the tree.
-fn Node* text(glaze::Style style, String s) {
+// text puts a string in the tree, styled by `style` (plain by default).
+fn Node* text(String s, glaze::Style style = {}) {
 	StyledText* st = mem::tnew(StyledText);
 	st.style = style;
 	st.text = s;

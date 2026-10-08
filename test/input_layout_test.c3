@@ -16,10 +16,10 @@ fn milktea::View Mod.view(&self) @dynamic {
 	glaze::Style nm = glaze::style().align(glaze::Position.RIGHT, glaze::Position.CENTER);
 	milktea::Node* col = milktea::vstack().with_gap(1);
 	col.add(milktea::hstack().height(milktea::cells(3)).with_gap(1)
-		.add(milktea::text(nm, "one").width(milktea::cells(6)))
+		.add(milktea::text("one", nm).width(milktea::cells(6)))
 		.add(milktea::component(&self.a).fill(1)));
 	col.add(milktea::hstack().height(milktea::cells(3)).with_gap(1)
-		.add(milktea::text(nm, "two").width(milktea::cells(6)))
+		.add(milktea::text("two", nm).width(milktea::cells(6)))
 		.add(milktea::component(&self.b).fill(1)));
 	return milktea::draw(milktea::root().add(col));
 }

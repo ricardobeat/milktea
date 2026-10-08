@@ -186,7 +186,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
 		String label = (i == self.selected ? active : bar).render(self.titles[i]);
-		xray::Node* title_node = milktea::text(bar, label)
+		xray::Node* title_node = milktea::text(label, bar)
 			.width(milktea::cells(glaze::string_width(self.titles[i])));
 		title_node.on_click(&title_clicked, &self.title_slots[i]);
 		row.add(title_node);
@@ -219,7 +219,7 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 	glaze::Style selected = { .bg = th.ink, .fg = th.accent, .bold = true };
 	glaze::Style item = { .bg = th.bar, .fg = th.bar_text };
 
-	xray::Node* panel_node = milktea::text(panel, "")
+	xray::Node* panel_node = milktea::text("", panel)
 		.width(milktea::cells(self.item_width + ITEM_PAD * 2 + 2))
 		.height(milktea::cells(MENU_ITEMS + 2))
 		.with_padding(1, 1, 1, 1)
@@ -248,7 +248,7 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 // gap JUSTIFY_SPACE_BETWEEN opens up between label and key would show
 // whatever is behind the dropdown instead of the row's own highlight.
 fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
-	xray::Node* bg = milktea::text(base, "").height(milktea::cells(1));
+	xray::Node* bg = milktea::text("", base).height(milktea::cells(1));
 	xray::Node* row = xray::hstack()
 		.with_justify(xray::JustifyContent.JUSTIFY_SPACE_BETWEEN)
 		.with_padding(0, ITEM_PAD, 0, ITEM_PAD);
@@ -256,8 +256,8 @@ fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
 	// default is fill, which would split the row 50/50 between them and
 	// leave JUSTIFY_SPACE_BETWEEN nothing to push apart, since two fill
 	// children already consume the whole row between them.
-	row.add(milktea::text(base, mi.label).width(milktea::cells(glaze::string_width(mi.label))));
-	row.add(milktea::text(base, mi.key).width(milktea::cells(glaze::string_width(mi.key))));
+	row.add(milktea::text(mi.label, base).width(milktea::cells(glaze::string_width(mi.label))));
+	row.add(milktea::text(mi.key, base).width(milktea::cells(glaze::string_width(mi.key))));
 	bg.add(row);
 	return bg;
 }

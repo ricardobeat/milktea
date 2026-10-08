@@ -271,14 +271,13 @@ timer panel:
 ```c3
     return milktea::draw(milktea::root()
         .add(milktea::vstack()
-            .add(milktea::text(title_s, " 🍵 milktea pomodoro").height(milktea::cells(1)))
+            .add(milktea::text(" 🍵 milktea pomodoro", title_s).height(milktea::cells(1)))
             .add(milktea::hstack()
                 .fill(1)
                 .with_gap(PANEL_GAP)
-                .add(milktea::text(side_s, side).width(milktea::cells(SIDEBAR_COLS)))
-                .add(milktea::text(timer_s, clock).fill(1)))
-            .add(milktea::text(status_s,
-                "  space pause · tab switch · r reset · q quit")
+                .add(milktea::text(side, side_s).width(milktea::cells(SIDEBAR_COLS)))
+                .add(milktea::text(clock, timer_s).fill(1)))
+            .add(milktea::text("  space pause · tab switch · r reset · q quit", status_s)
                 .height(milktea::cells(1)))));
 }
 ```

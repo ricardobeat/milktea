@@ -83,7 +83,7 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 		form.add(milktea::hstack()
 			.height(milktea::cells(1))
 			.with_gap(LABEL_GAP)
-			.add(milktea::text(label_s, LABELS[i]).width(milktea::cells(label_cols())))
+			.add(milktea::text(LABELS[i], label_s).width(milktea::cells(label_cols())))
 			.add(self.inputs[i].node().fill(1)));
 	}
 
@@ -95,10 +95,10 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 	return milktea::draw(milktea::root()
 		.add(milktea::vstack()
 			.with_gap(SECTION_GAP)
-			.add(milktea::text(title_s, "Sign Up").height(milktea::cells(1)))
+			.add(milktea::text("Sign Up", title_s).height(milktea::cells(1)))
 			.add(form.height(milktea::cells(3)))
-			.add(milktea::text(btn_s, "  Submit  ").height(milktea::cells(1)))
-			.add(milktea::text(hint_s, "TAB/Shift+TAB switch | ENTER submit | ESC quit")
+			.add(milktea::text("  Submit  ", btn_s).height(milktea::cells(1)))
+			.add(milktea::text("TAB/Shift+TAB switch | ENTER submit | ESC quit", hint_s)
 				.height(milktea::cells(1)))));
 }
 

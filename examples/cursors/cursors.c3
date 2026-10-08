@@ -184,7 +184,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		.add(milktea::vstack()
 			.with_gap(TITLE_GAP)
 			.with_padding(TOP_MARGIN, SIDE_MARGIN, 0, SIDE_MARGIN)
-			.add(milktea::text({}, title).height(milktea::cells(1)))
+			.add(milktea::text(title).height(milktea::cells(1)))
 			.add(body.fill(1))));
 }
 
@@ -213,7 +213,7 @@ fn milktea::Node* Model.entry_row(&self, sz i) {
 	return milktea::hstack()
 		.height(milktea::cells(BOX_ROWS))
 		.with_gap(NAME_GAP)
-		.add(milktea::text(name_s, e.label).width(milktea::cells(NAME_COLS)))
+		.add(milktea::text(e.label, name_s).width(milktea::cells(NAME_COLS)))
 		.add(e.input.node().fill(1));
 }
 

@@ -13,13 +13,13 @@ fn milktea::View Probe.view(&self) @dynamic {
 	glaze::Style card_b = glaze::style().with_width(20).with_height(10)
 		.with_border(glaze::ROUNDED).border_fg(glaze::color_hex("#00ff00"));
 	milktea::Node* screen = milktea::root()
-		.add(milktea::text(glaze::style(), "footer").at(0, 20));
+		.add(milktea::text("footer").at(0, 20));
 	if (self.flip) {
-		screen.add(milktea::text(card_b, "B").at(10, 2));
-		screen.add(milktea::text(card_a, "A").at(0, 0));
+		screen.add(milktea::text("B", card_b).at(10, 2));
+		screen.add(milktea::text("A", card_a).at(0, 0));
 	} else {
-		screen.add(milktea::text(card_a, "A").at(0, 0));
-		screen.add(milktea::text(card_b, "B").at(10, 2));
+		screen.add(milktea::text("A", card_a).at(0, 0));
+		screen.add(milktea::text("B", card_b).at(10, 2));
 	}
 	return milktea::draw(screen);
 }
@@ -48,8 +48,8 @@ fn void test_zstack_at_composites_in_order() @test {
 
 	// .at() sizes a node from its style when the style names a size.
 	milktea::Node* n = milktea::root()
-		.add(milktea::text(glaze::style().with_width(20).with_height(10), "A").at(0, 0))
-		.add(milktea::text(glaze::style().with_width(20).with_height(10), "B").at(10, 2));
+		.add(milktea::text("A", glaze::style().with_width(20).with_height(10)).at(0, 0))
+		.add(milktea::text("B", glaze::style().with_width(20).with_height(10)).at(10, 2));
 	n.solve(xray::new_rect(0, 0, 60, 24));
 	assert(n.child_rect(0).w == 20 && n.child_rect(0).h == 10, "card A sized from style");
 	assert(n.child_rect(1).x == 10 && n.child_rect(1).y == 2, "card B pinned by at()");

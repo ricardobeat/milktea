@@ -50,15 +50,15 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	xray::Node* dialog = null;
 	if (self.anim.showing()) {
-		dialog = milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
+		dialog = milktea::text("Animated Modal\n\nfade + slide, driven by a Tween", panel).center()
 			.shadow(milktea::shadow(1, 1, 160, blur: 2, half_blocks: true)
 				.with_color(glaze::color_hex("#05050c")))
 			.transition(milktea::slide_down(5).fade(), self.anim);
 	}
 
 	return milktea::draw(milktea::root()
-		.add(milktea::vstack().add(milktea::text(backdrop, "").fill(1))
-			.add(milktea::text(hint, "space toggles the modal · esc dismisses · q quits").height(xray::cells(1))))
+		.add(milktea::vstack().add(milktea::text("", backdrop).fill(1))
+			.add(milktea::text("space toggles the modal · esc dismisses · q quits", hint).height(xray::cells(1))))
 		.add(dialog));
 }
 

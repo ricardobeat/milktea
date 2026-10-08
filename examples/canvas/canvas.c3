@@ -50,15 +50,14 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 	// .at() pins each one at an absolute cell. Swapping which card is added
 	// last is the whole of the z-order flip.
 	milktea::Node* screen = milktea::root()
-		.add(milktea::text(footer_style,
-			"Press any key to swap the cards, or q to quit.").at(0, last_row));
+		.add(milktea::text("Press any key to swap the cards, or q to quit.", footer_style).at(0, last_row));
 
 	if (self.flip) {
-		screen.add(milktea::text(card_style, b).at(10, 2));
-		screen.add(milktea::text(card_style, a).at(0, 0));
+		screen.add(milktea::text(b, card_style).at(10, 2));
+		screen.add(milktea::text(a, card_style).at(0, 0));
 	} else {
-		screen.add(milktea::text(card_style, a).at(0, 0));
-		screen.add(milktea::text(card_style, b).at(10, 2));
+		screen.add(milktea::text(a, card_style).at(0, 0));
+		screen.add(milktea::text(b, card_style).at(10, 2));
 	}
 
 	return milktea::draw(screen);

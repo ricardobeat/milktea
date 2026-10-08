@@ -621,12 +621,12 @@ fn milktea::View TreeModel.view(&self) @dynamic {
 	glaze::Style plain = {};
 	milktea::Node* root = milktea::root()
 		.add(milktea::vstack()
-			.add(milktea::text(plain, "HEADER").height(milktea::cells(1)))
-			.add(milktea::text(plain, "body").fill(1))
-			.add(milktea::text(plain, "FOOTER").height(milktea::cells(1))));
+			.add(milktea::text("HEADER", plain).height(milktea::cells(1)))
+			.add(milktea::text("body", plain).fill(1))
+			.add(milktea::text("FOOTER", plain).height(milktea::cells(1))));
 
 	if (self.modal) {
-		root.add(milktea::text(plain, "MODAL").center());
+		root.add(milktea::text("MODAL", plain).center());
 	}
 
 	return self.inline_mode ? milktea::draw_inline(root) : milktea::draw(root);

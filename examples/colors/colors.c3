@@ -52,7 +52,7 @@ fn milktea::View ColorsModel.view(ColorsModel* self) @dynamic {
 		milktea::Node* r = milktea::hstack().fill(1);
 		for (sz col = 0; col < 4; col++) {
 			glaze::Style block = glaze::style().background(glaze::color_hex(colors[row * 4 + col]));
-			r.add(milktea::text(block, "").fill(1));
+			r.add(milktea::text("", block).fill(1));
 		}
 		grid.add(r);
 	}

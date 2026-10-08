@@ -123,22 +123,22 @@ fn String Model.transcript_text(&self, Theme th, sz width) {
 // over it. Rows past the pane's height solve to zero and never paint.
 fn xray::Node* Model.sidebar_node(&self, Theme th, sz width) {
 	xray::Node* list = milktea::vstack()
-		.add(milktea::text(th.sidebar_header, " REQUESTS").height(milktea::cells(1)))
-		.add(milktea::text(th.sidebar, "").height(milktea::cells(1)));
+		.add(milktea::text(" REQUESTS", th.sidebar_header).height(milktea::cells(1)))
+		.add(milktea::text("", th.sidebar).height(milktea::cells(1)));
 
 	sz rows = self.requests.count;
 	if (rows > MAX_SIDEBAR_ROWS) rows = MAX_SIDEBAR_ROWS;
 	for (sz i = 0; i < rows; i++) {
 		sz code = self.requests.status[self.requests.count - 1 - i];
 		glaze::Style rs = code < 400 ? th.row_ok : th.row_error;
-		list.add(milktea::text(rs, string::tformat("  %-3d %s", code, status_label(code)))
+		list.add(milktea::text(string::tformat("  %-3d %s", code, status_label(code)), rs)
 			.height(milktea::cells(1)));
 	}
 	// Soak up the leftover height so the rows sit at the top.
-	list.add(milktea::text(th.sidebar, "").fill(1));
+	list.add(milktea::text("", th.sidebar).fill(1));
 
 	return milktea::zstack()
-		.add(milktea::text(th.sidebar, ""))
+		.add(milktea::text("", th.sidebar))
 		.add(list)
 		.width(milktea::cells(width));
 }
@@ -152,7 +152,7 @@ fn xray::Node* dialog_node(sz screen_w, String body, glaze::Style style) {
 	// The tree is painted after view() returns, so the text must outlive this
 	// call: tformat puts it in the temp arena, which lives until the frame ends.
 	String text = string::tformat("%s", md::wrap_text(body, (sz)(bw - 4)).str_view());
-	return milktea::text(style.with_width(bw), text).center();
+	return milktea::text(text, style.with_width(bw)).center();
 }
 
 fn milktea::View Model.view(&self) @dynamic {
@@ -169,10 +169,10 @@ fn milktea::View Model.view(&self) @dynamic {
 	pane.style = th.output;
 
 	xray::Node* main = milktea::vstack()
-		.add(milktea::text(th.title, "  AI HARNESS").height(milktea::cells(1)))
+		.add(milktea::text("  AI HARNESS", th.title).height(milktea::cells(1)))
 		.add(milktea::component(pane).fill(1))
-		.add(milktea::text(th.input, self.prompt_line()).height(milktea::cells(3)))
-		.add(milktea::text(th.hint, self.hint_line()).height(milktea::cells(1)));
+		.add(milktea::text(self.prompt_line(), th.input).height(milktea::cells(3)))
+		.add(milktea::text(self.hint_line(), th.hint).height(milktea::cells(1)));
 
 	xray::Node* body = milktea::hstack().add(main.fill(1));
 	if (self.requests.open && sb_w > 0) {

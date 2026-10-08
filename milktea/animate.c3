@@ -8,7 +8,7 @@ import xray;
 // the node's offset and alpha, so it drops into a view's builder chain and
 // changes nothing but the node:
 // 
-//     dialog = milktea::text(panel, body).center()
+//     dialog = milktea::text(body, panel).center()
 //         .transition(milktea::slide_down(6).fade(), self.anim);
 // 
 // The model's only job is to aim the tween, which also keeps frames coming

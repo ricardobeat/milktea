@@ -118,7 +118,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	};
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
-	xray::Node* panel_node = milktea::text(panel, "")
+	xray::Node* panel_node = milktea::text("", panel)
 		.min_width(self.min_cols)
 		.with_gap(1)
 		.center()
@@ -133,7 +133,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	String header = glaze::join_vertical_arr(glaze::Position.LEFT, {
 		title_s.background(th.panel).render(self.title), "", body_s.render(self.body),
 	});
-	panel_node.add(milktea::text(body_s, header));
+	panel_node.add(milktea::text(header, body_s));
 
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)
@@ -142,7 +142,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .dialog = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused).view();
-		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
+		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
 		btn.on_click(&button_clicked, &self.button_slots[i]);
 		buttons_row.add(btn);
 	}

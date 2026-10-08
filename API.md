@@ -341,7 +341,7 @@ alias root, vstack, hstack, zstack, shadow, inner_shadow;
 alias cells, fill, percent, min, max;
 const START, CENTER, END, BETWEEN, AROUND, EVENLY;      // JustifyContent
 const STRETCH, ALIGN_START, ALIGN_CENTER, ALIGN_END;    // AlignItems
-fn Node* text(glaze::Style style, String s);
+fn Node* text(String s, glaze::Style style = {});
 ```
 
 `root()` is the mandatory outermost node and is a zstack, so anything added to
@@ -352,8 +352,8 @@ conditional content is a plain `if`.
 ```c3
 return milktea::draw(milktea::root()
     .add(milktea::vstack()
-        .add(milktea::text(title_s, "  My App").height(milktea::cells(1)))
-        .add(milktea::text(body_s, self.body).fill(1))
+        .add(milktea::text("  My App", title_s).height(milktea::cells(1)))
+        .add(milktea::text(self.body, body_s).fill(1))
         .add(self.list.node())));
 ```
 
