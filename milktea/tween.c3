@@ -2,22 +2,29 @@ module milktea;
 
 import dye;
 
-// Animation helpers: an easing curve plus a Tween that maps elapsed time onto
-// a value. A Tween is plain data the model owns, and it runs in one of two
-// modes.
+// Animation helpers: an easing curve plus a Tween that carries a value to a
+// target over a fixed time. Where a Spring's timing comes from its physics, a
+// Tween's comes from its duration and easing — the right fit for a panel
+// opening or a fade, where the length of the move is a design decision.
 //
-// Clock-driven is the usual one, and needs no frame messages at all: start it
-// in update() with `tween_at(frame_ms(), ms)`. It records when it started, and
-// every read solves its progress from frame_ms(), so view() only reads it. Starting
-// it also asks the runtime for frames until it ends (see frames_until), so
-// the model runs no timer either.
+// A Tween is used the way a Spring is. It is plain data the model owns, and
+// reading it never writes it: it stores where it set off from and when, and
+// every read solves where it is from there. So update() is the only call that
+// changes it and view() only reads. Each change also asks the runtime for
+// frames until the run ends (see frames_until), so the model runs no timer:
 //
-// Step-driven is for a model that wants the frames itself: build it with
-// `tween()`, advance it with `step()` on each frame message, and re-arm
-// `tick()` while step() reports the animation is still running.
+//     // init()
+//     self.open = tween(0, 180);
 //
-// Either way a settled tween stops asking for frames, so an idle animation
-// costs nothing.
+//     // update()
+//     if (key == ' ') self.open.update(self.open.target == 0 ? 1 : 0);
+//
+//     // view()
+//     if (self.open.value() > 0) ... .transition(slide_down(5), self.open)
+//
+// The plain calls read the frame clock, frame_ms(). Each has an _at twin
+// taking the time explicitly, for tests and for code running outside a
+// program.
 
 // A frame budget of 16ms is ~60fps, matching the default of `tick()`.
 const sz FRAME_MS = 16;
@@ -78,108 +85,72 @@ fn double ease(Easing e, double t) {
 	}
 }
 
-// Tween maps elapsed milliseconds onto a normalized, eased fraction. It holds
-// no clock: the owner advances it with `step()` (or sets `elapsed_ms`
-// directly) and reads `value()`. A zero-value Tween is a valid, already-
-// finished animation, so an un-initialized field renders at its target rather
-// than at its start.
+// Tween is a value on its way to `target`. A zero-value Tween rests at 0.
 struct Tween {
-	sz elapsed_ms; // a step-driven tween's progress
 	sz duration_ms;
 	Easing easing;
-	bool reverse; // play from the target back to the start
-	// A clock-driven tween reads its progress from frame_ms() against started_ms,
-	// on the same clock; see tween_at.
-	bool clocked;
-	sz started_ms;
+	double target;
+	// The start every read solves from: the value at start_ms, when the tween
+	// was last updated or set, and how long that run takes.
+	double from;
+	sz start_ms;
+	sz run_ms;
 }
 
-// tween builds a Tween that runs forward over `duration_ms`.
-fn Tween tween(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
-	return { .elapsed_ms = 0, .duration_ms = duration_ms, .easing = easing, .reverse = false };
+// tween builds a tween resting at `at`, already on its target.
+fn Tween tween(double at, sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
+	return { .duration_ms = duration_ms, .easing = easing, .target = at, .from = at };
 }
 
-// tween_reversed builds a Tween that runs from the target back to the start,
-// for dismissing whatever `tween()` presented.
-fn Tween tween_reversed(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
-	return { .elapsed_ms = 0, .duration_ms = duration_ms, .easing = easing, .reverse = true };
+// update sends the tween to a new target from wherever it is now, so a change
+// of mind mid-flight carries on from the current value rather than jumping.
+// A run takes duration_ms, except one that turns back toward where the
+// current run began: that takes only as long as the tween has been running,
+// so a half-open panel closes from half-way in half the time.
+fn void Tween.update(&self, double target) => self.update_at(target, frame_ms());
+
+fn void Tween.update_at(&self, double target, sz now_ms) {
+	if (target == self.target) return;
+	bool turning = self.moving_at(now_ms) && target == self.from;
+	sz run = turning ? now_ms - self.start_ms : self.duration_ms;
+	self.from     = self.value_at(now_ms);
+	self.target   = target;
+	self.start_ms = now_ms;
+	self.run_ms   = run;
+	frames_until(self.settles_at());
 }
 
-// tween_at builds a Tween that reads its progress from the clock, starting at
-// `now`. Pass milktea::frame_ms() from update() when the animation begins:
-// 
-//     self.anim = tween_at(milktea::frame_ms(), 260);
-// 
-// The tween then needs no frame messages and no timer: the runtime paints
-// every frame until it ends, and each read solves where it is from frame_ms().
-// A clock-driven tween ignores step().
-fn Tween tween_at(sz now, sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC, bool reverse = false) {
-	frames_until(now + duration_ms);
-	return { .duration_ms = duration_ms, .easing = easing, .reverse = reverse, .clocked = true, .started_ms = now };
+// set places the tween at `value` and keeps it there: a jump with no
+// animation.
+fn void Tween.set(&self, double value) => self.set_at(value, frame_ms());
+
+fn void Tween.set_at(&self, double value, sz now_ms) {
+	self.from     = value;
+	self.target   = value;
+	self.start_ms = now_ms;
+	self.run_ms   = 0;
 }
 
-// reversed turns the tween around from wherever it is, keeping its duration
-// and easing: a modal half-way open closes from half-way rather than jumping.
-// The result is clock-driven from frame_ms(), whichever mode this one ran in, and
-// a tween that never started reverses into one already at its start — so
-// `tween(180).reversed()` is a closed panel waiting to be opened.
-fn Tween Tween.reversed(self) => self.reversed_at(frame_ms());
-
-fn Tween Tween.reversed_at(self, sz now) {
-	// The way back covers what is left of the way out, so the tween resumes
-	// from the same point: elapsed and remaining swap.
-	sz left = self.duration_ms - self.elapsed_at(now);
-	return tween_at(now - left, self.duration_ms, self.easing, !self.reverse);
-}
-
-// elapsed_at is how far into its duration the tween is at `now`: the clock
-// for a clock-driven tween, the steps taken for a step-driven one.
-fn sz Tween.elapsed_at(self, sz now) {
-	if (!self.clocked) return self.elapsed_ms;
-	sz delta = now - self.started_ms;
-	// A time before the start reads as "not begun", a late one as finished.
-	if (delta < 0) return 0;
-	return delta > self.duration_ms ? self.duration_ms : delta;
-}
-
-// step advances the tween by `dt_ms` and reports whether it is still running.
-// The return value is what a model uses to decide whether to re-arm its frame
-// timer, so the timer stops arming itself once the animation settles:
-// 
-//     if (self.anim.step(FRAME_MS)) return tick(FRAME_MS, &on_frame);
-//     return null;
-fn bool Tween.step(&self, sz dt_ms = FRAME_MS) {
-	self.elapsed_ms += dt_ms;
-	if (self.elapsed_ms > self.duration_ms) self.elapsed_ms = self.duration_ms;
-	return !self.done();
-}
-
-// done reports whether the tween has reached its end.
-fn bool Tween.done(self) => self.done_at(frame_ms());
-fn bool Tween.done_at(self, sz now) => self.elapsed_at(now) >= self.duration_ms;
-
-// showing reports whether whatever this tween presents is on screen: on its
-// way in, in, or still on its way out.
-fn bool Tween.showing(self) => self.showing_at(frame_ms());
-fn bool Tween.showing_at(self, sz now) => !self.reverse || !self.done_at(now);
-
-// restart rewinds the tween to its first frame, keeping duration and easing.
-// A clock-driven tween starts over from frame_ms().
-fn void Tween.restart(&self) {
-	self.elapsed_ms = 0;
-	if (self.clocked) *self = tween_at(frame_ms(), self.duration_ms, self.easing, self.reverse);
-}
-
-// value returns the eased progress in [0,1] (EASE_OUT_BACK may exceed it
-// mid-flight; see `ease`). A zero duration yields its end — an instant
-// animation is one that is already finished, never a divide by zero.
+// value is where the tween is now. EASE_OUT_BACK carries it past the target
+// mid-flight; see `ease`.
 fn double Tween.value(self) => self.value_at(frame_ms());
 
-fn double Tween.value_at(self, sz now) {
-	double t = self.duration_ms == 0 ? 1.0 : (double)self.elapsed_at(now) / (double)self.duration_ms;
-	if (self.reverse) t = 1.0 - t;
-	return ease(self.easing, t);
+fn double Tween.value_at(self, sz now_ms) {
+	if (!self.moving_at(now_ms)) return self.target;
+	// A read from before the start (a clock that stepped back) sees the start.
+	double t = now_ms > self.start_ms ? (double)(now_ms - self.start_ms) / (double)self.run_ms : 0.0;
+	return self.from + (self.target - self.from) * ease(self.easing, t);
 }
+
+// moving reports whether the tween has yet to reach its target.
+fn bool Tween.moving(self) => self.moving_at(frame_ms());
+
+fn bool Tween.moving_at(self, sz now_ms) => now_ms < self.settles_at();
+
+// settles_at is when the current run ends, on the frame_ms() clock.
+fn sz Tween.settles_at(self) => self.start_ms + self.run_ms;
+
+// The helpers below map a tween running over 0..1 onto other ranges.
 
 // lerp interpolates between two ints by this tween's current value, rounding
 // to nearest. Handy for a slide: `t.lerp(start_y, target_y)`.

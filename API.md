@@ -359,27 +359,27 @@ return milktea::draw(milktea::root()
 
 ## Tweens and motion
 
+A `Tween` carries a value to a target over a fixed duration and easing. It is
+used the way a `Spring` is: `update()` aims it, `view()` reads it, and each
+change asks the runtime for frames until it arrives, so the model runs no
+timer for it.
+
 ```c3
-Tween t = milktea::tween_at(milktea::frame_ms(), 300, Easing.EASE_OUT_CUBIC); // in update()
-t.value();           // 0.0 .. 1.0, eased, at frame_ms()
-t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha();
-t.done();            // reached its end
-t.reversed();        // turn around from where it is, same duration and easing
-t.showing();         // on its way in, in, or still on its way out
-t.restart();
+Tween t = milktea::tween(0, 300, Easing.EASE_OUT_CUBIC); // resting at 0
+t.update(target);    // run to target from wherever it is now (in update())
+t.value();           // where it is now (in view())
+t.moving();          // false once it arrives
+t.settles_at();      // when it arrives, on the frame_ms() clock
+t.set(value);        // jump, no animation
+t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha(); // over 0..1
 ```
 
-`tween_at` starts a clock-driven tween: it records its start, every read
-solves its progress from `frame_ms()`, and starting it asks the runtime for frames
-until it ends, so the model runs no timer. `value_at`, `done_at`,
-`showing_at`, `reversed_at` and `elapsed_at` take the time explicitly.
-
-`tween(ms)` and `tween_reversed(ms)` build a step-driven tween instead, for a
-model that drives its own frames: `t.step()` advances one 16ms frame (or
-`step(dt_ms)`). `tween(ms).reversed()` is a clock-driven tween already at its
-start, which is how a closed panel waits to be opened. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
+The plain calls read `frame_ms()`; `update_at`, `value_at`, `moving_at` and
+`set_at` take the time explicitly. A run takes the full duration, except one
+that turns back toward where the current run began, which takes only as long
+as the tween has run so far. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
 in/out/in-out family, and `EASE_OUT_BACK` — which deliberately overshoots past
-1 before settling, so clamp anything that must stay in range.
+the target before settling, so clamp anything that must stay in range.
 
 ## Springs
 
@@ -415,7 +415,8 @@ Parameters are `SpringParams { stiffness, damping }`, built with:
 
 `Motion` animates a node's entry: `slide_down(rows)`, `slide_up(rows)`,
 `slide_in(cols)`, `fade_in()`, and `.fade()` to add a fade to any of them. Apply
-with `node.transition(motion, tween)`, which reads the tween at `frame_ms()`.
+with `node.transition(motion, tween)`, which reads a tween running over 0..1 at
+`frame_ms()`: 1 is at rest in place, 0 fully away.
 
 ## Other helpers
 

@@ -2,18 +2,19 @@ module milktea;
 
 import xray;
 
-// Transitions: moving a node between two states as a Tween runs — a modal
-// sliding in and fading up, then back out. `Node.transition` reads the tween
-// at frame_ms() and writes the result into the node's offset and alpha, so it
-// drops into a view's builder chain and changes nothing but the node:
+// Transitions: moving a node between two states as a Tween runs from 0 to 1
+// and back — a modal sliding in and fading up, then back out.
+// `Node.transition` reads the tween at frame_ms() and writes the result into
+// the node's offset and alpha, so it drops into a view's builder chain and
+// changes nothing but the node:
 // 
 //     dialog = milktea::text(panel, body).center()
 //         .transition(milktea::slide_down(6).fade(), self.anim);
 // 
-// The model's only job is to start the tween, which also keeps frames coming
-// until it ends:
+// The model's only job is to aim the tween, which also keeps frames coming
+// until it arrives:
 // 
-//     self.anim = milktea::tween_at(milktea::frame_ms(), 260);
+//     self.anim.update(1); // open; update(0) closes
 // 
 // This is the other half of Node.animate. A node that animates changes for as
 // long as it is on screen — a spinner, a caret — and says so from the view. A
@@ -56,9 +57,9 @@ fn Motion Motion.fade(self) {
 fn Motion fade_in() => { .from_dx = 0, .from_dy = 0, .fades = true };
 
 // transition applies `motion` to the node according to `tw`'s progress at
-// frame_ms() and returns the node, so it drops into a builder chain. A finished
-// tween writes the motion's end state: the node rests where the layout solver
-// put it, fully opaque — or, played in reverse, fully away.
+// frame_ms() and returns the node, so it drops into a builder chain. At 1 the
+// node rests where the layout solver put it, fully opaque; at 0 it is the
+// motion's starting point, fully away.
 fn xray::Node* xray::Node.transition(&self, Motion motion, Tween tw) {
 	if (self == null) return self;
 

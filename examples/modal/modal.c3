@@ -4,14 +4,14 @@ import milktea;
 import glaze;
 import xray;
 
-// The tween is the modal's whole state: which way it is heading, and since
-// when. It starts closed, at the far end of a reversed run.
+// The tween is the modal's whole state: 0 is closed, 1 is open, and anything
+// between is on its way.
 struct Model {
 	milktea::Tween anim;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
-	self.anim = milktea::tween(180, milktea::Easing.EASE_OUT_CUBIC).reversed();
+	self.anim = milktea::tween(0, 180, milktea::Easing.EASE_OUT_CUBIC);
 	return null;
 }
 
@@ -23,12 +23,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		case milktea::KeyCode.CTRL_C:
 			return milktea::quit();
 		case milktea::KeyCode.ESC:
-			// Turn around from wherever it is, so a half-open modal closes
+			// Head back from wherever it is, so a half-open modal closes
 			// from half-way rather than jumping.
-			if (!self.anim.reverse) self.anim = self.anim.reversed();
+			self.anim.update(0);
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
-			if (k.rune == ' ') self.anim = self.anim.reversed();
+			if (k.rune == ' ') self.anim.update(self.anim.target == 0 ? 1 : 0);
 		default:
 	}
 	return null;
@@ -49,7 +49,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	};
 
 	xray::Node* dialog = null;
-	if (self.anim.showing()) {
+	if (self.anim.value() > 0) {
 		dialog = milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
 			.shadow(milktea::shadow(1, 1, 160, blur: 2, half_blocks: true)
 				.with_color(glaze::color_hex("#05050c")))
