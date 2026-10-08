@@ -16,7 +16,7 @@ import std::core::string;
 
 // ─── Component catalogue ──────────────────────────────────────────────────────
 
-const int COMPONENT_COUNT = 14;
+const sz COMPONENT_COUNT = 14;
 
 enum Component : char {
 	FILE_PICKER,
@@ -88,8 +88,8 @@ fn bool component_interactive(Component c) {
 
 // ─── Preview — mount/unmount lifecycle ────────────────────────────────────────
 
-const int FLOAT_TICK_MS = 50;
-const int FLOAT_CYCLE = 60; // steps per full cycle (~3 seconds)
+const sz FLOAT_TICK_MS = 50;
+const sz FLOAT_CYCLE = 60; // steps per full cycle (~3 seconds)
 
 struct Preview {
 	Component kind;
@@ -107,7 +107,7 @@ struct Preview {
 	boba::Timer timer;
 	boba::Toast toast_hard;
 	boba::Toast toast_blur;
-	int float_step;
+	sz float_step;
 	boba::Viewport vp;
 }
 
@@ -223,7 +223,7 @@ fn void Preview.mount(&self, Component c) {
 				"",
 				"End.",
 			};
-			for (int i = 0; i < 30; i++) self.vp.add_line(vp_lines[i]);
+			for (sz i = 0; i < 30; i++) self.vp.add_line(vp_lines[i]);
 	}
 }
 
@@ -282,21 +282,21 @@ fn String Preview.render(&self) {
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 
-const int LEFT_PANE_W = 22;
+const sz LEFT_PANE_W = 22;
 
 struct Model {
 	boba::List lst;
 	Preview preview;
 	bool preview_focused;
-	int vp_screen_row;
-	int vp_screen_col;
+	sz vp_screen_row;
+	sz vp_screen_col;
 	boba::Toast toast;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.lst = boba::new_list();
 	self.lst.width = LEFT_PANE_W;
-	for (int i = 0; i < COMPONENT_COUNT; i++) {
+	for (sz i = 0; i < COMPONENT_COUNT; i++) {
 		Component c = (Component)i;
 		self.lst.add_item(component_name(c), component_desc(c));
 	}
@@ -374,8 +374,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
-	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
-	int h = milktea::screen_height();
+	sz w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
+	sz h = milktea::screen_height();
 
 	xray::Rect header_r, body_r, footer_r;
 	layout::vstack(layout::screen(w, h), {
@@ -461,8 +461,8 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.render(string::tformat("%s%s%s", comp_name, comp_desc, focus_indicator));
 
 	// Size textarea/textinput to fill available preview space
-	int content_h = preview_r.h - 5; // header padding (3) + content top padding (1) + margin
-	int content_w = preview_r.w - 6; // content side padding (2+2) + margin
+	sz content_h = preview_r.h - 5; // header padding (3) + content top padding (1) + margin
+	sz content_w = preview_r.w - 6; // content side padding (2+2) + margin
 	if (content_h < 4) content_h = 4;
 	if (content_w < 20) content_w = 20;
 	if (self.preview.kind == Component.TEXTAREA) {
@@ -503,7 +503,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 			"%s unfocus   %s quit",
 			key_style.render("Esc"), key_style.render("Ctrl+C"));
 	} else {
-		int idx = self.preview.kind.ordinal;
+		sz idx = self.preview.kind.ordinal;
 		footer_inner = string::tformat(
 			"%s navigate   %s%s focus   %s quit   %d/%d",
 			key_style.render("↑/↓"), key_style.render("Enter"),
@@ -516,7 +516,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
 	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
 
-	milktea::View view = milktea::new_alt_screen_view(doc)
+	milktea::View view = milktea::view(doc)
 		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 
 	// Inner shadow on sidebar right edge
@@ -543,9 +543,9 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// Toast preview: two floating toasts with different shadow styles
 	if (self.preview.kind == Component.TOAST) {
 		// Triangle wave: 0 → amplitude → 0 → -amplitude → 0
-		int quarter = FLOAT_CYCLE / 4;
-		int step = self.preview.float_step;
-		int float_offset;
+		sz quarter = FLOAT_CYCLE / 4;
+		sz step = self.preview.float_step;
+		sz float_offset;
 		if (step < quarter) {
 			float_offset = step * 3 / quarter;
 		} else if (step < quarter * 2) {
@@ -556,21 +556,21 @@ fn milktea::View Model.view(Model* self) @dynamic {
 			float_offset = -3 + (step - quarter * 3) * 3 / quarter;
 		}
 
-		int center_x = preview_r.x + preview_r.w / 2;
-		int center_y = preview_r.y + preview_r.h / 2;
+		sz center_x = preview_r.x + preview_r.w / 2;
+		sz center_y = preview_r.y + preview_r.h / 2;
 
 		// Hard shadow toast (left)
-		int hard_w = self.preview.toast_hard.toast_width();
-		int hard_x = center_x - hard_w - 2;
-		int hard_y = center_y - 2 + float_offset;
+		sz hard_w = self.preview.toast_hard.toast_width();
+		sz hard_x = center_x - hard_w - 2;
+		sz hard_y = center_y - 2 + float_offset;
 		String hard_rendered = self.preview.toast_hard.style.render(self.preview.toast_hard.message);
 		view = view.add_overlay(hard_x, hard_y, hard_w, boba::TOAST_H, hard_rendered,
 			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0) });
 
 		// Blurred shadow toast (right)
-		int blur_w = self.preview.toast_blur.toast_width();
-		int blur_x = center_x + 2;
-		int blur_y = center_y - 2 - float_offset;
+		sz blur_w = self.preview.toast_blur.toast_width();
+		sz blur_x = center_x + 2;
+		sz blur_y = center_y - 2 - float_offset;
 		String blur_rendered = self.preview.toast_blur.style.render(self.preview.toast_blur.message);
 		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered,
 			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2) });
@@ -581,5 +581,5 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

@@ -12,11 +12,11 @@ struct Textarea (xray::Content) {
 	sz len;
 	// Byte offset of the caret within buf.
 	sz cursor_pos;
-	int width;
-	int height;
-	int cursor_row;
-	int cursor_col;
-	int scroll_offset;
+	sz width;
+	sz height;
+	sz cursor_row;
+	sz cursor_col;
+	sz scroll_offset;
 	String placeholder;
 	String prompt; // prefix shown before each line (e.g. "> ")
 	bool show_line_numbers;
@@ -63,10 +63,10 @@ struct HighlightSpan {
 // the scroll resolved — so the callback can hand them straight back to
 // set_cursor without knowing how the text is laid out. id is the per-call
 // ctx the app registered through on_press.
-alias TextareaPressFn = fn void(void* id, int row, int col);
+alias TextareaPressFn = fn void(void* id, sz row, sz col);
 
 // new_textarea creates a textarea with the given dimensions.
-fn Textarea new_textarea(int width, int height) {
+fn Textarea new_textarea(sz width, sz height) {
 	Textarea t = { };
 	t.width = width;
 	t.height = height;
@@ -90,7 +90,7 @@ fn Textarea Textarea.with_placeholder(self, String ph) {
 	return t;
 }
 
-const int CURSOR_BLINK_MS = 530;
+const sz CURSOR_BLINK_MS = 530;
 
 fn milktea::Cmd Textarea.update(&self, milktea::Msg msg) {
 	if (msg.kind != milktea::MsgKind.TICK || msg.owner != self) return null;
@@ -132,27 +132,27 @@ fn void Textarea.clear(&self) {
 // the keyboard path: a press inside the editor reports (row, col) text
 // coordinates (already adjusted for the gutter, prompt and scroll) and the
 // app forwards them straight to set_cursor.
-fn void Textarea.set_cursor(&self, int row, int col) {
+fn void Textarea.set_cursor(&self, sz row, sz col) {
 	if (self.len == 0) {
 		self.cursor_pos = 0;
 		self.cursor_row = 0;
 		self.cursor_col = 0;
 		return;
 	}
-	int lc = self.line_count();
+	sz lc = self.line_count();
 	if (row < 0) row = 0;
 	if (row >= lc) row = lc - 1;
 	// Find the byte position at the start of row-th line and walk forward
 	// by `col` cells (not bytes — multi-byte runes are skipped whole).
 	sz pos = 0;
-	int r = 0;
+	sz r = 0;
 	while (r < row && pos < self.len) {
 		if (self.buf[pos] == '\n') r++;
 		pos++;
 	}
 	// pos now points at the first byte of row `row`. Walk forward by col
 	// runes, stopping at the newline or buffer end.
-	int walked = 0;
+	sz walked = 0;
 	while (walked < col && pos < self.len && self.buf[pos] != '\n') {
 		sz next = utf8_next_boundary(self.buf[:self.len], pos);
 		if (next <= pos) break;
@@ -168,9 +168,9 @@ fn void Textarea.set_cursor(&self, int row, int col) {
 // rows_for is how many rows the view spends on a line of len bytes. A line
 // wider than the content area is wrapped, so this is the count of chunks the
 // render draws — at least one, since even an empty line is a row.
-fn int rows_for(sz len, int width) @local {
+fn sz rows_for(sz len, sz width) @local {
 	if (len <= 0) return 1;
-	return (int)((len + (sz)width - 1) / (sz)width);
+	return (sz)((len + (sz)width - 1) / (sz)width);
 }
 
 // caret_visual_pos gives the caret's row from the top of the view and its
@@ -183,13 +183,13 @@ fn int rows_for(sz len, int width) @local {
 // The chunk is clamped to the caret line's own last one, so a caret at a
 // column that is a whole number of chunks wide sits at the end of the text
 // rather than on a row the line does not have.
-fn void Textarea.caret_visual_pos(&self, int* out_row, int* out_col) {
-	int width = self.width - self.text_offset();
+fn void Textarea.caret_visual_pos(&self, sz* out_row, sz* out_col) {
+	sz width = self.width - self.text_offset();
 	if (width < 1) width = 1;
 
-	int rows = 0;
+	sz rows = 0;
 	sz pos = 0;
-	for (int r = 0; r < self.cursor_row && pos < self.len; r++) {
+	for (sz r = 0; r < self.cursor_row && pos < self.len; r++) {
 		sz line_end = pos;
 		while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
 		if (r >= self.scroll_offset) rows += rows_for(line_end - pos, width);
@@ -199,8 +199,8 @@ fn void Textarea.caret_visual_pos(&self, int* out_row, int* out_col) {
 	// pos is the start of the caret's own line now.
 	sz line_end = pos;
 	while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
-	int chunks = rows_for(line_end - pos, width);
-	int chunk = self.cursor_col / width;
+	sz chunks = rows_for(line_end - pos, width);
+	sz chunk = self.cursor_col / width;
 	if (chunk > chunks - 1) chunk = chunks - 1;
 	if (chunk < 0) chunk = 0;
 
@@ -216,10 +216,10 @@ fn void Textarea.scroll_to_caret(&self) {
 		self.scroll_offset = self.cursor_row;
 		return;
 	}
-	int vis = self.height;
+	sz vis = self.height;
 	if (vis < 1) vis = 1;
-	int row;
-	int col;
+	sz row;
+	sz col;
 	self.caret_visual_pos(&row, &col);
 	if (row >= vis) self.scroll_offset = self.cursor_row;
 	if (self.scroll_offset < 0) self.scroll_offset = 0;
@@ -237,42 +237,42 @@ fn void Textarea.scroll_to_caret(&self) {
 //
 // A press past the end of the text answers with the end of the buffer, which
 // is where a click under the last line belongs.
-fn void Textarea.text_pos_at(&self, int row, int col, int* out_row, int* out_col) {
+fn void Textarea.text_pos_at(&self, sz row, sz col, sz* out_row, sz* out_col) {
 	if (row < 0) row = 0;
-	int width = self.width - self.text_offset();
+	sz width = self.width - self.text_offset();
 	if (width < 1) width = 1;
 
-	int lc = self.line_count();
-	int first = self.scroll_offset;
+	sz lc = self.line_count();
+	sz first = self.scroll_offset;
 	if (first < 0) first = 0;
 	if (first >= lc) first = lc - 1;
 
 	// Walk to the line the view draws first; rows are counted from there,
 	// since that line is row 0 on screen.
 	sz pos = 0;
-	for (int r = 0; r < first && pos < self.len; r++) {
+	for (sz r = 0; r < first && pos < self.len; r++) {
 		while (pos < self.len && self.buf[pos] != '\n') pos++;
 		if (pos < self.len) pos++;
 	}
 
-	int visual = 0;
-	int last_row = first;
-	int last_col = 0;
-	for (int r = first; r < lc; r++) {
+	sz visual = 0;
+	sz last_row = first;
+	sz last_col = 0;
+	for (sz r = first; r < lc; r++) {
 		sz line_start = pos;
 		while (pos < self.len && self.buf[pos] != '\n') pos++;
 		sz line_len = pos - line_start;
 		last_row = r;
-		last_col = (int)line_len;
-		int chunks = rows_for(line_len, width);
+		last_col = (sz)line_len;
+		sz chunks = rows_for(line_len, width);
 		if (row < visual + chunks) {
 			sz chunk_start = (sz)(row - visual) * (sz)width;
 			if (chunk_start > line_len) chunk_start = line_len;
-			int text_col = (int)chunk_start + (col - self.text_offset());
-			if (text_col < (int)chunk_start) text_col = (int)chunk_start;
+			sz text_col = (sz)chunk_start + (col - self.text_offset());
+			if (text_col < (sz)chunk_start) text_col = (sz)chunk_start;
 			sz chunk_end = chunk_start + (sz)width;
 			if (chunk_end > line_len) chunk_end = line_len;
-			if (text_col > (int)chunk_end) text_col = (int)chunk_end;
+			if (text_col > (sz)chunk_end) text_col = (sz)chunk_end;
 			*out_row = r;
 			*out_col = text_col;
 			return;
@@ -346,9 +346,9 @@ fn void Textarea.backspace(&self) {
 	if (prev == '\n') {
 		if (self.cursor_row > 0) self.cursor_row--;
 		// The joined line's column is the distance back to its start.
-		self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
+		self.cursor_col = (sz)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 	} else {
-		self.cursor_col -= (int)n;
+		self.cursor_col -= (sz)n;
 		if (self.cursor_col < 0) self.cursor_col = 0;
 	}
 }
@@ -379,7 +379,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 				sz prev = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
 				if (self.buf[prev] == '\n' && self.cursor_row > 0) self.cursor_row--;
 				self.cursor_pos = prev;
-				self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
+				self.cursor_col = (sz)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 			}
 			return true;
 		case milktea::KeyCode.RIGHT:
@@ -391,7 +391,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 					self.cursor_row++;
 					self.cursor_col = 0;
 				} else {
-					self.cursor_col = (int)(self.cursor_pos - self.line_start_at(self.cursor_pos));
+					self.cursor_col = (sz)(self.cursor_pos - self.line_start_at(self.cursor_pos));
 				}
 			}
 			return true;
@@ -401,17 +401,17 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 
 
 			{
-				int target_col = self.cursor_col;
-				int r          = self.cursor_row - 1;
+				sz target_col = self.cursor_col;
+				sz r          = self.cursor_row - 1;
 				if (r < 0) return true;
 				sz pos    = 0;
-				int cur_r = 0;
+				sz cur_r = 0;
 				while (pos < self.len && cur_r < r) {
 					if (self.buf[pos] == '\n') cur_r++;
 					pos++;
 				}
 				// pos is now at start of line r
-				int col       = 0;
+				sz col       = 0;
 				sz line_start = pos;
 				while (pos < self.len && self.buf[pos] != '\n' && col < target_col) {
 					col++;
@@ -428,17 +428,17 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 
 
 			{
-				int target_col = self.cursor_col;
-				int r          = self.cursor_row + 1;
+				sz target_col = self.cursor_col;
+				sz r          = self.cursor_row + 1;
 				sz pos         = 0;
-				int cur_r      = 0;
+				sz cur_r      = 0;
 				while (pos < self.len && cur_r < r) {
 					if (self.buf[pos] == '\n') cur_r++;
 					pos++;
 				}
 				if (cur_r < r) return true; // no next line
 				// pos is now at start of line r
-				int col       = 0;
+				sz col       = 0;
 				sz line_start = pos;
 				while (pos < self.len && self.buf[pos] != '\n' && col < target_col) {
 					col++;
@@ -474,7 +474,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 				sz pos = self.cursor_pos;
 				while (pos < self.len && self.buf[pos] != '\n') pos++;
 				self.cursor_pos = pos;
-				self.cursor_col = (int)(pos - self.line_start_at(pos));
+				self.cursor_col = (sz)(pos - self.line_start_at(pos));
 			}
 			return true;
 		case milktea::KeyCode.BACKSPACE:
@@ -488,7 +488,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 			return true;
 		case milktea::KeyCode.TAB:
 			// Insert spaces
-			for (int i = 0; i < 4; i++) self.insert(' ');
+			for (sz i = 0; i < 4; i++) self.insert(' ');
 			return true;
 		case milktea::KeyCode.RUNE:
 			self.insert_rune(k.rune);
@@ -518,9 +518,9 @@ fn void Textarea.handle_paste(&self, String s) {
 }
 
 // line_count returns the number of lines in the content.
-fn int Textarea.line_count(&self) {
+fn sz Textarea.line_count(&self) {
 	if (self.len == 0) return 1;
-	int count = 1;
+	sz count = 1;
 	for (sz i = 0; i < self.len; i++) {
 		if (self.buf[i] == '\n') count++;
 	}
@@ -530,9 +530,9 @@ fn int Textarea.line_count(&self) {
 // view returns the rendered textarea string.
 // gutter_width is how many columns the line-number column occupies, before
 // the trailing space. Zero when line numbers are off.
-fn int Textarea.gutter_width(&self) {
+fn sz Textarea.gutter_width(&self) {
 	if (!self.show_line_numbers) return 0;
-	int lc = self.line_count();
+	sz lc = self.line_count();
 	if (lc >= 100) return 4;
 	if (lc >= 10) return 3;
 	return 2;
@@ -542,16 +542,16 @@ fn int Textarea.gutter_width(&self) {
 // gutter (digits plus one trailing space) and then the prompt. The cursor
 // sits this far right of the component's own rect, so view() and cursor()
 // both read it from here rather than each recomputing it.
-fn int Textarea.text_offset(&self) {
-	int gutter = self.gutter_width();
-	return (gutter > 0 ? gutter + 1 : 0) + (int)self.prompt.len;
+fn sz Textarea.text_offset(&self) {
+	sz gutter = self.gutter_width();
+	return (gutter > 0 ? gutter + 1 : 0) + (sz)self.prompt.len;
 }
 
 // blank_span returns a run of spaces, for padding a styled run out to a
 // fixed width.
-fn String blank_span(int width) @local {
+fn String blank_span(sz width) @local {
 	DString out = dstring::temp_with_capacity(width);
-	for (int i = 0; i < width; i++) out.append_char(' ');
+	for (sz i = 0; i < width; i++) out.append_char(' ');
 	return out.str_view();
 }
 
@@ -591,25 +591,25 @@ fn void Textarea.append_text(&self, DString* out, glaze::Style base, sz at, Stri
 
 fn String Textarea.view(&self) {
 	DString out = dstring::temp();
-	int lc      = self.line_count();
+	sz lc      = self.line_count();
 
-	int gutter_width = self.gutter_width();
-	int gutter_visual = gutter_width > 0 ? gutter_width + 1 : 0;
-	int prompt_visual = (int)self.prompt.len;
+	sz gutter_width = self.gutter_width();
+	sz gutter_visual = gutter_width > 0 ? gutter_width + 1 : 0;
+	sz prompt_visual = (sz)self.prompt.len;
 
 	// Content width is the space available for actual text on each visual row.
-	int content_w = self.width - gutter_visual - prompt_visual;
+	sz content_w = self.width - gutter_visual - prompt_visual;
 	if (content_w < 1) content_w = 1;
 
 	glaze::Style content_style = self.focused ? self.focused_style : self.blurred_style;
 
 	// Split content into lines and render visible ones
-	int start_row = self.scroll_offset;
-	int end_row   = start_row + self.height;
+	sz start_row = self.scroll_offset;
+	sz end_row   = start_row + self.height;
 	if (end_row > lc) end_row = lc;
 
 	sz pos        = 0;
-	int row       = 0;
+	sz row       = 0;
 	sz line_start = 0;
 
 	// Skip to start_row
@@ -623,10 +623,10 @@ fn String Textarea.view(&self) {
 	if (row == start_row) line_start = pos;
 
 	// visual_row tracks how many visual rows we have rendered (for height clipping).
-	int visual_row = 0;
+	sz visual_row = 0;
 
 	// Render visible lines
-	for (int r = start_row; r < end_row && visual_row < self.height; r++) {
+	for (sz r = start_row; r < end_row && visual_row < self.height; r++) {
 		// Find end of this logical line
 		sz line_end = line_start;
 		while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
@@ -672,13 +672,13 @@ fn String Textarea.view(&self) {
 
 		// Soft-wrap: split line_text into chunks of content_w columns each.
 		sz chunk_start = 0;
-		int chunk_idx  = 0;
+		sz chunk_idx  = 0;
 		while (chunk_start < line_len) {
 			if (visual_row >= self.height) break;
 
 			// Determine how many bytes fit in content_w columns.
 			sz chunk_end   = chunk_start;
-			int col_count  = 0;
+			sz col_count  = 0;
 			while (chunk_end < line_len && col_count < content_w) {
 				// Simple 1-column-per-byte for ASCII; proper UTF-8 would need glaze::string_width
 				col_count++;
@@ -773,20 +773,20 @@ fn String Textarea.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int Textarea.measure(&self, int width) @dynamic {
-	int lc = self.line_count();
+fn sz Textarea.measure(&self, sz width) @dynamic {
+	sz lc = self.line_count();
 	return lc < 1 ? 1 : lc;
 }
 
-fn int Textarea.measure_width(&self, int height) @dynamic => self.width;
+fn sz Textarea.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.focused) return {};
 	// The caret's row on screen is its visual row within the view, and its
 	// column is its place inside the chunk it is in, past the gutter and
 	// prompt the text is drawn after — see caret_visual_pos.
-	int row;
-	int col;
+	sz row;
+	sz col;
 	self.caret_visual_pos(&row, &col);
 	return milktea::place_cursor(r,
 		self.text_offset() + col,
@@ -824,7 +824,7 @@ fn void Textarea.on_press(&self, TextareaPressFn cb, void* ctx) {
 // that holds &self; the static handler does the cast and the conversion.
 struct PressCtx { Textarea* t; }
 
-fn void textarea_press(void* id, String id_str, int col, int row) @local {
+fn void textarea_press(void* id, String id_str, sz col, sz row) @local {
 	PressCtx* pc = (PressCtx*)id;
 	Textarea* t = pc.t;
 	if (t.on_press_fn == null) return;
@@ -833,8 +833,8 @@ fn void textarea_press(void* id, String id_str, int col, int row) @local {
 	// text position the caret belongs at — see text_pos_at — so the app can
 	// hand them straight to set_cursor without knowing how the view wraps or
 	// where it is scrolled to.
-	int text_row;
-	int text_col;
+	sz text_row;
+	sz text_col;
 	t.text_pos_at(row, col, &text_row, &text_col);
 	t.on_press_fn(t.on_press_ctx, text_row, text_col);
 }

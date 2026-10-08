@@ -5,13 +5,20 @@
     "no-unused-import"
   ],
   "macos-min-version": "27.0",
+  "linked-libraries": ["z"],
   "sources": [
     "milktea/**",
     "glaze/**",
+    "dye/**",
     "boba/**",
+    "tgp/**",
     "xray/**",
     "src/**",
-    "test/**"
+    "test/**",
+    "examples/rounded/rounded.c3",
+    "examples/rounded/gfx.c3",
+    "examples/nineslice/nineslice.c3",
+    "examples/nineslice/slice.c3"
   ],
   "c-sources": [
     "milktea/tty_winsize.c"
@@ -159,12 +166,6 @@
     "examples/doom-fire": {
       "type": "executable",
       "sources": ["examples/doom-fire/doom-fire.c3"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "examples/doom-fire-milktea": {
-      "type": "executable",
-      "sources": ["examples/doom-fire/doom-fire-milktea.c3"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -344,11 +345,56 @@
       "type": "executable",
       "sources": ["examples/ai-harness/**"],
       "opt": "Os",
-      "strip-unused": true
+      "c-sources": ["examples/ai-harness/http_shim.c"],
+      "optsize": "tiny",
+      "strip-unused": true,
+      "linked-libraries": ["curl"]
     },
     "examples/nanobots": {
       "type": "executable",
       "sources": ["examples/nanobots/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/avian-assault": {
+      "type": "executable",
+      "sources": ["examples/avian-assault/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/doom-fire-overlay": {
+      "type": "executable",
+      "sources": ["examples/doom-fire/doom-fire-overlay.c3"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/flappybird": {
+      "type": "executable",
+      "sources": ["examples/flappybird/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/modal": {
+      "type": "executable",
+      "sources": ["examples/modal/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/nineslice": {
+      "type": "executable",
+      "sources": ["examples/nineslice/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/rounded": {
+      "type": "executable",
+      "sources": ["examples/rounded/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/squiggle": {
+      "type": "executable",
+      "sources": ["examples/squiggle/**"],
       "opt": "Os",
       "strip-unused": true
     }

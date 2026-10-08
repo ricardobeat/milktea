@@ -63,15 +63,15 @@ fn void test_pixel_bounded_fit_and_wrapping() @test {
 	assert(text.content_cell_rect().w == 4 && text.content_cell_rect().h == 3);
 }
 
-struct Hit { int count, col, row, entered, left; }
-fn void clicked(void* ctx, String id, int col, int row) {
+struct Hit { sz count, col, row, entered, left; }
+fn void clicked(void* ctx, String id, sz col, sz row) {
 	Hit* h = (Hit*)ctx;
 	h.count++;
 	h.col = col;
 	h.row = row;
 }
-fn void entered(void* ctx, String id, int col, int row) { ((Hit*)ctx).entered++; }
-fn void left(void* ctx, String id, int col, int row) { ((Hit*)ctx).left++; }
+fn void entered(void* ctx, String id, sz col, sz row) { ((Hit*)ctx).entered++; }
+fn void left(void* ctx, String id, sz col, sz row) { ((Hit*)ctx).left++; }
 
 fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	Hit hit;
@@ -80,7 +80,7 @@ fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	xray::Node* root = xray::root().decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 2, 1, 4)).add(child);
 	root.solve({ .w = 200, .h = 100 }, PIXELS);
 	xray::ClickTarget[4] targets;
-	int count;
+	sz count;
 	xray::collect_click_targets(root, targets[..], &count);
 	assert(count == 1);
 	xray::dispatch_click(targets[:count], 3, 3, false);
@@ -112,7 +112,7 @@ fn String CursorText.render(&self, xray::Rect r) @dynamic => "ab";
 fn xray::ContentCursor CursorText.cursor(&self, xray::Rect r) @dynamic {
 	return xray::place_cursor(r, 1, 0, { .draw = &draw_cursor });
 }
-fn String draw_cursor(int x, int y, bool blink, String under) => "_";
+fn String draw_cursor(sz x, sz y, bool blink, String under) => "_";
 
 fn void test_pixel_paint_and_cursor_origins_are_not_cell_snapped() @test {
 	CursorText content;
@@ -146,7 +146,7 @@ fn void test_pixel_padding_does_not_change_terminal_cells() @test {
 	defer { ba.destroy(); bb.destroy(); mem::free(ba); mem::free(bb); }
 	ba.paint(a);
 	bb.paint(b);
-	for (int i = 0; i < 50; i++) assert(ba.cells[i].eq(bb.cells[i]));
+	for (sz i = 0; i < 50; i++) assert(ba.cells[i].eq(bb.cells[i]));
 }
 
 fn void expect_rect(xray::Rect actual, xray::Rect expected) {
@@ -154,13 +154,13 @@ fn void expect_rect(xray::Rect actual, xray::Rect expected) {
 		&& actual.w == expected.w && actual.h == expected.h);
 }
 
-fn int custom_height(void* ctx, int width) {
-	*(int*)ctx = width;
+fn sz custom_height(void* ctx, sz width) {
+	*(sz*)ctx = width;
 	return 2;
 }
 
 fn void test_pixel_custom_fit_retains_cell_units() @test {
-	int measured_width = -1;
+	sz measured_width = -1;
 	xray::Node* child = xray::vstack()
 		.height(xray::fit(&custom_height, &measured_width))
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 4, 5, 6));

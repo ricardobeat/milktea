@@ -6,11 +6,11 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int TOTAL = 100;
+const sz TOTAL = 100;
 
 struct ProgressModel {
-	int progress;
-	int speed;
+	sz progress;
+	sz speed;
 	bool done;
 }
 
@@ -65,7 +65,7 @@ fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
 
 	glaze::Style box_style = glaze::style().with_border(glaze::ROUNDED).padding(1, 2, 1, 2);
 
-	int pct = (self.progress * 100) / TOTAL;
+	sz pct = (self.progress * 100) / TOTAL;
 
 	DString content = dstring::temp();
 	content.append_string(title.render("Progress Bar"));
@@ -117,10 +117,10 @@ fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
 		content.append_string(hint.render("  |  f fast  |  s slow  |  r restart  |  q quit"));
 	}
 
-	return milktea::new_alt_screen_view(box_style.render(content.str_view()));
+	return milktea::view(box_style.render(content.str_view()));
 }
 
 fn int main() {
 	ProgressModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

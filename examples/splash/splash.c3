@@ -11,9 +11,9 @@ extern fn double c3_cos(double x);
 
 
 struct SplashModel {
-	int frame;
-	int width;
-	int height;
+	sz frame;
+	sz width;
+	sz height;
 	// Cell grid for direct rendering
 	xray::Cell[] view_cells;
 	sz view_cells_len;
@@ -30,7 +30,7 @@ fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic
 		self.height = msg.window_size.height;
 		// Reallocate cell grid
 		mem::free(self.view_cells.ptr);
-		int rows = self.height;
+		sz rows = self.height;
 		self.view_cells_len = (sz)self.width * (sz)rows;
 		self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
 		return null;
@@ -43,22 +43,22 @@ fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic
 	return milktea::quit();
 }
 
-fn int clamp_color(int v) {
+fn sz clamp_color(sz v) {
 	if (v < 0) return 0;
 	if (v > 255) return 255;
 	return v;
 }
 
 struct RgbColor {
-	int r;
-	int g;
-	int b;
+	sz r;
+	sz g;
+	sz b;
 }
 
 fn RgbColor hsv_to_rgb(double h, double s, double v) {
 	double hh = h * 6.0;
 	if (hh < 0) hh = 0;
-	int i     = (int)hh;
+	sz i     = (sz)hh;
 	double ff = hh - (double)i;
 	double p  = v * (1.0 - s);
 	double q  = v * (1.0 - s * ff);
@@ -78,7 +78,7 @@ fn RgbColor hsv_to_rgb(double h, double s, double v) {
 		default: r = v; g = p; b = p;
 	}
 
-	return { .r = clamp_color((int)(r * 255)), .g = clamp_color((int)(g * 255)), .b = clamp_color((int)(b * 255)) };
+	return { .r = clamp_color((sz)(r * 255)), .g = clamp_color((sz)(g * 255)), .b = clamp_color((sz)(b * 255)) };
 }
 
 fn void SplashModel.on_mount(SplashModel* self) @dynamic {
@@ -94,15 +94,15 @@ fn void SplashModel.on_blur(SplashModel* self) @dynamic {
 }
 
 fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
-	int w = self.width;
-	int h = self.height;
+	sz w = self.width;
+	sz h = self.height;
 	if (w < 2) w = 80;
 	if (h < 2) h = 24;
 
 	double t     = (double)self.frame * 0.03;
 	double angle = 0.7854 + t * 0.1;
 
-	int rows = h;
+	sz rows = h;
 
 	// Reallocate if size changed
 	sz needed = (sz)w * (sz)rows;
@@ -114,13 +114,13 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 
 	xray::Style base_style = xray::default_style();
 
-	int pixel_rows = h * 2;
-	for (int y = 0; y < rows; y++) {
-		int fy_top     = y * 2;
-		int fy_bot     = y * 2 + 1;
-		int row_offset = y * w;
+	sz pixel_rows = h * 2;
+	for (sz y = 0; y < rows; y++) {
+		sz fy_top     = y * 2;
+		sz fy_bot     = y * 2 + 1;
+		sz row_offset = y * w;
 
-		for (int x = 0; x < w; x++) {
+		for (sz x = 0; x < w; x++) {
 			double fx = (double)x / (double)w;
 
 			double ca = c3_cos(angle);
@@ -154,10 +154,10 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)w, (sz)rows);
+	return milktea::cell_view(self.view_cells, w, rows);
 }
 
 fn int main() {
 	SplashModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

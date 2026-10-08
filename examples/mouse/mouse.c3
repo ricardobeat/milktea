@@ -7,13 +7,13 @@ import std::core::string;
 import std::core::dstring;
 
 struct Model {
-	int mouse_row;
-	int mouse_col;
+	sz mouse_row;
+	sz mouse_col;
 	milktea::MouseButton last_button;
 	milktea::MouseAction last_action;
 	bool dragging;
 	String[32] trail;
-	int trail_count;
+	sz trail_count;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -105,7 +105,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		out.append_char('\n');
 		out.append_string(title_style.render("Click Trail:"));
 		out.append_char('\n');
-		for (int i = 0; i < self.trail_count; i++) {
+		for (sz i = 0; i < self.trail_count; i++) {
 			out.append_string(self.trail[i]);
 			if (i < self.trail_count - 1) {
 				out.append_string(" -> ");
@@ -115,15 +115,14 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	out.append_string("\n\n");
 	out.append_string(hint_style.render("Click/drag to track  |  c to clear  |  q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
-	milktea::enter_alt_screen();
 	milktea::enable_mouse();
 
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		milktea::disable_mouse();
 		io::printfn("Error: %s", err);
 		return 1;

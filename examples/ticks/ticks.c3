@@ -11,9 +11,9 @@ const int MSG_TIMER = 2;
 const int MSG_STEP  = 3;
 
 struct Model {
-	int spin_frame;
-	int seconds;
-	int step;
+	sz spin_frame;
+	sz seconds;
+	sz step;
 }
 
 fn milktea::Msg on_spin() {
@@ -95,11 +95,11 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	out.append_string(main_view);
 	out.append_char('\n');
 	out.append_string(hint.render("q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	Model m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

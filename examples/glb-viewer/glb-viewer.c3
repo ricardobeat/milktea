@@ -30,9 +30,9 @@ fn milktea::Cmd glb::GlbModel.update(glb::GlbModel* self, milktea::Msg msg) @dyn
 fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 	self.render();
 
-	int w  = self.width;
-	int h  = self.height;
-	int ph = h * 2;
+	sz w  = self.width;
+	sz h  = self.height;
+	sz ph = h * 2;
 
 	// Combine pixel buffer into half-block cells
 	xray::Cell[] cells;
@@ -43,8 +43,8 @@ fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 	cells = self.view_cells;
 
 	for (sz i = 0; i < (sz)(w * h); i++) cells[i] = xray::empty_cell();
-	for (int ty = 0; ty < h; ty++) {
-		for (int tx = 0; tx < w; tx++) {
+	for (sz ty = 0; ty < h; ty++) {
+		for (sz tx = 0; tx < w; tx++) {
 			sz top_idx = (sz)((ty * 2) * w + tx);
 			sz bot_idx = (sz)((ty * 2 + 1) * w + tx);
 			bool top_filled = self.depth[top_idx] < 999.0f;
@@ -60,12 +60,12 @@ fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(cells, (sz)w, (sz)h);
+	return milktea::cell_view(cells, w, h);
 }
 
 // ── File picker ───────────────────────────────────────────────────────────────
 
-const int MAX_FILES = 256;
+const sz MAX_FILES = 256;
 
 enum AppMode {
 	PICKING,
@@ -76,11 +76,11 @@ struct App {
 	AppMode mode;
 	// picker state
 	String[MAX_FILES] files;
-	int file_count;
-	int cursor;
-	int scroll;
-	int width;
-	int height;
+	sz file_count;
+	sz cursor;
+	sz scroll;
+	sz width;
+	sz height;
 	String error_msg;
 	// viewer
 	glb::GlbModel* model;
@@ -98,24 +98,37 @@ struct App {
 	float vel_pitch;
 	float vel_pan;
 	bool auto_rotate;
+	float bob_phase;
 	// mouse state
 	bool dragging;
-	int drag_start_x;
-	int drag_start_y;
+	sz drag_start_x;
+	sz drag_start_y;
 	float drag_start_yaw;
 	float drag_start_pitch;
 	// last frame each key was seen (key repeat simulates held state)
-	int key_w;
-	int key_s;
-	int key_a;
-	int key_d;
-	int key_q;
-	int key_e;
-	int key_left;
-	int key_right;
-	int key_up;
-	int key_down;
-	int tick_count;
+	sz key_w;
+	sz key_s;
+	sz key_a;
+	sz key_d;
+	sz key_q;
+	sz key_e;
+	sz key_left;
+	sz key_right;
+	sz key_up;
+	sz key_down;
+	sz tick_count;
+}
+
+const float BOB_AMPLITUDE = 0.6f;
+const float BOB_SPEED = 0.005f;
+
+// Pick the bob phase whose pitch matches the model's current pose, so resuming
+// auto-rotation continues the swing from here instead of snapping.
+fn void App.sync_bob_phase(App* self) {
+	float ratio = self.model_pitch / BOB_AMPLITUDE;
+	if (ratio > 1.0f) ratio = 1.0f;
+	if (ratio < -1.0f) ratio = -1.0f;
+	self.bob_phase = (float)math::asin(ratio);
 }
 
 fn void App.free_model(App* self) {
@@ -150,6 +163,7 @@ fn void App.load_file(App* self, String path) {
 	self.vel_yaw = 0.0f;
 	self.vel_pan = 0.0f;
 	self.auto_rotate = true;
+	self.bob_phase = 0.0f;
 	self.mode = VIEWING;
 }
 
@@ -188,6 +202,7 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 	self.vel_yaw = 0.0f;
 	self.vel_pan = 0.0f;
 	self.auto_rotate = true;
+	self.bob_phase = 0.0f;
 	self.dragging = false;
 	scan_glb_files(self, ".");
 	return null;
@@ -234,8 +249,8 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 					self.dragging = false;
 				}
 			} else if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
-				int total_dx = msg.mouse.col - self.drag_start_x;
-				int total_dy = msg.mouse.row - self.drag_start_y;
+				sz total_dx = msg.mouse.col - self.drag_start_x;
+				sz total_dy = msg.mouse.row - self.drag_start_y;
 				self.model_yaw   = self.drag_start_yaw   + (float)total_dx / (float)self.width * 2.0f;
 				self.model_pitch = self.drag_start_pitch - (float)total_dy / (float)self.height * 2.0f;
 				if (self.model_pitch > 1.4f) self.model_pitch = 1.4f;
@@ -250,6 +265,11 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 			}
 			if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
 				return milktea::quit();
+			}
+			if (k.code == milktea::KeyCode.RUNE && k.rune == ' ') {
+				self.auto_rotate = !self.auto_rotate;
+				if (self.auto_rotate) self.sync_bob_phase();
+				return null;
 			}
 			if (k.code == milktea::KeyCode.RUNE) {
 				switch (k.rune) {
@@ -267,7 +287,7 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 		}
 		if (msg.kind == milktea::MsgKind.TICK) {
 			self.tick_count++;
-			int held_thresh = self.tick_count - 2;
+			sz held_thresh = self.tick_count - 2;
 			bool held_w     = self.key_w >= held_thresh;
 			bool held_s     = self.key_s >= held_thresh;
 			bool held_a     = self.key_a >= held_thresh;
@@ -282,8 +302,11 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 			if (self.model != null) {
 				self.model.frame++;
 				if (self.auto_rotate) {
-					self.model_yaw   = (float)self.model.frame * 0.01f;
-					self.model_pitch = (float)math::sin((float)self.model.frame * 0.003) * 0.15f;
+					// yaw carries on from the current pose, but pitch is absolute so
+					// the bob always swings around level rather than a dragged offset
+					self.model_yaw += 0.01f;
+					self.bob_phase += BOB_SPEED;
+					self.model_pitch = (float)math::sin(self.bob_phase) * BOB_AMPLITUDE;
 				}
 
 				float accel_fwd   = 0.04f;
@@ -334,7 +357,7 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	// PICKING mode
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
-	int visible = self.height - 3;
+	sz visible = self.height - 3;
 
 	switch (k.code) {
 		case milktea::KeyCode.CTRL_C:
@@ -400,10 +423,10 @@ fn milktea::View App.view(App* self) @dynamic {
 		out.append_string(normal_style.render("  No .glb files found in current directory."));
 		out.append_char('\n');
 	} else {
-		int visible = self.height - 3;
-		int end     = self.scroll + visible;
+		sz visible = self.height - 3;
+		sz end     = self.scroll + visible;
 		if (end > self.file_count) end = self.file_count;
-		for (int i = self.scroll; i < end; i++) {
+		for (sz i = self.scroll; i < end; i++) {
 			String name    = path::new(tmem, self.files[i])!!.basename();
 			bool is_cursor = (i == self.cursor);
 			String line = is_cursor ? cursor_style.render(string::tformat(" \u25b6 %s", name))
@@ -419,7 +442,7 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	out.append_string(hint_style.render("\u2191/\u2193 or j/k to navigate \u00b7 enter to open \u00b7 q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main(String[] args) {
@@ -437,7 +460,7 @@ fn int main(String[] args) {
 
 	milktea::enable_mouse();
 
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

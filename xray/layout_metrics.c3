@@ -3,18 +3,18 @@ module xray;
 // Zero-initialized metrics retain terminal cell coordinates.
 struct LayoutMetrics {
 	bool pixels;
-	int cell_w, cell_h;
+	sz cell_w, cell_h;
 }
 
-fn int LayoutMetrics.unit_w(self) => self.pixels && self.cell_w > 0 ? self.cell_w : 1;
-fn int LayoutMetrics.unit_h(self) => self.pixels && self.cell_h > 0 ? self.cell_h : 1;
+fn sz LayoutMetrics.unit_w(self) => self.pixels && self.cell_w > 0 ? self.cell_w : 1;
+fn sz LayoutMetrics.unit_h(self) => self.pixels && self.cell_h > 0 ? self.cell_h : 1;
 
 fn void Node.set_layout_metrics(&self, LayoutMetrics metrics) {
 	self.layout_metrics = metrics;
-	for (int i = 0; i < self.child_count; i++) self.children[i].set_layout_metrics(metrics);
+	for (sz i = 0; i < self.child_count; i++) self.children[i].set_layout_metrics(metrics);
 }
 
-fn int Node.layout_gap(&self) {
+fn sz Node.layout_gap(&self) {
 	return self.gap * (self.direction == NodeDirection.ROW
 		? self.layout_metrics.unit_w() : self.layout_metrics.unit_h());
 }
@@ -25,8 +25,8 @@ fn Constraint Node.layout_constraint(&self, bool horizontal) {
 		if (c.pixel_units) c.value = c.cell_fallback;
 		return c;
 	}
-	int unit = horizontal ? self.layout_metrics.unit_w() : self.layout_metrics.unit_h();
-	int pad = horizontal ? self.decoration.pad_left + self.decoration.pad_right
+	sz unit = horizontal ? self.layout_metrics.unit_w() : self.layout_metrics.unit_h();
+	sz pad = horizontal ? self.decoration.pad_left + self.decoration.pad_right
 		: self.decoration.pad_top + self.decoration.pad_bottom;
 	switch (c.kind) {
 		case ConstraintKind.CLEN:
@@ -45,22 +45,22 @@ fn Constraint Node.layout_constraint(&self, bool horizontal) {
 	return c;
 }
 
-fn int pixel_measure_w(void* ctx, int height) @local {
+fn sz pixel_measure_w(void* ctx, sz height) @local {
 	Node* n = (Node*)ctx;
 	Constraint c = n.size_w;
 	if (c.measure == &node_measure_w && c.ctx == n) return n.content_width(height);
-	int pad = n.decoration.pad_left + n.decoration.pad_right;
+	sz pad = n.decoration.pad_left + n.decoration.pad_right;
 	height -= n.decoration.pad_top + n.decoration.pad_bottom;
 	if (height < 0) height = 0;
 	return (c.measure ? c.measure(c.ctx, height / n.layout_metrics.unit_h()) : 0)
 		* n.layout_metrics.unit_w() + pad;
 }
 
-fn int pixel_measure_h(void* ctx, int width) @local {
+fn sz pixel_measure_h(void* ctx, sz width) @local {
 	Node* n = (Node*)ctx;
 	Constraint c = n.size_h;
 	if (c.measure == &node_measure_h && c.ctx == n) return n.content_height(width);
-	int pad = n.decoration.pad_top + n.decoration.pad_bottom;
+	sz pad = n.decoration.pad_top + n.decoration.pad_bottom;
 	width -= n.decoration.pad_left + n.decoration.pad_right;
 	if (width < 0) width = 0;
 	return (c.measure ? c.measure(c.ctx, width / n.layout_metrics.unit_w()) : 0)
@@ -80,12 +80,12 @@ fn Rect Node.content_layout_rect(&self) {
 
 fn Rect Node.content_cell_rect(&self) {
 	Rect r = self.content_layout_rect();
-	int w = self.layout_metrics.unit_w();
-	int h = self.layout_metrics.unit_h();
+	sz w = self.layout_metrics.unit_w();
+	sz h = self.layout_metrics.unit_h();
 	return { .x = floor_cell(r.x, w), .y = floor_cell(r.y, h),
 		.w = r.w / w, .h = r.h / h };
 }
 
-fn int floor_cell(int value, int unit) {
+fn sz floor_cell(sz value, sz unit) {
 	return value >= 0 ? value / unit : -((-value + unit - 1) / unit);
 }

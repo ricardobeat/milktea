@@ -29,6 +29,17 @@ const Border NORMAL = {
 	.bottom_right = "┘"
 };
 
+const Border SQUARE = {
+	.top = "─",
+	.bottom = "─",
+	.left = "│",
+	.right = "│",
+	.top_left = "┌",
+	.top_right = "┐",
+	.bottom_left = "└",
+	.bottom_right = "┘"
+};
+
 const Border ROUNDED = {
 	.top = "─",
 	.bottom = "─",
@@ -81,7 +92,7 @@ fn String Border.wrap(self, String input) {
 	return self.wrap_with_color(input, { .kind = ColorKind.NONE });
 }
 
-fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }) {
+fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }, Color corner_fg = { .kind = ColorKind.NONE }) {
 	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
 		&& self.top_left.len == 0
 		&& self.top_right.len == 0
@@ -89,8 +100,13 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 		&& self.bottom_right.len == 0;
 	if (is_empty) return input.tcopy();
 
+	// Corners use corner_fg when set, otherwise fall back to border_fg.
+	Color corner = corner_fg.kind != ColorKind.NONE ? corner_fg : border_fg;
+
 	bool color_border = border_fg.kind != ColorKind.NONE || border_bg.kind != ColorKind.NONE;
+	bool color_corner = corner.kind != ColorKind.NONE || border_bg.kind != ColorKind.NONE;
 	DString sgr_open  = dstring::temp();
+	DString sgr_corner = dstring::temp();
 	String sgr_close  = "\x1b[0m";
 	if (color_border) {
 		sgr_open.append_string("\x1b[0");
@@ -104,7 +120,20 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 		}
 		sgr_open.append_char('m');
 	}
+	if (color_corner) {
+		sgr_corner.append_string("\x1b[0");
+		if (corner.kind != ColorKind.NONE) {
+			sgr_corner.append_char(';');
+			corner.write_sgr_params(&sgr_corner, true);
+		}
+		if (border_bg.kind != ColorKind.NONE) {
+			sgr_corner.append_char(';');
+			border_bg.write_sgr_params(&sgr_corner, false);
+		}
+		sgr_corner.append_char('m');
+	}
 	String sgr_open_str = sgr_open.str_view();
+	String sgr_corner_str = sgr_corner.str_view();
 
 	// Find max line width (visual).
 	sz max_width  = 0;
@@ -129,11 +158,15 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 
 	// Top border row.
 	if (has_top) {
-		if (color_border) out.append_string(sgr_open_str);
+		if (color_corner) out.append_string(sgr_corner_str);
 		out.append_string(self.top_left);
+		if (color_corner) out.append_string(sgr_close);
+		if (color_border) out.append_string(sgr_open_str);
 		for (sz i = 0; i < max_width; i++) out.append_string(self.top);
-		out.append_string(self.top_right);
 		if (color_border) out.append_string(sgr_close);
+		if (color_corner) out.append_string(sgr_corner_str);
+		out.append_string(self.top_right);
+		if (color_corner) out.append_string(sgr_close);
 		out.append_char('\n');
 	}
 
@@ -158,11 +191,15 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 
 	// Bottom border row.
 	if (has_bottom) {
-		if (color_border) out.append_string(sgr_open_str);
+		if (color_corner) out.append_string(sgr_corner_str);
 		out.append_string(self.bottom_left);
+		if (color_corner) out.append_string(sgr_close);
+		if (color_border) out.append_string(sgr_open_str);
 		for (sz i = 0; i < max_width; i++) out.append_string(self.bottom);
-		out.append_string(self.bottom_right);
 		if (color_border) out.append_string(sgr_close);
+		if (color_corner) out.append_string(sgr_corner_str);
+		out.append_string(self.bottom_right);
+		if (color_corner) out.append_string(sgr_close);
 	} else {
 		// The last body line left a trailing newline that nothing follows.
 		out.chop(out.len() - 1);

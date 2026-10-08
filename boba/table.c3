@@ -8,31 +8,31 @@ import std::core::dstring;
 // Capacities for Table's fixed-size storage. The add_* guards below are
 // written against these constants rather than literals: the row guard used to
 // read 256 while the array held 64, so the 65th add_row wrote past the end.
-const int MAX_TABLE_COLUMNS = 16;
-const int MAX_TABLE_ROWS    = 64;
+const sz MAX_TABLE_COLUMNS = 16;
+const sz MAX_TABLE_ROWS    = 64;
 
 // TableColumn defines a column in a table.
 struct TableColumn {
 	String title;
-	int width;
+	sz width;
 }
 
 // TableRow represents a row of data.
 struct TableRow {
 	String[8] cells;
-	int cell_count;
+	sz cell_count;
 }
 
 // Table is a structured data display component.
 struct Table (xray::Content) {
 	TableColumn[MAX_TABLE_COLUMNS] columns;
-	int col_count;
+	sz col_count;
 	TableRow[MAX_TABLE_ROWS] rows;
-	int row_count;
-	int cursor;
-	int scroll_offset;
-	int width;
-	int height;
+	sz row_count;
+	sz cursor;
+	sz scroll_offset;
+	sz width;
+	sz height;
 	bool has_header;
 	glaze::Style header_style;
 	glaze::Style cursor_style;
@@ -52,7 +52,7 @@ fn Table new_table() {
 }
 
 // add_column adds a column with the given title and width.
-fn void Table.add_column(&self, String title, int width) {
+fn void Table.add_column(&self, String title, sz width) {
 	if (self.col_count >= MAX_TABLE_COLUMNS) return;
 	self.columns[self.col_count] = { .title = title, .width = width };
 	self.col_count++;
@@ -94,7 +94,7 @@ fn void Table.add_row3(&self, String c0, String c1, String c2) {
 // handle_key processes table navigation keybindings.
 // Returns true if the key was consumed.
 fn bool Table.handle_key(&self, milktea::KeyMsg k) {
-	int visible = self.height - 2;
+	sz visible = self.height - 2;
 	if (visible < 1) visible = 1;
 
 	switch (k.code) {
@@ -127,7 +127,7 @@ fn bool Table.handle_key(&self, milktea::KeyMsg k) {
 
 // view returns the rendered table string.
 fn String Table.view(&self) {
-	int visible = self.height - 2;
+	sz visible = self.height - 2;
 	if (visible < 1) visible = 1;
 
 	// Adjust scroll
@@ -138,7 +138,7 @@ fn String Table.view(&self) {
 
 	// Header
 	if (self.has_header) {
-		for (int c = 0; c < self.col_count; c++) {
+		for (sz c = 0; c < self.col_count; c++) {
 			String cell = self.columns[c].title;
 			// Pad/truncate to width
 
@@ -147,7 +147,7 @@ fn String Table.view(&self) {
 			if (cell.len < self.columns[c].width) {
 				DString padded = dstring::temp();
 				padded.append_string(cell);
-				for (int p = (int)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
+				for (sz p = (sz)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
 				cell = padded.str_view();
 			} else if (cell.len > self.columns[c].width) {
 				cell = (String)cell[:self.columns[c].width];
@@ -158,29 +158,29 @@ fn String Table.view(&self) {
 		out.append_char('\n');
 
 		// Separator
-		int total_w = 0;
-		for (int c = 0; c < self.col_count; c++) total_w += self.columns[c].width;
+		sz total_w = 0;
+		for (sz c = 0; c < self.col_count; c++) total_w += self.columns[c].width;
 		total_w += self.col_count - 1;
-		for (int i = 0; i < total_w; i++) out.append_string("\xe2\x94\x80");
+		for (sz i = 0; i < total_w; i++) out.append_string("\xe2\x94\x80");
 		out.append_char('\n');
 	}
 
 	// Rows
-	int end = self.scroll_offset + visible;
+	sz end = self.scroll_offset + visible;
 	if (end > self.row_count) end = self.row_count;
 
-	for (int r = self.scroll_offset; r < end; r++) {
+	for (sz r = self.scroll_offset; r < end; r++) {
 		TableRow row       = self.rows[r];
 		glaze::Style rs = (r == self.cursor) ? self.cursor_style : self.row_style;
 
-		for (int c = 0; c < self.col_count; c++) {
+		for (sz c = 0; c < self.col_count; c++) {
 			String cell = "";
 			if (c < row.cell_count) cell = row.cells[c];
 
 			if (cell.len < self.columns[c].width) {
 				DString padded = dstring::temp();
 				padded.append_string(cell);
-				for (int p = (int)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
+				for (sz p = (sz)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
 				cell = padded.str_view();
 			} else if (cell.len > self.columns[c].width) {
 				cell = (String)cell[:self.columns[c].width];
@@ -202,7 +202,7 @@ fn String Table.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int Table.measure(&self, int width) @dynamic => self.height;
-fn int Table.measure_width(&self, int height) @dynamic => self.width;
+fn sz Table.measure(&self, sz width) @dynamic => self.height;
+fn sz Table.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* Table.node(&self) => xray::content_node(self);

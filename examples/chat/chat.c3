@@ -6,7 +6,7 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int BUF_SIZE = 512;
+const sz BUF_SIZE = 512;
 
 struct ChatModel {
 	char[BUF_SIZE] input_buf;
@@ -14,9 +14,9 @@ struct ChatModel {
 	sz input_cursor;
 	String[64] messages;
 	String[64] senders;
-	int msg_count;
-	int scroll;
-	int cursor_blink;
+	sz msg_count;
+	sz scroll;
+	sz cursor_blink;
 }
 
 fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
@@ -100,7 +100,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 		);
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
 
-	int msg_area_h = milktea::screen_height() - 5;
+	sz msg_area_h = milktea::screen_height() - 5;
 	if (msg_area_h < 3) msg_area_h = 3;
 
 	DString out = dstring::temp();
@@ -108,12 +108,12 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	out.append_char('\n');
 
 	// Show messages (bottom-aligned) with word wrapping
-	int wrap_width = milktea::screen_width() - 6; // "You: " or "system: " prefix
+	sz wrap_width = milktea::screen_width() - 6; // "You: " or "system: " prefix
 	if (wrap_width < 10) wrap_width = 10;
-	int start = self.msg_count - msg_area_h;
+	sz start = self.msg_count - msg_area_h;
 	if (start < 0) start = 0;
 
-	for (int i = start; i < self.msg_count; i++) {
+	for (sz i = start; i < self.msg_count; i++) {
 		String sender     = self.senders[i];
 		String msg        = self.messages[i];
 		glaze::Style s = (sender == "You") ? you_style : sys_style;
@@ -125,7 +125,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 		while (pos < msg.len) {
 			sz end        = pos;
 			sz last_break = pos;
-			int col       = 0;
+			sz col       = 0;
 			while (end < msg.len && col < wrap_width) {
 				if (msg[end] == ' ') last_break = end + 1;
 				col++;
@@ -147,8 +147,8 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	}
 
 	// Fill remaining lines
-	int shown = self.msg_count - start;
-	for (int i = shown; i < msg_area_h; i++) {
+	sz shown = self.msg_count - start;
+	for (sz i = shown; i < msg_area_h; i++) {
 		out.append_char('\n');
 	}
 
@@ -163,11 +163,11 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	out.append_string(border.render(input_line.str_view()));
 	out.append_char('\n');
 	out.append_string(hint_style.render("ENTER send | ESC quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	ChatModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

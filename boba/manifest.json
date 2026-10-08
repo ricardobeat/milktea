@@ -1,7 +1,7 @@
 {
 	"provides": "boba",
 	"sources": ["**"],
-	"dependencies": ["milktea", "glaze", "xray"],
+	"dependencies": ["dye", "glaze", "xray", "milktea"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},

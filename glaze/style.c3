@@ -21,7 +21,7 @@ enum BorderAnimation : char {
 // generated from the same Unicode data by scripts/gen_width.py, and
 // test_glaze_and_xray_widths_agree compares them across the whole codepoint
 // range at build time, so the two cannot drift.
-fn int codepoint_width(uint cp) {
+fn sz codepoint_width(uint cp) {
 	return glaze_width_lookup(cp);
 }
 
@@ -530,7 +530,7 @@ fn bool glaze_width_in_ranges(CodepointRange[] ranges, uint cp) @local {
 	return false;
 }
 
-fn int glaze_width_lookup(uint cp) @local {
+fn sz glaze_width_lookup(uint cp) @local {
 	// Fast path: ASCII is by far the most common input and is
 	// entirely width 1 apart from NUL, which the zero table covers.
 	if (cp >= 0x20 && cp < 0x7F) return 1;
@@ -585,9 +585,9 @@ fn sz skip_escape(String s, sz start) {
 // leading bytes of a CSI as literal visible text. Multi-byte characters are
 // likewise kept intact, and a wide glyph that would straddle the limit is
 // dropped rather than half-included.
-fn String truncate_to_width(String s, int max_width) {
+fn String truncate_to_width(String s, sz max_width) {
 	if (max_width <= 0) return "";
-	int w = 0;
+	sz w = 0;
 	sz i  = 0;
 	while (i < s.len) {
 		if (s[i] == '\x1b') {
@@ -596,7 +596,7 @@ fn String truncate_to_width(String s, int max_width) {
 		}
 		sz char_len = utf8_sequence_len(s, i);
 		uint cp     = decode_codepoint(s, i, char_len);
-		int cw      = codepoint_width(cp);
+		sz cw      = codepoint_width(cp);
 		if (w + cw > max_width) break;
 		w += cw;
 		i += char_len;
@@ -638,14 +638,14 @@ fn uint decode_codepoint(String s, sz i, sz len) @local {
 // advance their column counter by this amount, not by one: a wide glyph (CJK,
 // emoji) occupies two terminal columns, so counting it once misaligns
 // selection and padding on lines that contain one.
-fn int utf8_width_at(String s, sz i) {
+fn sz utf8_width_at(String s, sz i) {
 	return codepoint_width(decode_codepoint(s, i, utf8_sequence_len(s, i)));
 }
 
 // string_width returns the terminal display width of a string, skipping ANSI
 // escape sequences. Uses the same codepoint width rules as xray::char_width.
-fn int string_width(String s) {
-	int w = 0;
+fn sz string_width(String s) {
+	sz w = 0;
 	sz i  = 0;
 	while (i < s.len) {
 		if (s[i] == '\x1b') {
@@ -706,6 +706,7 @@ struct Style {
 	Color fg;
 	Color bg;
 	Color border_color;
+	Color corner_color;
 	// Background behind the border. Unset means the border sits on the block's
 	// own background, which is right for a box drawn around its content. A
 	// border used as a drop shadow wants the surface behind the block instead,
@@ -718,25 +719,25 @@ struct Style {
 	bool bold;
 	bool italic;
 	bool underline;
-	int pad_top;
-	int pad_right;
-	int pad_bottom;
-	int pad_left;
-	int width; // 0 = auto (don't pad)
+	sz pad_top;
+	sz pad_right;
+	sz pad_bottom;
+	sz pad_left;
+	sz width; // 0 = auto (don't pad)
 	// Bounds on an auto width, total like width: the block hugs its content
 	// but is at least min_width and at most max_width wide, wrapping to fit
 	// the latter. 0 leaves that side unbounded; a set width overrides both.
-	int min_width;
-	int max_width;
+	sz min_width;
+	sz max_width;
 	// Text wider than width wraps onto more lines unless this is set, in
 	// which case it runs past the edge, like CSS white-space: nowrap.
 	bool nowrap;
-	int height; // 0 = auto
+	sz height; // 0 = auto
 	Position align_h; // horizontal alignment within width
 	Position align_v; // vertical alignment within height
 	Border border; // zero value = no border
 	BorderAnimation border_animation; // NONE = static
-	int anim_speed_ms; // ms per full cycle (default 1000)
+	sz anim_speed_ms; // ms per full cycle (default 1000)
 }
 
 fn Style style() {
@@ -774,25 +775,25 @@ fn Style Style.with_underline(self, bool v) {
 }
 
 // pad applies the same padding to all four sides.
-fn Style Style.pad(self, int n) => self.padding(n, n, n, n);
+fn Style Style.pad(self, sz n) => self.padding(n, n, n, n);
 
 // pad_x and pad_y pad one axis, which is the common case for a label or a
 // status line that needs breathing room on the sides but not above.
-fn Style Style.pad_x(self, int n) {
+fn Style Style.pad_x(self, sz n) {
 	Style s = self;
 	s.pad_left = n;
 	s.pad_right = n;
 	return s;
 }
 
-fn Style Style.pad_y(self, int n) {
+fn Style Style.pad_y(self, sz n) {
 	Style s = self;
 	s.pad_top = n;
 	s.pad_bottom = n;
 	return s;
 }
 
-fn Style Style.padding(self, int top, int right, int bottom, int left) {
+fn Style Style.padding(self, sz top, sz right, sz bottom, sz left) {
 	Style s = self;
 	s.pad_top = top;
 	s.pad_right = right;
@@ -801,7 +802,7 @@ fn Style Style.padding(self, int top, int right, int bottom, int left) {
 	return s;
 }
 
-fn Style Style.with_width(self, int w) {
+fn Style Style.with_width(self, sz w) {
 	Style s = self;
 	s.width = w;
 	return s;
@@ -819,6 +820,12 @@ fn Style Style.border_fg(self, Color c) {
 	return s;
 }
 
+fn Style Style.corner_fg(self, Color c) {
+	Style s = self;
+	s.corner_color = c;
+	return s;
+}
+
 fn Style Style.border_anim(self, BorderAnimation anim) {
 	Style s = self;
 	s.border_animation = anim;
@@ -826,13 +833,13 @@ fn Style Style.border_anim(self, BorderAnimation anim) {
 	return s;
 }
 
-fn Style Style.border_anim_speed(self, int ms) {
+fn Style Style.border_anim_speed(self, sz ms) {
 	Style s = self;
 	s.anim_speed_ms = ms;
 	return s;
 }
 
-fn Style Style.with_height(self, int h) {
+fn Style Style.with_height(self, sz h) {
 	Style s = self;
 	s.height = h;
 	return s;
@@ -867,25 +874,25 @@ fn Style Style.with_bg(self, String hex) {
 
 // measure_height renders content at the given outer width and counts the output lines.
 // Useful for auto-sizing a box before committing it to a layout rect.
-fn int Style.measure_height(self, String input, int outer_width) {
+fn sz Style.measure_height(self, String input, sz outer_width) {
 	// width() means total outer width (border+pad+content); render() subtracts border internally.
 	Style sized     = self.with_width(outer_width);
 	String rendered = sized.render(input);
-	int lines       = 1;
+	sz lines       = 1;
 	for (sz i = 0; i < rendered.len; i++) {
 		if (rendered[i] == '\n') lines++;
 	}
 	return lines;
 }
 
-fn void color_whitespace(DString* buf, Color* bg, bool has_bg, int n) @local {
+fn void color_whitespace(DString* buf, Color* bg, bool has_bg, sz n) @local {
 	if (n <= 0) return;
 	if (has_bg) {
 		buf.append_string("\x1b[");
 		bg.write_sgr_params(buf, false);
 		buf.append_string("m");
 	}
-	for (int j = 0; j < n; j++) buf.append_char(' ');
+	for (sz j = 0; j < n; j++) buf.append_char(' ');
 	if (has_bg) buf.append_string("\x1b[0m");
 }
 
@@ -899,11 +906,11 @@ fn void next_sgr_channels(String s, sz pos, bool* fg, bool* bg) @local {
 	if (pos + 2 >= s.len || s[pos] != '\x1b' || s[pos + 1] != '[') return;
 
 	sz i = pos + 2;
-	int code = 0;
+	sz code = 0;
 	bool have = false;
 	while (i < s.len && s[i] != 'm') {
 		if (s[i] >= '0' && s[i] <= '9') {
-			code = code * 10 + (s[i] - '0');
+			code = code * 10 + (sz)(s[i] - '0');
 			have = true;
 		} else if (s[i] == ';') {
 			if (have) mark_sgr_channel(code, fg, bg);
@@ -921,24 +928,24 @@ fn void next_sgr_channels(String s, sz pos, bool* fg, bool* bg) @local {
 // mark_sgr_channel records which channel one SGR parameter sets. 30-38 and
 // 90-97 are foreground, 40-48 and 100-107 background; 39 and 49 reset a
 // channel to the default, which still counts as the content deciding it.
-fn void mark_sgr_channel(int code, bool* fg, bool* bg) @local {
+fn void mark_sgr_channel(sz code, bool* fg, bool* bg) @local {
 	if ((code >= 30 && code <= 39) || (code >= 90 && code <= 97)) *fg = true;
 	if ((code >= 40 && code <= 49) || (code >= 100 && code <= 107)) *bg = true;
 }
 
 // frame_width is the columns the style spends on its border and padding.
-fn int Style.frame_width(self) {
+fn sz Style.frame_width(self) {
 	return self.pad_left + self.pad_right
 		+ (self.border.left.len > 0 ? 1 : 0) + (self.border.right.len > 0 ? 1 : 0);
 }
 
-fn Style Style.with_min_width(self, int w) {
+fn Style Style.with_min_width(self, sz w) {
 	Style s = self;
 	s.min_width = w;
 	return s;
 }
 
-fn Style Style.with_max_width(self, int w) {
+fn Style Style.with_max_width(self, sz w) {
 	Style s = self;
 	s.max_width = w;
 	return s;
@@ -948,7 +955,7 @@ fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
 	if (self.width == 0 && (self.min_width > 0 || self.max_width > 0)) {
-		int outer = widest_line(input) + self.frame_width();
+		sz outer = widest_line(input) + self.frame_width();
 		if (self.max_width > 0 && outer > self.max_width) outer = self.max_width;
 		if (self.min_width > 0 && outer < self.min_width) outer = self.min_width;
 		return self.with_width(outer).render(input);
@@ -995,7 +1002,7 @@ fn String Style.render(self, String input) {
 	// In Go glaze, Width(N) means total output = N (border + padding included).
 	// So we subtract border and padding from the requested width to get the
 	// content area width.
-	int border_h = 0;
+	sz border_h = 0;
 	bool border_is_empty = self.border.top.len == 0 && self.border.bottom.len == 0 && self.border.left.len == 0
 		&& self.border.right.len == 0
 		&& self.border.top_left.len == 0
@@ -1006,7 +1013,7 @@ fn String Style.render(self, String input) {
 		border_h = 2; // left + right border chars
 	}
 
-	int target_width = self.width;
+	sz target_width = self.width;
 	if (target_width > 0) {
 		// Subtract border and padding to get content area
 		target_width = target_width - border_h - self.pad_left - self.pad_right;
@@ -1015,7 +1022,7 @@ fn String Style.render(self, String input) {
 		// Auto-size to widest line
 		target_width = 0;
 		for (sz i = 0; i < line_count; i++) {
-			int line_width = string_width(lines[i]);
+			sz line_width = string_width(lines[i]);
 			if (line_width > target_width) target_width = line_width;
 		}
 	}
@@ -1025,13 +1032,13 @@ fn String Style.render(self, String input) {
 	bool has_bg = self.bg.kind != ColorKind.NONE;
 
 	// Total line width = content + padding (border is applied after)
-	int line_width = target_width + self.pad_left + self.pad_right;
+	sz line_width = target_width + self.pad_left + self.pad_right;
 
 	// Build content into a temp buffer first, then add height alignment.
 	DString body = dstring::temp();
 
 	// Top padding lines.
-	for (int i = 0; i < self.pad_top; i++) {
+	for (sz i = 0; i < self.pad_top; i++) {
 		color_whitespace(&body, &self.bg, has_bg, line_width);
 		body.append_char('\n');
 	}
@@ -1041,13 +1048,13 @@ fn String Style.render(self, String input) {
 		String line = lines[i];
 
 		// Build styled line: pad_left + [align_h lead] + content + fill + pad_right.
-		int content_w   = string_width(line);
-		int slack       = target_width - content_w;
+		sz content_w   = string_width(line);
+		sz slack       = target_width - content_w;
 		if (slack < 0) slack = 0;
-		int h_lead      = 0;
+		sz h_lead      = 0;
 		if (self.align_h == Position.CENTER) { h_lead = slack / 2; }
 		else if (self.align_h == Position.RIGHT) { h_lead = slack; }
-		int fill        = slack - h_lead;
+		sz fill        = slack - h_lead;
 
 		// Pad left + horizontal alignment lead.
 		color_whitespace(&body, &self.bg, has_bg, self.pad_left + h_lead);
@@ -1141,21 +1148,21 @@ fn String Style.render(self, String input) {
 	}
 
 	// Bottom padding lines.
-	for (int i = 0; i < self.pad_bottom; i++) {
+	for (sz i = 0; i < self.pad_bottom; i++) {
 		color_whitespace(&body, &self.bg, has_bg, line_width);
 		body.append_char('\n');
 	}
 
 	// Height: add empty lines to reach target height, with vertical alignment.
 	// height means total outer height (like Go glaze v2), so subtract border.
-	int border_v      = !border_is_empty ? 2 : 0;
-	int height_target = self.height - border_v;
+	sz border_v      = !border_is_empty ? 2 : 0;
+	sz height_target = self.height - border_v;
 	if (height_target < 0) height_target = 0;
-	int total_lines = (int)line_count + self.pad_top + self.pad_bottom;
+	sz total_lines = (sz)line_count + self.pad_top + self.pad_bottom;
 	if (height_target > 0 && total_lines < height_target) {
-		int extra        = height_target - total_lines;
-		int top_extra    = 0;
-		int bottom_extra = 0;
+		sz extra        = height_target - total_lines;
+		sz top_extra    = 0;
+		sz bottom_extra = 0;
 		if (self.align_v == Position.CENTER) {
 			top_extra = extra / 2;
 			bottom_extra = extra - top_extra;
@@ -1165,12 +1172,12 @@ fn String Style.render(self, String input) {
 			bottom_extra = extra;
 		}
 
-		for (int i = 0; i < top_extra; i++) {
+		for (sz i = 0; i < top_extra; i++) {
 			color_whitespace(&out, &self.bg, has_bg, line_width);
 			out.append_char('\n');
 		}
 		out.append_string(body.str_view());
-		for (int i = 0; i < bottom_extra; i++) {
+		for (sz i = 0; i < bottom_extra; i++) {
 			color_whitespace(&out, &self.bg, has_bg, line_width);
 			out.append_char('\n');
 		}
@@ -1194,7 +1201,7 @@ fn String Style.render(self, String input) {
 
 	if (!border_is_empty) {
 		Color bbg = self.border_bg.kind != ColorKind.NONE ? self.border_bg : self.bg;
-		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg);
+		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg, self.corner_color);
 		// The gradient runs over the whole block, border rows included, so it
 		// is applied after wrapping rather than to the content alone.
 		return apply_bg_gradient(bordered, self.bg, self.bg_gradient);
@@ -1215,11 +1222,11 @@ fn String Style.render(self, String input) {
 fn String apply_bg_gradient(String block, Color from, Color to) @local {
 	if (to.kind != ColorKind.TRUECOLOR || from.kind != ColorKind.TRUECOLOR) return block;
 
-	int rows = 1;
+	sz rows = 1;
 	foreach (c : block) if (c == '\n') rows++;
 
 	DString out = dstring::temp();
-	int row = 0;
+	sz row = 0;
 	usz start = 0;
 	for (usz i = 0; i <= block.len; i++) {
 		if (i < block.len && block[i] != '\n') continue;
@@ -1281,6 +1288,7 @@ fn String Style.render_content_only(self, String input) {
 	Style s     = self;
 	s.border = { };
 	s.border_color = { };
+	s.corner_color = { };
 	s.border_animation = BorderAnimation.NONE;
 	String result = s.render(input);
 	return result;

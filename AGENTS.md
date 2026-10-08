@@ -1,15 +1,17 @@
 # milktea — agent guide
 
-Three modules. Each has one job.
+Four modules. Each has one job.
 
 - **milktea** — Elm-style runtime loop (model/update/view, timers, input)
 - **glaze** — styling; builds ANSI-escaped strings
 - **xray** — geometry: layout constraints + the cell grid
+- **tgp** — kitty-graphics images: glyphs, placeholders, placements
 
 User-facing docs cover the API in depth — this file only adds what they don't:
 
 | I need to… | Read |
 |---|---|
+| images (kitty graphics) | `README.md` → "Images with tgp" |
 | model/update/view/main skeleton | `README.md` → "The model", "init", "update", "view", "main" |
 | styling, colors, borders | `README.md` → "Styling with glaze" |
 | splitting the screen (`vstack`/`hstack`) | `README.md` → "Layout with xray::layout" |
@@ -109,14 +111,20 @@ glaze's `.border()` (README → Borders) when you just want a box around a strin
 **Simple case** — build a string (with glaze), hand it to milktea. See README → "View types":
 
 ```c3
-return milktea::new_alt_screen_view(glaze_string);   // alt screen (typical TUI)
-return milktea::new_view(glaze_string);               // inline (no alt screen)
+return milktea::view(glaze_string);
 ```
 
 **Cell-grid case** — use this only when you need the xray `ScreenBuffer` for precise x,y placement:
 
 ```c3
-return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
+return self.canvas.view();                       // grid held in a ScreenBuffer
+return milktea::cell_view(self.cells, w, h);     // grid you allocated yourself
+```
+
+Alt screen is a program option, not a view flag:
+
+```c3
+return milktea::@run(&model, { .alt_screen = true });
 ```
 
 ## Typical view() pattern (cell-grid)
@@ -136,13 +144,35 @@ Rect inner = self.canvas.draw_border(zones[0], rounded_border(), border_sty);
 self.canvas.render_ansi_string(inner.x, inner.y, glaze_string, ...);
 
 // 5. return
-return milktea::new_alt_cell_view(canvas.cells[0:w*h], w, h);
+return self.canvas.view();
 ```
+
+## `sz` or `int`
+
+Sizes, lengths, indices and screen geometry are `sz` (C3's signed
+pointer-sized type, `ssize_t`). That covers `Rect`, every constraint, node and
+`ScreenBuffer` dimension, `screen_width()`/`screen_height()`, and cell counts.
+Prefer it: C3 made sizes signed precisely so this arithmetic needs no casts,
+and `sz` is what the allocator and `read`/`write` already speak.
+
+`int` is for values that are not sizes:
+
+- **C ABI scalars** — fds, signums, return codes, `poll` timeouts, thread entry
+  points (`ThreadFn` is `fn int(void*)`), and anything an `extern fn` names.
+  Cast at the boundary, in the call, not by widening the field.
+- **Colour channels** — `alpha`, `opacity`, and the RGB components.
+- **Rates and discriminants** — `fps`, `Msg.tag`.
+
+`WinSize` keeps `ushort`, because it is the real `struct winsize` from
+`TIOCGWINSZ`; `get_window_size()` widens once on the way out.
+
+Adding a geometry parameter? Make it `sz`. If the compiler asks for a cast to
+`int`, you have found an ABI boundary — cast there and leave the geometry alone.
 
 ## Tests
 
-All tests live in `test/` (kept out of the library dirs so `milktea/**` etc. stay
-test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare
+All tests live in `test/` (kept out of the library dirs so `milktea/**`, `tgp/**`
+etc. stay test-free in build targets). Run `just test` (= `c3c test`). Snapshot tests compare
 against `snapshots/*/*.snap`; re-record with `just update-snapshots` and review the
 diff. See README → "Testing".
 

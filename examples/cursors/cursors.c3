@@ -14,22 +14,22 @@ import std::io;
 
 // ── section A: draw-cursor callbacks ─────────────────────────────────────────
 
-fn String cursor_fire(int x, int y, bool blink, String under) {
+fn String cursor_fire(sz x, sz y, bool blink, String under) {
 	return blink ? "🔥" : "";
 }
 
-fn String cursor_skull(int x, int y, bool blink, String under) {
+fn String cursor_skull(sz x, sz y, bool blink, String under) {
 	return blink ? "💀" : "";
 }
 
-fn String cursor_crosshair(int x, int y, bool blink, String under) {
+fn String cursor_crosshair(sz x, sz y, bool blink, String under) {
 	if (!blink && under.len > 0) return under;
 	return blink ? "\x1b[1;33m✛\x1b[0m" : "\x1b[2;33m✛\x1b[0m";
 }
 
-fn String cursor_snake(int x, int y, bool blink, String under) {
+fn String cursor_snake(sz x, sz y, bool blink, String under) {
 	long now  = milktea::time_ms();
-	int phase = (int)((now / 150) % 4);
+	sz phase = (sz)((now / 150) % 4);
 	switch (phase) {
 		case 0: return "█";
 		case 1: return "▓";
@@ -38,16 +38,16 @@ fn String cursor_snake(int x, int y, bool blink, String under) {
 	}
 }
 
-fn String cursor_rainbow(int x, int y, bool blink, String under) {
+fn String cursor_rainbow(sz x, sz y, bool blink, String under) {
 	long now = milktea::time_ms();
 	double t = ((double)(now % 1500)) / 1500.0;
 	return glaze::style().foreground(glaze::hcl(t * 360.0, 100.0, 60.0)).render("█");
 }
 
-fn String cursor_matrix(int x, int y, bool blink, String under) {
+fn String cursor_matrix(sz x, sz y, bool blink, String under) {
 	if (!blink && under.len > 0) return under;
 	long now = milktea::time_ms();
-	int idx  = (int)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
+	sz idx  = (sz)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
 	uint cp  = 0x30A1u + (uint)idx; // katakana block
 	char[4] buf;
 	sz len;
@@ -87,22 +87,22 @@ fn glaze::Style style_input(String bc, bool focused) {
 
 // ── model ─────────────────────────────────────────────────────────────────────
 
-const int N = 10;
+const sz N = 10;
 
 // Layout measurements, named rather than inlined so the shape of the page is
 // readable in one place.
-const int TOP_MARGIN  = 1;  // blank row above the title
-const int SIDE_MARGIN = 2;  // breathing room at the page edges
-const int TITLE_GAP   = 2;  // rows between the title and the columns
-const int COL_GAP     = 2;  // columns between the two entry columns
-const int ROW_GAP     = 1;  // rows between entry boxes
-const int NAME_GAP    = 1;  // columns between a name and its box
-const int NAME_COLS   = 10; // width of the name column
-const int BOX_ROWS    = 3;  // top border, content, bottom border
+const sz TOP_MARGIN  = 1;  // blank row above the title
+const sz SIDE_MARGIN = 2;  // breathing room at the page edges
+const sz TITLE_GAP   = 2;  // rows between the title and the columns
+const sz COL_GAP     = 2;  // columns between the two entry columns
+const sz ROW_GAP     = 1;  // rows between entry boxes
+const sz NAME_GAP    = 1;  // columns between a name and its box
+const sz NAME_COLS   = 10; // width of the name column
+const sz BOX_ROWS    = 3;  // top border, content, bottom border
 
 struct Model {
 	Entry[N] entries;
-	int focused;
+	sz focused;
 }
 
 // Section A entries paint their own cursor; section B entries use the
@@ -124,17 +124,17 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	return null;
 }
 
-fn void Model.add_drawn(&self, int i, String label, String bc, xray::DrawCursorFn draw, int blink_ms) {
+fn void Model.add_drawn(&self, sz i, String label, String bc, xray::DrawCursorFn draw, sz blink_ms) {
 	self.entries[i] = { .label = label, .border_color = bc, .input = new_input(bc) };
 	self.entries[i].input.cursor_style = { .draw = draw, .blink_ms = blink_ms };
 }
 
-fn void Model.add_native(&self, int i, String label, String bc,
+fn void Model.add_native(&self, sz i, String label, String bc,
 	milktea::CursorShape shape, String color, bool blink)
 {
 	self.entries[i] = { .label = label, .border_color = bc, .input = new_input(bc) };
 	self.entries[i].input.cursor_style = {
-		.shape = (int)shape, .color = color, .blink = blink,
+		.shape = (sz)shape, .color = color, .blink = blink,
 	};
 }
 
@@ -189,9 +189,9 @@ fn milktea::View Model.view(&self) @dynamic {
 }
 
 // column builds one stack of entry rows, starting at entry `first`.
-fn milktea::Node* Model.column(&self, int first) {
+fn milktea::Node* Model.column(&self, sz first) {
 	milktea::Node* col = milktea::vstack().with_gap(ROW_GAP);
-	for (int i = first; i < first + N / 2; i++) {
+	for (sz i = first; i < first + N / 2; i++) {
 		col.add(self.entry_row(i));
 	}
 	return col;
@@ -200,7 +200,7 @@ fn milktea::Node* Model.column(&self, int first) {
 // entry_row is a right-aligned name beside the input box. The box is three
 // rows — border, content, border — and the input reports its cursor against
 // the rect the layout hands it, so nothing here counts rows or columns.
-fn milktea::Node* Model.entry_row(&self, int i) {
+fn milktea::Node* Model.entry_row(&self, sz i) {
 	Entry* e = &self.entries[i];
 	bool focused = i == self.focused;
 

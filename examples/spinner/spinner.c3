@@ -9,7 +9,7 @@ import std::core::dstring;
 const int MSG_SPIN = 1;
 
 struct SpinnerModel {
-	int frame;
+	sz frame;
 }
 
 fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {
@@ -52,11 +52,11 @@ fn milktea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
 	out.append_string(title.render(string::tformat("%s  Loading...", spin)));
 	out.append_char('\n');
 	out.append_string(subtle.render("Press q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	SpinnerModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

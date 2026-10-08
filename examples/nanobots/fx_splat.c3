@@ -8,9 +8,9 @@ import std::math;
 struct FxSplat {
 	float splat_wall;
 	bool splat_falling;
-	int splat_launch;
-	int[] stack_top;
-	int fade_start;
+	sz splat_launch;
+	sz[] stack_top;
+	sz fade_start;
 }
 
 // Spring-loaded throw. The wind-up drags the slab back and stores tension;
@@ -25,7 +25,7 @@ fn FxSplat* splat_data(Model* self) => (FxSplat*)self.fx_state;
 fn bool splat_hit(Model* self, FxSplat* s) {
 	// Nothing lands while the slab is still winding up.
 	if (self.frame < s.splat_launch) return false;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (p.y <= 0.0f || p.y >= (float)(self.h - 1)) return true;
@@ -39,7 +39,7 @@ fn bool splat_hit(Model* self, FxSplat* s) {
 }
 
 fn void splash_from_wall(Model* self, FxSplat* s) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		p.x = s.splat_wall;
@@ -58,12 +58,12 @@ fn void splat_setup(void* raw) {
 	s.splat_wall = to_right ? (float)(self.w - 1) : 0.0f;
 	s.splat_falling = false;
 	s.fade_start = 0;
-	s.stack_top = mem::new_array(int, (sz)self.w);
-	for (int c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
+	s.stack_top = mem::new_array(sz, (sz)self.w);
+	for (sz c = 0; c < self.w; c++) s.stack_top[c] = self.h * 2;
 	float angle = rand_range(-0.25f, 0.25f);
 	float dir = to_right ? 1.0f : -1.0f;
 	s.splat_launch = self.frame + SPLAT_WINDUP;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -88,10 +88,10 @@ fn void splat_step(void* raw) {
 		// stores tension; on release a spring accelerates it into the wall,
 		// so the impact is the fastest moment rather than a constant glide.
 		float dir = s.splat_wall > 0.0f ? 1.0f : -1.0f;
-		for (int i = 0; i < self.total; i++) {
+		for (sz i = 0; i < self.total; i++) {
 			Particle* p = &self.particles[i];
 			if (!p.alive) continue;
-			int rel = self.frame - s.splat_launch;
+			sz rel = self.frame - s.splat_launch;
 			if (rel < 0) {
 				// Loading: ease back away from the wall, tapering to a
 				// standstill exactly at the turn.
@@ -116,7 +116,7 @@ fn void splat_step(void* raw) {
 		return;
 	}
 
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (p.resting) continue;
@@ -127,7 +127,7 @@ fn void splat_step(void* raw) {
 		float mx = (float)(self.w - 1);
 		if (p.x < 0)  { p.x = 0;  p.vx = -p.vx * 0.3f; }
 		if (p.x > mx) { p.x = mx; p.vx = -p.vx * 0.3f; }
-		int c = (int)p.x;
+		sz c = (sz)p.x;
 		if (c < 0) c = 0;
 		if (c >= self.w) c = self.w - 1;
 		float floor_y = (float)(s.stack_top[c] - 1) * 0.5f;
@@ -159,11 +159,11 @@ fn void splat_render(void* raw) {
 	xray::ScreenBuffer* sb = self.canvas;
 	// Keep the word's own glyphs throughout — the slab flies in as intact
 	// letters, and the splash sprays the letters rather than generic blocks.
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
-		int col = (int)p.x;
-		int row = (int)p.y;
+		sz col = (sz)p.x;
+		sz row = (sz)p.y;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		xray::Color c = gradient_color(self, p.col);

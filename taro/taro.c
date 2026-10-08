@@ -1532,10 +1532,12 @@ static JSValue _js_set_interval(JSContext* ctx, JSValueConst this_val, int argc,
 
 /* ── blend_luv JS binding ───────────────────────────────────────────────────── */
 
-typedef struct { unsigned char kind; unsigned char ansi; unsigned char r; unsigned char g; unsigned char b; } LipglossColor;
+/* Mirrors dye::Color (dye/color.c3). Field order and count must match: the
+   struct is passed and returned by value across this boundary. */
+typedef struct { unsigned char kind; unsigned char index; unsigned char r; unsigned char g; unsigned char b; unsigned char a; } LipglossColor;
 
-/* Declared in C3 gradient.c3 with @export — C3 mangles to glaze__blend_luv */
-extern LipglossColor glaze__blend_luv(LipglossColor a, LipglossColor b, double t);
+/* Declared in C3 dye/space.c3 with @export — C3 mangles to dye__blend_luv */
+extern LipglossColor dye__blend_luv(LipglossColor a, LipglossColor b, double t);
 
 /* Declared in C3 js_view.c3 — C3 mangles as taro__function with @export */
 extern void*         taro__textarea_get_ptr(const char* id);
@@ -1566,7 +1568,7 @@ static int _parse_hex_byte(const char* s) {
 }
 
 static LipglossColor _parse_hex_color(const char* s) {
-    LipglossColor c = {0,0,0,0,0};
+    LipglossColor c = {0};
     if (!s) return c;
     if (s[0] == '#') s++;
     int r = _parse_hex_byte(s);
@@ -1591,7 +1593,7 @@ static JSValue _js_blend_luv(JSContext* ctx, JSValueConst this_val, int argc, JS
     LipglossColor b = _parse_hex_color(to_str);
     JS_FreeCString(ctx, from_str);
     JS_FreeCString(ctx, to_str);
-    LipglossColor result = glaze__blend_luv(a, b, t);
+    LipglossColor result = dye__blend_luv(a, b, t);
     char buf[8];
     snprintf(buf, sizeof(buf), "#%02x%02x%02x",
              (unsigned)result.r, (unsigned)result.g, (unsigned)result.b);

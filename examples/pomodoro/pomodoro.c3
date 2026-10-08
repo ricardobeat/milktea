@@ -15,11 +15,11 @@ import std::io;
 // ── Model ────────────────────────────────────────────────────────────────────
 
 // Width of the stats sidebar, and of the progress bar inside the timer panel.
-const int SIDEBAR_COLS  = 22;
-const int PROGRESS_CELLS = 28;
+const sz SIDEBAR_COLS  = 22;
+const sz PROGRESS_CELLS = 28;
 // Columns between the sidebar and the timer panel. Without it the two borders
 // sit flush and the sidebar's right edge is overwritten.
-const int PANEL_GAP = 1;
+const sz PANEL_GAP = 1;
 
 enum Phase : int {
 	FOCUS,
@@ -28,16 +28,16 @@ enum Phase : int {
 
 struct Model {
 	Phase phase;
-	int   remaining;   // seconds left in the current phase
+	sz   remaining;   // seconds left in the current phase
 	bool  running;
-	int   completed;   // focus sessions finished
+	sz   completed;   // focus sessions finished
 }
 
 // Phase lengths, in seconds. Short for demoing; bump to 25*60 / 5*60 for real use.
-const int FOCUS_SECS = 25 * 60;
-const int BREAK_SECS = 5 * 60;
+const sz FOCUS_SECS = 25 * 60;
+const sz BREAK_SECS = 5 * 60;
 
-fn int phase_length(Phase p) {
+fn sz phase_length(Phase p) {
 	return p == Phase.FOCUS ? FOCUS_SECS : BREAK_SECS;
 }
 
@@ -128,10 +128,10 @@ fn milktea::View Model.view(&self) @dynamic {
 	};
 	glaze::Style status_s = { .fg = dim };
 
-	int mins = self.remaining / 60;
-	int secs = self.remaining % 60;
-	int total = phase_length(self.phase);
-	int pct   = total > 0 ? 100 - (self.remaining * 100 / total) : 0;
+	sz mins = self.remaining / 60;
+	sz secs = self.remaining % 60;
+	sz total = phase_length(self.phase);
+	sz pct   = total > 0 ? 100 - (self.remaining * 100 / total) : 0;
 
 	String bar = glaze::progress_bar(PROGRESS_CELLS, pct, "█", "░", accent, dim);
 

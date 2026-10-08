@@ -11,7 +11,7 @@ import std::core::dstring;
 // ANSI escape sequences take no width and are never split, so text that was
 // styled before it was wrapped keeps its styling. A width of 0 or less
 // returns s unchanged.
-fn String wrap_text(String s, int width) {
+fn String wrap_text(String s, sz width) {
 	if (width <= 0 || string_width(s) <= width) return s;
 	DString out = dstring::temp();
 	sz start = 0;
@@ -26,19 +26,19 @@ fn String wrap_text(String s, int width) {
 
 // wrapped_line_count is how many lines wrap_text(s, width) produces, for
 // sizing a box before it is rendered.
-fn int wrapped_line_count(String s, int width) {
+fn sz wrapped_line_count(String s, sz width) {
 	String w = wrap_text(s, width);
-	int lines = 1;
+	sz lines = 1;
 	foreach (c : w) if (c == '\n') lines++;
 	return lines;
 }
 
-fn void wrap_line(DString* out, String line, int width) @local {
+fn void wrap_line(DString* out, String line, sz width) @local {
 	if (string_width(line) <= width) {
 		out.append_string(line);
 		return;
 	}
-	int col = 0;
+	sz col = 0;
 	sz i = 0;
 	while (i < line.len) {
 		sz sp = i;
@@ -50,15 +50,15 @@ fn void wrap_line(DString* out, String line, int width) @local {
 			i = line[i] == '\x1b' ? skip_escape(line, i) : i + 1;
 		}
 		String word = line[ws:i - ws];
-		int ww = string_width(word);
+		sz ww = string_width(word);
 
-		if (col > 0 && col + (int)spaces.len + ww > width) {
+		if (col > 0 && col + (sz)spaces.len + ww > width) {
 			out.append_char('\n');
 			col = 0;
 			spaces = "";
 		}
 		out.append_string(spaces);
-		col += (int)spaces.len;
+		col += (sz)spaces.len;
 
 		if (col + ww <= width) {
 			out.append_string(word);
@@ -76,7 +76,7 @@ fn void wrap_line(DString* out, String line, int width) @local {
 				continue;
 			}
 			sz n = utf8_sequence_len(word, j);
-			int cw = utf8_width_at(word, j);
+			sz cw = utf8_width_at(word, j);
 			if (col > 0 && col + cw > width) {
 				out.append_char('\n');
 				col = 0;
@@ -89,12 +89,12 @@ fn void wrap_line(DString* out, String line, int width) @local {
 }
 
 // widest_line is the display width of the widest line in s.
-fn int widest_line(String s) {
-	int widest = 0;
+fn sz widest_line(String s) {
+	sz widest = 0;
 	sz start = 0;
 	for (sz i = 0; i <= s.len; i++) {
 		if (i < s.len && s[i] != '\n') continue;
-		int w = string_width(s[start:i - start]);
+		sz w = string_width(s[start:i - start]);
 		if (w > widest) widest = w;
 		start = i + 1;
 	}

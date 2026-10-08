@@ -45,8 +45,8 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 	glaze::Style subtle = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out     = dstring::temp();
-	int minutes     = self.timer.remaining() / 60;
-	int secs        = self.timer.remaining() % 60;
+	sz minutes     = self.timer.remaining() / 60;
+	sz secs        = self.timer.remaining() % 60;
 	String time_str = string::tformat("%02d:%02d", minutes, secs);
 	out.append_string(box_style.render(time_str));
 	out.append_char('\n');
@@ -64,11 +64,11 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(subtle.render("r to reset  |  q to quit"));
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	TimerModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

@@ -10,26 +10,26 @@ import std::core::mem;
 // FilePicker is a file browser component.
 struct FilePicker (xray::Content) {
 	char[64][64] names;
-	int[64] name_lens;
+	sz[64] name_lens;
 	bool[64] is_dirs;
-	int count;
-	int cursor;
-	int scroll;
+	sz count;
+	sz cursor;
+	sz scroll;
 	// Distinct from cursor (the keyboard position): the row that the user
 	// clicked, kept across frames so its highlight survives until the next
 	// click moves it. -1 = no row selected yet.
-	int selected;
+	sz selected;
 	// Row currently under the pointer, -1 if none. The picker manages this
 	// itself through each row node's on_hover_in/out hooks; the app does not
 	// have to touch it.
-	int hover;
+	sz hover;
 	// current_dir views dir_buf, which the picker owns: callers usually pass
 	// temp strings to load_dir, and those are gone once the frame ends.
 	String current_dir;
 	DString dir_buf;
 	String selected_name;
-	int width;
-	int height;
+	sz width;
+	sz height;
 	glaze::Style cursor_style;
 	glaze::Style selected_style;
 	glaze::Style hover_style;
@@ -51,7 +51,7 @@ struct FilePicker (xray::Content) {
 // ctx the app registered; name is the row's filename (without the trailing
 // slash, for both files and directories); is_dir reports the kind; col, row
 // are the press position in cells (rarely useful — the name is the identity).
-alias FilePickerRowFn = fn void(void* id, String name, bool is_dir, int col, int row);
+alias FilePickerRowFn = fn void(void* id, String name, bool is_dir, sz col, sz row);
 
 // new_file_picker creates a file picker starting in the given directory.
 fn FilePicker new_file_picker(String start_dir) {
@@ -112,19 +112,19 @@ fn void FilePicker.load_dir(&self, String path) {
 		char[64 * 64] name_buf;
 		int[64] dir_flags;
 
-		int n = c3_list_dir(&path_buf[0], &name_buf[0], &dir_flags[0], 64);
+		sz n = c3_list_dir(&path_buf[0], &name_buf[0], &dir_flags[0], 64);
 
-		for (int i = 0; i < n && self.count < 64; i++) {
+		for (sz i = 0; i < n && self.count < 64; i++) {
 			self.is_dirs[self.count] = (dir_flags[i] != 0);
 
-			int offset = i * 64;
+			sz offset = i * 64;
 			sz j       = 0;
 			while (j < 63 && name_buf[offset + j] != 0) {
 				self.names[self.count][j] = name_buf[offset + j];
 				j++;
 			}
 			self.names[self.count][j] = 0;
-			self.name_lens[self.count] = (int)j;
+			self.name_lens[self.count] = (sz)j;
 
 			// Skip hidden files (except . and ..)
 			if (j > 0 && self.names[self.count][0] == '.'
@@ -200,17 +200,17 @@ fn String FilePicker.view(&self) {
 	out.append_string(self.title_style.render(string::tformat("Files: %s", self.current_dir)));
 	out.append_char('\n');
 
-	int visible = self.height - 4;
+	sz visible = self.height - 4;
 	if (visible < 1) visible = 1;
 
 	// Adjust scroll
 	if (self.cursor < self.scroll) self.scroll = self.cursor;
 	if (self.cursor >= self.scroll + visible) self.scroll = self.cursor - visible + 1;
 
-	int end = self.scroll + visible;
+	sz end = self.scroll + visible;
 	if (end > self.count) end = self.count;
 
-	for (int i = self.scroll; i < end; i++) {
+	for (sz i = self.scroll; i < end; i++) {
 		String name   = (String)self.names[i][:self.name_lens[i]];
 		String suffix = self.is_dirs[i] ? "/" : "";
 		String marker = (i == self.cursor) ? "> " : "  ";
@@ -238,8 +238,8 @@ fn String FilePicker.render(&self, xray::Rect r) @dynamic {
 	return self.view();
 }
 
-fn int FilePicker.measure(&self, int width) @dynamic => self.height;
-fn int FilePicker.measure_width(&self, int height) @dynamic => self.width;
+fn sz FilePicker.measure(&self, sz width) @dynamic => self.height;
+fn sz FilePicker.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* FilePicker.node(&self) => xray::content_node(self);
 
@@ -263,13 +263,13 @@ fn xray::Node* FilePicker.node(&self) => xray::content_node(self);
 
 struct PickRowCtx {
 	FilePicker* picker;
-	int index;
+	sz index;
 }
 
-fn void picker_row_clicked(void* id, String id_str, int col, int row) @local {
+fn void picker_row_clicked(void* id, String id_str, sz col, sz row) @local {
 	PickRowCtx* rc = (PickRowCtx*)id;
 	FilePicker* fp = rc.picker;
-	int i = rc.index;
+	sz i = rc.index;
 	if (i < 0 || i >= fp.count) return;
 	fp.cursor = i;
 	fp.selected = i;
@@ -280,12 +280,12 @@ fn void picker_row_clicked(void* id, String id_str, int col, int row) @local {
 	}
 }
 
-fn void picker_row_hover_in(void* id, String id_str, int col, int row) @local {
+fn void picker_row_hover_in(void* id, String id_str, sz col, sz row) @local {
 	PickRowCtx* rc = (PickRowCtx*)id;
 	rc.picker.hover = rc.index;
 }
 
-fn void picker_row_hover_out(void* id, String id_str, int col, int row) @local {
+fn void picker_row_hover_out(void* id, String id_str, sz col, sz row) @local {
 	PickRowCtx* rc = (PickRowCtx*)id;
 	if (rc.picker.hover == rc.index) rc.picker.hover = -1;
 }
@@ -293,7 +293,7 @@ fn void picker_row_hover_out(void* id, String id_str, int col, int row) @local {
 // row_node builds one row as an xray node, picking the style from the row's
 // relationship to cursor / selected / hover. ctx is a fresh PickRowCtx that
 // the node tree keeps alive for the frame — tmem handles the cleanup.
-fn xray::Node* FilePicker.row_node(&self, int i) {
+fn xray::Node* FilePicker.row_node(&self, sz i) {
 	String name = (String)self.names[i][:self.name_lens[i]];
 	String suffix = self.is_dirs[i] ? "/" : "";
 	glaze::Style* s;
@@ -325,24 +325,24 @@ fn xray::Node* FilePicker.row_node(&self, int i) {
 // string form, so the visible rows in the tree match the rows the terminal
 // would see.
 fn xray::Node* FilePicker.tree_node(&self) {
-	int visible = self.height - 4;
+	sz visible = self.height - 4;
 	if (visible < 1) visible = 1;
 	if (self.cursor < self.scroll) self.scroll = self.cursor;
 	if (self.cursor >= self.scroll + visible) self.scroll = self.cursor - visible + 1;
-	int end = self.scroll + visible;
+	sz end = self.scroll + visible;
 	if (end > self.count) end = self.count;
 
 	xray::Node* v = xray::vstack();
 	v.add(milktea::text(self.title_style, string::tformat("Files: %s", self.current_dir))
 		.height(milktea::cells(1)));
-	for (int i = self.scroll; i < end; i++) {
+	for (sz i = self.scroll; i < end; i++) {
 		v.add(self.row_node(i));
 	}
 	// Pad with empty rows so the picker's total height matches the rect the
 	// app laid out, otherwise the next thing under it slides up when fewer
 	// than `visible` rows exist.
-	int pad = visible - (end - self.scroll);
-	for (int i = 0; i < pad; i++) {
+	sz pad = visible - (end - self.scroll);
+	for (sz i = 0; i < pad; i++) {
 		v.add(milktea::text(self.file_style, "").height(milktea::cells(1)));
 	}
 	v.add(milktea::text(self.hint_style, "Enter: open | Backspace: parent | q: quit")

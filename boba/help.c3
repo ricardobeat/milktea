@@ -15,7 +15,7 @@ struct HelpEntry {
 // Help is a help text rendering component.
 struct Help (xray::Content) {
 	HelpEntry[16] entries;
-	int count;
+	sz count;
 	glaze::Style key_style;
 	glaze::Style desc_style;
 	glaze::Style separator_style;
@@ -62,7 +62,7 @@ fn void Help.clear(&self) {
 // view returns the rendered help string with all entries joined by the separator.
 fn String Help.view(&self) {
 	DString out = dstring::temp();
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		if (i > 0) {
 			out.append_string(self.separator_style.render(self.separator));
 		}
@@ -76,7 +76,7 @@ fn String Help.view(&self) {
 // view_vertical returns entries rendered one per line.
 fn String Help.view_vertical(&self) {
 	DString out = dstring::temp();
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		out.append_string(self.key_style.render(self.entries[i].key));
 		out.append_char(' ');
 		out.append_string(self.desc_style.render(self.entries[i].description));
@@ -99,7 +99,7 @@ fn Help default_help() {
 
 // A help bar draws one line of its own width; the rect only bounds it.
 fn String Help.render(&self, xray::Rect r) @dynamic => self.view();
-fn int Help.measure(&self, int width) @dynamic => 1;
-fn int Help.measure_width(&self, int height) @dynamic => glaze::string_width(self.view());
+fn sz Help.measure(&self, sz width) @dynamic => 1;
+fn sz Help.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Help.node(&self) => xray::content_node(self);

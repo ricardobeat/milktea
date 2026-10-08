@@ -20,11 +20,11 @@ fn milktea::Cmd VanishModel.update(VanishModel* self, milktea::Msg msg) @dynamic
 }
 
 fn milktea::View VanishModel.view(VanishModel* self) @dynamic {
-	if (self.quitting) return milktea::new_alt_screen_view("");
-	return milktea::new_alt_screen_view("Press any key to quit. Your terminal will be clean.");
+	if (self.quitting) return milktea::view("");
+	return milktea::view("Press any key to quit. Your terminal will be clean.");
 }
 
 fn int main() {
 	VanishModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

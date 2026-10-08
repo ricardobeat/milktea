@@ -30,7 +30,7 @@ QUICKJS_C_SOURCES = [
 
 # Per-example overrides, keyed by the target name (without "examples/"
 # prefix). Anything not specified here falls back to the default: sources =
-# ["milktea/**", "glaze/**", "examples/<name>/**"], c-sources =
+# ["milktea/**", "glaze/**", "dye/**", "examples/<name>/**"], c-sources =
 # ["milktea/tty_winsize.c"], opt = "Os", strip-unused = true.
 #
 # Recognized keys:
@@ -43,12 +43,19 @@ QUICKJS_C_SOURCES = [
 #                  (used for targets with per-file sources, e.g. doom-fire)
 #   c_sources    - full explicit `c-sources` list (default: tty_winsize.c only)
 #   opt          - opt level (default: "Os")
+#   optsize      - value for "optsize" (omitted entirely by default)
 #   strip_unused - whether to set "strip-unused": true (default: True; set to
 #                  False to omit the key entirely, as cursors/inputbox do)
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
 #   dependencies         - value for "dependencies" (e.g. ["raylib6"])
 OVERRIDES = {
+    "ai-harness": {
+        "sources": ["examples/ai-harness/**"],
+        "c_sources": ["examples/ai-harness/http_shim.c"],
+        "optsize": "tiny",
+        "linked_libraries": ["curl"],
+    },
     "component-viewer": {},
     "paste": {},
     "split-editors": {},
@@ -69,6 +76,9 @@ OVERRIDES = {
     },
     "doom-fire-milktea": {
         "sources": ["examples/doom-fire/doom-fire-milktea.c3"],
+    },
+    "doom-fire-overlay": {
+        "sources": ["examples/doom-fire/doom-fire-overlay.c3"],
     },
     "doom-fire-donut": {
         "sources": [
@@ -129,15 +139,38 @@ OVERRIDES = {
 
 # doom-fire's directory produces multiple targets (not a 1:1 dir->target
 # mapping), so it's special-cased here instead of derived from a directory
-# listing.
-EXTRA_TARGETS_FROM_DOOM_FIRE_DIR = ["doom-fire-milktea"]
+# listing. Each variant is its own main() in module doom_fire, so they cannot
+# be compiled together -- hence one target per file rather than a glob.
+EXTRA_TARGETS_FROM_DOOM_FIRE_DIR = ["doom-fire-milktea", "doom-fire-overlay"]
+
+
+def sources_exist(name):
+    """Whether every concrete .c3 file an override names still exists.
+
+    A target whose OVERRIDES entry lists files by hand (rather than by glob)
+    outlives the files themselves: the directory can still be there while the
+    one .c3 the target compiles has been deleted or renamed. Globs are left
+    alone -- c3c is happy for a "dir/**" to match nothing.
+    """
+    explicit = OVERRIDES.get(name, {}).get("sources")
+    if not explicit:
+        return True
+    for src in explicit:
+        if "*" in src or not src.endswith(".c3"):
+            continue
+        if not os.path.exists(os.path.join(PROJECT_ROOT, src)):
+            return False
+    return True
 
 
 def discover_example_names():
-    """Directory names under examples/ that should produce a target.
+    """Target names that examples/ should still produce.
 
     Skips "lib" (a support-code dir pulled in by other targets, not a target
-    of its own) and any dir with no .c3 file in it.
+    of its own) and any dir with no .c3 file in it. A name whose override
+    names .c3 files by hand is dropped once those files are gone, which is how
+    the doom-fire directory's extra targets are checked -- their directory
+    outlives them.
     """
     names = []
     for entry in sorted(os.listdir(EXAMPLES_DIR)):
@@ -149,8 +182,10 @@ def discover_example_names():
         has_c3 = any(f.endswith(".c3") for f in os.listdir(path))
         if not has_c3:
             continue
+        if not sources_exist(entry):
+            continue
         names.append(entry)
-    names.extend(EXTRA_TARGETS_FROM_DOOM_FIRE_DIR)
+    names.extend(n for n in EXTRA_TARGETS_FROM_DOOM_FIRE_DIR if sources_exist(n))
     return names
 
 
@@ -176,6 +211,8 @@ def build_target(name):
     c_sources = override.get("c_sources", DEFAULT_C_SOURCES)
     if c_sources != DEFAULT_C_SOURCES:
         target["c-sources"] = c_sources
+    if "optsize" in override:
+        target["optsize"] = override["optsize"]
     if override.get("strip_unused", True):
         target["strip-unused"] = True
     if "linked_libraries" in override:
@@ -223,9 +260,22 @@ def main():
             "(adding them, please review): " + ", ".join(sorted(new_names))
         )
 
-    # Preserve existing order for known targets; append any newly discovered
-    # ones (sorted) at the end of the examples run.
-    ordered_names = [k[len("examples/") :] for k in existing_example_keys]
+    # Drop targets whose example is gone. Without this an entry outlives the
+    # code it builds and `c3c build` fails on a directory that is not there.
+    stale_names = [n for n in existing_example_names if n not in set(discovered)]
+    if stale_names:
+        print(
+            "gen_targets: dropping targets whose examples/ sources are gone: "
+            + ", ".join(sorted(stale_names))
+        )
+
+    # Preserve existing order for surviving targets; append any newly
+    # discovered ones (sorted) at the end of the examples run.
+    ordered_names = [
+        k[len("examples/") :]
+        for k in existing_example_keys
+        if k[len("examples/") :] not in set(stale_names)
+    ]
     ordered_names.extend(sorted(new_names))
 
     if not existing_example_keys:

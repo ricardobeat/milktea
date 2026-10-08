@@ -153,7 +153,7 @@ fn void test_table_row_capacity_is_enforced() @test {
 	// the end of the struct.
 	boba::Table t = boba::new_table();
 	t.add_column("Name", 10);
-	for (int i = 0; i < 200; i++) {
+	for (sz i = 0; i < 200; i++) {
 		t.add_row("row");
 	}
 	assert(t.row_count == boba::MAX_TABLE_ROWS);
@@ -210,7 +210,7 @@ fn void test_viewport_selection_uses_display_columns() @test {
 	// wrapped in its own SGR pair, so the style appears once per selected
 	// glyph, followed immediately by that glyph's bytes.
 	char[] sel = "\x1b[38;2;0;0;0;48;2;255;255;255m";
-	int matches = 0;
+	sz matches = 0;
 	for (sz i = 0; i + sel.len + 1 <= out.len; i++) {
 		bool match = true;
 		for (sz j = 0; j < sel.len; j++) {
@@ -243,7 +243,7 @@ fn void test_textarea_press_counts_wrapped_rows() @test {
 	// number put the caret on whichever line happened to be that far down.
 	DString body = dstring::temp();
 	body.append_string("first\n");
-	for (int i = 0; i < 120; i++) body.append_char('A');
+	for (sz i = 0; i < 120; i++) body.append_char('A');
 	body.append_string("\nthird");
 	boba::Textarea ta = boba::new_textarea(40, 10);
 	ta.handle_paste(body.str_view());
@@ -251,13 +251,13 @@ fn void test_textarea_press_counts_wrapped_rows() @test {
 	ta.height = 10;
 	ta.scroll_offset = 0;
 
-	int content_w = 40 - ta.text_offset();
+	sz content_w = 40 - ta.text_offset();
 	assert(content_w == 37);
 
 	// Line 1 is one row, so rows 1..4 are line 2's four chunks: row 2 is its
 	// second chunk, and a column inside it counts from where that chunk starts.
-	int row = -1;
-	int col = -1;
+	sz row = -1;
+	sz col = -1;
 	ta.text_pos_at(2, 10, &row, &col);
 	assert(row == 1);
 	assert(col == content_w + (10 - ta.text_offset()));
@@ -284,8 +284,8 @@ fn void test_textarea_press_reads_from_the_scrolled_top() @test {
 	ta.height = 10;
 	ta.scroll_offset = 2;
 
-	int row = -1;
-	int col = -1;
+	sz row = -1;
+	sz col = -1;
 	ta.text_pos_at(0, 5, &row, &col);
 	assert(row == 2);
 	assert(col == 5 - ta.text_offset());
@@ -296,7 +296,7 @@ fn void test_textarea_set_cursor_leaves_an_onscreen_view_alone() @test {
 	// not scroll. The rule this replaced compared line numbers against the
 	// view height, which jumps once wrapping puts fewer lines on screen.
 	DString body = dstring::temp();
-	for (int i = 1; i <= 25; i++) body.append_string(string::tformat("line %d\n", i));
+	for (sz i = 1; i <= 25; i++) body.append_string(string::tformat("line %d\n", i));
 	boba::Textarea ta = boba::new_textarea(40, 10);
 	ta.handle_paste(body.str_view());
 	ta.width = 40;
@@ -318,7 +318,7 @@ fn void test_textarea_cursor_sits_on_the_wrapped_chunk() @test {
 	// a wrapped line above the caret has to move it down with the text.
 	DString body = dstring::temp();
 	body.append_string("first\n");
-	for (int i = 0; i < 120; i++) body.append_char('A');
+	for (sz i = 0; i < 120; i++) body.append_char('A');
 	body.append_string("\nthird");
 	boba::Textarea ta = boba::new_textarea(40, 10);
 	ta.handle_paste(body.str_view());
@@ -328,7 +328,7 @@ fn void test_textarea_cursor_sits_on_the_wrapped_chunk() @test {
 	ta.focused = true;
 	ta.set_cursor(1, 40);
 
-	int content_w = 40 - ta.text_offset();
+	sz content_w = 40 - ta.text_offset();
 	xray::ContentCursor c = ta.cursor(xray::new_rect(0, 0, 40, 10));
 	assert(c.has_cursor);
 	assert(c.y == 2); // line 1's second chunk
@@ -342,19 +342,19 @@ fn void test_textarea_caret_visual_pos_clamps_to_the_last_chunk() @test {
 	// view disagree by a row.
 	boba::Textarea ta = boba::new_textarea(40, 10);
 	DString body = dstring::temp();
-	for (int i = 0; i < 37; i++) body.append_char('A');
+	for (sz i = 0; i < 37; i++) body.append_char('A');
 	body.append_string("\nbb");
 	ta.handle_paste(body.str_view());
 	ta.width = 40;
 	ta.height = 10;
 	ta.scroll_offset = 0;
 
-	int content_w = 40 - ta.text_offset();
+	sz content_w = 40 - ta.text_offset();
 	assert(content_w == 37);
 	ta.set_cursor(0, content_w);
 
-	int row = -1;
-	int col = -1;
+	sz row = -1;
+	sz col = -1;
 	ta.caret_visual_pos(&row, &col);
 	assert(row == 0);
 	assert(col == content_w);

@@ -6,12 +6,13 @@ For usage, see `README.md`. For a quick API map, see `AGENTS.md`.
 
 ## Module map
 
-Five modules, one-way dependency chain:
+Six modules, one-way dependency chain:
 
 ```
-xray    — cell grid, diff renderer, layout solver, color        (no internal deps)
-glaze   — styles, borders, gradients → ANSI strings              (no internal deps)
-milktea — event loop, input parsing, TTY control, View/Cmd       (depends on xray)
+dye     — Color, palettes, HSL/HCL/LUV colour spaces              (no internal deps)
+xray    — cell grid, diff renderer, layout solver                (depends on dye)
+glaze   — styles, borders, gradients → ANSI strings              (depends on dye)
+milktea — event loop, input parsing, TTY control, View/Cmd       (depends on dye, xray)
 boba    — widget collection (list, textinput, viewport, ...)     (depends on milktea, glaze, xray)
 taro    — QuickJS bridge (JS models drive milktea from taro.js)  (depends on milktea, glaze, xray, boba)
 ```
@@ -21,6 +22,18 @@ standalone. `glaze` produces ANSI-styled strings; `xray` owns the persistent
 cell grid and the diffing renderer. `milktea` composites the two: a `View`
 carries either a plain string (parsed by xray's ANSI parser) or a direct
 `Cell[]` grid. Package manifests (`*/manifest.json`) encode this same order.
+
+`dye` sits under both. It owns the one `Color` type, its constructors, the
+xterm-256 palette and the downsampling between colour depths, plus the
+colour-space maths (sRGB↔linear, XYZ, LUV, HSL, HCL) that `hsl`/`hcl`/
+`blend_luv` are built from. `xray` and `glaze` each alias `Color` and the
+constructors into their own namespace, so a caller still writes
+`glaze::color_hex(...)` or `xray::color_rgb(...)` and never names `dye`.
+
+The type is shared, but not every field means something to both: `dye::Color`
+carries an alpha channel and a `TRANSPARENT` kind that only xray's compositor
+acts on. glaze renders to a string with no layer beneath it, so it treats
+`TRANSPARENT` the way it treats `NONE` — it emits nothing.
 
 `taro/taro.c` and `vendor/quickjs/*.c` are C sources pulled in via
 `c-sources`; `taro/taro.c3` declares `extern fn` bindings into that C layer.
@@ -47,9 +60,10 @@ carries either a plain string (parsed by xray's ANSI parser) or a direct
   which `dispatch()` calls and chains through `update()` again.
 - `View` — either `content: String` (parsed by xray's ANSI parser) or a
   direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus cursor
-  state, alt-screen flag, mouse mode, and up to `MAX_OVERLAYS` (8)
-  `Overlay` entries for floating content (menus, shadows) over the base
-  view. Built fluently: `new_view(s).set_cursor(x, y).set_alt_screen(true)`.
+  state, mouse mode, and up to `MAX_OVERLAYS` (8) `Overlay` entries for
+  floating content (menus, shadows) over the base view. Built fluently:
+  `view(s).set_cursor(x, y).set_mouse_mode(mode)`. The alternate screen
+  is a program option (`Options.alt_screen`), entered once before `init()`.
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`
@@ -181,8 +195,8 @@ stderr, which belong to the rendering surface).
   Anything from the temp allocator (`dstring::temp()`, `string::tformat()`)
   is freed at block exit — models must not stash temp-allocated strings
   across frames.
-- **Heap ownership**: `xray::new_screen_buffer`, `xray::new_renderer`, and
-  `xray::new_layer` return heap pointers the caller owns.
+- **Heap ownership**: `xray::new_screen_buffer` and `xray::new_renderer`
+  return heap pointers the caller owns.
   `Program.run()` frees the renderer in its shutdown `defer`. Temporary
   `ScreenBuffer`s created mid-render for overlay blending always pair
   their allocation with `defer { tmp.destroy(); mem::free(tmp); }`.

@@ -9,8 +9,8 @@ extern fn int rand();
 extern fn void srand(uint seed);
 extern fn long c3_time_ms_long();
 
-const int MAX_W = 400;
-const int MAX_H = 400;
+const sz MAX_W = 400;
+const sz MAX_H = 400;
 
 // Canonical DOOM fire palette: 37 RGB colors (from DoomFirePSX)
 // Index 0 = coldest (near-black), index 36 = hottest (white)
@@ -63,21 +63,21 @@ FireColor[37] fire_palette = {
 // Each entry: content = "▀" (U+2580), style.fg = palette color (for top pixel).
 xray::Cell[37] fire_cells;
 
-const int FIRE_MAX = 37;
+const sz FIRE_MAX = 37;
 
 struct FireModel {
-	int* fire;
-	int width;
-	int height;
+	sz* fire;
+	sz width;
+	sz height;
 	long startTime;
 	// Pre-allocated cell grid for direct rendering
 	xray::Cell[] view_cells;
-	int view_cols;
-	int view_rows;
+	sz view_cols;
+	sz view_rows;
 }
 
 fn void init_fire_cells() {
-	for (int i = 0; i < FIRE_MAX; i++) {
+	for (sz i = 0; i < FIRE_MAX; i++) {
 		FireColor c   = fire_palette[i];
 		xray::Style s = xray::default_style().set_fg(xray::color_rgb(c.r, c.g, c.b));
 		fire_cells[i] = xray::new_cell("\xe2\x96\x80", 1, s);
@@ -90,9 +90,9 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	self.startTime = c3_time_ms_long();
 	self.width = 80;
 	self.height = 48;
-	self.fire = mem::new_array(int, MAX_W * MAX_H);
-	for (int i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
-	for (int x = 0; x < self.width; x++) {
+	self.fire = mem::new_array(sz, MAX_W * MAX_H);
+	for (sz i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
+	for (sz x = 0; x < self.width; x++) {
 		self.fire[(self.height - 1) * self.width + x] = 36;
 	}
 	self.view_cols = self.width;
@@ -105,19 +105,19 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 }
 
 
-fn void spread_pixel(FireModel* m, int idx) {
+fn void spread_pixel(FireModel* m, sz idx) {
 	if (idx < m.width) return;
-	int pixel = m.fire[idx];
+	sz pixel = m.fire[idx];
 	if (pixel == 0) {
 		m.fire[idx - m.width] = 0;
 		return;
 	}
-	int rnd     = rand() % 4;
-	int dst     = idx - rnd + 1;
-	int buf_len = m.width * m.height;
+	sz rnd     = rand() % 4;
+	sz dst     = idx - rnd + 1;
+	sz buf_len = m.width * m.height;
 	if (dst - m.width >= 0 && dst - m.width < buf_len) {
-		int decay   = rnd & 1;
-		int new_val = pixel - decay;
+		sz decay   = rnd & 1;
+		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.width] = new_val;
 	}
@@ -125,16 +125,16 @@ fn void spread_pixel(FireModel* m, int idx) {
 
 fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		int new_w = msg.window_size.width;
-		int new_h = msg.window_size.height * 2;
+		sz new_w = msg.window_size.width;
+		sz new_h = msg.window_size.height * 2;
 		if (new_w > MAX_W) new_w = MAX_W;
 		if (new_h > MAX_H) new_h = MAX_H;
 		self.width = new_w;
 		self.height = new_h;
-		for (int i = 0; i < self.width * self.height; i++) {
+		for (sz i = 0; i < self.width * self.height; i++) {
 			self.fire[i] = 0;
 		}
-		for (int x = 0; x < self.width; x++) {
+		for (sz x = 0; x < self.width; x++) {
 			self.fire[(self.height - 1) * self.width + x] = 36;
 		}
 		// Reallocate view cell grid
@@ -146,8 +146,8 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	}
 
 	if (msg.kind == milktea::MsgKind.TICK) {
-		for (int x = 0; x < self.width; x++) {
-			for (int y = 0; y < self.height; y++) {
+		for (sz x = 0; x < self.width; x++) {
+			for (sz y = 0; y < self.height; y++) {
 				spread_pixel(self, y * self.width + x);
 			}
 		}
@@ -168,19 +168,19 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View FireModel.view(FireModel* self) @dynamic {
-	if (self.width == 0) return milktea::new_view("Initializing...");
+	if (self.width == 0) return milktea::view("Initializing...");
 
 	// Build cell grid directly — no string, no ANSI, no parsing.
 	// xray's diff engine handles minimal output.
-	int view_w = self.view_cols;
-	int view_h = self.view_rows;
+	sz view_w = self.view_cols;
+	sz view_h = self.view_rows;
 
-	for (int vy = 0; vy < view_h; vy++) {
-		int fire_y     = vy * 2;
-		int row_offset = vy * view_w;
-		for (int vx = 0; vx < view_w; vx++) {
-			int top_val = self.fire[fire_y * self.width + vx];
-			int bot_val = self.fire[(fire_y + 1) * self.width + vx];
+	for (sz vy = 0; vy < view_h; vy++) {
+		sz fire_y     = vy * 2;
+		sz row_offset = vy * view_w;
+		for (sz vx = 0; vx < view_w; vx++) {
+			sz top_val = self.fire[fire_y * self.width + vx];
+			sz bot_val = self.fire[(fire_y + 1) * self.width + vx];
 
 			// Start with the pre-built cell for the top pixel's fg color.
 			// Set the bg to the bottom pixel's color.
@@ -191,12 +191,12 @@ fn milktea::View FireModel.view(FireModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)view_w, (sz)view_h);
+	return milktea::cell_view(self.view_cells, view_w, view_h);
 }
 
 fn int main() {
 	FireModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

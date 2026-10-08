@@ -7,23 +7,23 @@ struct PaintResult {
 	// than one does, the last one painted wins — but content is expected to
 	// claim it only when focused, so that should not arise.
 	ContentCursor cursor;
-	int cursor_dx, cursor_dy;
+	sz cursor_dx, cursor_dy;
 
 	// Smallest repaint interval any node asked for, in milliseconds, or 0 if
 	// none did. The runtime schedules one timer from this rather than each
 	// node running its own.
-	int repaint_ms;
+	sz repaint_ms;
 }
 
 // paint walks a solved tree and draws it into buf.
-//
+// 
 // Children are painted after their parent and later siblings after earlier
 // ones, so a zstack layers in the order things were added. Nothing clips to
 // its parent's rect — only to the buffer — because a shadow is drawn at an
 // offset and would otherwise be cut off by the very node casting it.
-//
+// 
 // The tree must already be solved against a rect inside buf.
-//
+// 
 // scratch is a spare buffer used only when a node blends (see Node.alpha). It
 // is grown as needed and reused across nodes and frames, so callers should
 // hang one off something long-lived and pass its address. Passing null
@@ -46,13 +46,13 @@ fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = nu
 }
 
 // Default blink period for a drawn cursor, in milliseconds per phase.
-const int CURSOR_BLINK_MS = 500;
+const sz CURSOR_BLINK_MS = 500;
 
 // draw_cursor runs a self-painting cursor's callback, last, once the grid is
 // finished. It has to be last because the callback is handed the character
 // already at that cell so it can show it through — which does not exist until
 // everything else has painted.
-//
+// 
 // now_ms drives the blink. xray has no clock of its own, so the caller
 // supplies one; milktea::draw passes milktea::time_ms().
 fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
@@ -60,10 +60,10 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 	if (!c.has_cursor || c.draw == null) return;
 	if (c.x < 0 || c.y < 0 || (sz)c.x >= self.width || (sz)c.y >= self.height) return;
 
-	int period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
+	sz period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
 	bool blink = ((now_ms / (long)period) % 2) == 0;
 
-	Cell* cell = self.cell_at((sz)c.x, (sz)c.y);
+	Cell* cell   = self.cell_at((sz)c.x, (sz)c.y);
 	String under = (cell != null && cell.content_len > 0) ? cell.content_str() : "";
 
 	// A drawn cursor animates, so ask for a repaint on its own blink period.
@@ -74,7 +74,9 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 
 	String drawn = c.draw(c.x, c.y, blink, under);
 	// An empty return means "leave the cell alone", which is how a blinking
+
 	// cursor spends its off phase.
+
 	if (drawn.len == 0) return;
 	// overlay_char writes exactly one cell slot, so a wide glyph — an emoji,
 	// a katakana character — cannot displace its neighbour.
@@ -93,16 +95,27 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		res.repaint_ms = n.repaint_ms;
 	}
 
-	// The shadow goes down first so the content lands on top of it.
+	// alpha 0 is "fully invisible": skip the node, its effects, and its
+	// subtree. A fade-out's final frame reaches value exactly 0, so this is
+	// what keeps that last painted frame from leaving a ghost behind. The
+	// repaint request is collected above first: a fade-in's opening frame
+	// also sits at alpha 0, and it must still ask for the next frame.
+	if (n.alpha_value == 0) return;
+
+	// The shadow goes down first so the content lands on top of it. A node's
+	// alpha scales the shadow along with the content: they are one object, so
+	// a half-faded panel casting a solid shadow would read as two.
 	if (n.layer_style.shadow.enabled) {
 		Rect outer = n.computed_rect;
-		int w = n.layout_metrics.unit_w();
-		int h = n.layout_metrics.unit_h();
-		int x = floor_cell(outer.x, w);
-		int y = floor_cell(outer.y, h);
+		sz w = n.layout_metrics.unit_w();
+		sz h = n.layout_metrics.unit_h();
+		sz x = floor_cell(outer.x, w);
+		sz y = floor_cell(outer.y, h);
 		self.paint_dx = outer.x - x * w;
 		self.paint_dy = outer.y - y * h;
-		self.render_shadow(x, y, outer.w / w, outer.h / h, n.layer_style.shadow);
+		Shadow s = n.layer_style.shadow;
+		s.opacity = scale_opacity(s.opacity, n.alpha_value);
+		if (s.opacity > 0) self.render_shadow(x, y, outer.w / w, outer.h / h, s);
 		self.paint_dx = content_area.x - r.x * w;
 		self.paint_dy = content_area.y - r.y * h;
 	}
@@ -117,7 +130,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	if (n.content != null && r.w > 0 && r.h > 0) {
 		String s = n.content.render(r);
 		if (s.len > 0) {
-			if (n.alpha_value != 0 && n.alpha_value < 255 && scratch != null) {
+			if (n.alpha_value < 255 && scratch != null) {
 				self.paint_blended(r, s, n.alpha_value, scratch);
 			} else {
 				self.render_ansi_string((sz)r.x, (sz)r.y, s, default_style());
@@ -135,7 +148,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	}
 
 	self.decorated_content = false;
-	for (int i = 0; i < n.child_count; i++) {
+	for (sz i = 0; i < n.child_count; i++) {
 		self.paint_node(n.children[i], res, scratch);
 	}
 
@@ -146,8 +159,22 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	self.paint_dy = content_area.y - r.y * n.layout_metrics.unit_h();
 	self.paint_extent = content_area;
 	if (n.layer_style.inner_shadow.enabled) {
-		self.render_inner_shadow(r.x, r.y, r.w, r.h, n.layer_style.inner_shadow);
+		InnerShadow is = n.layer_style.inner_shadow;
+		is.opacity = scale_opacity(is.opacity, n.alpha_value);
+		if (is.opacity > 0) self.render_inner_shadow(r.x, r.y, r.w, r.h, is);
 	}
+}
+
+// scale_opacity dims an effect's opacity by a node's alpha, so shadows fade
+// with the node that casts them.
+// 
+// 255 — the opaque default — leaves the opacity untouched, and every other
+// value scales proportionally, rounding to nearest so a nearly-opaque node
+// does not lose its shadow to truncation. (Alpha 0 never reaches here: paint
+// skips such a node's subtree entirely.)
+fn char scale_opacity(char opacity, char alpha) @local {
+	if (alpha == 255) return opacity;
+	return (char)(((sz)opacity * (sz)alpha + 127) / 255);
 }
 
 // paint_blended renders content into a scratch buffer and blends its colors
@@ -160,7 +187,7 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 		tmp = new_screen_buffer((sz)r.w, (sz)r.h);
 		*scratch = tmp;
 	} else if (tmp.width < (sz)r.w || tmp.height < (sz)r.h) {
-		sz w = tmp.width  < (sz)r.w ? (sz)r.w : tmp.width;
+		sz w = tmp.width < (sz)r.w ? (sz)r.w : tmp.width;
 		sz h = tmp.height < (sz)r.h ? (sz)r.h : tmp.height;
 		tmp.resize(w, h);
 	}
@@ -174,7 +201,9 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 			sz dx = (sz)r.x + cx;
 			sz dy = (sz)r.y + cy;
 			// sz is signed: a node scrolled off the top or left gives
+
 			// negative coordinates that would index before the buffer.
+
 			if (dx < 0 || dy < 0 || dx >= self.width || dy >= self.height) continue;
 
 			Cell src = tmp.cells[cy * tmp.width + cx];
@@ -183,7 +212,7 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 			Cell* dst = &self.cells[dy * self.width + dx];
 
 			if (src.style.bg.kind == ColorKind.TRUECOLOR) {
-				self.record_tint((int)dx, (int)dy, src.style.bg);
+				self.record_tint((sz)dx, (sz)dy, src.style.bg);
 				dst.style.bg = src.style.bg.blend_over(dst.style.bg);
 			}
 			if (src.style.fg.kind == ColorKind.TRUECOLOR) {

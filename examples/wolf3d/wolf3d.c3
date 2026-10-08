@@ -13,8 +13,8 @@ struct Pixel {
 	char r, g, b;
 }
 
-const int MAP_WIDTH  = 16;
-const int MAP_HEIGHT = 16;
+const sz MAP_WIDTH  = 16;
+const sz MAP_HEIGHT = 16;
 
 const char[MAP_WIDTH * MAP_HEIGHT] MAP = {
 	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -42,8 +42,8 @@ struct Wolf3D {
 	float plane_x, plane_y;
 
 	// Viewport
-	int width, height;
-	int tick_count;
+	sz width, height;
+	sz tick_count;
 
 	// Rendering buffers
 	xray::Cell[] cells;
@@ -51,7 +51,7 @@ struct Wolf3D {
 	float[] depth;
 
 	// Input state
-	int key_w, key_s, key_a, key_d, key_left, key_right;
+	sz key_w, key_s, key_a, key_d, key_left, key_right;
 }
 
 // ── Tea Methods ──────────────────────────────────────────────────────────────
@@ -109,19 +109,19 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 
 		float move_speed = 0.25f;
 		float rot_speed  = 0.12f;
-		int thresh       = self.tick_count - 5;
+		sz thresh       = self.tick_count - 5;
 
 		if (self.key_w >= thresh) {
-			if (MAP[(int)(self.pos_x + self.dir_x * move_speed) + (int)(self.pos_y) * MAP_WIDTH]
+			if (MAP[(sz)(self.pos_x + self.dir_x * move_speed) + (sz)(self.pos_y) * MAP_WIDTH]
 				== 0) self.pos_x += self.dir_x * move_speed;
-			if (MAP[(int)(self.pos_x) + (int)(self.pos_y + self.dir_y * move_speed) * MAP_WIDTH]
+			if (MAP[(sz)(self.pos_x) + (sz)(self.pos_y + self.dir_y * move_speed) * MAP_WIDTH]
 				== 0) self.pos_y += self.dir_y * move_speed;
 			self.key_w = 0;
 		}
 		if (self.key_s >= thresh) {
-			if (MAP[(int)(self.pos_x - self.dir_x * move_speed) + (int)(self.pos_y) * MAP_WIDTH]
+			if (MAP[(sz)(self.pos_x - self.dir_x * move_speed) + (sz)(self.pos_y) * MAP_WIDTH]
 				== 0) self.pos_x -= self.dir_x * move_speed;
-			if (MAP[(int)(self.pos_x) + (int)(self.pos_y - self.dir_y * move_speed) * MAP_WIDTH]
+			if (MAP[(sz)(self.pos_x) + (sz)(self.pos_y - self.dir_y * move_speed) * MAP_WIDTH]
 				== 0) self.pos_y -= self.dir_y * move_speed;
 			self.key_s = 0;
 		}
@@ -150,26 +150,26 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
-	int w  = self.width;
-	int h  = self.height;
-	int ph = h * 2;
+	sz w  = self.width;
+	sz h  = self.height;
+	sz ph = h * 2;
 
 	// Viewport
-	int width, height;
-	int tick_count;
+	sz width, height;
+	sz tick_count;
 
 	// Rendering buffers
 	xray::Cell[] cells;
 	Pixel[] pixels;
-	for (int x = 0; x < w; x++) {
-		for (int sub = 0; sub < 2; sub++) {
+	for (sz x = 0; x < w; x++) {
+		for (sz sub = 0; sub < 2; sub++) {
 			// 2x horizontal super-sampling
 			float camera_x  = 2.0f * ((float)x + (sub == 0 ? 0.25f : 0.75f)) / (float)w - 1.0f;
 			float ray_dir_x = self.dir_x + self.plane_x * camera_x;
 			float ray_dir_y = self.dir_y + self.plane_y * camera_x;
 
-			int map_x = (int)self.pos_x;
-			int map_y = (int)self.pos_y;
+			sz map_x = (sz)self.pos_x;
+			sz map_y = (sz)self.pos_y;
 
 			float side_dist_x, side_dist_y;
 
@@ -177,9 +177,9 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 			float delta_dist_y = (float)math::abs(1.0f / ray_dir_y);
 			float perp_wall_dist;
 
-			int step_x, step_y;
-			int hit = 0;
-			int side;
+			sz step_x, step_y;
+			sz hit = 0;
+			sz side;
 
 			if (ray_dir_x < 0) {
 				step_x = -1;
@@ -215,11 +215,11 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 				perp_wall_dist = (side_dist_y - delta_dist_y);
 			}
 
-			int line_height = (int)((float)ph / perp_wall_dist);
+			sz line_height = (sz)((float)ph / perp_wall_dist);
 
-			int draw_start = -line_height / 2 + ph / 2;
+			sz draw_start = -line_height / 2 + ph / 2;
 			if (draw_start < 0) draw_start = 0;
-			int draw_end = line_height / 2 + ph / 2;
+			sz draw_end = line_height / 2 + ph / 2;
 			if (draw_end >= ph) draw_end = ph - 1;
 
 			Pixel color;
@@ -237,7 +237,7 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 				color.b /= 2;
 			}
 
-			for (int y = 0; y < ph; y++) {
+			for (sz y = 0; y < ph; y++) {
 				sz idx = (sz)(y * w + x);
 				Pixel sample_col;
 				if (y < draw_start) {
@@ -251,16 +251,16 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 				if (sub == 0) {
 					self.pixels[idx] = sample_col;
 				} else {
-					self.pixels[idx].r = (char)(((int)self.pixels[idx].r + (int)sample_col.r) / 2);
-					self.pixels[idx].g = (char)(((int)self.pixels[idx].g + (int)sample_col.g) / 2);
-					self.pixels[idx].b = (char)(((int)self.pixels[idx].b + (int)sample_col.b) / 2);
+					self.pixels[idx].r = (char)(((sz)self.pixels[idx].r + (sz)sample_col.r) / 2);
+					self.pixels[idx].g = (char)(((sz)self.pixels[idx].g + (sz)sample_col.g) / 2);
+					self.pixels[idx].b = (char)(((sz)self.pixels[idx].b + (sz)sample_col.b) / 2);
 				}
 			}
 		}
 	}
 
-	for (int ty = 0; ty < h; ty++) {
-		for (int tx = 0; tx < w; tx++) {
+	for (sz ty = 0; ty < h; ty++) {
+		for (sz tx = 0; tx < w; tx++) {
 			sz top_idx = (sz)((ty * 2) * w + tx);
 			sz bot_idx = (sz)((ty * 2 + 1) * w + tx);
 			Pixel top  = self.pixels[top_idx];
@@ -271,12 +271,12 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 fn int main(String[] args) {
 	Wolf3D* app = mem::new(Wolf3D);
-	if (catch err = milktea::@run_program(app)) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

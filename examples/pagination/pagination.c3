@@ -7,11 +7,11 @@ import std::io;
 import std::core::string;
 import std::core::dstring;
 
-const int TOTAL_ITEMS = 50;
+const sz TOTAL_ITEMS = 50;
 
 struct PaginationModel {
 	boba::Pagination pg;
-	int cursor;
+	sz cursor;
 	bool[1000] selected;
 }
 
@@ -26,8 +26,8 @@ fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) 
 
 	if (self.pg.handle_key(k)) return null;
 
-	int page_start = self.pg.page_start();
-	int page_end   = self.pg.page_end();
+	sz page_start = self.pg.page_start();
+	sz page_end   = self.pg.page_end();
 
 	switch (k.code) {
 		case milktea::KeyCode.CTRL_C:
@@ -65,14 +65,14 @@ fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
 	glaze::Style dim_style    = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	DString out = dstring::temp();
-	int tp      = self.pg.total_pages();
+	sz tp      = self.pg.total_pages();
 	out.append_string(title_style.render(string::tformat("Items (page %d of %d)", self.pg.page + 1, tp)));
 	out.append_char('\n');
 
-	int page_start = self.pg.page_start();
-	int page_end   = self.pg.page_end();
+	sz page_start = self.pg.page_start();
+	sz page_end   = self.pg.page_end();
 
-	for (int i = page_start; i < page_end; i++) {
+	for (sz i = page_start; i < page_end; i++) {
 		String check     = self.selected[i] ? "\xe2\x9c\x93" : " ";
 		String marker    = (i == self.cursor) ? "> " : "  ";
 		String item_text = string::tformat("Item %03d", i + 1);
@@ -93,11 +93,11 @@ fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
 	out.append_string(self.pg.view());
 	out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  ←→ pages  |  q quit"));
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	PaginationModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

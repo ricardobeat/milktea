@@ -10,8 +10,8 @@ const int MSG_CLEAR_ERROR = 1;
 
 struct PickerModel {
 	boba::FilePicker fp;
-	int width;
-	int height;
+	sz width;
+	sz height;
 	bool has_error;
 	String error_msg;
 }
@@ -74,12 +74,12 @@ fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
 	}
 
 	out.append_string(self.fp.view());
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	PickerModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	if (m.fp.selected.len > 0) {
 		io::printfn("Selected: %s", m.fp.selected);
 	} else {

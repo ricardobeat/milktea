@@ -11,7 +11,7 @@ struct Resp {
 alias StreamCb = fn int(char* data, int len, void* user);
 
 extern fn void mimo_global_init();
-extern fn int mimo_http_post(char* url, char* auth, char* body, int timeout_ms, Resp* out);
-extern fn int mimo_http_post_stream(char* url, char* auth, char* body, int timeout_ms, StreamCb cb, void* user, int* out_status);
+extern fn int mimo_http_post(ZString url, ZString auth, ZString body, int timeout_ms, Resp* out);
+extern fn int mimo_http_post_stream(ZString url, ZString auth, ZString body, int timeout_ms, StreamCb cb, void* user, int* out_status);
 extern fn void mimo_free(void* p);
 extern fn int mimo_run_command(char* cmd, char* outbuf, int outsize, int* exit_code);

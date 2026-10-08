@@ -2,7 +2,7 @@
 	"provides": "milktea",
 	"sources": ["**"],
 	"c-sources": ["tty_winsize.c"],
-	"dependencies": ["glaze", "xray"],
+	"dependencies": ["dye", "glaze", "xray"],
 	"targets": {
 		"macos-aarch64": {},
 		"macos-x64": {},

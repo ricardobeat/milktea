@@ -45,7 +45,7 @@ const String OSC_CURSOR_COLOR_RESET = "\x1b]112\x1b\\";
 // cursor_style_seq returns the ANSI escape to set cursor shape.
 // Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
 fn String cursor_style_seq(CursorShape shape, bool blink) {
-	int style = ((int)shape * 2) + 1;
+	sz style = ((sz)shape * 2) + 1;
 	if (!blink) style++;
 	return string::tformat("\x1b[%d q", style);
 }
@@ -59,10 +59,17 @@ fn String cells_to_string(View v) {
 	DString out = dstring::temp();
 	xray::Style pen = xray::default_style();
 
-	for (sz row = 0; row < v.cells_height; row++) {
+	// cells_width/cells_height are carried separately from the cells slice and
+	// can overstate it, so bound the walk by what the slice actually holds
+	// rather than by the declared extent.
+	sz stride = v.cells_width;
+	sz rows   = stride > 0 ? v.cells.len / stride : 0;
+	if (rows > v.cells_height) rows = v.cells_height;
+
+	for (sz row = 0; row < rows; row++) {
 		if (row > 0) out.append_char('\n');
-		sz line_start = row * v.cells_width;
-		for (sz col = 0; col < v.cells_width; col++) {
+		sz line_start = row * stride;
+		for (sz col = 0; col < stride; col++) {
 			xray::Cell cell = v.cells[line_start + col];
 			String sgr = cell.style.diff_sgr(pen);
 			if (sgr.len > 0) out.append_string(sgr);
@@ -106,8 +113,8 @@ fn void render_view_to(View v, DString* out) {
 	// After SGR_CLEAR_HOME, content starts at terminal position (1,1),
 	// so we add 1 to convert to 1-indexed terminal coordinates.
 	if (v.has_cursor) {
-		int term_row = v.cursor.y + 1;
-		int term_col = v.cursor.x + 1;
+		sz term_row = v.cursor.y + 1;
+		sz term_col = v.cursor.x + 1;
 		out.append_string(cursor_to(term_row, term_col));
 
 		// Set cursor color via OSC 12
@@ -137,10 +144,24 @@ fn void render_view(View v) {
 	write_stdout((char[])out.str_view());
 }
 
+// g_manual_alt_screen records that enter_alt_screen() was called outside of a
+// running Program. Program.run() starts from the assumption that it owns the
+// alt screen and that the terminal is not in it yet; a manual entry beforehand
+// breaks that, leaving in_alt_screen false forever so the exit path never pops
+// back to the normal buffer. run() checks this flag and refuses to start.
+bool g_manual_alt_screen = false;
+
+// enter_alt_screen switches the terminal to the alternate screen buffer.
+//
+// A Program with an alt-screen view enters and exits the alt screen on its own
+// — do not call this before @run_program/run(); doing so is an error and run()
+// will reject it. This is for direct rendering without a Program.
 fn void enter_alt_screen() {
+	g_manual_alt_screen = true;
 	write_stdout((char[])SGR_ALT_ON);
 }
 fn void exit_alt_screen() {
+	g_manual_alt_screen = false;
 	write_stdout((char[])SGR_ALT_OFF);
 }
 fn void show_cursor() {
@@ -211,26 +232,6 @@ fn void disable_mouse_pixels() {
 	write_stdout((char[])SGR_MOUSE_PIXELS_OFF);
 }
 
-fn String cursor_to(int row, int col) {
+fn String cursor_to(sz row, sz col) {
 	return string::tformat("\x1b[%d;%dH", row, col);
-}
-
-fn String cursor_up(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dA", n);
-}
-
-fn String cursor_down(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dB", n);
-}
-
-fn String cursor_right(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dC", n);
-}
-
-fn String cursor_left(int n) {
-	if (n <= 0) return "";
-	return string::tformat("\x1b[%dD", n);
 }

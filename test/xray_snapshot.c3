@@ -11,8 +11,8 @@ const String SNAP = "xray";
 fn String render_rows(xray::ScreenBuffer* sb) @local {
 	DString out = dstring::temp();
 	xray::Style pen = xray::default_style();
-	for (int row = 0; row < sb.height; row++) {
-		for (int col = 0; col < sb.width; col++) {
+	for (sz row = 0; row < sb.height; row++) {
+		for (sz col = 0; col < sb.width; col++) {
 			Cell* c = sb.cell_at(col, row);
 			String sgr = c.style.diff_sgr(pen);
 			if (sgr.len > 0) {

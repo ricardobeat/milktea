@@ -18,12 +18,12 @@ struct MenuItem {
 }
 
 // Cells of padding on each side of a dropdown item, inside its highlight.
-const int ITEM_PAD = 1;
+const sz ITEM_PAD = 1;
 // Least space between an item's label and its key.
-const int ITEM_GAP = 2;
+const sz ITEM_GAP = 2;
 
-const int MENU_COLS  = 4;
-const int MENU_ITEMS = 4;
+const sz MENU_COLS  = 4;
+const sz MENU_ITEMS = 4;
 
 // TitleSlot/ItemSlot are the click contexts passed as the void* ctx to
 // on_click — one struct per bar title / dropdown row, holding the index and
@@ -33,27 +33,27 @@ const int MENU_ITEMS = 4;
 // own click context.
 struct TitleSlot {
 	Menu* menu;
-	int index;
+	sz index;
 }
 
 struct ItemSlot {
 	Menu* menu;
-	int index;
+	sz index;
 }
 
 struct Menu {
 	String[MENU_COLS] titles;
 	// Column where each title starts in the bar, so a dropdown can open under
 	// the one that owns it.
-	int[MENU_COLS] title_x;
+	sz[MENU_COLS] title_x;
 	MenuItem[MENU_COLS][MENU_ITEMS] items;
 
-	int selected;      // which title
-	int item;          // which item within the open dropdown
+	sz selected;      // which title
+	sz item;          // which item within the open dropdown
 	bool open;
 
 	// Narrowest a dropdown gets, border included; longer items widen it.
-	int item_width;
+	sz item_width;
 
 	TitleSlot[MENU_COLS] title_slots;
 	ItemSlot[MENU_ITEMS] item_slots;
@@ -73,18 +73,18 @@ enum Chosen {
 	PICKED,
 }
 
-fn Menu new_menu(String[MENU_COLS] titles, int item_width = 24) {
+fn Menu new_menu(String[MENU_COLS] titles, sz item_width = 24) {
 	Menu m = { .titles = titles, .item_width = item_width };
 	// Titles sit end to end from the left edge, each as wide as its own text.
-	int x = 0;
-	for (int i = 0; i < MENU_COLS; i++) {
+	sz x = 0;
+	for (sz i = 0; i < MENU_COLS; i++) {
 		m.title_x[i] = x;
 		x += glaze::string_width(titles[i]);
 	}
 	return m;
 }
 
-fn void Menu.set_items(&self, int col, MenuItem[MENU_ITEMS] items) {
+fn void Menu.set_items(&self, sz col, MenuItem[MENU_ITEMS] items) {
 	if (col >= 0 && col < MENU_COLS) self.items[col] = items;
 }
 
@@ -158,21 +158,21 @@ fn Chosen Menu.take_pending(&self) {
 // TitleSlot*/ItemSlot*/Menu* set via .id_with(&slot) at registration time —
 // the slot addresses stay valid because they live on Menu itself, which
 // outlives the node tree that registered them.
-fn void title_clicked(void* id, String id_str, int col, int row) @local {
+fn void title_clicked(void* id, String id_str, sz col, sz row) @local {
 	TitleSlot* slot = (TitleSlot*)id;
 	slot.menu.selected = slot.index;
 	slot.menu.open = true;
 	slot.menu.item = 0;
 }
 
-fn void item_clicked(void* id, String id_str, int col, int row) @local {
+fn void item_clicked(void* id, String id_str, sz col, sz row) @local {
 	ItemSlot* slot = (ItemSlot*)id;
 	slot.menu.item = slot.index;
 	slot.menu.open = false;
 	slot.menu.pending = Chosen.PICKED;
 }
 
-fn void dropdown_dismissed(void* id, String id_str, int col, int row) @local {
+fn void dropdown_dismissed(void* id, String id_str, sz col, sz row) @local {
 	Menu* m = (Menu*)id;
 	m.dismiss();
 	m.pending = Chosen.DISMISSED;
@@ -185,7 +185,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
 
 	xray::Node* row = milktea::hstack().height(milktea::cells(1));
-	for (int i = 0; i < MENU_COLS; i++) {
+	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
 		xray::Node* title_node = milktea::text(i == self.selected ? active : bar, self.titles[i])
 			.fit_width();
@@ -202,7 +202,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 // narrower than item_width. Each row is its own clickable node, and a click
 // anywhere on the panel that isn't a row (the border) falls through to
 // on_click_outside, which is exactly the dismiss behavior wanted there too.
-fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
+fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style panel = {
@@ -215,10 +215,10 @@ fn xray::Node* Menu.dropdown(&self, int below, Theme* th) {
 
 	xray::Node* panel_node = milktea::vbox(panel)
 		.at(self.title_x[self.selected], below)
-		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
+		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
 	panel_node.id_with(self).on_click_outside(&dropdown_dismissed);
 
-	for (int i = 0; i < MENU_ITEMS; i++) {
+	for (sz i = 0; i < MENU_ITEMS; i++) {
 		self.item_slots[i] = { .menu = self, .index = i };
 		glaze::Style s = i == self.item ? selected : item;
 		xray::Node* row_node = self.item_row(self.items[self.selected][i], s);

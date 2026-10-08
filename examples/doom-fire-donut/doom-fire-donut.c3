@@ -31,31 +31,31 @@ FireColor[37] fire_palette = {
 	{ 255, 255, 255 },
 	};
 
-const int FIRE_MAX_W = 400;
-const int FIRE_MAX_H = 400;
+const sz FIRE_MAX_W = 400;
+const sz FIRE_MAX_H = 400;
 
 struct Model {
 	glb::GlbModel* donut;
-	int* fire;
-	int fire_w;
-	int fire_h;
-	int tick;
+	sz* fire;
+	sz fire_w;
+	sz fire_h;
+	sz tick;
 	xray::Cell[] cells;
 }
 
-fn void spread_pixel(Model* m, int idx) {
+fn void spread_pixel(Model* m, sz idx) {
 	if (idx < m.fire_w) return;
-	int pixel = m.fire[idx];
+	sz pixel = m.fire[idx];
 	if (pixel == 0) {
 		m.fire[idx - m.fire_w] = 0;
 		return;
 	}
-	int rnd     = rand() % 4;
-	int dst     = idx - rnd + 1;
-	int buf_len = m.fire_w * m.fire_h;
+	sz rnd     = rand() % 4;
+	sz dst     = idx - rnd + 1;
+	sz buf_len = m.fire_w * m.fire_h;
 	if (dst - m.fire_w >= 0 && dst - m.fire_w < buf_len) {
-		int decay   = (rand() & 1) ? 0 : 1;
-		int new_val = pixel - decay;
+		sz decay   = (rand() & 1) ? 0 : 1;
+		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.fire_w] = new_val;
 	}
@@ -75,9 +75,9 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 
 	self.fire_w = 80;
 	self.fire_h = 48;
-	self.fire = mem::new_array(int, FIRE_MAX_W * FIRE_MAX_H);
+	self.fire = mem::new_array(sz, FIRE_MAX_W * FIRE_MAX_H);
 	self.tick = 0;
-	for (int i = 0; i < FIRE_MAX_W * FIRE_MAX_H; i++) self.fire[i] = 0;
+	for (sz i = 0; i < FIRE_MAX_W * FIRE_MAX_H; i++) self.fire[i] = 0;
 
 	self.cells = mem::new_array(xray::Cell, (sz)(self.fire_w * (self.fire_h / 2)));
 
@@ -86,14 +86,14 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		int new_w = msg.window_size.width;
-		int new_h = msg.window_size.height * 2;
+		sz new_w = msg.window_size.width;
+		sz new_h = msg.window_size.height * 2;
 		if (new_w > FIRE_MAX_W) new_w = FIRE_MAX_W;
 		if (new_h > FIRE_MAX_H) new_h = FIRE_MAX_H;
 		self.fire_w = new_w;
 		self.fire_h = new_h;
 		self.donut.resize(new_w, new_h / 2);
-		for (int i = 0; i < self.fire_w * self.fire_h; i++) self.fire[i] = 0;
+		for (sz i = 0; i < self.fire_w * self.fire_h; i++) self.fire[i] = 0;
 		mem::free(self.cells.ptr);
 		self.cells = mem::new_array(xray::Cell, (sz)(self.fire_w * (self.fire_h / 2)));
 		return null;
@@ -118,12 +118,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		self.donut.render();
 
 		// Seed bottom fire row
-		for (int x = 0; x < self.fire_w; x++) {
+		for (sz x = 0; x < self.fire_w; x++) {
 			self.fire[(self.fire_h - 1) * self.fire_w + x] = 36;
 		}
 		// Spread fire upward
-		for (int x = 0; x < self.fire_w; x++) {
-			for (int y = 0; y < self.fire_h; y++) {
+		for (sz x = 0; x < self.fire_w; x++) {
+			for (sz y = 0; y < self.fire_h; y++) {
 				spread_pixel(self, y * self.fire_w + x);
 			}
 		}
@@ -134,17 +134,17 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
-	int w  = self.fire_w;
-	int h  = self.fire_h;
-	int vh = h / 2;
+	sz w  = self.fire_w;
+	sz h  = self.fire_h;
+	sz vh = h / 2;
 
-	for (int vy = 0; vy < vh; vy++) {
-		int fire_y_top = vy * 2;
-		int fire_y_bot = vy * 2 + 1;
-		int row_off    = vy * w;
-		for (int vx = 0; vx < w; vx++) {
-			int f_top = self.fire[fire_y_top * w + vx];
-			int f_bot = self.fire[fire_y_bot * w + vx];
+	for (sz vy = 0; vy < vh; vy++) {
+		sz fire_y_top = vy * 2;
+		sz fire_y_bot = vy * 2 + 1;
+		sz row_off    = vy * w;
+		for (sz vx = 0; vx < w; vx++) {
+			sz f_top = self.fire[fire_y_top * w + vx];
+			sz f_bot = self.fire[fire_y_bot * w + vx];
 
 			glb::Pixel d_top = self.donut.pixels[fire_y_top * w + vx];
 			glb::Pixel d_bot = self.donut.pixels[fire_y_bot * w + vx];
@@ -177,12 +177,12 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)vh);
+	return milktea::cell_view(self.cells, w, vh);
 }
 
 fn int main() {
 	Model* m = mem::new(Model);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

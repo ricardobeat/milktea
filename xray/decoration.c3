@@ -25,7 +25,7 @@ struct Decoration {
 	// the geometry); filled in by the paint traversal from the solved rect.
 	Rect rect;
 	bool pixel_rect;
-	int pad_top, pad_right, pad_bottom, pad_left;
+	sz pad_top, pad_right, pad_bottom, pad_left;
 
 	DecorationKind kind;
 	Color color;
@@ -126,7 +126,7 @@ fn Decoration Decoration.with_shadow(self, float dx, float dy, float blur, Color
 }
 
 // Extra GUI inset in logical pixels; cell constraints size the box before it.
-fn Decoration Decoration.padding(self, int top, int right, int bottom, int left) {
+fn Decoration Decoration.padding(self, sz top, sz right, sz bottom, sz left) {
 	self.pad_top = top > 0 ? top : 0;
 	self.pad_right = right > 0 ? right : 0;
 	self.pad_bottom = bottom > 0 ? bottom : 0;

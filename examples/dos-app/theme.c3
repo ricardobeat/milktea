@@ -13,7 +13,7 @@ import std::io::file;
 // reads a color directly would not follow a theme change, so nothing does.
 const String THEMES_PATH = "examples/dos-app/themes.json";
 
-const int MAX_THEMES = 8;
+const sz MAX_THEMES = 8;
 
 struct Theme {
 	String name;
@@ -33,8 +33,8 @@ struct Theme {
 
 struct ThemeSet {
 	Theme[MAX_THEMES] themes;
-	int count;
-	int active;
+	sz count;
+	sz active;
 }
 
 fn Theme* ThemeSet.current(&self) => &self.themes[self.active];

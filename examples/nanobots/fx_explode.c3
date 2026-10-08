@@ -9,7 +9,7 @@ fn void explode_setup(void* raw) {
 	Model* self = (Model*)raw;
 	float cx = (float)self.text_x + (float)self.text_w * 0.5f;
 	float cy = (float)self.text_y + (float)self.text_h * 0.5f;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -30,7 +30,7 @@ fn void explode_setup(void* raw) {
 
 fn void explode_step(void* raw) {
 	Model* self = (Model*)raw;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue;

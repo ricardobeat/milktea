@@ -6,7 +6,7 @@ import xray;
 import std::math;
 
 struct FxSpheres {
-	int fade_start;
+	sz fade_start;
 }
 
 fn FxSpheres* spheres_data(Model* self) => (FxSpheres*)self.fx_state;
@@ -14,10 +14,10 @@ fn FxSpheres* spheres_data(Model* self) => (FxSpheres*)self.fx_state;
 // Push overlapping balls apart and exchange momentum along the line of
 // centres; a settled ball is never woken so the pile always comes to rest.
 fn void spheres_collide(Model* self) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* a = &self.particles[i];
 		if (!a.alive || self.frame < a.spawn_tick) continue;
-		for (int j = i + 1; j < self.total; j++) {
+		for (sz j = i + 1; j < self.total; j++) {
 			Particle* b = &self.particles[j];
 			if (!b.alive || self.frame < b.spawn_tick) continue;
 			float dx = (b.x - a.x) * 0.5f;
@@ -58,7 +58,7 @@ fn void spheres_collide(Model* self) {
 // True when a ball is in contact with a resting ball below it — that counts
 // as ground, so balls stacked on the pile can settle without touching the floor.
 fn bool spheres_on_resting(Model* self, Particle* p) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* q = &self.particles[i];
 		if (!q.alive || !q.resting || q == p) continue;
 		float dx = (q.x - p.x) * 0.5f;
@@ -73,7 +73,7 @@ fn void spheres_setup(void* raw) {
 	Model* self = (Model*)raw;
 	FxSpheres* s = mem::new(FxSpheres);
 	s.fade_start = 0;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -84,8 +84,8 @@ fn void spheres_setup(void* raw) {
 		p.vy = 0;
 		// Released in list order (bottom-up) so the word trickles apart;
 		// spread over a fixed ~4s regardless of word size.
-		int span = @dur(80);
-		int slot = self.total > 1 ? i * span / (self.total - 1) : 0;
+		sz span = @dur(80);
+		sz slot = self.total > 1 ? i * span / (self.total - 1) : 0;
 		p.spawn_tick = self.frame + slot + @dur(rand() % 4);
 	}
 	self.fx_state = s;
@@ -97,7 +97,7 @@ fn void spheres_step(void* raw) {
 	Model* self = (Model*)raw;
 	FxSpheres* s = spheres_data(self);
 	spheres_collide(self);
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue;
@@ -147,7 +147,7 @@ fn void spheres_render(void* raw) {
 	FxSpheres* s = spheres_data(self);
 	xray::ScreenBuffer* sb = self.canvas;
 	float fade = fx_pile_fade(self, s.fade_start);
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		xray::Color bc = gradient_color(self, p.col);
@@ -166,8 +166,8 @@ fn void spheres_render(void* raw) {
 			sb.set_cell((sz)p.col, (sz)p.row, xray::new_cell(g, 1, bs));
 			continue;
 		}
-		int col = (int)p.x;
-		int row = (int)p.y;
+		sz col = (sz)p.x;
+		sz row = (sz)p.y;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		sb.set_cell((sz)col, (sz)row, xray::new_cell("\u25CF", 1, bs));

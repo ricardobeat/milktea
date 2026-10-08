@@ -7,8 +7,8 @@ import std::core::dstring;
 // ============================================================
 
 struct KeyProbeModel {
-	int key_count;
-	int last_keycode;
+	sz key_count;
+	sz last_keycode;
 	bool quit_seen;
 }
 
@@ -20,7 +20,7 @@ fn milktea::Cmd KeyProbeModel.update(KeyProbeModel* self, milktea::Msg msg) @dyn
 	switch (msg.kind) {
 		case milktea::MsgKind.KEY:
 			self.key_count++;
-			self.last_keycode = (int)msg.key.code;
+			self.last_keycode = (sz)msg.key.code;
 			return milktea::quit();
 		case milktea::MsgKind.WINDOW_SIZE:
 			return null;
@@ -35,7 +35,7 @@ fn void KeyProbeModel.on_destroy(KeyProbeModel* self) @dynamic {
 }
 
 fn milktea::View KeyProbeModel.view(KeyProbeModel* self) @dynamic {
-	return milktea::new_view("probe");
+	return milktea::view("probe");
 }
 
 // ============================================================
@@ -126,7 +126,7 @@ fn void test_lone_esc_delivers_esc_key() @test {
 	milktea::Program p  = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x1b });
 	p.run()!!;
 	assert(m.key_count == 1);
-	assert(m.last_keycode == (int)milktea::KeyCode.ESC);
+	assert(m.last_keycode == (sz)milktea::KeyCode.ESC);
 }
 
 fn void test_esc_bracket_a_delivers_single_up() @test {
@@ -136,7 +136,7 @@ fn void test_esc_bracket_a_delivers_single_up() @test {
 	milktea::Program p  = milktea::@test_program_input(&m, &out, 80, 24, "\x1b[A");
 	p.run()!!;
 	assert(m.key_count == 1);
-	assert(m.last_keycode == (int)milktea::KeyCode.UP);
+	assert(m.last_keycode == (sz)milktea::KeyCode.UP);
 }
 
 // ============================================================
@@ -144,8 +144,8 @@ fn void test_esc_bracket_a_delivers_single_up() @test {
 // ============================================================
 
 struct DispatchProbeModel {
-	int[16] msg_kinds;
-	int msg_count;
+	sz[16] msg_kinds;
+	sz msg_count;
 }
 
 fn milktea::Cmd DispatchProbeModel.init(DispatchProbeModel* self) @dynamic {
@@ -154,7 +154,7 @@ fn milktea::Cmd DispatchProbeModel.init(DispatchProbeModel* self) @dynamic {
 
 fn milktea::Cmd DispatchProbeModel.update(DispatchProbeModel* self, milktea::Msg msg) @dynamic {
 	if (self.msg_count < 16) {
-		self.msg_kinds[self.msg_count] = (int)msg.kind;
+		self.msg_kinds[self.msg_count] = (sz)msg.kind;
 	}
 	self.msg_count++;
 	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
@@ -167,7 +167,7 @@ fn void DispatchProbeModel.on_destroy(DispatchProbeModel* self) @dynamic {
 }
 
 fn milktea::View DispatchProbeModel.view(DispatchProbeModel* self) @dynamic {
-	return milktea::new_view("dispatch-probe");
+	return milktea::view("dispatch-probe");
 }
 
 // ============================================================
@@ -177,7 +177,7 @@ fn milktea::View DispatchProbeModel.view(DispatchProbeModel* self) @dynamic {
 // Helper: build a 6-byte X10 mouse sequence.
 // cb is the raw button byte BEFORE adding 32 (i.e. the decoded value).
 // cx/cy are 1-based column/row.
-fn char[6] x10_mouse_buf(int cb, int cx, int cy) {
+fn char[6] x10_mouse_buf(sz cb, sz cx, sz cy) {
 	char[6] buf;
 	buf[0] = 0x1b;
 	buf[1] = '[';
@@ -311,9 +311,9 @@ fn void test_dispatch_delivers_key_message() @test {
 	// Should have received: WINDOW_SIZE (from init), then KEY (from 'q')
 	assert(m.msg_count >= 2);
 	// First message should be WINDOW_SIZE
-	assert(m.msg_kinds[0] == (int)milktea::MsgKind.WINDOW_SIZE);
+	assert(m.msg_kinds[0] == (sz)milktea::MsgKind.WINDOW_SIZE);
 	// Second message should be KEY
-	assert(m.msg_kinds[1] == (int)milktea::MsgKind.KEY);
+	assert(m.msg_kinds[1] == (sz)milktea::MsgKind.KEY);
 }
 // ============================================================
 // Terminal replies must not surface as keypresses
@@ -327,8 +327,8 @@ fn void test_dispatch_delivers_key_message() @test {
 
 // count_key_events runs the parser over a byte string the way the event loop
 // does and counts how many events a model would actually observe.
-fn int count_key_events(char[] bytes) @private {
-	int events = 0;
+fn sz count_key_events(char[] bytes) @private {
+	sz events = 0;
 	sz pos     = 0;
 	while (pos < bytes.len) {
 		ParseResult r = parse_key(bytes[pos..]);
@@ -416,7 +416,7 @@ fn void test_huge_csi_param_is_clamped_not_dropped() @test {
 fn void test_parse_key_never_consumes_past_buffer() @test {
 	// The @ensure contract, exercised over every single-byte input plus a
 	// spread of adversarial multi-byte prefixes.
-	for (int b = 0; b < 256; b++) {
+	for (sz b = 0; b < 256; b++) {
 		char[1] one = { (char)b };
 		assert(parse_key(one[..]).consumed <= 1);
 	}

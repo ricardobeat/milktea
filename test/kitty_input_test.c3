@@ -182,3 +182,55 @@ fn void test_kitty_ctrl_c_maps_to_ctrl_c_keycode() @test {
 	assert(pr2.key.rune == 'c');
 	assert(pr2.key.ctrl && pr2.key.shift);
 }
+
+// Under kitty flag 2 (report events), the legacy CSI forms carry the event
+// type as a subparameter on the modifier param, exactly like the CSI u form.
+// These used to be parsed with a hardcoded KEY_PRESS, so a single arrow press
+// delivered two PRESS events — one for the press, one for the release — and
+// menus stepped twice per keystroke.
+fn void test_kitty_arrow_press_and_release() @test {
+	milktea::ParseResult press = milktea::parse_key((char[])"\x1b[1;1:1B");
+	assert(press.kind == milktea::MsgKind.KEY);
+	assert(press.key.code == milktea::KeyCode.DOWN);
+	assert(press.key.action == milktea::KeyAction.KEY_PRESS);
+
+	milktea::ParseResult repeat = milktea::parse_key((char[])"\x1b[1;1:2B");
+	assert(repeat.key.code == milktea::KeyCode.DOWN);
+	assert(repeat.key.action == milktea::KeyAction.KEY_REPEAT);
+
+	milktea::ParseResult release = milktea::parse_key((char[])"\x1b[1;1:3B");
+	assert(release.key.code == milktea::KeyCode.DOWN);
+	assert(release.key.action == milktea::KeyAction.KEY_RELEASE);
+}
+
+// Without the subparameter (no opt-in, or a legacy terminal) arrows must still
+// report a plain press, and modifiers must survive the change.
+fn void test_arrow_without_event_subparam_is_press() @test {
+	milktea::ParseResult pr = milktea::parse_key((char[])"\x1b[A");
+	assert(pr.key.code == milktea::KeyCode.UP);
+	assert(pr.key.action == milktea::KeyAction.KEY_PRESS);
+
+	milktea::ParseResult ctrl = milktea::parse_key((char[])"\x1b[1;5C");
+	assert(ctrl.key.code == milktea::KeyCode.RIGHT);
+	assert(ctrl.key.ctrl);
+	assert(ctrl.key.action == milktea::KeyAction.KEY_PRESS);
+}
+
+// The tilde family (Delete, PgUp, F-keys) shares the same modifier param, so
+// it carries the event subparameter too.
+fn void test_kitty_tilde_release() @test {
+	milktea::ParseResult rel = milktea::parse_key((char[])"\x1b[3;1:3~");
+	assert(rel.key.code == milktea::KeyCode.DELETE);
+	assert(rel.key.action == milktea::KeyAction.KEY_RELEASE);
+
+	milktea::ParseResult press = milktea::parse_key((char[])"\x1b[5~");
+	assert(press.key.code == milktea::KeyCode.PAGE_UP);
+	assert(press.key.action == milktea::KeyAction.KEY_PRESS);
+}
+
+// Home/End use the same layout as the arrows.
+fn void test_kitty_home_release() @test {
+	milktea::ParseResult rel = milktea::parse_key((char[])"\x1b[1;1:3H");
+	assert(rel.key.code == milktea::KeyCode.HOME);
+	assert(rel.key.action == milktea::KeyAction.KEY_RELEASE);
+}

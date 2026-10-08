@@ -10,8 +10,8 @@ import std::core::dstring;
 struct JsModel {
 	Runtime rt;
 	void* js_model_obj;
-	int term_w;
-	int term_h;
+	sz term_w;
+	sz term_h;
 	bool mem_profile;
 	long frame_count;
 	io::File profile_file;
@@ -23,7 +23,7 @@ struct JsModel {
 // Active when globalThis.__debug = true (set via --debug CLI flag).
 // Records the last N events for display in a debug panel at screen bottom.
 
-const int DEBUG_MAX_EVENTS = 32;
+const sz DEBUG_MAX_EVENTS = 32;
 
 struct DebugEvent {
 	long seq;
@@ -37,21 +37,21 @@ struct DebugEvent {
 	// Mouse fields
 	milktea::MouseButton mouse_button;
 	milktea::MouseAction mouse_action;
-	int mouse_row;
-	int mouse_col;
+	sz mouse_row;
+	sz mouse_col;
 }
 
 struct DebugLog {
 	bool enabled;
 	DebugEvent[DEBUG_MAX_EVENTS] events;
-	int count;
+	sz count;
 	long seq;
 }
 
 DebugLog g_debug_log = { };
 
 // ── Timing stats ring buffer (5s window) ───────────────────────────────────
-const int TIMING_MAX = 512;
+const sz TIMING_MAX = 512;
 
 struct TimingSample {
 	long js_ms;
@@ -60,8 +60,8 @@ struct TimingSample {
 
 struct TimingStats {
 	TimingSample[TIMING_MAX] buf;
-	int head;
-	int count;
+	sz head;
+	sz count;
 }
 
 TimingStats g_timing = { };
@@ -78,7 +78,7 @@ struct TimingAgg {
 	long avg_vnode;
 	long peak_js;
 	long peak_vnode;
-	int n;
+	sz n;
 }
 
 fn TimingAgg timing_agg() {
@@ -86,9 +86,9 @@ fn TimingAgg timing_agg() {
 	long sum_vn = 0;
 	long peak_js = 0;
 	long peak_vn = 0;
-	int n = g_timing.count;
-	int start = n >= TIMING_MAX ? g_timing.head : 0;
-	for (int i = 0; i < n; i++) {
+	sz n = g_timing.count;
+	sz start = n >= TIMING_MAX ? g_timing.head : 0;
+	for (sz i = 0; i < n; i++) {
 		TimingSample s = g_timing.buf[(start + i) % TIMING_MAX];
 		sum_js += s.js_ms;
 		sum_vn += s.vnode_ms;
@@ -133,7 +133,7 @@ fn void debug_log_event(milktea::Msg msg) {
 		g_debug_log.events[g_debug_log.count++] = e;
 	} else {
 		// Shift left
-		for (int i = 0; i < DEBUG_MAX_EVENTS - 1; i++) {
+		for (sz i = 0; i < DEBUG_MAX_EVENTS - 1; i++) {
 			g_debug_log.events[i] = g_debug_log.events[i + 1];
 		}
 		g_debug_log.events[DEBUG_MAX_EVENTS - 1] = e;
@@ -224,23 +224,23 @@ fn String debug_event_str(DebugEvent* e) {
 }
 
 // Render the debug event log as an overlay at the bottom of the screen.
-fn void render_debug_overlay(xray::ScreenBuffer* screen, int screen_w, int screen_h) {
+fn void render_debug_overlay(xray::ScreenBuffer* screen, sz screen_w, sz screen_h) {
 	if (!g_debug_log.enabled) return;
 
 	TimingAgg agg = timing_agg();
 
 	// Build panel content
 	DString body = dstring::temp();
-	body.append_string(string::tformat("js  avg=%d pk=%d", (int)agg.avg_js, (int)agg.peak_js));
+	body.append_string(string::tformat("js  avg=%d pk=%d", (sz)agg.avg_js, (sz)agg.peak_js));
 	body.append_string("\n");
-	body.append_string(string::tformat("vn  avg=%d pk=%d", (int)agg.avg_vnode, (int)agg.peak_vnode));
+	body.append_string(string::tformat("vn  avg=%d pk=%d", (sz)agg.avg_vnode, (sz)agg.peak_vnode));
 	body.append_string("\n");
 	body.append_string(string::tformat("frames=%d", agg.n));
 
 	// Show last 6 non-tick events
-	int show = 6;
-	int ev_start = g_debug_log.count > show ? g_debug_log.count - show : 0;
-	for (int i = ev_start; i < g_debug_log.count; i++) {
+	sz show = 6;
+	sz ev_start = g_debug_log.count > show ? g_debug_log.count - show : 0;
+	for (sz i = ev_start; i < g_debug_log.count; i++) {
 		DebugEvent* e = &g_debug_log.events[i];
 		body.append_string("\n");
 		body.append_string(debug_event_str(e));
@@ -255,7 +255,7 @@ fn void render_debug_overlay(xray::ScreenBuffer* screen, int screen_w, int scree
 	String rendered = panel.render(content);
 
 	// Count rendered lines to size the overlay
-	int lines = 1;
+	sz lines = 1;
 	for (sz i = 0; i < rendered.len; i++) {
 		if (rendered[i] == '\n') lines++;
 	}
@@ -402,8 +402,8 @@ fn milktea::Cmd JsModel.js_tick_cmd(&self) @inline {
 }
 
 fn milktea::View JsModel.view(&self) @dynamic {
-	int w = self.term_w > 0 ? self.term_w : 80;
-	int h = self.term_h > 0 ? self.term_h : 24;
+	sz w = self.term_w > 0 ? self.term_w : 80;
+	sz h = self.term_h > 0 ? self.term_h : 24;
 
 	long t_js_start = taro_now_ms();
 	void* fn_val = self.rt.get_prop(self.js_model_obj, "view");
@@ -423,7 +423,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	// after view() returns).
 	if (self.screen == null) {
 		self.screen = xray::new_screen_buffer((sz)w, (sz)h);
-	} else if ((int)self.screen.width != w || (int)self.screen.height != h) {
+	} else if ((sz)self.screen.width != w || (sz)self.screen.height != h) {
 		self.screen.resize((sz)w, (sz)h);
 	}
 	self.screen.clear();
@@ -459,11 +459,11 @@ fn milktea::View JsModel.view(&self) @dynamic {
 			.foreground(glaze::color_hex("#ff6666"))
 			.with_width(w - 2);
 		String rendered = err_style.render(err_str);
-		int line_count  = 1;
+		sz line_count  = 1;
 		for (sz i = 0; i < rendered.len; i++) {
 			if (rendered[i] == '\n') line_count++;
 		}
-		int overlay_y = h - line_count;
+		sz overlay_y = h - line_count;
 		if (overlay_y < 0) overlay_y = 0;
 		self.screen.render_ansi_string(1, (sz)overlay_y, rendered, xray::default_style());
 	}
@@ -473,10 +473,10 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		render_debug_overlay(self.screen, w, h);
 	}
 
-	milktea::View view = milktea::new_alt_cell_view(self.screen.cells[0:self.screen.width * self.screen.height], self.screen.width, self.screen.height);
+	milktea::View view = self.screen.view();
 	view.mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION;
 
-	int cx, cy;
+	sz cx, cy;
 	String cursor_color;
 	bool suppress_native;
 	if (get_focused_cursor(&cx, &cy, &cursor_color, &suppress_native) && !suppress_native) {

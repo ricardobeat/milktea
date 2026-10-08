@@ -82,14 +82,27 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 // the node's frame (see text()), which the layout adds on top. They
 // are consulted for a centered modal and under draw_inline, where nothing
 // else fixes that axis.
-fn int StyledText.measure(&self, int width) @dynamic {
+//
+// The style's border and padding are the node's frame (see text()), so these
+// measure the text alone. A style carrying an explicit size names the answer
+// outright: render() sizes the box to it, so measuring the text instead would
+// hand the node a rect smaller than what it paints.
+fn sz StyledText.measure(&self, sz width) @dynamic {
+	if (self.style.height > 0) {
+		sz inner = self.style.height - frame_height(self.style);
+		return inner > 0 ? inner : 0;
+	}
 	// Text wraps to the width it is given (see Style.render), so it is as
 	// many lines tall as wrapping at that width makes it.
 	if (self.style.nowrap) width = 0;
 	return glaze::wrapped_line_count(self.text, width);
 }
 
-fn int StyledText.measure_width(&self, int height) @dynamic {
+fn sz StyledText.measure_width(&self, sz height) @dynamic {
+	if (self.style.width > 0) {
+		sz inner = self.style.width - frame_width(self.style);
+		return inner > 0 ? inner : 0;
+	}
 	return glaze::widest_line(self.text);
 }
 
@@ -129,31 +142,30 @@ fn View draw(Node* root) {
 	return draw_in(root, screen_width(), screen_height(), true);
 }
 
-// draw_inline sizes the tree to its content and paints it below whatever is
-// already on screen, leaving the user's scrollback alone. The block is capped
-// at the terminal height: taller than that cannot be addressed relatively
-// without scrolling.
+// draw_inline sizes the tree to its content height, so the painted block is
+// only as tall as the tree needs. The block is capped at the terminal height:
+// taller than that cannot be addressed relatively without scrolling.
 fn View draw_inline(Node* root) {
-	int w = screen_width();
+	sz w = screen_width();
 	if (root != null) root.set_layout_metrics(layout_metrics());
 	if (root != null && g_program != null && g_program.layout_metrics.pixels) {
 		xray::LayoutMetrics metrics = g_program.layout_metrics;
-		int height = root.natural_height(g_program.layout_area.w);
+		sz height = root.natural_height(g_program.layout_area.w);
 		if (height < 1) height = 1;
 		if (height > g_program.layout_area.h) height = g_program.layout_area.h;
 		return draw_in(root, w, (height + metrics.unit_h() - 1) / metrics.unit_h(), false, height);
 	}
-	int h = root != null ? root.natural_height(w) : 0;
+	sz h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
 	return draw_in(root, w, h, false);
 }
 
-fn View draw_in(Node* root, int w, int h, bool alt, int pixel_height = 0) @local {
+fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
-	if (root == null || w < 1 || h < 1 || g_program == null) return new_view("");
+	if (root == null || w < 1 || h < 1 || g_program == null) return view("");
 
 	xray::LayoutMetrics metrics = g_program.layout_metrics;
 	xray::Rect area = xray::new_rect(0, 0, w, h);
@@ -188,7 +200,6 @@ fn View draw_in(Node* root, int w, int h, bool alt, int pixel_height = 0) @local
 		.cells        = buf.cells,
 		.cells_width  = (sz)w,
 		.cells_height = (sz)h,
-		.alt_screen   = alt,
 	};
 	// A drawn cursor is already in the grid, so the terminal cursor stays
 	// hidden — showing both would put two cursors on screen.
@@ -203,7 +214,14 @@ fn View draw_in(Node* root, int w, int h, bool alt, int pixel_height = 0) @local
 	// doubles as the owner token — one draw tree, one repaint timer.
 	cancel(buf);
 	if (res.repaint_ms > 0) {
-		tick((sz)res.repaint_ms, &tick_msg, buf);
+		// every(), not tick(): the deadline is snapped to the next multiple of
+		// the interval in absolute time, so the frame this arms lands on the
+		// same grid as the last one. tick() would wait the full interval from
+		// *now*, adding however long this frame took to every period — a rate
+		// that sags under load and drifts out of step with the terminal's own
+		// refresh. The repaint is re-armed from scratch each frame, so the
+		// snapping is what keeps successive frames evenly spaced.
+		every((sz)res.repaint_ms, &tick_msg, buf);
 	}
 	return v;
 }

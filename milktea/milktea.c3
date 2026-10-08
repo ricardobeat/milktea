@@ -27,8 +27,8 @@ enum MouseMode : int {
 // x, y are 0-indexed relative to the top-left corner of the View content.
 // color is an optional hex color string (e.g. "#ff6600"). Empty = terminal default.
 struct Cursor {
-	int x;
-	int y;
+	sz x;
+	sz y;
 	CursorShape shape;
 	bool blink;
 	String color;
@@ -36,16 +36,16 @@ struct Cursor {
 
 struct Overlay {
 	String content;
-	int x;
-	int y;
-	int w;
-	int h;
+	sz x;
+	sz y;
+	sz w;
+	sz h;
 	bool transparent;
 	char alpha; // 0 = opaque (default), 1-254 = blended
 	xray::LayerStyle layer_style;
 }
 
-const int MAX_OVERLAYS = 8;
+const sz MAX_OVERLAYS = 8;
 
 struct View {
 	// Optional GUI commands, owned by the draw buffer until its next paint.
@@ -53,49 +53,50 @@ struct View {
 	String content;
 	Cursor cursor;
 	bool has_cursor;
-	bool alt_screen;
 	MouseMode mouse_mode;
 	xray::Cell[] cells;
 	sz cells_width;
 	sz cells_height;
 	String mouse_cursor;
 	Overlay[MAX_OVERLAYS] overlays;
-	int overlay_count;
+	sz overlay_count;
 	bool report_key_events;
 	bool mouse_pixels;
 }
 
-// new_view creates a View with the given content and default settings (no cursor, no alt screen).
-fn View new_view(String content) {
+// view creates a View displaying the given string.
+//
+// Whether the string lands on the alternate screen or inline is a property of
+// the program: see Options.alt_screen and @run.
+fn View view(String content) {
 	return { .content = content };
 }
 
-// new_alt_screen_view creates a View with alt screen enabled.
-fn View new_alt_screen_view(String content) {
-	return { .content = content, .alt_screen = true };
-}
-
-// new_alt_cell_view creates an alt-screen View backed by a direct cell grid.
-fn View new_alt_cell_view(xray::Cell[] cells, sz width, sz height) {
-	return { .cells = cells, .cells_width = width, .cells_height = height, .alt_screen = true };
+// cell_view creates a View backed by a caller-owned cell grid.
+//
+// The slice must stay alive until the frame is rendered; the usual owner is a
+// field on the model. For a grid held in an xray::ScreenBuffer, buf.view()
+// takes the geometry from the buffer itself.
+fn View cell_view(xray::Cell[] cells, sz width, sz height) {
+	return { .cells = cells, .cells_width = width, .cells_height = height };
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
-fn Cursor new_cursor(int x, int y) {
+fn Cursor new_cursor(sz x, sz y) {
 	return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
 }
 
 // View builder methods — enable fluent declarative View construction.
-// Example: return new_view("hello").set_cursor(5, 3).set_alt_screen(true);
+// Example: return view("hello").set_cursor(5, 3).set_mouse_mode(mode);
 
-fn View View.set_cursor(self, int x, int y) {
+fn View View.set_cursor(self, sz x, sz y) {
 	View v = self;
 	v.has_cursor = true;
 	v.cursor = new_cursor(x, y);
 	return v;
 }
 
-fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink) {
+fn View View.set_cursor_shape(self, sz x, sz y, CursorShape shape, bool blink) {
 	View v = self;
 	v.has_cursor = true;
 	v.cursor = { .x = x, .y = y, .shape = shape, .blink = blink };
@@ -105,12 +106,6 @@ fn View View.set_cursor_shape(self, int x, int y, CursorShape shape, bool blink)
 fn View View.set_cursor_color(self, String color) {
 	View v = self;
 	v.cursor.color = color;
-	return v;
-}
-
-fn View View.set_alt_screen(self, bool on) {
-	View v = self;
-	v.alt_screen = on;
 	return v;
 }
 
@@ -166,7 +161,7 @@ fn View View.set_mouse_pixels(self, bool on) {
 //   the overlay. The drop-shadow is composited under the overlay content;
 //   the inner-shadow is composited on top (inside the overlay bounds).
 //   Both fields default to disabled (zero-value LayerStyle).
-fn View View.add_overlay(self, int x, int y, int w, int h, String content, char alpha = 0,
+fn View View.add_overlay(self, sz x, sz y, sz w, sz h, String content, char alpha = 0,
 	bool transparent = false, xray::LayerStyle layer_style = {})
 {
 	View v = self;
@@ -217,16 +212,6 @@ fn bool should_support_sync_output() {
 	return false;
 }
 
-// viewf creates a formatted View (shorthand for new_view + string::tformat).
-fn View viewf(String fmt, args...) {
-	return new_view(string::tformat(fmt, ...args));
-}
-
-// view_alto creates an alt-screen View with formatted content.
-fn View view_alto(String fmt, args...) {
-	return new_alt_screen_view(string::tformat(fmt, ...args));
-}
-
 enum MsgKind : char {
 	NONE,
 	KEY,
@@ -248,8 +233,8 @@ enum MsgKind : char {
 }
 
 struct WindowSizeMsg {
-	int width;
-	int height;
+	sz width;
+	sz height;
 }
 
 struct Msg {
@@ -270,6 +255,19 @@ struct Msg {
 // Cmd: function pointer producing a Msg. A null Cmd means "no command".
 alias Cmd = fn Msg();
 
+// Options configures program-level terminal state, fixed for the lifetime of
+// the run and applied before the first frame.
+//
+// Per-frame state stays on the View: mouse mode, key-event reporting and
+// pixel-resolution mouse reporting all vary while a program runs, so a view
+// declares what it wants and the runtime applies the difference.
+struct Options {
+	// alt_screen runs the program on the terminal's alternate screen buffer,
+	// leaving the user's scrollback untouched. The screen is entered before
+	// the first frame and exited on teardown, including on a fatal signal.
+	bool alt_screen;
+}
+
 interface Model {
 	fn Cmd init();
 	fn Cmd update(Msg msg);
@@ -283,8 +281,8 @@ interface Model {
 // Constants
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
-const int MAX_CLICK_TARGETS = 32;
-const int MAX_DRAG_REGIONS = 8;
+const sz MAX_CLICK_TARGETS = 32;
+const sz MAX_DRAG_REGIONS = 8;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
@@ -308,6 +306,7 @@ struct Program {
 	xray::LayoutMetrics layout_metrics;
 	xray::Rect layout_area;
 	Model model;
+	Options options;
 	TimerEntry[MAX_TIMERS] timers;
 	// Buffers for tree layout (see draw / draw_inline), kept across frames
 	// rather than reallocated per view. draw_buf holds the painted grid the
@@ -324,20 +323,20 @@ struct Program {
 	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
 	// timers/send_queue/pending.
 	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
-	int click_target_count;
+	sz click_target_count;
 	// Last pointer position and last hovered targets, used by dispatch_hover
 	// to fire on_hover_in / on_hover_out only on real edge crossings. Targets
 	// themselves are not stored — the same click_targets list is filtered each
 	// frame, so a frame that rebuilt the tree invalidates the comparison and
 	// every previously-hovered target gets on_hover_out + on_hover_in again.
-	int hover_prev_col;
-	int hover_prev_row;
+	sz hover_prev_col;
+	sz hover_prev_row;
 	bool hover_has_prev;
 	// Areas the app offered as drag handles for the OS window (xray::Node
 	// .window_drag), refilled by draw() from the same solved tree. Only a GUI
 	// build reads them; in a terminal there is no window to move.
 	xray::Rect[MAX_DRAG_REGIONS] drag_regions;
-	int drag_region_count;
+	sz drag_region_count;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -361,12 +360,12 @@ struct Program {
 	// own frame counter reaches that point. After firing, the slot is
 	// disarmed so the event does not re-fire every subsequent frame.
 	bool test_click_armed;
-	int test_pending_click_col;
-	int test_pending_click_row;
+	sz test_pending_click_col;
+	sz test_pending_click_row;
 	long test_pending_click_frame;
 	bool test_pointer_armed;
-	int test_pending_pointer_col;
-	int test_pending_pointer_row;
+	sz test_pending_pointer_col;
+	sz test_pending_pointer_row;
 	long test_pending_pointer_frame;
 	char[512] pending;
 	sz pending_len;
@@ -376,15 +375,15 @@ struct Program {
 
 	// Test / injection support
 	bool test_mode;
-	int inject_width;
-	int inject_height;
+	sz inject_width;
+	sz inject_height;
 	DString* output_buf;
 	char[] inject_input;
 	sz inject_input_pos;
 	// Ring buffer for Send()-injected messages.
 	Msg[MAX_BATCH] send_queue;
-	int send_head;
-	int send_tail;
+	sz send_head;
+	sz send_tail;
 	// Mutex protecting send_queue / send_head / send_tail.
 	// Initialized lazily inside run() so send() is safe to call before
 	// the program is started (send_accepting guards against that path).
@@ -398,7 +397,7 @@ struct Program {
 	// send_accepting and then waits for this to reach zero before destroying
 	// the mutex — clearing the flag alone only stops *new* entrants, and a
 	// sender already past the check would otherwise lock a destroyed mutex.
-	Atomic{int} send_inflight;
+	Atomic{sz} send_inflight;
 
 	// Threaded input reader
 	thread::Thread reader_thread;
@@ -549,7 +548,7 @@ fn int input_reader_fn(void* arg) {
 		pfd.events = POLLIN;
 		pfd.revents = 0;
 
-		int r = poll(&pfd, 1, 50); // 50ms timeout
+		sz r = poll(&pfd, 1, 50); // 50ms timeout
 		if (r <= 0) continue;
 
 		sz n = read(STDIN_FILENO, &tmp[0], 256);
@@ -584,14 +583,14 @@ Program* g_program = null;
 // Models that need to *react* to a resize (recompute a cached layout, reflow
 // text) should still handle MsgKind.WINDOW_SIZE; these accessors only remove
 // the need to store the size in order to read it back.
-fn int screen_width() {
+fn sz screen_width() {
 	if (g_program == null) return 80;
-	return (int)g_program.cached_ws.ws_col;
+	return (sz)g_program.cached_ws.ws_col;
 }
 
-fn int screen_height() {
+fn sz screen_height() {
 	if (g_program == null) return 24;
-	return (int)g_program.cached_ws.ws_row;
+	return (sz)g_program.cached_ws.ws_row;
 }
 
 // Layout geometry is in logical pixels in GUI programs and cells in terminals.
@@ -619,7 +618,7 @@ fn xray::Rect[] drag_regions() {
 	return g_program.drag_regions[:g_program.drag_region_count];
 }
 
-fn void dispatch_click(int col, int row) {
+fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
 	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count],
 		col, row, g_program.debug_mouse);
@@ -630,7 +629,7 @@ fn void dispatch_click(int col, int row) {
 // the last pointer event. A press at (col, row) also counts as motion for
 // the purposes of hover tracking — the press location becomes the new
 // pointer position. (-1, -1) on the first call skips every prior target.
-fn void dispatch_hover(int col, int row) {
+fn void dispatch_hover(sz col, sz row) {
 	if (g_program == null) return;
 	xray::ClickTarget[] targs = g_program.click_targets[:g_program.click_target_count];
 	if (g_program.hover_has_prev) {
@@ -676,7 +675,7 @@ fn long frame_no() => g_program != null ? g_program.frame_no : 0;
 // Test scripts prefer this over MILKTEA_DEBUG_CLICK_AT: it is deterministic,
 // has a programmatic return value, and does not depend on the env-var
 // parsing happening to produce a valid cell.
-fn void test_click(int col, int row, long after_frame) {
+fn void test_click(sz col, sz row, long after_frame) {
 	if (g_program == null) return;
 	g_program.test_pending_click_col = col;
 	g_program.test_pending_click_row = row;
@@ -687,7 +686,7 @@ fn void test_click(int col, int row, long after_frame) {
 // test_pointer schedules a synthetic hover at (col, row), firing after
 // `after_frame` frames the same way test_click does. Useful for asserting
 // that hover effects render without driving a real mouse.
-fn void test_pointer(int col, int row, long after_frame) {
+fn void test_pointer(sz col, sz row, long after_frame) {
 	if (g_program == null) return;
 	g_program.test_pending_pointer_col = col;
 	g_program.test_pending_pointer_row = row;
@@ -746,12 +745,81 @@ fn bool request_quit() {
 	return true;
 }
 
+// emit writes raw terminal bytes through the same tty path the renderer uses,
+// so user escapes (kitty graphics, mode sets, ...) interleave correctly with
+// frame output instead of racing io::print's buffering. In test mode the
+// bytes are appended to the captured output buffer like any other render.
+// Must be called from the main thread (init/update/view/on_* hooks) — not
+// from arbitrary threads.
+fn void emit(String escape) {
+	if (g_program != null && g_program.test_mode && g_program.output_buf != null) {
+		g_program.output_buf.append_string(escape);
+		return;
+	}
+	write_stdout(escape);
+}
+
+// in_alt_screen reports whether the terminal is currently showing the
+// alternate screen buffer. True from the start of init() for a program run
+// with Options.alt_screen, which is when the screen is entered. Useful for
+// gating writes that are tied to the current screen (kitty-graphics images
+// die on a screen switch) and for direct-rendering code that does not run
+// under a Program.
+fn bool in_alt_screen() {
+	if (g_program != null) return g_program.in_alt_screen;
+	return g_manual_alt_screen;
+}
+
+// monotonic_ms exposes the runtime's monotonic clock to models — the same
+// time base timers use. Immune to wall-clock steps (NTP, DST).
+fn sz monotonic_ms() {
+	return time_ms();
+}
+
+// Cell-size accessors — the pixel size of one character cell, discovered via
+// the startup probe (CSI 16 t / OSC 1337) and refreshed by runtime replies.
+// 0 + cell_size_known() == false means the terminal never answered (e.g.
+// alacritty, GNU Screen); callers should fall back to a guess like 10x20.
+// Refreshed on WINDOW_SIZE by a fresh CSI 16 t query.
+fn sz cell_width_px() {
+	return (sz)g_cell_w_px;
+}
+
+fn sz cell_height_px() {
+	return (sz)g_cell_h_px;
+}
+
+fn bool cell_size_known() {
+	return g_cell_px_known;
+}
+
+// kitty_graphics_supported reports whether the terminal answered the kitty
+// graphics protocol capability query (a=q) during the startup probe.
+// Terminals that implement the protocol always reply; silence means no
+// support. True as soon as any ESC_G APC reply is seen.
+fn bool kitty_graphics_supported() {
+	return g_tgp_replied;
+}
+
+// terminal_background reports the terminal's own background color, from the
+// OSC 11 query sent during the startup probe. Terminals that do not implement
+// it stay silent, so check terminal_background_known() first — the returned
+// color is black when nothing answered, which is the safe assumption for a
+// dark terminal but a wrong one for a light theme.
+fn sz terminal_background_r() => g_term_bg_r;
+fn sz terminal_background_g() => g_term_bg_g;
+fn sz terminal_background_b() => g_term_bg_b;
+
+fn bool terminal_background_known() {
+	return g_term_bg_known;
+}
+
 // ============================================================
 // Program options — configure a Program before run()
 // ============================================================
 
 // with_window_size sets a fixed window size, bypassing the TTY query.
-fn void with_window_size(Program* self, int w, int h) {
+fn void with_window_size(Program* self, sz w, sz h) {
 	self.inject_width = w;
 	self.inject_height = h;
 }
@@ -800,7 +868,7 @@ fn void Program.send(Program* self, Msg msg) {
 	defer self.send_inflight.sub(1);
 
 	self.send_mu.lock();
-	int next = (self.send_head + 1) % (int)MAX_BATCH;
+	sz next = (self.send_head + 1) % (sz)MAX_BATCH;
 	bool dropped = next == self.send_tail;
 	if (!dropped) {
 		self.send_queue[self.send_head] = msg;
@@ -820,7 +888,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 		return false;
 	}
 	*out = self.send_queue[self.send_tail];
-	self.send_tail = (self.send_tail + 1) % (int)MAX_BATCH;
+	self.send_tail = (self.send_tail + 1) % (sz)MAX_BATCH;
 	self.send_mu.unlock();
 	return true;
 }
@@ -841,7 +909,7 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 		dispatch_hover(m.mouse.col, m.mouse.row);
 	}
 	Cmd c     = model.update(m);
-	int chain = 0;
+	sz chain = 0;
 	while (c != null && chain < MAX_BATCH) {
 		Msg next = c();
 		if (next.kind == MsgKind.QUIT) return true;
@@ -889,25 +957,25 @@ fn void Program.apply_mouse_pixels(Program* self, MouseMsg* mouse) {
 	if (ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0) {
 		return;
 	}
-	if (mouse.col < (int)ws.ws_col && mouse.row < (int)ws.ws_row) {
+	if (mouse.col < (sz)ws.ws_col && mouse.row < (sz)ws.ws_row) {
 		// Coordinates already fit inside the cell grid — terminal is still
 		// sending cell coordinates (mode 1016 unsupported/ignored).
 		return;
 	}
 
-	int raw_x = mouse.col;
-	int raw_y = mouse.row;
+	sz raw_x = mouse.col;
+	sz raw_y = mouse.row;
 
 	double cell_w = (double)ws.ws_xpixel / (double)ws.ws_col;
 	double cell_h = (double)ws.ws_ypixel / (double)ws.ws_row;
 
-	int cell_col = (int)((double)raw_x / cell_w);
-	int cell_row = (int)((double)raw_y / cell_h);
+	sz cell_col = (sz)((double)raw_x / cell_w);
+	sz cell_row = (sz)((double)raw_y / cell_h);
 
 	if (cell_col < 0) cell_col = 0;
-	if (cell_col >= (int)ws.ws_col) cell_col = (int)ws.ws_col - 1;
+	if (cell_col >= (sz)ws.ws_col) cell_col = (sz)ws.ws_col - 1;
 	if (cell_row < 0) cell_row = 0;
-	if (cell_row >= (int)ws.ws_row) cell_row = (int)ws.ws_row - 1;
+	if (cell_row >= (sz)ws.ws_row) cell_row = (sz)ws.ws_row - 1;
 
 	mouse.px = raw_x;
 	mouse.py = raw_y;
@@ -989,6 +1057,23 @@ fn void cancel(void* owner) {
 
 // run executes the event loop for the program.
 fn void? Program.run(Program* self) {
+	// run() owns the alt screen: it enters when a view asks for it and exits on
+	// the way out, tracking that in in_alt_screen. Entering the alt screen
+	// manually beforehand desynchronizes that — in_alt_screen stays false, so
+	// the view never triggers an entry and the exit path never pops back to the
+	// normal buffer, stranding the terminal in the alt screen after quit.
+	// An alt-screen view is all that is needed, so the manual call is always
+	// redundant: reject it rather than start and wedge the terminal.
+	//
+	// The caller already wrote the alt-screen entry before we got here, so
+	// refusing on its own would strand the terminal just as surely. Pop back to
+	// the normal buffer first, so the fault surfaces on a usable terminal.
+	if (g_manual_alt_screen) {
+		if (!self.test_mode) exit_alt_screen();
+		g_manual_alt_screen = false;
+		return ALT_SCREEN_ALREADY_ENTERED~;
+	}
+
 	g_program = self;
 	self.pending_len = 0;
 	self.in_alt_screen = false;
@@ -1065,6 +1150,9 @@ fn void? Program.run(Program* self) {
 			disable_kitty_keyboard();
 			disable_focus();
 			show_cursor();
+			// Registered cleanups (e.g. kitty-graphics tile deletion) run while
+			// the terminal is still usable, before raw mode is restored.
+			if (g_cleanup_fn != null) g_cleanup_fn();
 			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
 			write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 			// For inline (non-alt-screen) mode the cursor is parked at the
@@ -1090,6 +1178,13 @@ fn void? Program.run(Program* self) {
 		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
 		// Terminals that don't support it ignore the sequence — safe to push always.
 		enable_kitty_keyboard();
+
+		// Probe cell pixel size + kitty graphics support. Runs before the
+		// reader thread so it owns stdin; keystrokes typed during the probe
+		// are preserved by re-injecting the leftovers into the pending buffer.
+		char[64] probe_leftover;
+		sz probe_leftover_len = probe_terminal_caps(probe_leftover[..]);
+
 		setup_signals(saved, &self.in_alt_screen);
 
 		// Start the reader thread so stdin reads never block the event loop.
@@ -1097,6 +1192,10 @@ fn void? Program.run(Program* self) {
 		queue_created = true;
 		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
 		reader_running = true;
+
+		for (sz i = 0; i < probe_leftover_len; i++) {
+			self.pending[self.pending_len++] = probe_leftover[i];
+		}
 	}
 
 	// Defers live at function scope so they run after the event loop exits,
@@ -1149,6 +1248,15 @@ fn void? Program.run(Program* self) {
 		}
 	}
 
+	// Enter the alt screen before init() so a model can emit screen-tied
+	// output (graphics images die on a screen switch) from its first frame.
+	// The defer above owns the matching exit, and setup_signals() has the
+	// address of in_alt_screen so a fatal signal exits too.
+	if (self.options.alt_screen) {
+		self.emit_sgr(SGR_ALT_ON);
+		self.in_alt_screen = true;
+	}
+
 	Cmd c0 = self.model.init();
 	if (c0 != null) {
 		Msg m0 = c0();
@@ -1184,7 +1292,7 @@ fn void? Program.run(Program* self) {
 		}
 	}
 
-	Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)initial_ws.ws_col, (int)initial_ws.ws_row } };
+	Msg init_wmsg = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (sz)initial_ws.ws_col, (sz)initial_ws.ws_row } };
 	if (dispatch(self, self.model, init_wmsg)) return;
 
 	// Render initial view
@@ -1238,10 +1346,14 @@ fn void? Program.run(Program* self) {
 			g_win_resized.store(false, RELAXED);
 			WinSize ws = get_window_size();
 			self.cached_ws = ws;
+			// Cell pixels may change independently of the row/col count (font
+			// zoom). CSI 16 t is answered asynchronously and lands in the shared
+			// cell-size state via the key parser.
+			if (ws.ws_col > 0) write_stdout((char[])"\x1b[16t");
 			if (self.renderer != null) {
 				self.renderer.resize((sz)ws.ws_col, (sz)ws.ws_row);
 			}
-			Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (int)ws.ws_col, (int)ws.ws_row } };
+			Msg wm = { .kind = MsgKind.WINDOW_SIZE, .window_size = { (sz)ws.ws_col, (sz)ws.ws_row } };
 			if (dispatch(self, self.model, wm)) return;
 			dirty = true;
 		}
@@ -1560,7 +1672,7 @@ fn sz view_content_rows(View v) {
 	}
 	// Overlays are positioned against the same origin and may extend past
 	// the content, so the block has to be tall enough to contain them.
-	for (int oi = 0; oi < v.overlay_count; oi++) {
+	for (sz oi = 0; oi < v.overlay_count; oi++) {
 		sz bottom = (sz)v.overlays[oi].y + (sz)v.overlays[oi].h;
 		if (bottom > rows) rows = bottom;
 	}
@@ -1595,7 +1707,7 @@ fn sz view_content_cols(View v) {
 		cur += 1;
 	}
 	if (cur > widest) widest = cur;
-	for (int oi = 0; oi < v.overlay_count; oi++) {
+	for (sz oi = 0; oi < v.overlay_count; oi++) {
 		sz right = (sz)v.overlays[oi].x + (sz)v.overlays[oi].w;
 		if (right > widest) widest = right;
 	}
@@ -1639,13 +1751,6 @@ fn void Program.render_current_view(Program* self) {
 	self.frame_no++;
 	@pool() {
 		View v = self.model.view();
-		if (v.alt_screen && !self.in_alt_screen) {
-			self.emit_sgr(SGR_ALT_ON);
-			self.in_alt_screen = true;
-		} else if (!v.alt_screen && self.in_alt_screen) {
-			self.emit_sgr(SGR_ALT_OFF);
-			self.in_alt_screen = false;
-		}
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (v.mouse_mode != self.mouse_mode) {
 			if (v.mouse_mode == MOUSE_MODE_NONE) {
@@ -1702,11 +1807,11 @@ fn void Program.render_current_view(Program* self) {
 			// Use xray renderer for differential output
 			xray::Renderer* r = self.renderer;
 			if (r != null) {
-				// Select the coordinate model for this view. An alt-screen
-				// view owns the terminal and addresses it absolutely; an
-				// inline view shares the screen with the user's scrollback
-				// and must position relative to where it started.
-				xray::PositionMode want = v.alt_screen
+				// Select the coordinate model. An alt-screen program owns
+				// the terminal and addresses it absolutely; an inline one
+				// shares the screen with the user's scrollback and must
+				// position relative to where it started.
+				xray::PositionMode want = self.options.alt_screen
 					? xray::PositionMode.ABSOLUTE
 					: xray::PositionMode.RELATIVE;
 				if (r.screen.position_mode != want) r.set_position_mode(want);
@@ -1714,7 +1819,7 @@ fn void Program.render_current_view(Program* self) {
 				// An inline buffer is exactly as tall as its content: the
 				// rows below it are the user's, not ours to paint or clear.
 				// Alt-screen keeps the full terminal height.
-				if (!v.alt_screen) {
+				if (!self.options.alt_screen) {
 					sz want_rows = view_content_rows(v);
 					if (want_rows < 1) want_rows = 1;
 					// Never exceed the terminal: a block taller than the
@@ -1736,30 +1841,49 @@ fn void Program.render_current_view(Program* self) {
 				if (v.cells.ptr != null) {
 					// Direct cell path — write cells straight into the screen buffer.
 					// No string building, no CSI parsing. The diff engine handles the rest.
-					// Skip clear() — set_cell() tracks dirty lines against previous frame.
-					sz cols = v.cells_width;
-					if (cols > r.screen.width) cols = r.screen.width;
-					sz rows = v.cells_height;
+					// cells_width/cells_height travel in the View separately from
+					// the cells slice, so they can overstate it — a resize that
+					// reallocates the grid between building a View and rendering
+					// it is enough. The per-cell loop this replaced indexed
+					// through bounds-checked slice access, so a stale pair was
+					// survivable; mem::copy takes raw pointers and a byte count,
+					// so the same staleness walks off the allocation. Bound every
+					// extent by what the slices actually hold.
+					sz src_w = v.cells_width;
+					sz cols  = src_w > r.screen.width ? r.screen.width : src_w;
+					sz rows  = v.cells_height;
 					if (rows > r.screen.height) rows = r.screen.height;
-					for (sz row = 0; row < rows; row++) {
-						bool prev_wide = false;
-						for (sz col = 0; col < cols; col++) {
-							xray::Cell c = v.cells[row * v.cells_width + col];
-							if (prev_wide) {
-								// The cell just placed at col-1 is a wide glyph
-								// (width 2) whose second terminal column this
-								// cell covers. It is the glyph's own trailing
-								// half — write it raw so the wide-pair repair
-								// doesn't demote the glyph we are copying.
-								// Without this, any wide glyph in a cell view
-								// was blanked a column later, on the spot.
-								r.screen.put_raw_cell(col, row, c);
-								prev_wide = false;
-							} else {
-								r.screen.set_cell(col, row, c);
-								prev_wide = c.width == 2;
+					sz src_rows = src_w > 0 ? v.cells.len / src_w : 0;
+					if (rows > src_rows) rows = src_rows;
+					sz dst_rows = r.screen.width > 0 ? r.screen.cells.len / r.screen.width : 0;
+					if (rows > dst_rows) rows = dst_rows;
+					if (rows > (sz)r.screen.dirty_lines.len) rows = (sz)r.screen.dirty_lines.len;
+
+					if (rows > 0 && cols > 0) {
+						if (cols == r.screen.width && src_w == r.screen.width) {
+							// Fast path: identical stride on both sides, so the
+							// region is contiguous and copies in one go.
+							mem::copy(r.screen.cells.ptr, v.cells.ptr, rows * cols * xray::Cell::size);
+							for (sz row = 0; row < rows; row++) {
+								r.screen.dirty_lines[row] = true;
+							}
+						} else {
+							// Strided copy row-by-row
+							sz row_bytes = cols * xray::Cell::size;
+							xray::Cell empty = xray::empty_cell();
+							for (sz row = 0; row < rows; row++) {
+								mem::copy(r.screen.cells.ptr + row * r.screen.width, v.cells.ptr + row * src_w, row_bytes);
+								for (sz col = cols; col < r.screen.width; col++) {
+									r.screen.cells[row * r.screen.width + col] = empty;
+								}
+								r.screen.dirty_lines[row] = true;
 							}
 						}
+					}
+
+					// Clear any untouched bottom rows
+					if (rows < r.screen.height) {
+						r.screen.clear_range(rows, r.screen.height);
 					}
 					self.last_content_rows = rows;
 				} else {
@@ -1788,7 +1912,7 @@ fn void Program.render_current_view(Program* self) {
 				}
 
 				// Render overlays
-				for (int oi = 0; oi < v.overlay_count; oi++) {
+				for (sz oi = 0; oi < v.overlay_count; oi++) {
 					Overlay o = v.overlays[oi];
 
 					// Render shadow before content so it appears underneath
@@ -1870,8 +1994,8 @@ fn void Program.render_current_view(Program* self) {
 				// Emit cursor positioning and shape after the diff frame
 				if (v.has_cursor) {
 					DString cursor_seq = dstring::temp();
-					int term_row       = v.cursor.y + 1;
-					int term_col       = v.cursor.x + 1;
+					sz term_row       = v.cursor.y + 1;
+					sz term_col       = v.cursor.x + 1;
 					cursor_seq.append_string(cursor_to(term_row, term_col));
 					// Set cursor color via OSC 12
 					if (v.cursor.color.len > 0) {
@@ -1887,7 +2011,7 @@ fn void Program.render_current_view(Program* self) {
 					}
 					cursor_seq.append_string(SGR_SHOW_CURSOR);
 					write_stdout((char[])cursor_seq.str_view());
-				} else if (v.alt_screen) {
+				} else if (self.options.alt_screen) {
 					// Park the hidden cursor at top-left to prevent artifacts in some terminals
 					write_stdout("\x1b[1;1H");
 				}

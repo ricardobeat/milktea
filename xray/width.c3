@@ -19,7 +19,7 @@ module xray;
 // mark outside the Latin blocks — Arabic, Hebrew, Devanagari, Thai, Khmer,
 // Tibetan — was reported as one column instead of zero. Each error shifts the
 // cursor by a column per character, which corrupts the whole line.
-fn int char_width(uint cp) {
+fn sz char_width(uint cp) {
 	return xray_width_lookup(cp);
 }
 
@@ -528,7 +528,7 @@ fn bool xray_width_in_ranges(CodepointRange[] ranges, uint cp) @local {
 	return false;
 }
 
-fn int xray_width_lookup(uint cp) @local {
+fn sz xray_width_lookup(uint cp) @local {
 	// Fast path: ASCII is by far the most common input and is
 	// entirely width 1 apart from NUL, which the zero table covers.
 	if (cp >= 0x20 && cp < 0x7F) return 1;

@@ -20,6 +20,9 @@ now; where the two differ, the code is right. The differences worth knowing:
 - `Padding` was not added: the pad fields are already settable in a literal, so
   a wrapper struct would have added a name and no capability. `pad`, `pad_x`
   and `pad_y` cover the shorthand.
+- The duplication listed below is resolved: `FlexNode`, `milktea::Layout` and
+  `Layer`/`Compositor` are all gone. A zstack of `.at()` nodes covers absolute
+  positioning and z-order, with `.alpha()` and `Shadow` on top.
 
 ## What was wrong
 

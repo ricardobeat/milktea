@@ -52,14 +52,14 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 			// Capture byte count and line count before calling handle_paste,
 			// which may modify the textarea but leaves the original slice intact.
 			sz byte_count = msg.paste.len;
-			int line_count = 1;
+			sz line_count = 1;
 			for (sz i = 0; i < byte_count; i++) {
 				if (msg.paste[i] == '\n') line_count++;
 			}
 			self.ta.handle_paste(msg.paste);
 			// Build the status string into the fixed buffer via a temp DString.
 			String s = string::tformat("pasted %d bytes (%d line%s)",
-				(int)byte_count,
+				(sz)byte_count,
 				line_count,
 				line_count == 1 ? "" : "s");
 			self.set_status(s);
@@ -81,8 +81,8 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
-	int w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
-	int h = milktea::screen_height();
+	sz w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
+	sz h = milktea::screen_height();
 
 	// Layout: textarea area (fill) + one-line status bar.
 	xray::Rect editor_r, status_r;
@@ -131,11 +131,11 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(status_text);
 
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	PasteModel m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

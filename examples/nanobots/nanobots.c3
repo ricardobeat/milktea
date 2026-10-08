@@ -28,68 +28,68 @@ const char[] EMBED_TEXT = $embed("milktea.txt");
 // gets pow(damp, DT) via the `decay` helper rather than a plain multiply —
 // multiplying a damping factor by DT would make things stop faster, not
 // slower.
-const int FRAME_MS = 21;        // ~48fps
+const sz FRAME_MS = 21;        // ~48fps
 const float DT = 20.0f * (float)FRAME_MS / 1000.0f; // sim-ticks per frame
 // Sim steps per rendered frame. This is the real speed knob: raising the
 // frame rate is mostly compensated out by @dur/DT scaling, so speed comes
 // from advancing the sim more than once per frame. 2 = twice the pace.
-const int BASE_STEPS = 2;
+const sz BASE_STEPS = 2;
 
 // Convert a duration tuned in 20fps ticks into frames at the current rate.
-macro int @dur(#ticks) => (int)((float)(#ticks) / DT);
+macro sz @dur(#ticks) => (sz)((float)(#ticks) / DT);
 
 // Per-frame survival of a per-tick damping factor.
 fn float decay(float per_tick) {
 	return (float)math::pow((double)per_tick, (double)DT);
 }
 
-const int PARTICLES_PER_WAVE = 20; // 7 rounds of 20 = 140 blocks; user-tunable
-const int EMIT_COOLDOWN = @dur(14);   // ticks between waves — release bots fast
-const int HOLD_DURATION = @dur(60);   // ticks the finished word stays up (~3s)
-const int BUILD_TIMEOUT = @dur(600);  // safety net: if a straggler somehow never
+const sz PARTICLES_PER_WAVE = 20; // 7 rounds of 20 = 140 blocks; user-tunable
+const sz EMIT_COOLDOWN = @dur(14);   // ticks between waves — release bots fast
+const sz HOLD_DURATION = @dur(60);   // ticks the finished word stays up (~3s)
+const sz BUILD_TIMEOUT = @dur(600);  // safety net: if a straggler somehow never
                                 // settles, snap it home rather than stall
 const float PULL_MAX = 0.9f;    // ceiling on the spring force, so a thrown
                                 // bot coasts before the pull takes over
-const int SPAWN_STAGGER = @dur(1);    // ticks between bots within one wave, so a wave
+const sz SPAWN_STAGGER = @dur(1);    // ticks between bots within one wave, so a wave
                                 // sprays out over ~2s instead of popping at once
 const float GRAVITY = 1.4f;     // cells/tick^2 in the FALL exit
 const float BOUNCE = 0.32f;     // energy kept when a block hits the pile
-const int FADE_DURATION = @dur(45);   // ticks the settled pile takes to fade out
-const int DISSOLVE_FLICKERS = 5; // noise flashes a block shows before blanking
-const int DISSOLVE_STEP = @dur(3);    // ticks per flicker frame
+const sz FADE_DURATION = @dur(45);   // ticks the settled pile takes to fade out
+const sz DISSOLVE_FLICKERS = 5; // noise flashes a block shows before blanking
+const sz DISSOLVE_STEP = @dur(3);    // ticks per flicker frame
 const float WIND_ACCEL = 2.2f;  // sideways force in the SHEAR exit
 const float TOPPLE_ACCEL = 0.0016f; // angular accel of the falling slab
-const int LINE_HOLD = @dur(10);       // ticks the hot line holds before it collapses
-const int DOT_HOLD = @dur(16);        // ticks the dot lingers after the flare
-const int SWELL_DURATION = @dur(22);  // ticks the picture stretches and brightens
+const sz LINE_HOLD = @dur(10);       // ticks the hot line holds before it collapses
+const sz DOT_HOLD = @dur(16);        // ticks the dot lingers after the flare
+const sz SWELL_DURATION = @dur(22);  // ticks the picture stretches and brightens
 const float SWELL_MAX = 1.5f;   // how far the picture widens before collapsing
 const float SPLAT_SPEED = 20.0f; // top speed of the thrown slab
-const int SPLAT_WINDUP = @dur(14);     // ticks of pull-back before the release
+const sz SPLAT_WINDUP = @dur(14);     // ticks of pull-back before the release
 const float SPLAT_SPLASH = 7.0f; // how hard blocks spray along the wall
 const float BALL_BOUNCE = 0.82f; // energy a sphere keeps per floor bounce
 const float BALL_REST = 0.7f;    // below this impact speed a sphere stops
 const float BALL_RADIUS = 0.75f; // contact distance between two spheres, in
                                  // screen-square units (x is halved to match
                                  // the 2:1 cell aspect)
-const int GLOW_RADIUS = 3;      // cells the bloom reaches past the glyphs
-const int BADGE_DURATION = @dur(30);  // ticks the exit name stays on screen
+const sz GLOW_RADIUS = 3;      // cells the bloom reaches past the glyphs
+const sz BADGE_DURATION = @dur(30);  // ticks the exit name stays on screen
 	                              // after TAB before fading from view
-const int DUST_COUNT = 26;      // motes left hanging after the word goes
+const sz DUST_COUNT = 26;      // motes left hanging after the word goes
 
 
 // Each cell is one UTF-8 character. We scan the embedded text row by row
 // to extract target positions for the particle cloud.
 struct Particle {
-	int col;       // target cell column
-	int row;       // target cell row
-	int row_src;   // index into the rows[] List — the source row
-	int byte_off;  // byte offset of the glyph's first byte in that row
-	int byte_len;  // byte length of the glyph (1-4)
+	sz col;       // target cell column
+	sz row;       // target cell row
+	sz row_src;   // index into the rows[] List — the source row
+	sz byte_off;  // byte offset of the glyph's first byte in that row
+	sz byte_len;  // byte length of the glyph (1-4)
 	float x;       // current x (cell col as float)
 	float y;       // current y (cell row as float)
 	float vx;
 	float vy;
-	int spawn_tick;
+	sz spawn_tick;
 	float attract;     // per-bot spring constant pulling it toward its cell
 	float damp;        // per-bot damping — the spread in this and in attract
 	                   // is what staggers arrival and varies the springiness
@@ -98,7 +98,7 @@ struct Particle {
 	bool alive;
 	bool settled;
 	bool resting;      // FALL exit: landed on the pile, no longer moving
-	int fall_col;      // FALL exit: column it is stacking in
+	sz fall_col;      // FALL exit: column it is stacking in
 	float noise_seed;  // DISSOLVE exit: per-block offset into the noise glyphs
 }
 
@@ -138,11 +138,11 @@ enum Exit {
 	RAINBOW,
 	GRADIENT,
 }
-const int EXIT_COUNT = 13;
+const sz EXIT_COUNT = 13;
 
 struct Corner {
-	int col;
-	int row;
+	sz col;
+	sz row;
 }
 
 // An exit effect: a self-contained animation owning all its own state,
@@ -171,21 +171,21 @@ struct Effect {
 
 struct Model {
 	xray::ScreenBuffer* canvas;
-	int w;
-	int h;
-	int frame;
-	int last_emit_frame;
+	sz w;
+	sz h;
+	sz frame;
+	sz last_emit_frame;
 	Phase phase;
-	int phase_frame;           // frame the current phase started
-	int cycle;                 // completed build/blow cycles
-	int next_emit_index;       // cursor into self.particles[]
+	sz phase_frame;           // frame the current phase started
+	sz cycle;                 // completed build/blow cycles
+	sz next_emit_index;       // cursor into self.particles[]
 	Corner corner;
 	Particle[] particles;
-	int total;
-	int text_x;                // top-left col of rendered text
-	int text_y;
-	int text_w;
-	int text_h;
+	sz total;
+	sz text_x;                // top-left col of rendered text
+	sz text_y;
+	sz text_w;
+	sz text_h;
 	char[] half_mask;          // per-cell half-block occupancy for flying bots:
 	                           // bit 0 = upper half, bit 1 = lower half
 	xray::Color[] half_col;    // colour for those cells
@@ -199,10 +199,10 @@ struct Model {
 	Exit forced_exit;          // the queued one
 	bool exit_previewed;       // the badge shows a TAB pick rather than a
 	                           // random draw — only affects its colour
-	int preview_at;            // frame a queued TAB preview fires (0 = none).
+	sz preview_at;            // frame a queued TAB preview fires (0 = none).
 	                           // The pause lets you read the badge and see
 	                           // the assembled word before it goes.
-	int badge_until;           // frame the exit-name badge disappears again.
+	sz badge_until;           // frame the exit-name badge disappears again.
 	                           // TAB flashes the name briefly rather than
 	                           // pinning it up for the whole cycle.
 	float[] glow;              // per-cell bloom intensity, built by seeding
@@ -214,7 +214,7 @@ struct Model {
 	bool fx_active;            // an exit effect is running and owns the phase
 	void* fx_state;            // the active effect's private state; owned by
 	                           // the effect and released by its teardown
-	int turbo_until;           // frame the 4x speed-up lapses. Terminals only
+	sz turbo_until;           // frame the 4x speed-up lapses. Terminals only
 	                           // report key *release* under the kitty
 	                           // protocol, so "held" is inferred from auto-
 	                           // repeat: each space press extends this a few
@@ -226,14 +226,14 @@ struct Model {
 // library's UTF-8 decoder. Returns 0 on end-of-iteration, but always
 // advances *k past the consumed bytes (or by 1 on empty input) so the
 // caller's loop makes progress.
-fn long read_codepoint(String s, int* k) {
+fn long read_codepoint(String s, sz* k) {
 	if (*k >= s.len) return 0;
 	StringIterator it;
 	it.utf8 = s;
 	it.current = (sz)*k;
-	int start = *k;
+	sz start = *k;
 	Char32? cp_opt = it.next();
-	*k = (int)it.current;
+	*k = (sz)it.current;
 	Char32 cp = cp_opt ?? (Char32)0;
 	if (*k == start) *k += 1; // safety: always advance
 	return (long)cp;
@@ -258,26 +258,26 @@ fn void Model.parse_text(Model* self) {
 		self.rows.init(mem);
 		self.rows_ready = true;
 	}
-	int line_start = 0;
-	for (int i = 0; i <= text.len; i++) {
+	sz line_start = 0;
+	for (sz i = 0; i <= text.len; i++) {
 		if (i == text.len || text[i] == (char)0x0A) {
 			self.rows.push(text[line_start:(sz)(i - line_start)]);
 			line_start = i + 1;
 		}
 	}
 	List{String} rows = self.rows;
-	int row_count = (int)rows.len();
+	sz row_count = (sz)rows.len();
 
 	// First pass: bounding box and count.
-	int min_col = 0x7fffffff;
-	int max_col = -1;
-	int min_row = 0x7fffffff;
-	int max_row = -1;
-	int count = 0;
-	for (int r = 0; r < row_count; r++) {
+	sz min_col = 0x7fffffff;
+	sz max_col = -1;
+	sz min_row = 0x7fffffff;
+	sz max_row = -1;
+	sz count = 0;
+	for (sz r = 0; r < row_count; r++) {
 		String line = rows[r];
-		int k = 0;
-		int col = 0;
+		sz k = 0;
+		sz col = 0;
 		while (k < line.len) {
 			long cp = read_codepoint(line, &k);
 			if (cp == 0x20) { col++; continue; }
@@ -304,13 +304,13 @@ fn void Model.parse_text(Model* self) {
 
 	// Second pass: collect targets. byte_off/byte_len point into the source
 	// row String so we can render the actual seXtant glyph at the cell.
-	int idx = 0;
-	for (int r = min_row; r <= max_row && idx < self.total; r++) {
+	sz idx = 0;
+	for (sz r = min_row; r <= max_row && idx < self.total; r++) {
 		String line = rows[r];
-		int k = 0;
-		int col = 0;
+		sz k = 0;
+		sz col = 0;
 		while (k < line.len && idx < self.total) {
-			int glyph_start = k;
+			sz glyph_start = k;
 			long cp = read_codepoint(line, &k);
 			if (cp == 0x20) { col++; continue; }
 			if (!is_sextant_filled(cp)) continue;
@@ -339,9 +339,9 @@ fn void Model.parse_text(Model* self) {
 
 	// Sort bottom-up, then left-to-right, so successive waves rebuild the
 	// word row by row starting from the baseline.
-	for (int i = 1; i < self.total; i++) {
+	for (sz i = 1; i < self.total; i++) {
 		Particle cur_p = self.particles[i];
-		int j = i - 1;
+		sz j = i - 1;
 		while (j >= 0
 				&& (self.particles[j].row < cur_p.row
 					|| (self.particles[j].row == cur_p.row
@@ -378,11 +378,11 @@ fn float rand_range(float lo, float hi) {
 }
 
 fn void Model.emit_cloud(Model* self) {
-	int n = self.total;
-	int start = self.next_emit_index;
-	int end = start + PARTICLES_PER_WAVE;
+	sz n = self.total;
+	sz start = self.next_emit_index;
+	sz end = start + PARTICLES_PER_WAVE;
 	if (end > n) end = n;
-	for (int i = start; i < end; i++) {
+	for (sz i = start; i < end; i++) {
 		Particle* p = &self.particles[i];
 		// Spray: scatter the launch point widely around the corner, fire in a
 		// fully random direction at a slightly random speed, and stagger the
@@ -438,7 +438,7 @@ fn void Model.randomize_palette(Model* self) {
 	// luminance — a consistent brightness sheen runs across the word.
 	double mid = (double)rand_range(40.0f, 58.0f);
 	double step = (double)rand_range(6.0f, 14.0f);
-	int up = rand() % 2 == 0 ? 1 : -1;
+	sz up = rand() % 2 == 0 ? 1 : -1;
 	double l0 = mid + (double)up * -step;
 	double l1 = mid;
 	double l2 = mid + (double)up * step;
@@ -455,14 +455,14 @@ fn void Model.randomize_palette(Model* self) {
 fn bool Model.all_settled(Model* self) {
 	if (self.total == 0) return false;
 	if (self.next_emit_index < self.total) return false;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		if (!self.particles[i].settled) return false;
 	}
 	return true;
 }
 
 fn void Model.snap_stragglers(Model* self) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = true;
@@ -471,7 +471,7 @@ fn void Model.snap_stragglers(Model* self) {
 }
 
 fn bool Model.any_alive(Model* self) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		if (self.particles[i].alive) return true;
 	}
 	return false;
@@ -480,7 +480,7 @@ fn bool Model.any_alive(Model* self) {
 // True when every living bot is at rest — used by effects that end with a
 // settled pile (COLLAPSE, SPLAT, TOPPLE, SPHERES) to know when to fade out.
 fn bool Model.all_resting(Model* self) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (p.alive && !p.resting) return false;
 	}
@@ -490,7 +490,7 @@ fn bool Model.all_resting(Model* self) {
 fn void Model.restart_cycle(Model* self) {
 	self.cycle++;
 	self.randomize_palette();
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		self.particles[i].alive = false;
 		self.particles[i].settled = false;
 		self.particles[i].resting = false;
@@ -512,7 +512,7 @@ fn void Model.restart_cycle(Model* self) {
 }
 
 fn void Model.update_physics(Model* self) {
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue; // not sprayed out yet
@@ -627,9 +627,9 @@ fn glaze::Color to_glaze(xray::Color c) {
 fn xray::Color gradient_sat(Model* self, float pos) {
 	float span = (float)(self.text_w > 1 ? self.text_w - 1 : 1);
 	float t = pos / span;
-	t = t - (float)(int)t;      // fractional part
+	t = t - (float)(sz)t;      // fractional part
 	if (t < 0.0f) t += 1.0f;    // ...which is negative for a leftward scroll
-	int lo = t < 0.5f ? 0 : 1;
+	sz lo = t < 0.5f ? 0 : 1;
 	double u = t < 0.5f ? (double)t * 2.0 : ((double)t - 0.5) * 2.0;
 	glaze::Color from = to_glaze(self.palette[lo]);
 	glaze::Color to = to_glaze(self.palette[lo + 1]);
@@ -637,7 +637,7 @@ fn xray::Color gradient_sat(Model* self, float pos) {
 	return xray::color_rgb(mixed.r, mixed.g, mixed.b);
 }
 
-fn xray::Color gradient_color(Model* self, int col) {
+fn xray::Color gradient_color(Model* self, sz col) {
 	// Map the column across the *text* span (not the screen) to a 3-stop
 	// gradient. `col` is an absolute screen column, so subtract text_x first
 	// and clamp — otherwise t runs past 1 and the ramp overshoots.
@@ -650,7 +650,7 @@ fn xray::Color gradient_color(Model* self, int col) {
 
 	// Blend in CIE LUV via glaze, not sRGB — a straight sRGB lerp dips in
 	// lightness mid-ramp and reads as a seam at each stop.
-	int lo = t < 0.5f ? 0 : 1;
+	sz lo = t < 0.5f ? 0 : 1;
 	double u = t < 0.5f ? (double)t * 2.0 : ((double)t - 0.5) * 2.0;
 	glaze::Color from = to_glaze(self.palette[lo]);
 	glaze::Color to = to_glaze(self.palette[lo + 1]);
@@ -754,8 +754,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.TICK) {
 		// Holding space runs extra steps per frame rather than shortening the
 		// frame, so the frame rate stays put and only the sim speeds up.
-		int steps = self.frame < self.turbo_until ? BASE_STEPS * 4 : BASE_STEPS;
-		for (int step = 0; step < steps; step++) self.step();
+		sz steps = self.frame < self.turbo_until ? BASE_STEPS * 4 : BASE_STEPS;
+		for (sz step = 0; step < steps; step++) self.step();
 		return arm_tick(self);
 	}
 
@@ -769,9 +769,9 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			// last effect actually run — otherwise every TAB during the
 			// pause re-queues the same one and the key looks dead.
 			if (self.preview_at != 0) {
-				self.forced_exit = (Exit)(((int)self.forced_exit + 1) % EXIT_COUNT);
+				self.forced_exit = (Exit)(((sz)self.forced_exit + 1) % EXIT_COUNT);
 			} else if (self.exit_previewed || self.has_last_exit) {
-				self.forced_exit = (Exit)(((int)self.last_exit + 1) % EXIT_COUNT);
+				self.forced_exit = (Exit)(((sz)self.last_exit + 1) % EXIT_COUNT);
 			} else {
 				self.forced_exit = Exit.EXPLODE;
 			}
@@ -839,7 +839,7 @@ fn String exit_name(Exit e) {
 	}
 }
 
-fn String glyph_at(List{String} rows, int row_src, int byte_off, int byte_len) {
+fn String glyph_at(List{String} rows, sz row_src, sz byte_off, sz byte_len) {
 	// Pull the byte range from the source row String. Note the `:len` form —
 	// C3's `a..b` range is inclusive and would grab a trailing stray byte.
 	String line = rows[row_src];
@@ -854,18 +854,18 @@ fn void draw_badge(Model* self) {
 	xray::ScreenBuffer* sb = self.canvas;
 	Exit shown = self.forced_exit;
 	String label = exit_name(shown);
-	int pad = 1;
-	int bw = (int)label.len + pad * 2;
-	int bx = self.w - bw - 1;
-	int by = 0;
+	sz pad = 1;
+	sz bw = (sz)label.len + pad * 2;
+	sz bx = self.w - bw - 1;
+	sz by = 0;
 	if (bx < 0 || self.h <= 0) return;
 	xray::Color plate = xray::color_rgb(46, 44, 62);
 	xray::Color ink = xray::color_rgb(190, 180, 210);
 	xray::Style bg = xray::default_style().set_fg(ink).set_bg(plate);
-	for (int i = 0; i < bw; i++) {
+	for (sz i = 0; i < bw; i++) {
 		sb.set_cell((sz)(bx + i), (sz)by, xray::new_cell(" ", 1, bg));
 	}
-	for (int i = 0; i < label.len; i++) {
+	for (sz i = 0; i < label.len; i++) {
 		String ch = label[(sz)i:1];
 		sb.set_cell((sz)(bx + pad + i), (sz)by, xray::new_cell(ch, 1, bg));
 	}
@@ -887,9 +887,9 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		(float)self.w * 0.65f, (float)self.h * 0.95f);
 
 	xray::Style dot_s = xray::default_style().set_fg(xray::color_rgb(30, 38, 60)).set_bg(xray::color_transparent());
-	for (int row = 0; row < self.h; row++) {
-		for (int col = 0; col < self.w; col++) {
-			int mod = (col * 7 + row * 13) % 41;
+	for (sz row = 0; row < self.h; row++) {
+		for (sz col = 0; col < self.w; col++) {
+			sz mod = (col * 7 + row * 13) % 41;
 			if (mod == 0) {
 				sb.set_cell((sz)col, (sz)row, xray::new_cell(" ", 1, dot_s));
 			}
@@ -902,32 +902,32 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.fx_active) {
 		self.fx.render(self);
 		draw_badge(self);
-		return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+		return sb.view();
 	}
 
 	// In flight a bot is a half block, so it moves at twice the vertical
 	// resolution of a cell. Two bots sharing a cell composite into a full
 	// block, so accumulate into a mask first rather than drawing directly.
 	for (sz i = 0; i < self.half_mask.len; i++) self.half_mask[i] = 0;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue;
 		if (p.settled) continue;
 		if (p.resting) continue;
-		int cell_col = (int)p.x;
-		int half_row = (int)(p.y * 2.0f);
-		int cell_row = half_row / 2;
+		sz cell_col = (sz)p.x;
+		sz half_row = (sz)(p.y * 2.0f);
+		sz cell_row = half_row / 2;
 		if (cell_col < 0 || cell_col >= self.w) continue;
 		if (cell_row < 0 || cell_row >= self.h) continue;
-		int idx = cell_row * self.w + cell_col;
+		sz idx = cell_row * self.w + cell_col;
 		self.half_mask[idx] |= (char)(half_row % 2 == 0 ? 1 : 2);
 		xray::Color pc = gradient_color(self, p.col);
 		self.half_col[idx] = pc;
 	}
-	for (int row = 0; row < self.h; row++) {
-		for (int col = 0; col < self.w; col++) {
-			int idx = row * self.w + col;
+	for (sz row = 0; row < self.h; row++) {
+		for (sz col = 0; col < self.w; col++) {
+			sz idx = row * self.w + col;
 			char mask = self.half_mask[idx];
 			if (mask == 0) continue;
 			String g = "█";
@@ -939,7 +939,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	}
 
 	// draw settled particles with gradient
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive || !p.settled) continue;
 		if (p.col < 0 || p.col >= self.w) continue;
@@ -953,12 +953,12 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// Effect name badge, top right, shown briefly after TAB.
 	draw_badge(self);
 
-	return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+	return sb.view();
 }
 
 fn int main() {
 	Model m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

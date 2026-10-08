@@ -8,8 +8,8 @@ import boba;
 // ============================================================
 
 struct PasteProbeModel {
-	int paste_count;
-	int key_count;
+	sz paste_count;
+	sz key_count;
 	// Store the last paste text in a fixed buffer for assertions.
 	// Tests inject at most a few hundred bytes, so 256 is plenty.
 	char[256] last_paste_buf;
@@ -50,7 +50,7 @@ fn void PasteProbeModel.on_mount(PasteProbeModel* self) @dynamic { }
 fn void PasteProbeModel.on_destroy(PasteProbeModel* self) @dynamic { }
 
 fn milktea::View PasteProbeModel.view(PasteProbeModel* self) @dynamic {
-	return milktea::new_view("paste-probe");
+	return milktea::view("paste-probe");
 }
 
 // Helper: return the last paste as a String view into the model's buffer.
@@ -176,8 +176,8 @@ fn void test_paste_textinput_no_newline_inserts_all() @test {
 // that quuits on a key instead.
 
 struct PasteThenKeyModel {
-	int paste_count;
-	int key_count;
+	sz paste_count;
+	sz key_count;
 	char[64] last_paste_buf;
 	sz last_paste_len;
 }
@@ -213,7 +213,7 @@ fn void PasteThenKeyModel.on_mount(PasteThenKeyModel* self) @dynamic { }
 fn void PasteThenKeyModel.on_destroy(PasteThenKeyModel* self) @dynamic { }
 
 fn milktea::View PasteThenKeyModel.view(PasteThenKeyModel* self) @dynamic {
-	return milktea::new_view("paste-then-key");
+	return milktea::view("paste-then-key");
 }
 
 fn void test_paste_followed_by_key() @test {

@@ -72,10 +72,10 @@ fn milktea::View FocusModel.view(FocusModel* self) @dynamic {
 			string::tformat("Focus reporting: %s\nPress t to toggle | q to quit", self.reporting ? "ON" : "OFF")
 		)
 	);
-	return milktea::new_alt_screen_view(out.str_view());
+	return milktea::view(out.str_view());
 }
 
 fn int main() {
 	FocusModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

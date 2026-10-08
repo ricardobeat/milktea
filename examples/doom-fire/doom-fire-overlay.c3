@@ -9,8 +9,8 @@ extern fn int rand();
 extern fn void srand(uint seed);
 extern fn long c3_time_ms_long();
 
-const int MAX_W = 400;
-const int MAX_H = 400;
+const sz MAX_W = 400;
+const sz MAX_H = 400;
 
 // Canonical DOOM fire palette: 37 RGB colors (from DoomFirePSX)
 // Index 0 = coldest (near-black), index 36 = hottest (white)
@@ -67,8 +67,8 @@ xray::Cell[37] fire_cells;
 // TEA watermark — DOS Rebel font, gray top / red→amber bottom
 // ============================================================
 
-const int MASK_W = 37;
-const int MASK_H = 8;
+const sz MASK_W = 37;
+const sz MASK_H = 8;
 
 // Encoded mask: 0=empty, 1=█ full block (U+2588), 2=░ light shade (U+2591)
 char[MASK_W][MASK_H] tea_mask_data = {
@@ -85,21 +85,26 @@ char[MASK_W][MASK_H] tea_mask_data = {
 // Pre-built cells for each mask position
 xray::Cell[MASK_H * MASK_W] tea_mask_cells;
 
-const int FIRE_MAX = 37;
+const sz FIRE_MAX = 37;
 
 struct FireModel {
-	int* fire;
-	int width;
-	int height;
+	sz* fire;
+	sz width;
+	sz height;
 	long startTime;
 	// Pre-allocated cell grid for direct rendering
 	xray::Cell[] view_cells;
-	int view_cols;
-	int view_rows;
+	sz view_cols;
+	sz view_rows;
+	// Per-row decay, split into a whole part and a probability of one more.
+	// Calculated from the terminal height so the fire always reaches over the
+	// watermark; see set_fire_decay.
+	sz decay_whole;
+	float decay_frac;
 }
 
 fn void init_fire_cells() {
-	for (int i = 0; i < FIRE_MAX; i++) {
+	for (sz i = 0; i < FIRE_MAX; i++) {
 		FireColor c   = fire_palette[i];
 		xray::Style s = xray::default_style().set_fg(xray::color_rgb(c.r, c.g, c.b));
 		fire_cells[i] = xray::new_cell("\xe2\x96\x80", 1, s);
@@ -120,9 +125,9 @@ fn void init_tea_mask() {
 	};
 	xray::Color bg = xray::color_rgb(0, 0, 0);
 
-	for (int row = 0; row < MASK_H; row++) {
-		for (int col = 0; col < MASK_W; col++) {
-			int idx  = row * MASK_W + col;
+	for (sz row = 0; row < MASK_H; row++) {
+		for (sz col = 0; col < MASK_W; col++) {
+			sz idx  = row * MASK_W + col;
 			char val = tea_mask_data[row][col];
 			if (val == 0) {
 				tea_mask_cells[idx] = xray::empty_cell();
@@ -144,11 +149,12 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	self.startTime = c3_time_ms_long();
 	self.width = 80;
 	self.height = 48;
-	self.fire = mem::new_array(int, MAX_W * MAX_H);
-	for (int i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
-	for (int x = 0; x < self.width; x++) {
-		self.fire[(self.height / 2 - 1) * self.width + x] = 36;
+	self.fire = mem::new_array(sz, MAX_W * MAX_H);
+	for (sz i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
+	for (sz x = 0; x < self.width; x++) {
+		self.fire[(self.height - 1) * self.width + x] = 36;
 	}
+	self.set_fire_decay();
 	self.view_cols = self.width;
 	self.view_rows = self.height / 2;
 	self.view_cells = mem::new_array(xray::Cell, (sz)(self.view_cols * self.view_rows));
@@ -159,21 +165,56 @@ fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	return milktea::tick();
 }
 
-fn void spread_pixel(FireModel* m, int idx) {
+// MASK_AIM is where the fire is aimed, in pixel rows below the top of the
+// watermark. The blend only shows where flame and glyph share a cell, so the
+// fire has to reach into the text -- but aiming over the top of it drowns the
+// letters, and the tips overshoot this by a few rows anyway, so the aim sits
+// inside the text and lets the flicker do the rest.
+const sz MASK_AIM = 5;
+
+// mask_row returns the watermark's top row, in view rows. The view and the
+// fire both need it -- one to paint the glyphs, the other to know what it has
+// to cover -- so it is derived in one place from the view height.
+fn sz mask_row(sz view_rows) {
+	sz y = (view_rows - MASK_H) / 2 - 1;
+	if (y < 0) y = 0;
+	return y;
+}
+
+// set_fire_decay picks the per-row decay so the flame tops out in the same
+// place relative to the watermark whatever the terminal height.
+//
+// A pixel starts at 36 and loses `decay` per row, so it climbs about
+// 36/decay rows: aiming at a row means solving for the decay rather than
+// guessing it, which is what the old height-derived ratio did -- it left the
+// fire covering the text in a short terminal and falling short of it in a tall
+// one. The fractional part is applied as a probability, because a decay
+// rounded to a whole number can only hit a few reachable heights.
+fn void FireModel.set_fire_decay(FireModel* self) {
+	sz text_top = mask_row(self.height / 2) * 2;
+	sz target   = text_top + MASK_AIM;
+	if (target < 0) target = 0;
+	sz band = (self.height - 1) - target;
+	if (band < 1) band = 1;
+	float per        = 36.0f / (float)band;
+	self.decay_whole = (sz)per;
+	self.decay_frac  = per - (float)self.decay_whole;
+}
+
+fn void spread_pixel(FireModel* m, sz idx) {
 	if (idx < m.width) return;
-	int pixel = m.fire[idx];
+	sz pixel = m.fire[idx];
 	if (pixel == 0) {
 		m.fire[idx - m.width] = 0;
 		return;
 	}
-	int rnd     = rand() % 5;
-	int dst     = idx - rnd + 1;
-	int buf_len = m.width * m.height;
-	float ratio = 2 - (float)m.height / 80;
+	sz rnd     = rand() % 5;
+	sz dst     = idx - rnd + 1;
+	sz buf_len = m.width * m.height;
 	if (dst - m.width >= 0 && dst - m.width < buf_len) {
-		float r     = (float)(rand() % 2) + (float)(rand() % 2);
-		int decay   = (int)(r * ratio + 0.4f);
-		int new_val = pixel - decay;
+		sz decay = m.decay_whole;
+		if (m.decay_frac > 0 && (float)(rand() % 1000) / 1000.0f < m.decay_frac) decay++;
+		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.width] = new_val;
 	}
@@ -181,19 +222,20 @@ fn void spread_pixel(FireModel* m, int idx) {
 
 fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
-		int new_w = msg.window_size.width;
-		int new_h = msg.window_size.height * 2;
+		sz new_w = msg.window_size.width;
+		sz new_h = msg.window_size.height * 2;
 		if (new_w > MAX_W) new_w = MAX_W;
 		if (new_h > MAX_H) new_h = MAX_H;
 		self.width = new_w;
 		self.height = new_h;
-		for (int i = 0; i < self.width * self.height; i++) {
+		for (sz i = 0; i < self.width * self.height; i++) {
 			self.fire[i] = 0;
 		}
-		for (int x = 0; x < self.width; x++) {
+		for (sz x = 0; x < self.width; x++) {
 			self.fire[(self.height - 1) * self.width + x] = 36;
 		}
 		// Reallocate view cell grid
+		self.set_fire_decay();
 		mem::free(self.view_cells.ptr);
 		self.view_cols = self.width;
 		self.view_rows = self.height / 2;
@@ -202,8 +244,8 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	}
 
 	if (msg.kind == milktea::MsgKind.TICK) {
-		for (int x = 0; x < self.width; x++) {
-			for (int y = 0; y < self.height; y++) {
+		for (sz x = 0; x < self.width; x++) {
+			for (sz y = 0; y < self.height; y++) {
 				spread_pixel(self, y * self.width + x);
 			}
 		}
@@ -224,19 +266,19 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View FireModel.view(FireModel* self) @dynamic {
-	if (self.width == 0) return milktea::new_view("Initializing...");
+	if (self.width == 0) return milktea::view("Initializing...");
 
 	// Build cell grid directly — no string, no ANSI, no parsing.
 	// xray's diff engine handles minimal output.
-	int view_w = self.view_cols;
-	int view_h = self.view_rows;
+	sz view_w = self.view_cols;
+	sz view_h = self.view_rows;
 
-	for (int vy = 0; vy < view_h; vy++) {
-		int fire_y     = vy * 2;
-		int row_offset = vy * view_w;
-		for (int vx = 0; vx < view_w; vx++) {
-			int top_val = self.fire[fire_y * self.width + vx];
-			int bot_val = self.fire[(fire_y + 1) * self.width + vx];
+	for (sz vy = 0; vy < view_h; vy++) {
+		sz fire_y     = vy * 2;
+		sz row_offset = vy * view_w;
+		for (sz vx = 0; vx < view_w; vx++) {
+			sz top_val = self.fire[fire_y * self.width + vx];
+			sz bot_val = self.fire[(fire_y + 1) * self.width + vx];
 
 			// Start with the pre-built cell for the top pixel's fg color.
 			// Set the bg to the bottom pixel's color.
@@ -248,23 +290,23 @@ fn milktea::View FireModel.view(FireModel* self) @dynamic {
 	}
 
 	// Overlay TEA watermark where fire is cold
-	int mask_x = (view_w - MASK_W) / 2;
-	int mask_y = (view_h - MASK_H) / 2 - 1;
+	sz mask_x = (view_w - MASK_W) / 2;
+	sz mask_y = mask_row(view_h);
 
-	for (int my = 0; my < MASK_H; my++) {
-		int vy = mask_y + my;
+	for (sz my = 0; my < MASK_H; my++) {
+		sz vy = mask_y + my;
 		if (vy < 0 || vy >= view_h) continue;
-		int fire_y_top = vy * 2;
-		int fire_y_bot = fire_y_top + 1;
+		sz fire_y_top = vy * 2;
+		sz fire_y_bot = fire_y_top + 1;
 		if (fire_y_bot >= self.height) continue;
 
-		for (int mx = 0; mx < MASK_W; mx++) {
-			int vx = mask_x + mx;
+		for (sz mx = 0; mx < MASK_W; mx++) {
+			sz vx = mask_x + mx;
 			if (vx < 0 || vx >= view_w) continue;
 
 			xray::Cell mc = tea_mask_cells[my * MASK_W + mx];
 			if (mc.content_len > 0 && mc.content[0] != ' ') {
-				int idx = vy * view_w + vx;
+				sz idx = vy * view_w + vx;
 				bool cold = self.fire[fire_y_top * self.width + vx] == 0
 					&& self.fire[fire_y_bot * self.width + vx] == 0;
 				if (cold) {
@@ -295,12 +337,12 @@ fn milktea::View FireModel.view(FireModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.view_cells, (sz)view_w, (sz)view_h);
+	return milktea::cell_view(self.view_cells, view_w, view_h);
 }
 
 fn int main() {
 	FireModel m = { };
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -15,7 +15,7 @@ fn void shear_setup(void* raw) {
 	Model* self = (Model*)raw;
 	FxShear* s = mem::new(FxShear);
 	s.bar_dir = rand() % 2 == 0 ? 1.0f : -1.0f;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		p.alive = true;
 		p.settled = false;
@@ -24,7 +24,7 @@ fn void shear_setup(void* raw) {
 		p.y = (float)p.row;
 		p.vx = 0;
 		p.vy = 0;
-		int band = s.bar_dir > 0
+		sz band = s.bar_dir > 0
 			? p.col - self.text_x
 			: self.text_x + self.text_w - p.col;
 		p.spawn_tick = self.frame + @dur(band * 2 + rand() % 8);
@@ -39,7 +39,7 @@ fn void shear_setup(void* raw) {
 fn void shear_step(void* raw) {
 	Model* self = (Model*)raw;
 	FxShear* s = shear_data(self);
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
 		if (self.frame < p.spawn_tick) continue; // not torn loose yet
@@ -58,11 +58,11 @@ fn void shear_step(void* raw) {
 fn void shear_render(void* raw) {
 	Model* self = (Model*)raw;
 	xray::ScreenBuffer* sb = self.canvas;
-	for (int i = 0; i < self.total; i++) {
+	for (sz i = 0; i < self.total; i++) {
 		Particle* p = &self.particles[i];
 		if (!p.alive) continue;
-		int col = (int)p.x;
-		int row = (int)p.y;
+		sz col = (sz)p.x;
+		sz row = (sz)p.y;
 		if (col < 0 || col >= self.w) continue;
 		if (row < 0 || row >= self.h) continue;
 		xray::Style ss = xray::default_style().set_fg(gradient_color(self, p.col)).set_bg(xray::color_transparent());

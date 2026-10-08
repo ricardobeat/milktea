@@ -1,21 +1,21 @@
 module xray;
 
 // Natural sizing.
-//
+// 
 // A node's natural size is what it wants when nothing constrains it: for a
 // leaf, whatever its Content reports; for a column, the sum of its children's
 // heights and the width of its widest child; for a row, the other way around.
-//
+// 
 // It is used in two places — CFIT sizing, which is what place() and center()
 // produce, and draw_inline, which has to know how tall a tree is before it
 // can pick a rect to solve against.
-//
+// 
 // A fill child has no natural size of its own, so it contributes what its
 // content needs instead of expanding. That is what makes fill degrade to
 // fit-to-content in a container with no fixed size: there is no leftover
 // space to divide when the container's own size came from its children.
 
-fn int constraint_natural(Constraint c, int other, int fallback) @local {
+fn sz constraint_natural(Constraint c, sz other, sz fallback) @local {
 	switch (c.kind) {
 		case ConstraintKind.CLEN:
 		case ConstraintKind.CMIN:
@@ -34,41 +34,41 @@ fn int constraint_natural(Constraint c, int other, int fallback) @local {
 }
 
 // natural_width is how wide this node wants to be, given the height available.
-fn int Node.natural_width(&self, int height) {
+fn sz Node.natural_width(&self, sz height) {
 	return constraint_natural(self.layout_constraint(true), height, self.content_width(height));
 }
 
 // natural_height is how tall this node wants to be, given the width available.
-fn int Node.natural_height(&self, int width) {
+fn sz Node.natural_height(&self, sz width) {
 	return constraint_natural(self.layout_constraint(false), width, self.content_height(width));
 }
 
 // content_width measures what is inside this node, ignoring the node's own
 // width constraint.
-fn int Node.content_width(&self, int height) {
-	int pad_x = self.inset_left() + self.inset_right();
-	int inner_h = height - self.inset_top() - self.inset_bottom();
+fn sz Node.content_width(&self, sz height) {
+	sz pad_x = self.inset_left() + self.inset_right();
+	sz inner_h = height - self.inset_top() - self.inset_bottom();
 	if (inner_h < 0) inner_h = 0;
 
 	if (self.child_count == 0) {
-		int n = 0;
+		sz n = 0;
 		if (self.content != null && &self.content.measure_width) {
 			n = self.content.measure_width(inner_h / self.layout_metrics.unit_h()) * self.layout_metrics.unit_w();
 		}
 		return n + pad_x;
 	}
 
-	int total = 0;
+	sz total = 0;
 	if (self.direction == NodeDirection.ROW) {
 		// Side by side: widths add up.
-		for (int i = 0; i < self.child_count; i++) {
+		for (sz i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_width(inner_h);
 		}
 		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Stacked or layered: as wide as the widest child.
-		for (int i = 0; i < self.child_count; i++) {
-			int n = self.children[i].natural_width(inner_h);
+		for (sz i = 0; i < self.child_count; i++) {
+			sz n = self.children[i].natural_width(inner_h);
 			if (n > total) total = n;
 		}
 	}
@@ -77,30 +77,30 @@ fn int Node.content_width(&self, int height) {
 
 // content_height measures what is inside this node, ignoring the node's own
 // height constraint.
-fn int Node.content_height(&self, int width) {
-	int pad_y = self.inset_top() + self.inset_bottom();
-	int inner_w = width - self.inset_left() - self.inset_right();
+fn sz Node.content_height(&self, sz width) {
+	sz pad_y = self.inset_top() + self.inset_bottom();
+	sz inner_w = width - self.inset_left() - self.inset_right();
 	if (inner_w < 0) inner_w = 0;
 
 	if (self.child_count == 0) {
-		int n = 0;
+		sz n = 0;
 		if (self.content != null && &self.content.measure) {
 			n = self.content.measure(inner_w / self.layout_metrics.unit_w()) * self.layout_metrics.unit_h();
 		}
 		return n + pad_y;
 	}
 
-	int total = 0;
+	sz total = 0;
 	if (self.direction == NodeDirection.COLUMN) {
 		// Stacked: heights add up.
-		for (int i = 0; i < self.child_count; i++) {
+		for (sz i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_height(inner_w);
 		}
 		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Side by side or layered: as tall as the tallest child.
-		for (int i = 0; i < self.child_count; i++) {
-			int n = self.children[i].natural_height(inner_w);
+		for (sz i = 0; i < self.child_count; i++) {
+			sz n = self.children[i].natural_height(inner_w);
 			if (n > total) total = n;
 		}
 	}
@@ -109,11 +109,11 @@ fn int Node.content_height(&self, int width) {
 
 // MeasureFn adapters, so a CFIT constraint can point back at the node it
 // belongs to. The solver passes the size available on the other axis.
-fn int node_measure_w(void* ctx, int height) {
+fn sz node_measure_w(void* ctx, sz height) {
 	return ((Node*)ctx).content_width(height);
 }
 
-fn int node_measure_h(void* ctx, int width) {
+fn sz node_measure_h(void* ctx, sz width) {
 	return ((Node*)ctx).content_height(width);
 }
 
@@ -134,21 +134,21 @@ fn void Node.solve_layout(&self, Rect area) {
 	// own constraints and its own justify/align — which is how a centered
 	// modal ends up sized to its content in the middle of the screen.
 	if (self.direction == NodeDirection.STACK) {
-		for (int i = 0; i < self.child_count; i++) {
+		for (sz i = 0; i < self.child_count; i++) {
 			self.children[i].solve_layout(self.stack_child_rect(inner, self.children[i]));
 		}
 		return;
 	}
 
 	bool row = self.direction == NodeDirection.ROW;
-	int cc = self.child_count;
+	sz cc   = self.child_count;
 
 	Constraint[MAX_NODE_CHILDREN] constraints;
 	Rect[MAX_NODE_CHILDREN] child_rects;
 
 	// The main axis belongs to the parent, so it picks which of each child's
 	// two constraints applies along it.
-	for (int i = 0; i < cc; i++) {
+	for (sz i = 0; i < cc; i++) {
 		constraints[i] = self.children[i].layout_constraint(row);
 	}
 
@@ -160,17 +160,17 @@ fn void Node.solve_layout(&self, Rect area) {
 
 	// Main-axis justification: shift the solved rects within whatever space
 	// the children did not claim.
-	int content_size = 0;
-	for (int i = 0; i < cc; i++) {
+	sz content_size = 0;
+	for (sz i = 0; i < cc; i++) {
 		content_size += row ? child_rects[i].w : child_rects[i].h;
 	}
 	if (cc > 1) content_size += self.layout_gap() * (cc - 1);
 
-	int spare = (row ? inner.w : inner.h) - content_size;
+	sz spare = (row ? inner.w : inner.h) - content_size;
 	if (spare < 0) spare = 0;
 
-	for (int i = 0; i < cc; i++) {
-		int offset = justify_offset(self.justify, spare, i, cc);
+	for (sz i = 0; i < cc; i++) {
+		sz offset = justify_offset(self.justify, spare, i, cc);
 		if (row) {
 			child_rects[i].x += offset;
 		} else {
@@ -179,25 +179,25 @@ fn void Node.solve_layout(&self, Rect area) {
 	}
 
 	// Cross-axis alignment and sizing.
-	int cross_total  = row ? inner.h : inner.w;
-	int cross_origin = row ? inner.y : inner.x;
+	sz cross_total  = row ? inner.h : inner.w;
+	sz cross_origin = row ? inner.y : inner.x;
 
-	for (int i = 0; i < cc; i++) {
+	for (sz i = 0; i < cc; i++) {
 		Constraint cross = self.children[i].layout_constraint(!row);
-		int main_size = row ? child_rects[i].w : child_rects[i].h;
+		sz main_size = row ? child_rects[i].w : child_rects[i].h;
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
 		// for a specific cross size still gets it — otherwise .with_width(30)
 		// inside a vstack would be silently ignored, since stretch is the
 		// default alignment.
-		int size = cross_total;
+		sz size = cross_total;
 		if (self.align != AlignItems.ALIGN_STRETCH || cross.kind != ConstraintKind.CFILL) {
 			size = resolve_axis(cross, cross_total, main_size);
 		}
 		if (size > cross_total) size = cross_total;
 		if (size < 0) size = 0;
 
-		int pos = cross_origin + align_offset(self.align, cross_total - size);
+		sz pos = cross_origin + align_offset(self.align, cross_total - size);
 
 		if (row) {
 			child_rects[i].y = pos;
@@ -208,7 +208,15 @@ fn void Node.solve_layout(&self, Rect area) {
 		}
 	}
 
-	for (int i = 0; i < cc; i++) {
+	// offset() displaces a child from where the row/column put it, after both
+	// axes are settled, so an animated child does not disturb its siblings'
+	// positions the way changing its size would. The shift is in cells.
+	for (sz i = 0; i < cc; i++) {
+		child_rects[i].x += self.children[i].shift_x * self.layout_metrics.unit_w();
+		child_rects[i].y += self.children[i].shift_y * self.layout_metrics.unit_h();
+	}
+
+	for (sz i = 0; i < cc; i++) {
 		self.children[i].solve_layout(child_rects[i]);
 	}
 }
@@ -218,30 +226,35 @@ fn void Node.solve_layout(&self, Rect area) {
 // axis gets that size, positioned by its own justify (horizontally) and align
 // (vertically) — which is what place() sets both of.
 fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
-	int w = resolve_axis(child.layout_constraint(true), area.w, area.h);
+	sz w = resolve_axis(child.layout_constraint(true), area.w, area.h);
 	if (w > area.w) w = area.w;
 	if (w < 0) w = 0;
 	// Height is measured at the width just settled on, not the area's:
 	// content that wraps is taller in a narrower box.
-	int h = resolve_axis(child.layout_constraint(false), area.h, w);
+	sz h = resolve_axis(child.layout_constraint(false), area.h, w);
 	if (h > area.h) h = area.h;
 	if (h < 0) h = 0;
 
 	// A pinned child names its own offset; everything else is placed by its
 	// justify and align within the space it did not fill.
-	int x = child.pinned
+	sz x = child.pinned
 		? child.offset_x * self.layout_metrics.unit_w()
 		: justify_offset(child.justify, area.w - w, 0, 1);
-	int y = child.pinned
+	sz y = child.pinned
 		? child.offset_y * self.layout_metrics.unit_h()
 		: align_offset(child.align, area.h - h);
+
+	// offset() displaces the child from wherever it landed, pinned or placed,
+	// without having resized it. The shift is in cells.
+	x += child.shift_x * self.layout_metrics.unit_w();
+	y += child.shift_y * self.layout_metrics.unit_h();
 
 	return { .x = area.x + x, .y = area.y + y, .w = w, .h = h };
 }
 
 // resolve_axis turns one constraint into a size. avail is the space on this
 // axis, other the space on the perpendicular one, which CFIT measures against.
-fn int resolve_axis(Constraint c, int avail, int other) @local {
+fn sz resolve_axis(Constraint c, sz avail, sz other) @local {
 	switch (c.kind) {
 		case ConstraintKind.CLEN:
 		case ConstraintKind.CMIN:
@@ -257,7 +270,7 @@ fn int resolve_axis(Constraint c, int avail, int other) @local {
 	}
 }
 
-fn int justify_offset(JustifyContent j, int spare, int i, int n) @local {
+fn sz justify_offset(JustifyContent j, sz spare, sz i, sz n) @local {
 	if (spare < 0) spare = 0;
 	switch (j) {
 		case JustifyContent.JUSTIFY_END:
@@ -275,7 +288,7 @@ fn int justify_offset(JustifyContent j, int spare, int i, int n) @local {
 	}
 }
 
-fn int align_offset(AlignItems a, int spare) @local {
+fn sz align_offset(AlignItems a, sz spare) @local {
 	if (spare < 0) spare = 0;
 	switch (a) {
 		case AlignItems.ALIGN_CENTER:

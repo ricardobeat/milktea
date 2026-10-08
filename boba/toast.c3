@@ -5,9 +5,9 @@ import glaze;
 import xray;
 import std::core::dstring;
 
-const int TOAST_ANIM_MS = 12;
-const int TOAST_DISPLAY_MS = 2500;
-const int TOAST_ANIM_STEPS = 5;
+const sz TOAST_ANIM_MS = 12;
+const sz TOAST_DISPLAY_MS = 2500;
+const sz TOAST_ANIM_STEPS = 5;
 
 enum ToastState {
 	HIDDEN,
@@ -19,10 +19,10 @@ enum ToastState {
 struct Toast {
 	String message;
 	ToastState state;
-	int anim_step;
-	int visible_ticks;
-	int screen_width;
-	int screen_height;
+	sz anim_step;
+	sz visible_ticks;
+	sz screen_width;
+	sz screen_height;
 	glaze::Style style;
 	glaze::Style shadow_style;
 }
@@ -89,15 +89,15 @@ fn bool Toast.visible(&self) {
 	return self.state != ToastState.HIDDEN;
 }
 
-fn int Toast.toast_width(&self) {
+fn sz Toast.toast_width(&self) {
 	return glaze::string_width(self.message) + 4; // padding left(2) + right(2)
 }
 
-const int TOAST_H = 3; // padding top(1) + content(1) + padding bottom(1)
-const int SHADOW_OFFSET = 1;
+const sz TOAST_H = 3; // padding top(1) + content(1) + padding bottom(1)
+const sz SHADOW_OFFSET = 1;
 
 // overlay_count returns how many overlays to add (0 if hidden, 2 if visible: shadow + toast).
-fn int Toast.overlay_count(&self) {
+fn sz Toast.overlay_count(&self) {
 	return self.visible() ? 2 : 0;
 }
 
@@ -105,14 +105,14 @@ fn int Toast.overlay_count(&self) {
 fn milktea::View Toast.add_overlays(&self, milktea::View v) {
 	if (!self.visible()) return v;
 
-	int toast_w = self.toast_width();
+	sz toast_w = self.toast_width();
 
-	int visible_rows = (self.anim_step * TOAST_H + TOAST_ANIM_STEPS - 1) / TOAST_ANIM_STEPS;
+	sz visible_rows = (self.anim_step * TOAST_H + TOAST_ANIM_STEPS - 1) / TOAST_ANIM_STEPS;
 	if (visible_rows > TOAST_H) visible_rows = TOAST_H;
 	if (visible_rows < 1) visible_rows = 1;
 
-	int base_y = self.screen_height - visible_rows - 3;
-	int base_x = (self.screen_width - toast_w) / 2;
+	sz base_y = self.screen_height - visible_rows - 3;
+	sz base_x = (self.screen_width - toast_w) / 2;
 	if (base_x < 0) base_x = 0;
 
 	String rendered = self.style.render(self.message);
@@ -139,33 +139,33 @@ fn milktea::View Toast.add_overlays(&self, milktea::View v) {
 fn milktea::View Toast.add_overlays_manual(&self, milktea::View v) {
 	if (!self.visible()) return v;
 
-	int toast_w = self.toast_width();
-	int total_h = TOAST_H + SHADOW_OFFSET;
+	sz toast_w = self.toast_width();
+	sz total_h = TOAST_H + SHADOW_OFFSET;
 
-	int visible_rows = (self.anim_step * total_h + TOAST_ANIM_STEPS - 1) / TOAST_ANIM_STEPS;
+	sz visible_rows = (self.anim_step * total_h + TOAST_ANIM_STEPS - 1) / TOAST_ANIM_STEPS;
 	if (visible_rows > total_h) visible_rows = total_h;
 	if (visible_rows < 1) visible_rows = 1;
 
-	int base_y = self.screen_height - visible_rows - 3;
-	int base_x = (self.screen_width - toast_w) / 2;
+	sz base_y = self.screen_height - visible_rows - 3;
+	sz base_x = (self.screen_width - toast_w) / 2;
 	if (base_x < 0) base_x = 0;
 
-	int shadow_y = base_y + SHADOW_OFFSET;
-	int shadow_x = base_x + SHADOW_OFFSET;
-	int shadow_visible_h = visible_rows - SHADOW_OFFSET;
+	sz shadow_y = base_y + SHADOW_OFFSET;
+	sz shadow_x = base_x + SHADOW_OFFSET;
+	sz shadow_visible_h = visible_rows - SHADOW_OFFSET;
 	if (shadow_visible_h > TOAST_H) shadow_visible_h = TOAST_H;
 	if (shadow_visible_h > 0) {
 		DString shadow_buf = dstring::temp();
-		for (int row = 0; row < shadow_visible_h; row++) {
+		for (sz row = 0; row < shadow_visible_h; row++) {
 			if (row > 0) shadow_buf.append_char('\n');
 			DString line = dstring::temp();
-			for (int col = 0; col < toast_w; col++) line.append_char(' ');
+			for (sz col = 0; col < toast_w; col++) line.append_char(' ');
 			shadow_buf.append_string(self.shadow_style.render(line.str_view()));
 		}
 		v = v.add_overlay(shadow_x, shadow_y, toast_w, shadow_visible_h, shadow_buf.str_view(), alpha: 128);
 	}
 
-	int toast_visible_h = visible_rows;
+	sz toast_visible_h = visible_rows;
 	if (toast_visible_h > TOAST_H) toast_visible_h = TOAST_H;
 	String rendered = self.style.render(self.message);
 	v = v.add_overlay(base_x, base_y, toast_w, toast_visible_h, rendered);

@@ -11,23 +11,23 @@ import xray;
 // the list and the buttons are navigated at once without a focus mode. That
 // suits a short list, which is what a picker is for.
 
-const int MAX_CHOICES = 8;
+const sz MAX_CHOICES = 8;
 
 struct Picker {
 	String title;
 	String[MAX_CHOICES] choices;
-	int count;
+	sz count;
 
 	// Which option is highlighted, and which was highlighted when the picker
 	// opened — restored if the user cancels.
-	int selected;
-	int opening;
+	sz selected;
+	sz opening;
 
 	Button[DIALOG_BUTTONS] buttons;
-	int focused_button;
+	sz focused_button;
 	bool open;
 
-	int min_cols;
+	sz min_cols;
 
 	// Click-path counterpart to what handle_key returns — see Dialog.pending.
 	Pressed pending;
@@ -38,12 +38,12 @@ struct Picker {
 
 struct ChoiceSlot {
 	Picker* picker;
-	int index;
+	sz index;
 }
 
 struct PickerButtonSlot {
 	Picker* picker;
-	int index;
+	sz index;
 }
 
 fn Picker new_picker(String title, String ok, String cancel) {
@@ -60,7 +60,7 @@ fn void Picker.add_choice(&self, String label) {
 
 // show opens the picker on `current`, remembering it so a cancel can put it
 // back.
-fn void Picker.show(&self, int current) {
+fn void Picker.show(&self, sz current) {
 	self.open = true;
 	self.selected = current;
 	self.opening = current;
@@ -107,14 +107,14 @@ fn Pressed Picker.take_pending(&self) {
 	return p;
 }
 
-fn void picker_choice_clicked(void* id, String id_str, int col, int row) @local {
+fn void picker_choice_clicked(void* id, String id_str, sz col, sz row) @local {
 	ChoiceSlot* slot = (ChoiceSlot*)id;
 	// A click on a choice previews it, same as arrowing to it — it does not
 	// confirm on its own, matching how Up/Down behave for the keyboard path.
 	slot.picker.selected = slot.index;
 }
 
-fn void picker_button_clicked(void* id, String id_str, int col, int row) @local {
+fn void picker_button_clicked(void* id, String id_str, sz col, sz row) @local {
 	PickerButtonSlot* slot = (PickerButtonSlot*)id;
 	Picker* p = slot.picker;
 	p.focused_button = slot.index;
@@ -127,7 +127,7 @@ fn void picker_button_clicked(void* id, String id_str, int col, int row) @local 
 	}
 }
 
-fn void picker_backdrop_dismissed(void* id, String id_str, int col, int row) @local {
+fn void picker_backdrop_dismissed(void* id, String id_str, sz col, sz row) @local {
 	Picker* p = (Picker*)id;
 	p.open = false;
 	p.selected = p.opening;
@@ -154,7 +154,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	xray::Node* panel_node = milktea::vbox(panel)
 		.with_gap(1)
 		.center()
-		.shadow(milktea::shadow(2, 1).with_color(milktea::to_cell_color(th.shadow)));
+		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
 	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
 
 	panel_node.add(milktea::text(title_s, self.title).fit_height());
@@ -165,7 +165,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.fg = th.ink, .bg = th.accent, .bold = true,
 		.pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT,
 	};
-	for (int i = 0; i < self.count; i++) {
+	for (sz i = 0; i < self.count; i++) {
 		self.choice_slots[i] = { .picker = self, .index = i };
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
@@ -179,7 +179,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.with_gap(2)
 		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
 		.height(milktea::cells(2)); // label row + the button's own drop shadow
-	for (int i = 0; i < DIALOG_BUTTONS; i++) {
+	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
 		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));

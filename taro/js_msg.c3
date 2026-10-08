@@ -29,8 +29,8 @@ fn void* msg_to_js(Runtime* rt, milktea::Msg msg) {
 
 		case milktea::MsgKind.WINDOW_SIZE:
 			rt.set_prop_str(obj, "kind", "window_size");
-			rt.set_prop_int(obj, "width", msg.window_size.width);
-			rt.set_prop_int(obj, "height", msg.window_size.height);
+			rt.set_prop_int(obj, "width", (int)msg.window_size.width);
+			rt.set_prop_int(obj, "height", (int)msg.window_size.height);
 
 		case milktea::MsgKind.MOUSE:
 			rt.set_prop_str(obj, "kind", "mouse");
@@ -43,8 +43,8 @@ fn void* msg_to_js(Runtime* rt, milktea::Msg msg) {
 			String action_str = mouse_action_to_string(msg.mouse.action);
 			rt.set_prop_str(mouse_obj, "action", action_str);
 
-			rt.set_prop_int(mouse_obj, "row", msg.mouse.row);
-			rt.set_prop_int(mouse_obj, "col", msg.mouse.col);
+			rt.set_prop_int(mouse_obj, "row", (int)msg.mouse.row);
+			rt.set_prop_int(mouse_obj, "col", (int)msg.mouse.col);
 			rt.set_prop_bool(mouse_obj, "shift", msg.mouse.shift);
 			rt.set_prop_bool(mouse_obj, "alt", msg.mouse.alt);
 			rt.set_prop_bool(mouse_obj, "ctrl", msg.mouse.ctrl);
@@ -54,7 +54,7 @@ fn void* msg_to_js(Runtime* rt, milktea::Msg msg) {
 
 		case milktea::MsgKind.TICK:
 			rt.set_prop_str(obj, "kind", "tick");
-			rt.set_prop_int(obj, "tag", msg.tag);
+			rt.set_prop_int(obj, "tag", (int)msg.tag);
 
 		case milktea::MsgKind.QUIT:
 			rt.set_prop_str(obj, "kind", "quit");

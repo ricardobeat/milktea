@@ -12,7 +12,7 @@ import std::io;
 struct ClickTarget {
 	Rect rect;
 	LayoutMetrics metrics;
-	int inset_x, inset_y;
+	sz inset_x, inset_y;
 	String id_str;
 	void* id_ptr;
 	ClickFn on_click;
@@ -30,8 +30,8 @@ struct ClickTarget {
 // *count is both the starting offset and, on return, the new total. Targets
 // beyond `out.len` are silently dropped, matching the fixed-buffer-drops
 // convention used elsewhere (timers, send queue, input ring).
-fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
-	if (n == null || *count >= (int)out.len) return;
+fn void collect_click_targets(Node* n, ClickTarget[] out, sz* count) {
+	if (n == null || *count >= (sz)out.len) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null
 		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null) {
 		out[*count] = {
@@ -48,7 +48,7 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 		};
 		(*count)++;
 	}
-	for (int i = 0; i < n.child_count; i++) {
+	for (sz i = 0; i < n.child_count; i++) {
 		collect_click_targets(n.children[i], out, count);
 	}
 }
@@ -64,9 +64,9 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 // after removing GUI decoration padding, so a widget that cares where the
 // press landed inside it can read the position as a 0-based cell within its
 // own content area rather than subtracting its own origin by hand.
-fn void dispatch_click(ClickTarget[] targets, int col, int row, bool dbg) {
+fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 	if (dbg) io::eprintfn("[dispatch] (%d,%d) against %d targets", col, row, targets.len);
-	for (int i = (int)targets.len - 1; i >= 0; i--) {
+	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
 		if (dbg) {
 			Rect r = targets[i].rect;
 			io::eprintfn("  [%d] rect x=%d y=%d w=%d h=%d hit=%s click=%s id=%s",
@@ -103,8 +103,8 @@ fn void dispatch_click(ClickTarget[] targets, int col, int row, bool dbg) {
 //
 // col and row passed to the callbacks are local to the hit target's rect,
 // matching dispatch_click.
-fn void dispatch_hover(ClickTarget[] targets, int col, int row,
-		ClickTarget[] prev, int prev_count, int prev_col, int prev_row, bool dbg) {
+fn void dispatch_hover(ClickTarget[] targets, sz col, sz row,
+		ClickTarget[] prev, sz prev_count, sz prev_col, sz prev_row, bool dbg) {
 	if (col == prev_col && row == prev_row) return;
 	foreach (i, t : targets) {
 		if (t.on_hover_in == null && t.on_hover_out == null) continue;
@@ -132,13 +132,13 @@ fn void dispatch_hover(ClickTarget[] targets, int col, int row,
 // out is a caller-owned fixed buffer; *count is both the starting offset and,
 // on return, the new total. Regions beyond out.len are dropped silently, same
 // as click targets.
-fn void collect_drag_regions(Node* n, Rect[] out, int* count) {
-	if (n == null || *count >= (int)out.len) return;
+fn void collect_drag_regions(Node* n, Rect[] out, sz* count) {
+	if (n == null || *count >= (sz)out.len) return;
 	if (n.window_drag_area) {
 		out[*count] = n.computed_rect;
 		(*count)++;
 	}
-	for (int i = 0; i < n.child_count; i++) {
+	for (sz i = 0; i < n.child_count; i++) {
 		collect_drag_regions(n.children[i], out, count);
 	}
 }

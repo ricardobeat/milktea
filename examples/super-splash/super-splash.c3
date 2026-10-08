@@ -11,12 +11,12 @@ extern fn double c3_cos(double x);
 // ─── Splash types ───────────────────────────────────────────
 
 struct RgbColor {
-	int r;
-	int g;
-	int b;
+	sz r;
+	sz g;
+	sz b;
 }
 
-fn int clamp_color(int v) {
+fn sz clamp_color(sz v) {
 	if (v < 0) return 0;
 	if (v > 255) return 255;
 	return v;
@@ -25,7 +25,7 @@ fn int clamp_color(int v) {
 fn RgbColor hsv_to_rgb(double h, double s, double v) {
 	double hh = h * 6.0;
 	if (hh < 0) hh = 0;
-	int i     = (int)hh;
+	sz i     = (sz)hh;
 	double ff = hh - (double)i;
 	double p  = v * (1.0 - s);
 	double q  = v * (1.0 - s * ff);
@@ -45,7 +45,7 @@ fn RgbColor hsv_to_rgb(double h, double s, double v) {
 		default: r = v; g = p; b = p;
 	}
 
-	return { .r = clamp_color((int)(r * 255)), .g = clamp_color((int)(g * 255)), .b = clamp_color((int)(b * 255)) };
+	return { .r = clamp_color((sz)(r * 255)), .g = clamp_color((sz)(g * 255)), .b = clamp_color((sz)(b * 255)) };
 }
 
 // ─── Voxel types ────────────────────────────────────────────
@@ -93,9 +93,9 @@ fn Vec3 Vec3.rotate_z(&self, float angle) {
 
 struct SuperSplashModel {
 	// Shared
-	int width;
-	int height;
-	int frame;
+	sz width;
+	sz height;
+	sz frame;
 
 	// Splash pixel storage for compositing
 	Pixel[] splash_top; // top-half pixel colors per cell (w * h)
@@ -103,7 +103,7 @@ struct SuperSplashModel {
 
 	// Voxel
 	Voxel[8192] voxels;
-	int voxel_count;
+	sz voxel_count;
 	float rotation_x;
 	float rotation_y;
 	float rotation_z;
@@ -115,8 +115,8 @@ struct SuperSplashModel {
 
 // ─── Voxel grid (C3 text) ───────────────────────────────────
 
-const int GRID_W = 25;
-const int GRID_H = 5;
+const sz GRID_W = 25;
+const sz GRID_H = 5;
 
 const String[5] ROWS = {
 	"████████ ███████  █████  ",
@@ -126,10 +126,10 @@ const String[5] ROWS = {
 	"   ██    ███████ ██   ██ ",
 };
 
-fn bool grid_set(int x, int y) {
+fn bool grid_set(sz x, sz y) {
 	if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return false;
 	String row = ROWS[y];
-	int col    = 0;
+	sz col    = 0;
 	sz i       = 0;
 	while (i < row.len && col <= x) {
 		char b = row[i];
@@ -165,9 +165,9 @@ fn bool point_in_quad(float px, float py, float[4] sx, float[4] sy) {
 		|| point_in_triangle(px, py, sx[1], sy[1], sx[2], sy[2], sx[3], sy[3]);
 }
 
-const int DEPTH = 3;
+const sz DEPTH = 3;
 
-fn bool voxel_set(int x, int y, int z) {
+fn bool voxel_set(sz x, sz y, sz z) {
 	if (z < 0 || z >= DEPTH) return false;
 	return grid_set(x, y);
 }
@@ -177,9 +177,9 @@ fn void create_voxels(SuperSplashModel* self) {
 	float oy =  (float)GRID_H / 2.0f;
 	float oz = -(float)DEPTH / 2.0f;
 
-	for (int gy = 0; gy < GRID_H; gy++) {
-		for (int gx = 0; gx < GRID_W; gx++) {
-			for (int gz = 0; gz < DEPTH; gz++) {
+	for (sz gy = 0; gy < GRID_H; gy++) {
+		for (sz gx = 0; gx < GRID_W; gx++) {
+			for (sz gz = 0; gz < DEPTH; gz++) {
 				if (!voxel_set(gx, gy, gz)) continue;
 
 				float x =  (float)gx + ox;
@@ -281,8 +281,8 @@ fn void SuperSplashModel.on_blur(SuperSplashModel* self) @dynamic {
 // ─── View ────────────────────────────────────────────────────
 
 fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
-	int w = self.width;
-	int h = self.height;
+	sz w = self.width;
+	sz h = self.height;
 	if (w < 2) w = 80;
 	if (h < 2) h = 24;
 	sz total = (sz)(w * h);
@@ -292,14 +292,14 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 
 	// ── Layer 1: render splash background ────────────────────
 	xray::Style base_style = xray::default_style();
-	int pixel_rows         = h * 2;
+	sz pixel_rows         = h * 2;
 
-	for (int y = 0; y < h; y++) {
-		int fy_top     = y * 2;
-		int fy_bot     = y * 2 + 1;
-		int row_offset = y * w;
+	for (sz y = 0; y < h; y++) {
+		sz fy_top     = y * 2;
+		sz fy_bot     = y * 2 + 1;
+		sz row_offset = y * w;
 
-		for (int x = 0; x < w; x++) {
+		for (sz x = 0; x < w; x++) {
 			double fx = (double)x / (double)w;
 
 			double ca = c3_cos(angle);
@@ -334,7 +334,7 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	}
 
 	// ── Layer 2: render voxel 3D on top ──────────────────────
-	int ph    = h * 2;
+	sz ph    = h * 2;
 	sz ptotal = (sz)(w * ph);
 
 	for (sz i = 0; i < ptotal; i++) {
@@ -356,7 +356,7 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	light_y /= light_len;
 	light_z /= light_len;
 
-	for (int v = 0; v < self.voxel_count; v++) {
+	for (sz v = 0; v < self.voxel_count; v++) {
 		Vec3 p = self.voxels[v].pos;
 		Vec3 n = self.voxels[v].normal;
 
@@ -391,7 +391,7 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		float[4] corner_sy = { 0, 0, 0, 0 };
 		float[4] cu        = { -1, -1, 1, 1 };
 		float[4] cv        = { -1, 1, -1, 1 };
-		for (int ci = 0; ci < 4; ci++) {
+		for (sz ci = 0; ci < 4; ci++) {
 			float cx3 = p.x + cu[ci] * tu.x + cv[ci] * tv.x;
 			float cy3 = p.y + cu[ci] * tu.y + cv[ci] * tv.y;
 			float cz3 = p.z + cu[ci] * tu.z + cv[ci] * tv.z;
@@ -408,10 +408,10 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 			if (csy > max_sy) max_sy = csy;
 		}
 
-		int x0 = (int)min_sx;
-		int x1 = (int)max_sx;
-		int y0 = (int)min_sy;
-		int y1 = (int)max_sy;
+		sz x0 = (sz)min_sx;
+		sz x1 = (sz)max_sx;
+		sz y0 = (sz)min_sy;
+		sz y1 = (sz)max_sy;
 
 		float diff = n.x * light_x + n.y * light_y + n.z * light_z;
 		if (diff < 0.0f) diff = 0.0f;
@@ -421,9 +421,9 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		char pg = (char)(brightness * 180.0f);
 		char pb = (char)(brightness * 255.0f);
 
-		for (int py = y0; py <= y1; py++) {
+		for (sz py = y0; py <= y1; py++) {
 			if (py < 0 || py >= ph) continue;
-			for (int px = x0; px <= x1; px++) {
+			for (sz px = x0; px <= x1; px++) {
 				if (px < 0 || px >= w) continue;
 				if (!point_in_quad((float)px + 0.5f, (float)py + 0.5f, corner_sx, corner_sy)) continue;
 				sz idx = (sz)(py * w + px);
@@ -437,21 +437,21 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	}
 
 	// post-process AA on the pixel buffer
-	int[4] adx = { 1, -1, 0, 0 };
-	int[4] ady = { 0, 0, 1, -1 };
-	for (int py = 0; py < ph; py++) {
-		for (int px = 0; px < w; px++) {
+	sz[4] adx = { 1, -1, 0, 0 };
+	sz[4] ady = { 0, 0, 1, -1 };
+	for (sz py = 0; py < ph; py++) {
+		for (sz px = 0; px < w; px++) {
 			sz idx = (sz)(py * w + px);
 			if (self.depth[idx] < 999.0f) continue;
 
 			float sum_r = 0.0f;
 			float sum_g = 0.0f;
 			float sum_b = 0.0f;
-			int count   = 0;
+			sz count   = 0;
 
-			for (int d = 0; d < 4; d++) {
-				int nx = px + adx[d];
-				int ny = py + ady[d];
+			for (sz d = 0; d < 4; d++) {
+				sz nx = px + adx[d];
+				sz ny = py + ady[d];
 				if (nx < 0 || nx >= w || ny < 0 || ny >= ph) continue;
 				sz nidx = (sz)(ny * w + nx);
 				if (self.depth[nidx] >= 998.0f) continue;
@@ -476,8 +476,8 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 
 	// ── Combine: alpha-blend voxels over splash ──────────────
 	// Splash is already rendered into self.cells — blend voxels on top
-	for (int ty = 0; ty < h; ty++) {
-		for (int tx = 0; tx < w; tx++) {
+	for (sz ty = 0; ty < h; ty++) {
+		for (sz tx = 0; tx < w; tx++) {
 			sz top_idx  = (sz)((ty * 2) * w + tx);
 			sz bot_idx  = (sz)((ty * 2 + 1) * w + tx);
 			float top_a = self.alpha[top_idx];
@@ -513,12 +513,12 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::new_alt_cell_view(self.cells, (sz)w, (sz)h);
+	return milktea::cell_view(self.cells, w, h);
 }
 
 fn int main() {
 	SuperSplashModel* m = mem::new(SuperSplashModel);
-	if (catch err = milktea::@run_program(m)) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

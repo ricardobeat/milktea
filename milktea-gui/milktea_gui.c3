@@ -813,7 +813,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	milktea::Program prog;
 	prog.record_paint = true;
 	prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
-	prog.layout_area = { .w = opts.cols * opts.cell_w, .h = opts.rows * opts.cell_h };
+	prog.layout_area = { .w = (sz)opts.cols * opts.cell_w, .h = (sz)opts.rows * opts.cell_h };
 	prog.cached_ws.ws_col = (ushort)opts.cols;
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
@@ -1028,8 +1028,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 
 		prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
-		prog.layout_area = { .w = shot ? opts.cols * opts.cell_w : rl::get_screen_width(),
-			.h = shot ? opts.rows * opts.cell_h : rl::get_screen_height() };
+		prog.layout_area = { .w = shot ? (sz)opts.cols * opts.cell_w : rl::get_screen_width(),
+			.h = shot ? (sz)opts.rows * opts.cell_h : rl::get_screen_height() };
 
 		if (rl::is_window_resized() || size_changed) {
 			g_dirty = true;
@@ -1144,8 +1144,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		// a live session — only the raylib input poll is skipped.
 		if (milktea::g_program.test_click_armed
 				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_click_frame) {
-			int tc = milktea::g_program.test_pending_click_col;
-			int tr = milktea::g_program.test_pending_click_row;
+			sz tc = milktea::g_program.test_pending_click_col;
+			sz tr = milktea::g_program.test_pending_click_row;
 			milktea::g_program.test_click_armed = false;
 			io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
 				milktea::g_program.frame_no, tc, tr,
@@ -1157,8 +1157,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		if (milktea::g_program.test_pointer_armed
 				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_pointer_frame) {
-			int pc = milktea::g_program.test_pending_pointer_col;
-			int pr = milktea::g_program.test_pending_pointer_row;
+			sz pc = milktea::g_program.test_pending_pointer_col;
+			sz pr = milktea::g_program.test_pending_pointer_row;
 			milktea::g_program.test_pointer_armed = false;
 			io::eprintfn("[test] frame %d: pointer col=%d row=%d",
 				milktea::g_program.frame_no, pc, pr);
@@ -1178,8 +1178,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 		int mx, my;
 		pointer_pixel(opts, &mx, &my);
-		int mcol = xray::floor_cell(mx, opts.cell_w);
-		int mrow = xray::floor_cell(my, opts.cell_h);
+		sz mcol = xray::floor_cell(mx, opts.cell_w);
+		sz mrow = xray::floor_cell(my, opts.cell_h);
 		if (mx != g_prev_mcol || my != g_prev_mrow) {
 			// Hover is an edge event: walking every target each frame would
 			// be a no-op while the pointer stays put, but the edge crossing
@@ -1306,14 +1306,16 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			foreach (op : v.paint_ops) {
 				switch (op.kind) {
 					case xray::PaintKind.DECORATION:
-						decor_draw(op.decoration, opts, prog.layout_area.w, prog.layout_area.h);
+						decor_draw(op.decoration, opts, (int)prog.layout_area.w, (int)prog.layout_area.h);
 					case xray::PaintKind.TINT:
-						rl::draw_rectangle(op.pixels ? op.col : op.col * opts.cell_w,
-							op.pixels ? op.row : op.row * opts.cell_h,
+						int tcol = (int)op.col;
+						int trow = (int)op.row;
+						rl::draw_rectangle(op.pixels ? tcol : tcol * opts.cell_w,
+							op.pixels ? trow : trow * opts.cell_h,
 							opts.cell_w, opts.cell_h, to_rl(op.tint, rl::BLANK));
 					case xray::PaintKind.CELL:
-						paint_gui_cell(op.cell, op.col, op.row, opts, font, rule_font,
-							text_fit, rule_fit, split_atlas, true, op.pixels, op.bg_w, op.bg_h);
+						paint_gui_cell(op.cell, (int)op.col, (int)op.row, opts, font, rule_font,
+							text_fit, rule_fit, split_atlas, true, op.pixels, (int)op.bg_w, (int)op.bg_h);
 				}
 			}
 		} else if (v.cells.ptr != null) {

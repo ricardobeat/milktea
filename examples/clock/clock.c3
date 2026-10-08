@@ -13,7 +13,7 @@ const String LSH   = "\xe2\x96\x91";
 const String STAR  = "\xc2\xb7";
 const String STAR2 = "\xe2\x98\x86";
 
-const int GLYPH_ROWS = 7;
+const sz GLYPH_ROWS = 7;
 
 const String[GLYPH_ROWS] DIGIT_1 = {
 	"   ░██",
@@ -118,24 +118,24 @@ const String[GLYPH_ROWS] DIGIT_0 = {
 const String[GLYPH_ROWS] COLON = { "", "", "", "░██", "", "", "░██", };
 
 struct Cloud {
-	int x;
-	int y;
-	int w;
-	int speed;
-	int phase;
+	sz x;
+	sz y;
+	sz w;
+	sz speed;
+	sz phase;
 }
 
 struct ClockModel {
 	xray::ScreenBuffer* canvas;
-	int w;
-	int h;
+	sz w;
+	sz h;
 	long frame;
 	Cloud[3] clouds;
 }
 
 fn String[GLYPH_ROWS] glyph(char c) {
 	if (c >= '0' && c <= '9') {
-		int idx = (int)c - (int)'0';
+		sz idx = (sz)c - (sz)'0';
 		switch (idx) {
 			case 0: return DIGIT_0;
 			case 1: return DIGIT_1;
@@ -158,17 +158,17 @@ fn String[GLYPH_ROWS] glyph(char c) {
 fn void draw_glyph(
 	xray::ScreenBuffer* sb,
 	char ch,
-	int dx,
-	int dy,
+	sz dx,
+	sz dy,
 	xray::Color fg_color,
 	xray::Color shadow_color
 ) @local {
 	String[GLYPH_ROWS] rows = glyph(ch);
-	for (int row = 0; row < GLYPH_ROWS; row++) {
+	for (sz row = 0; row < GLYPH_ROWS; row++) {
 		String r = rows[row];
-		int abs_y = dy + row;
+		sz abs_y = dy + row;
 		if (abs_y < 0 || (sz)abs_y >= sb.height) continue;
-		int col = 0;
+		sz col = 0;
 		sz i = 0;
 		while (i < r.len) {
 			if (r[i] == ' ') {
@@ -179,7 +179,7 @@ fn void draw_glyph(
 			if (r[i] == '\xe2' && i + 2 < r.len) {
 				xray::Color fc = fg_color;
 				if (r[i + 1] == '\x96' && r[i + 2] == '\x91') fc = shadow_color;
-				int abs_x = dx + col;
+				sz abs_x = dx + col;
 				if (abs_x >= 0 && (sz)abs_x < sb.width) {
 					xray::Style s = xray::default_style().set_fg(fc);
 					sb.set_cell((sz)abs_x, (sz)abs_y, xray::new_cell(BLK, 1, s));
@@ -201,22 +201,22 @@ fn void draw_cloud(
 	xray::Color c_light = xray::color_rgb(210, 218, 240);
 	xray::Color c_mid   = xray::color_rgb(160, 172, 210);
 
-	int n_bumps = 5;
-	int[5] bro = {
+	sz n_bumps = 5;
+	sz[5] bro = {
 		c.w / 5 + (c.phase % 2),
 		c.w / 4 + ((c.phase * 3) % 2),
 		c.w / 5 + ((c.phase * 5) % 2),
 		c.w / 4 + ((c.phase * 7) % 2),
 		c.w / 5 + ((c.phase * 11) % 2),
 	};
-	int[5] bxo = {
+	sz[5] bxo = {
 		-(c.w / 2 - bro[0] * 2) + (c.phase * 2) % 3,
 		-(c.w / 6) + (c.phase * 3) % 4,
 		0 + (c.phase * 5) % 3,
 		c.w / 6 + (c.phase * 7) % 3,
 		c.w / 2 - bro[4] * 2 + (c.phase * 11) % 3,
 	};
-	int[5] byo = {
+	sz[5] byo = {
 		-(c.w * 3 / 20) - (c.phase % 2),
 		-(c.w / 5) - ((c.phase * 3) % 2),
 		-(c.w / 4) - ((c.phase * 5) % 2),
@@ -224,28 +224,28 @@ fn void draw_cloud(
 		-(c.w * 3 / 20) - ((c.phase * 11) % 2),
 	};
 
-	int cx = c.x;
-	int cy = c.y;
-	int sp_y = cy * 2;
-	int span_x0 = cx - c.w / 2;
-	int span_x1 = cx + c.w / 2;
+	sz cx = c.x;
+	sz cy = c.y;
+	sz sp_y = cy * 2;
+	sz span_x0 = cx - c.w / 2;
+	sz span_x1 = cx + c.w / 2;
 
 	// Find vertical sub-pixel extent across all bumps
-	int min_sy = sp_y + byo[0] - bro[0];
-	int max_sy = sp_y + byo[0] + bro[0];
-	for (int b = 1; b < n_bumps; b++) {
-		int lo = sp_y + byo[b] - bro[b];
-		int hi = sp_y + byo[b] + bro[b];
+	sz min_sy = sp_y + byo[0] - bro[0];
+	sz max_sy = sp_y + byo[0] + bro[0];
+	for (sz b = 1; b < n_bumps; b++) {
+		sz lo = sp_y + byo[b] - bro[b];
+		sz hi = sp_y + byo[b] + bro[b];
 		if (lo < min_sy) min_sy = lo;
 		if (hi > max_sy) max_sy = hi;
 	}
 
 	// Process pairs of sub-pixel rows → one terminal cell via half-blocks
-	for (int sy = min_sy; sy <= max_sy; sy += 2) {
-		int screen_row = sy / 2;
+	for (sz sy = min_sy; sy <= max_sy; sy += 2) {
+		sz screen_row = sy / 2;
 		if (screen_row < 0 || (sz)screen_row >= sb.height) continue;
 
-		for (int x = span_x0; x <= span_x1; x++) {
+		for (sz x = span_x0; x <= span_x1; x++) {
 			if (x < 0 || (sz)x >= sb.width) continue;
 
 			// Check circle membership for top (sy) and bot (sy+1) sub-rows
@@ -254,15 +254,15 @@ fn void draw_cloud(
 			bool prev_in = false;
 			bool next_in = false;
 
-			for (int b = 0; b < n_bumps; b++) {
-				int dx = x - (cx + bxo[b]);
-				int dx2 = dx * dx;
-				int r2 = bro[b] * bro[b];
-				int base = sp_y + byo[b];
-				int d_prev = (sy - 1) - base;
-				int d_top  = sy - base;
-				int d_bot  = (sy + 1) - base;
-				int d_next = (sy + 2) - base;
+			for (sz b = 0; b < n_bumps; b++) {
+				sz dx = x - (cx + bxo[b]);
+				sz dx2 = dx * dx;
+				sz r2 = bro[b] * bro[b];
+				sz base = sp_y + byo[b];
+				sz d_prev = (sy - 1) - base;
+				sz d_top  = sy - base;
+				sz d_bot  = (sy + 1) - base;
+				sz d_next = (sy + 2) - base;
 				if (dx2 + d_prev * d_prev <= r2) prev_in = true;
 				if (dx2 + d_top * d_top <= r2) top_in = true;
 				if (dx2 + d_bot * d_bot <= r2) bot_in = true;
@@ -322,14 +322,14 @@ fn milktea::Cmd ClockModel.update(ClockModel* self, milktea::Msg msg) @dynamic {
 
 	if (msg.kind == milktea::MsgKind.TICK) {
 		self.frame++;
-		for (int i = 0; i < 3; i++) {
+		for (sz i = 0; i < 3; i++) {
 			Cloud* c = &self.clouds[i];
 			if (self.frame % c.speed == 0) {
 				c.x--;
 				if (c.x + c.w < 0) {
 					long fi = (long)self.frame;
-					c.x = self.w + c.w + (int)(fi * (long)(i + 7) % 20);
-					c.y = 2 + (int)((fi * (long)(i + 1) + (long)(i * 17)) % (long)(self.h - 12));
+					c.x = self.w + c.w + (sz)(fi * (long)(i + 7) % 20);
+					c.y = 2 + (sz)((fi * (long)(i + 1) + (long)(i * 17)) % (long)(self.h - 12));
 					if (c.y < 2) c.y = 2;
 				}
 			}
@@ -363,12 +363,12 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 	xray::Style star_bright = xray::default_style().set_fg(xray::color_rgb(255, 255, 255))
 		.set_bg(xray::color_transparent());
 
-	for (int row = 1; row < self.h; row++) {
-		for (int col = 0; col < self.w; col++) {
+	for (sz row = 1; row < self.h; row++) {
+		for (sz col = 0; col < self.w; col++) {
 			uint h  = (uint)(col * 1103515245 + row * 12345);
-			int mod = (int)(h % 97);
+			sz mod = (sz)(h % 97);
 			if (mod == 0) {
-				if ((self.frame / 8 + (int)(h >> 8)) % 7 == 0) {
+				if ((self.frame / 8 + (sz)(h >> 8)) % 7 == 0) {
 					sb.set_cell((sz)col, (sz)row, xray::new_cell(STAR2, 1, star_bright));
 				} else {
 					sb.set_cell((sz)col, (sz)row, xray::new_cell(STAR, 1, star_s));
@@ -381,9 +381,9 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 
 	long now  = c3_time_ms_long();
 	long secs = now / 1000;
-	int h     = ((int)(secs / 3600)) % 24;
-	int m     = ((int)(secs / 60)) % 60;
-	int s     = (int)(secs % 60);
+	sz h     = ((sz)(secs / 3600)) % 24;
+	sz m     = ((sz)(secs / 60)) % 60;
+	sz s     = (sz)(secs % 60);
 
 	char h0_c = (char)('0' + h / 10);
 	char h1_c = (char)('0' + h % 10);
@@ -392,15 +392,15 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 	char s0_c = (char)('0' + s / 10);
 	char s1_c = (char)('0' + s % 10);
 
-	int digit_w   = 10;
-	int colon_w   = 4;
-	int colon_gap = 1;
-	int pair_gap  = 2;
-	int total_w   = digit_w * 2 + colon_w + colon_gap * 2 + digit_w * 2 + colon_w + colon_gap * 2 + digit_w * 2;
+	sz digit_w   = 10;
+	sz colon_w   = 4;
+	sz colon_gap = 1;
+	sz pair_gap  = 2;
+	sz total_w   = digit_w * 2 + colon_w + colon_gap * 2 + digit_w * 2 + colon_w + colon_gap * 2 + digit_w * 2;
 	total_w += pair_gap * 2;
 
-	int time_x = (self.w - total_w) / 2;
-	int time_y = (self.h - GLYPH_ROWS) / 2 - 1;
+	sz time_x = (self.w - total_w) / 2;
+	sz time_y = (self.h - GLYPH_ROWS) / 2 - 1;
 
 	xray::Color fg_color     = xray::color_rgb(255, 255, 255);
 	xray::Color shadow_color = xray::color_rgb(255, 90, 180);
@@ -415,11 +415,11 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 	draw_glyph(sb, s0_c, time_x + digit_w * 4 + colon_w * 2 + colon_gap + pair_gap, time_y, fg_color, shadow_color);
 	draw_glyph(sb, s1_c, time_x + digit_w * 5 + colon_w * 2 + colon_gap + pair_gap, time_y, fg_color, shadow_color);
 
-	for (int i = 0; i < 3; i++) {
+	for (sz i = 0; i < 3; i++) {
 		draw_cloud(sb, &self.clouds[i]);
 	}
 
-	return milktea::new_alt_cell_view(sb.cells[0:(sz)(self.w * self.h)], (sz)self.w, (sz)self.h);
+	return sb.view();
 }
 
 fn int main() {
@@ -427,7 +427,7 @@ fn int main() {
 	m.w = 80;
 	m.h = 24;
 	m.canvas = xray::new_screen_buffer(80, 24);
-	if (catch err = milktea::@run_program(&m)) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

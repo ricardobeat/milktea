@@ -1,0 +1,12 @@
+{
+	"provides": "tgp",
+	"sources": ["**"],
+	"dependencies": ["milktea"],
+	"targets": {
+		"macos-aarch64": {},
+		"macos-x64": {},
+		"linux-x64": {},
+		"linux-aarch64": {},
+		"freebsd-x64": {}
+	}
+}

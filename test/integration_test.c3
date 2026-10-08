@@ -12,7 +12,7 @@ import xray;
 // ============================================================
 
 struct TestModel {
-	int counter;
+	sz counter;
 	bool mounted;
 	bool destroyed;
 }
@@ -47,7 +47,7 @@ fn void TestModel.on_destroy(TestModel* self) @dynamic {
 }
 
 fn milktea::View TestModel.view(TestModel* self) @dynamic {
-	return milktea::new_view(string::tformat("count=%d", self.counter));
+	return milktea::view(string::tformat("count=%d", self.counter));
 }
 
 // ============================================================
@@ -142,8 +142,8 @@ fn void test_send_quit() @test {
 // test_window_size_injection verifies WithWindowSize sets the
 // initial WindowSizeMsg delivered to the model.
 struct SizeTrackerModel {
-	int last_w;
-	int last_h;
+	sz last_w;
+	sz last_h;
 }
 
 fn milktea::Cmd SizeTrackerModel.init(SizeTrackerModel* self) @dynamic {
@@ -160,7 +160,7 @@ fn milktea::Cmd SizeTrackerModel.update(SizeTrackerModel* self, milktea::Msg msg
 }
 
 fn milktea::View SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
-	return milktea::new_view(string::tformat("%dx%d", self.last_w, self.last_h));
+	return milktea::view(string::tformat("%dx%d", self.last_w, self.last_h));
 }
 
 fn void SizeTrackerModel.on_mount(SizeTrackerModel* self) @dynamic {
@@ -208,8 +208,8 @@ fn void test_render_contains_sgr() @test {
 // ============================================================
 
 struct TimerModel {
-	int tick_count;
-	int every_count;
+	sz tick_count;
+	sz every_count;
 	bool quit_after_first_tick;
 }
 
@@ -234,7 +234,7 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	return milktea::new_view("");
+	return milktea::view("");
 }
 
 // test_tick_fires verifies tick() delivers TICK messages and the model
@@ -321,7 +321,7 @@ fn milktea::Cmd ZeroIntervalModel.update(ZeroIntervalModel* self, milktea::Msg m
 }
 
 fn milktea::View ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
-	return milktea::new_view("ok");
+	return milktea::view("ok");
 }
 
 fn void ZeroIntervalModel.on_mount(ZeroIntervalModel* self) @dynamic { }
@@ -349,7 +349,7 @@ fn void test_every_zero_no_crash() @test {
 // args leaves transparent=false and layer_style zero-initialised, preserving
 // backward-compatible behaviour for all existing call sites.
 fn void test_add_overlay_defaults() @test {
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(1, 2, 10, 5, "hello");
 
 	assert(v.overlay_count == 1);
@@ -372,7 +372,7 @@ fn void test_add_overlay_transparent_and_shadow() @test {
 		.shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2),
 	};
 
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(0, 0, 20, 8, "popup", transparent: true, layer_style: ls);
 
 	assert(v.overlay_count == 1);
@@ -380,7 +380,8 @@ fn void test_add_overlay_transparent_and_shadow() @test {
 	assert(o.transparent);
 	assert(o.layer_style.shadow.enabled);
 	assert(o.layer_style.shadow.offset_x == 1);
-	assert(o.layer_style.shadow.offset_y == 1);
+	// offset_y is stored in half-rows, so one row is 2.
+	assert(o.layer_style.shadow.offset_y == 2);
 	assert(o.layer_style.shadow.opacity == 128);
 	assert(o.layer_style.shadow.blur == 2);
 	// Inner shadow untouched when only shadow was set.
@@ -393,7 +394,7 @@ fn void test_add_overlay_inner_shadow() @test {
 		.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
 	};
 
-	milktea::View v = milktea::new_view("bg");
+	milktea::View v = milktea::view("bg");
 	v = v.add_overlay(0, 0, 30, 10, "panel", layer_style: ls);
 
 	assert(v.overlay_count == 1);
@@ -409,7 +410,7 @@ fn void test_add_overlay_inner_shadow() @test {
 // NeverQuitsModel is the shape of a model with a bug: it consumes messages
 // but never returns quit().
 struct NeverQuitsModel {
-	int updates;
+	sz updates;
 }
 
 fn milktea::Cmd NeverQuitsModel.init(NeverQuitsModel* self) @dynamic {
@@ -422,7 +423,7 @@ fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) 
 }
 
 fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
-	return milktea::new_view("still here");
+	return milktea::view("still here");
 }
 
 // test_test_mode_terminates_without_quit pins down that the event loop ends
@@ -453,7 +454,7 @@ fn void test_test_mode_terminates_without_quit() @test {
 // view. sz is signed, so the destination guard (dx >= width) let negative
 // coordinates through to index before the cell buffer.
 struct NegativeOverlayModel {
-	int frames;
+	sz frames;
 }
 
 fn milktea::Cmd NegativeOverlayModel.init(NegativeOverlayModel* self) @dynamic {
@@ -467,7 +468,7 @@ fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea:
 
 fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
 	self.frames++;
-	milktea::View v = milktea::new_alt_screen_view("base content");
+	milktea::View v = milktea::view("base content");
 	// Off the top-left corner, and off the right/bottom edge. alpha != 0
 	// selects the per-cell blending path, which does its own destination
 	// bounds check rather than going through ScreenBuffer.set_cell.
@@ -493,7 +494,7 @@ fn void test_overlay_with_negative_origin_is_clipped() @test {
 // SendRaceModel quits after a handful of messages so run() tears down while
 // the sender threads below are still hammering send().
 struct SendRaceModel {
-	int updates;
+	sz updates;
 }
 
 fn milktea::Cmd SendRaceModel.init(SendRaceModel* self) @dynamic {
@@ -507,12 +508,12 @@ fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dyn
 }
 
 fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
-	return milktea::new_view("race");
+	return milktea::view("race");
 }
 
 fn int send_race_sender(void* arg) @private {
 	milktea::Program* p = (milktea::Program*)arg;
-	for (int i = 0; i < 200000; i++) {
+	for (sz i = 0; i < 200000; i++) {
 		milktea::Msg m = { .kind = milktea::MsgKind.USER };
 		p.send(m);
 	}
@@ -531,7 +532,7 @@ fn int send_race_sender(void* arg) @private {
 // send() now registers as in-flight before checking the flag, and teardown
 // stops accepting and then drains the in-flight count before destroying.
 fn void test_send_survives_concurrent_shutdown() @test {
-	for (int round = 0; round < 4; round++) {
+	for (sz round = 0; round < 4; round++) {
 		SendRaceModel m;
 		DString out = dstring::temp();
 		milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
@@ -555,10 +556,10 @@ fn void test_send_survives_concurrent_shutdown() @test {
 // ScreenSizeModel records what the accessors report from inside the
 // program callbacks, so the test can assert on them after run() returns.
 struct ScreenSizeModel {
-	int w_in_update;
-	int h_in_update;
-	int w_in_view;
-	int h_in_view;
+	sz w_in_update;
+	sz h_in_update;
+	sz w_in_view;
+	sz h_in_view;
 }
 
 fn milktea::Cmd ScreenSizeModel.init(ScreenSizeModel* self) @dynamic {
@@ -575,7 +576,7 @@ fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) 
 fn milktea::View ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
 	self.w_in_view = milktea::screen_width();
 	self.h_in_view = milktea::screen_height();
-	return milktea::new_view("size");
+	return milktea::view("size");
 }
 
 // The accessors report the program's injected size from inside update/view,
@@ -684,4 +685,93 @@ fn void test_text_style_box_frames_children() @test {
 	assert(panel.rect().h == 1 + 2 + 2, "one line + padding + border");
 	assert(child.rect().x == panel.rect().x + 3, "child clears border and padding");
 	assert(child.rect().y == panel.rect().y + 2, "child clears border and padding");
+}
+
+// Program.run() owns the alt screen. Entering it manually beforehand leaves
+// in_alt_screen false, so the exit path never pops back to the normal buffer
+// and the terminal is stranded in the alt screen after quit. run() must reject
+// that up front rather than start and wedge the terminal.
+fn void test_manual_alt_screen_before_run_is_rejected() @test {
+	TestModel m = { };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+
+	milktea::g_manual_alt_screen = true;
+	defer milktea::g_manual_alt_screen = false;
+
+	if (catch err = p.run()) {
+		assert(err == milktea::ALT_SCREEN_ALREADY_ENTERED);
+		// Rejecting is not enough on its own: the caller already wrote the
+		// alt-screen entry, so run() must also pop back to the normal buffer or
+		// the fault surfaces on a terminal that is still stranded in the alt
+		// screen — exactly the breakage the guard exists to prevent.
+		assert(!milktea::g_manual_alt_screen);
+		return;
+	}
+	unreachable("run() must reject a manually entered alt screen");
+}
+
+// exit_alt_screen() clears the flag, so a program that renders directly and
+// cleans up after itself can still hand off to run() afterwards.
+fn void test_manual_alt_screen_cleared_allows_run() @test {
+	milktea::g_manual_alt_screen = true;
+	milktea::exit_alt_screen();
+	assert(!milktea::g_manual_alt_screen);
+}
+
+// CellModel renders a direct cell View whose declared extent may deliberately
+// overstate the backing slice, to exercise the renderer's clamping.
+struct CellModel {
+	xray::Cell[] cells;
+	sz w;
+	sz h;
+}
+
+fn milktea::Cmd CellModel.init(CellModel* self) @dynamic { return null; }
+
+fn milktea::Cmd CellModel.update(CellModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
+	return null;
+}
+
+fn milktea::View CellModel.view(CellModel* self) @dynamic {
+	return milktea::cell_view(self.cells, self.w, self.h);
+}
+
+// A View carries cells_width/cells_height separately from the cells slice, so
+// the two can disagree — a resize that reallocates the grid between building a
+// View and rendering it is enough. The bulk-memcpy cell path takes raw pointers
+// and a byte count, so an overstated extent used to memmove straight off the
+// end of the allocation (SIGSEGV in _platform_memmove). The renderer must clamp
+// to what the slices actually hold instead of trusting the fields.
+fn void test_cell_view_extent_overstated_is_clamped() @test {
+	// Four real cells, but the View claims a 40x20 grid.
+	xray::Cell[4] backing;
+	for (sz i = 0; i < 4; i++) backing[i] = xray::empty_cell();
+
+	CellModel m = { .cells = backing[..], .w = 40, .h = 20 };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x03 });
+
+	// Must render and exit rather than fault on the oversized copy.
+	if (catch err = p.run()) {
+		unreachable("renderer must clamp an overstated cell extent, got a fault");
+	}
+}
+
+// The strided path takes the source row stride from cells_width. An overstated
+// stride walks the source pointer off the buffer well before the row counter
+// reaches the claimed height, so it needs the same clamp as the fast path.
+fn void test_cell_view_overstated_stride_is_clamped() @test {
+	xray::Cell[16] backing;
+	for (sz i = 0; i < 16; i++) backing[i] = xray::empty_cell();
+
+	// Stride 8 over 16 cells is 2 real rows; the View claims 9.
+	CellModel m = { .cells = backing[..], .w = 8, .h = 9 };
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program_input(&m, &out, 80, 24, (char[]) { 0x03 });
+
+	if (catch err = p.run()) {
+		unreachable("renderer must clamp an overstated cell stride, got a fault");
+	}
 }
