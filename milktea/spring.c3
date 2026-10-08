@@ -23,7 +23,7 @@ import std::math;
 //     // view()
 //     double x = self.x.value();
 //
-// The plain calls read the frame clock, now(). Each has an _at twin taking the
+// The plain calls read the frame clock, frame_ms(). Each has an _at twin taking the
 // time explicitly, for tests and for code running outside a program.
 
 // ── Parameters ───────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ fn Spring spring(double at, SpringParams params) {
 // update points the spring at a new target from wherever it is now, keeping
 // its velocity, so a change of mind mid-flight bends the path rather than
 // breaking it.
-fn void Spring.update(&self, double target) => self.update_at(target, now());
+fn void Spring.update(&self, double target) => self.update_at(target, frame_ms());
 
 fn void Spring.update_at(&self, double target, sz now_ms) {
 	SpringState s = self.state_at(now_ms);
@@ -119,7 +119,7 @@ fn void Spring.update_at(&self, double target, sz now_ms) {
 // set places the spring at `value`, moving at `velocity` units per second,
 // keeping its target: a jump with no animation when the velocity is 0, or a
 // fling that the spring then reels back in.
-fn void Spring.set(&self, double value, double velocity = 0.0) => self.set_at(value, velocity, now());
+fn void Spring.set(&self, double value, double velocity = 0.0) => self.set_at(value, velocity, frame_ms());
 
 fn void Spring.set_at(&self, double value, double velocity, sz now_ms) {
 	self.start_value    = value;
@@ -129,18 +129,18 @@ fn void Spring.set_at(&self, double value, double velocity, sz now_ms) {
 }
 
 // value is where the spring is now.
-fn double Spring.value(self) => self.state_at(now()).value;
+fn double Spring.value(self) => self.state_at(frame_ms()).value;
 
 fn double Spring.value_at(self, sz now_ms) => self.state_at(now_ms).value;
 
 // velocity is how fast the spring is moving now, in units per second.
-fn double Spring.velocity(self) => self.state_at(now()).velocity;
+fn double Spring.velocity(self) => self.state_at(frame_ms()).velocity;
 
 fn double Spring.velocity_at(self, sz now_ms) => self.state_at(now_ms).velocity;
 
 // moving reports whether the spring has yet to settle — the test a view uses
 // to decide whether it needs another frame.
-fn bool Spring.moving(self) => self.moving_at(now());
+fn bool Spring.moving(self) => self.moving_at(frame_ms());
 
 fn bool Spring.moving_at(self, sz now_ms) {
 	SpringState s = self.state_at(now_ms);
@@ -152,7 +152,7 @@ fn bool Spring.moving_at(self, sz now_ms) {
 // whatever frame comes next.
 const sz SPRING_SETTLE_LIMIT_MS = 30_000;
 
-// settles_at is when the spring comes to rest, on the now() clock: the first
+// settles_at is when the spring comes to rest, on the frame_ms() clock: the first
 // frame at which it no longer counts as moving. A spring already at rest
 // settles at its start.
 fn sz Spring.settles_at(self) {

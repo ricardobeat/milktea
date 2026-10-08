@@ -13,34 +13,34 @@ fn sz fake_clock() {
 }
 
 struct NowModel {
-	sz init_now;
-	sz[8] update_now;
+	sz init_ms;
+	sz[8] update_ms;
 	sz updates;
-	sz view_now;
-	bool steady; // now() never moved within a single call
+	sz view_ms;
+	bool steady; // frame_ms() never moved within a single call
 }
 
 fn milktea::Cmd NowModel.init(NowModel* self) @dynamic {
 	self.steady = true;
-	self.init_now = now();
+	self.init_ms = frame_ms();
 	return null;
 }
 
 fn milktea::Cmd NowModel.update(NowModel* self, milktea::Msg msg) @dynamic {
-	sz t = now();
-	if (now() != t) self.steady = false;
-	if (self.updates < self.update_now.len) self.update_now[self.updates++] = t;
+	sz t = frame_ms();
+	if (frame_ms() != t) self.steady = false;
+	if (self.updates < self.update_ms.len) self.update_ms[self.updates++] = t;
 	if (msg.kind == KEY && msg.key.rune == 'q') return quit();
 	return null;
 }
 
 fn milktea::View NowModel.view(NowModel* self) @dynamic {
-	self.view_now = now();
-	if (now() != self.view_now) self.steady = false;
+	self.view_ms = frame_ms();
+	if (frame_ms() != self.view_ms) self.steady = false;
 	return view("");
 }
 
-fn void test_now_is_stamped_per_callback() @test {
+fn void test_frame_ms_is_stamped_per_callback() @test {
 	g_fake_clock_ms = 1000;
 	NowModel m;
 	DString out = dstring::temp();
@@ -48,18 +48,18 @@ fn void test_now_is_stamped_per_callback() @test {
 	with_clock(&p, &fake_clock);
 	p.run()!!;
 
-	assert(m.steady, "now() moved during a single callback");
-	assert(m.init_now > 1000, "init() reads the injected clock");
+	assert(m.steady, "frame_ms() moved during a single callback");
+	assert(m.init_ms > 1000, "init() reads the injected clock");
 	assert(m.updates >= 3, "expected a, b and q to reach update()");
 	for (sz i = 1; i < m.updates; i++) {
-		assert(m.update_now[i] > m.update_now[i - 1], "each update() gets a fresh stamp");
+		assert(m.update_ms[i] > m.update_ms[i - 1], "each update() gets a fresh stamp");
 	}
-	assert(m.view_now > m.init_now, "view() is stamped after init()");
+	assert(m.view_ms > m.init_ms, "view() is stamped after init()");
 }
 
-fn void test_now_outside_a_program_reads_the_live_clock() @test {
+fn void test_frame_ms_outside_a_program_reads_the_live_clock() @test {
 	sz before = time_ms();
-	sz t = now();
+	sz t = frame_ms();
 	assert(t >= before && t <= time_ms());
 }
 
@@ -116,14 +116,14 @@ struct FramesModel {
 }
 
 fn milktea::Cmd FramesModel.init(FramesModel* self) @dynamic {
-	frames_until(now() + self.ahead);
+	frames_until(frame_ms() + self.ahead);
 	return null;
 }
 
 fn milktea::Cmd FramesModel.update(FramesModel* self, milktea::Msg msg) @dynamic {
 	self.updates++;
 	if (msg.kind == KEY && msg.key.rune == 'q') return quit();
-	if (msg.kind == KEY) frames_until(now() + self.ahead);
+	if (msg.kind == KEY) frames_until(frame_ms() + self.ahead);
 	return null;
 }
 
@@ -157,5 +157,5 @@ fn void test_repaints_do_not_reach_update() @test {
 }
 
 fn void test_frames_until_outside_a_program_is_ignored() @test {
-	frames_until(now() + 1000); // must not crash with no program running
+	frames_until(frame_ms() + 1000); // must not crash with no program running
 }

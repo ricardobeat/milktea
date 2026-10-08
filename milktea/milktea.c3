@@ -332,11 +332,11 @@ struct Program {
 	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
 	// which the lone ESC is flushed as a real keypress. 0 = no hold active.
 	sz esc_deadline_ms;
-	// The frame clock behind now(): stamped from `clock` right before every
+	// The frame clock behind frame_ms(): stamped from `clock` right before every
 	// init(), update() and view() call, so one call reads one instant.
 	sz now_ms;
 	ClockFn clock; // null = the monotonic clock; see with_clock
-	// Paint every frame until this time on the now() clock; see frames_until.
+	// Paint every frame until this time on the frame_ms() clock; see frames_until.
 	sz frames_until_ms;
 
 	// Test / injection support
@@ -533,7 +533,7 @@ fn int input_reader_fn(void* arg) {
 	return 0;
 }
 
-// ClockFn supplies the time behind now(), in milliseconds. The runtime uses
+// ClockFn supplies the time behind frame_ms(), in milliseconds. The runtime uses
 // the monotonic clock; a test swaps in its own with with_clock.
 alias ClockFn = fn sz();
 
@@ -630,26 +630,20 @@ fn bool in_alt_screen() {
 	return g_manual_alt_screen;
 }
 
-// monotonic_ms exposes the runtime's monotonic clock to models — the same
-// time base timers use. Immune to wall-clock steps (NTP, DST).
-fn sz monotonic_ms() {
-	return time_ms();
-}
-
-// now is the frame clock: the time of the init(), update() or view() call in
+// frame_ms is the frame clock: the time of the init(), update() or view() call in
 // progress, in monotonic milliseconds. It stays fixed for the whole call, so
 // everything one view draws agrees on the instant it is drawing, and a value
 // set in update() is read back in view() against the same time base.
 //
 // Outside a running program (a unit test, direct rendering) there is no frame,
-// and now reads the live monotonic clock instead.
-fn sz now() {
+// and frame_ms reads the live monotonic clock instead.
+fn sz frame_ms() {
 	if (g_program == null) return time_ms();
 	return g_program.now_ms;
 }
 
 // frames_until keeps the runtime painting every frame until `deadline_ms` on
-// the now() clock. It is for a value that goes on changing by itself after
+// the frame_ms() clock. It is for a value that goes on changing by itself after
 // update() set it going — a tween running to its end, a spring settling — so
 // the model need not run a frame timer for it. Requests merge, the latest
 // deadline winning. Outside a program it does nothing.
@@ -720,7 +714,7 @@ fn void with_test_mode(Program* self, DString* output) {
 	self.output_buf = output;
 }
 
-// with_clock replaces the clock behind now(), so a test can render an
+// with_clock replaces the clock behind frame_ms(), so a test can render an
 // animation at chosen instants instead of whenever the test happens to run.
 // Timers keep the real clock: this only moves what the model sees.
 fn void with_clock(Program* self, ClockFn clock) {
@@ -1650,7 +1644,7 @@ fn void Program.schedule_repaint(&self, sz ms) {
 	if (self.now_ms < self.frames_until_ms && (ms <= 0 || FRAME_MS < ms)) ms = FRAME_MS;
 	if (ms <= 0) return;
 	// Land on the next multiple of the interval on the monotonic clock, the
-	// one now() reads. Content that picks its frame from now() then changes on
+	// one frame_ms() reads. Content that picks its frame from frame_ms() then changes on
 	// every repaint and holds each frame for exactly one interval; a delay
 	// counted from the end of this frame would drift against it and now and
 	// then show a frame twice.

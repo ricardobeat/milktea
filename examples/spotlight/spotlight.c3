@@ -105,7 +105,7 @@ fn milktea::Cmd Model.follow(&self, milktea::MouseMsg m) {
 		case MOUSE_PRESS:
 			if (self.holding) return null;
 			self.holding    = true;
-			self.pressed_at = milktea::now();
+			self.pressed_at = milktea::frame_ms();
 			// A bloom grows for as long as the button stays down, with nothing
 			// to say when it ends, so it runs a frame timer until the release.
 			return milktea::tick(milktea::FRAME_MS);
@@ -123,7 +123,7 @@ fn milktea::Cmd Model.follow(&self, milktea::MouseMsg m) {
 }
 
 // Seconds the button has been down.
-fn double Model.held(&self) => (double)(milktea::now() - self.pressed_at) / 1000.0;
+fn double Model.held(&self) => (double)(milktea::frame_ms() - self.pressed_at) / 1000.0;
 
 fn double Model.light_radius(&self) {
 	double r = self.radius.value();

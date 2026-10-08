@@ -7,8 +7,8 @@ import dye;
 // modes.
 //
 // Clock-driven is the usual one, and needs no frame messages at all: start it
-// in update() with `tween_at(now(), ms)`. It records when it started, and
-// every read solves its progress from now(), so view() only reads it. Starting
+// in update() with `tween_at(frame_ms(), ms)`. It records when it started, and
+// every read solves its progress from frame_ms(), so view() only reads it. Starting
 // it also asks the runtime for frames until it ends (see frames_until), so
 // the model runs no timer either.
 //
@@ -88,7 +88,7 @@ struct Tween {
 	sz duration_ms;
 	Easing easing;
 	bool reverse; // play from the target back to the start
-	// A clock-driven tween reads its progress from now() against started_ms,
+	// A clock-driven tween reads its progress from frame_ms() against started_ms,
 	// on the same clock; see tween_at.
 	bool clocked;
 	sz started_ms;
@@ -106,12 +106,12 @@ fn Tween tween_reversed(sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC) {
 }
 
 // tween_at builds a Tween that reads its progress from the clock, starting at
-// `now`. Pass milktea::now() from update() when the animation begins:
+// `now`. Pass milktea::frame_ms() from update() when the animation begins:
 // 
-//     self.anim = tween_at(milktea::now(), 260);
+//     self.anim = tween_at(milktea::frame_ms(), 260);
 // 
 // The tween then needs no frame messages and no timer: the runtime paints
-// every frame until it ends, and each read solves where it is from now().
+// every frame until it ends, and each read solves where it is from frame_ms().
 // A clock-driven tween ignores step().
 fn Tween tween_at(sz now, sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC, bool reverse = false) {
 	frames_until(now + duration_ms);
@@ -120,10 +120,10 @@ fn Tween tween_at(sz now, sz duration_ms, Easing easing = Easing.EASE_OUT_CUBIC,
 
 // reversed turns the tween around from wherever it is, keeping its duration
 // and easing: a modal half-way open closes from half-way rather than jumping.
-// The result is clock-driven from now(), whichever mode this one ran in, and
+// The result is clock-driven from frame_ms(), whichever mode this one ran in, and
 // a tween that never started reverses into one already at its start — so
 // `tween(180).reversed()` is a closed panel waiting to be opened.
-fn Tween Tween.reversed(self) => self.reversed_at(now());
+fn Tween Tween.reversed(self) => self.reversed_at(frame_ms());
 
 fn Tween Tween.reversed_at(self, sz now) {
 	// The way back covers what is left of the way out, so the tween resumes
@@ -155,25 +155,25 @@ fn bool Tween.step(&self, sz dt_ms = FRAME_MS) {
 }
 
 // done reports whether the tween has reached its end.
-fn bool Tween.done(self) => self.done_at(now());
+fn bool Tween.done(self) => self.done_at(frame_ms());
 fn bool Tween.done_at(self, sz now) => self.elapsed_at(now) >= self.duration_ms;
 
 // showing reports whether whatever this tween presents is on screen: on its
 // way in, in, or still on its way out.
-fn bool Tween.showing(self) => self.showing_at(now());
+fn bool Tween.showing(self) => self.showing_at(frame_ms());
 fn bool Tween.showing_at(self, sz now) => !self.reverse || !self.done_at(now);
 
 // restart rewinds the tween to its first frame, keeping duration and easing.
-// A clock-driven tween starts over from now().
+// A clock-driven tween starts over from frame_ms().
 fn void Tween.restart(&self) {
 	self.elapsed_ms = 0;
-	if (self.clocked) *self = tween_at(now(), self.duration_ms, self.easing, self.reverse);
+	if (self.clocked) *self = tween_at(frame_ms(), self.duration_ms, self.easing, self.reverse);
 }
 
 // value returns the eased progress in [0,1] (EASE_OUT_BACK may exceed it
 // mid-flight; see `ease`). A zero duration yields its end — an instant
 // animation is one that is already finished, never a divide by zero.
-fn double Tween.value(self) => self.value_at(now());
+fn double Tween.value(self) => self.value_at(frame_ms());
 
 fn double Tween.value_at(self, sz now) {
 	double t = self.duration_ms == 0 ? 1.0 : (double)self.elapsed_at(now) / (double)self.duration_ms;

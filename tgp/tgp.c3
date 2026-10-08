@@ -194,8 +194,8 @@ fn Session new_session() {
 	Session s = { };
 	// Auto-assigned ids unique per run: seed from the monotonic clock so a
 	// quick restart cannot collide with ids the terminal still holds.
-	s.next_id = ((uint)(milktea::monotonic_ms() % 1024) * 4096) + 4096;
-	s.born_ms = milktea::monotonic_ms();
+	s.next_id = ((uint)(milktea::time_ms() % 1024) * 4096) + 4096;
+	s.born_ms = milktea::time_ms();
 	s.next_pid = 1;
 	return s;
 }
@@ -277,7 +277,7 @@ fn void Session.release(&self, Glyph g) {
 // reconciles placements. Call it from update() on every animation message
 // (it is idempotent and emits nothing when nothing changed).
 fn void Session.tick(&self) {
-	self.clock_ms = milktea::monotonic_ms() - self.born_ms;
+	self.clock_ms = milktea::time_ms() - self.born_ms;
 	self.flush();
 	self.sync();
 }

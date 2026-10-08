@@ -203,7 +203,7 @@ terminals with `View.set_report_key_events(true)` ever send the latter two.
 | `tick(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer, delay from now |
 | `every(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer snapped to the next wall-clock multiple of `ms` |
 | `cancel(owner)` | Cancels timers registered with that owner pointer |
-| `frames_until(deadline_ms)` | Repaint every frame until `deadline_ms` on the `now()` clock |
+| `frames_until(deadline_ms)` | Repaint every frame until `deadline_ms` on the `frame_ms()` clock |
 
 Both timers are one-shot: re-arm from `update` to keep them firing. `tick` is
 for animation, where only the gap between frames matters; `every` is for
@@ -213,7 +213,7 @@ and render cost.
 `frames_until` is for something that keeps changing after `update` set it
 going, such as a tween running to its end. The runtime keeps painting until the
 deadline, and so does a drawn tree with a node that calls `.animate(fps)`. Both
-feed one repaint timer, aligned to the `now()` clock. A repaint is not a
+feed one repaint timer, aligned to the `frame_ms()` clock. A repaint is not a
 message: `view` runs again, but `update` does not.
 
 A custom `Cmd` is just a function returning a `Msg`:
@@ -298,11 +298,11 @@ Callable from `init`, `update`, `view` and `on_mount`; main thread only.
 | `cell_size_known()` | Whether the terminal answered the probe |
 | `kitty_graphics_supported()` | Result of the `a=q` probe |
 | `in_alt_screen()` | Whether the alternate screen is showing |
-| `now()` | The frame clock: monotonic ms, fixed for the current callback |
-| `monotonic_ms()` | Monotonic milliseconds, live |
+| `frame_ms()` | The frame clock: monotonic ms, fixed for the current callback |
+| `time_ms()` | Monotonic milliseconds, live |
 | `emit(String escape)` | Writes a raw escape through the renderer's tty path |
 
-`now()` is stamped once before each `init`, `update`, `view` and `on_mount`
+`frame_ms()` is stamped once before each `init`, `update`, `view` and `on_mount`
 call, so everything one callback reads agrees on the time. Outside a running
 program it reads the live clock.
 
@@ -328,7 +328,7 @@ turns true.
 | `with_window_size(&p, w, h)` | Fixes the size (tests) |
 | `with_test_mode(&p, DString*)` | Captures output instead of writing to the tty |
 | `with_input(&p, char[])` | Preloads input bytes (tests) |
-| `with_clock(&p, ClockFn)` | Replaces the clock behind `now()` (tests) |
+| `with_clock(&p, ClockFn)` | Replaces the clock behind `frame_ms()` (tests) |
 
 ## Node tree
 
@@ -360,8 +360,8 @@ return milktea::draw(milktea::root()
 ## Tweens and motion
 
 ```c3
-Tween t = milktea::tween_at(milktea::now(), 300, Easing.EASE_OUT_CUBIC); // in update()
-t.value();           // 0.0 .. 1.0, eased, at now()
+Tween t = milktea::tween_at(milktea::frame_ms(), 300, Easing.EASE_OUT_CUBIC); // in update()
+t.value();           // 0.0 .. 1.0, eased, at frame_ms()
 t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha();
 t.done();            // reached its end
 t.reversed();        // turn around from where it is, same duration and easing
@@ -370,7 +370,7 @@ t.restart();
 ```
 
 `tween_at` starts a clock-driven tween: it records its start, every read
-solves its progress from `now()`, and starting it asks the runtime for frames
+solves its progress from `frame_ms()`, and starting it asks the runtime for frames
 until it ends, so the model runs no timer. `value_at`, `done_at`,
 `showing_at`, `reversed_at` and `elapsed_at` take the time explicitly.
 
@@ -395,11 +395,11 @@ s.update(target);    // aim from wherever it is now (in update())
 s.value();           // where it is now (in view())
 s.velocity();        // units per second
 s.moving();          // false once settled
-s.settles_at();      // when it comes to rest, on the now() clock
+s.settles_at();      // when it comes to rest, on the frame_ms() clock
 s.set(value, velocity = 0);  // jump, or fling with a velocity
 ```
 
-The plain calls read `now()`; `update_at`, `value_at`, `velocity_at`,
+The plain calls read `frame_ms()`; `update_at`, `value_at`, `velocity_at`,
 `moving_at` and `set_at` take the time explicitly. `Spring.rest` (default
 `SPRING_REST`, 0.01) is how close and slow counts as settled, in the value's
 own units.
@@ -415,7 +415,7 @@ Parameters are `SpringParams { stiffness, damping }`, built with:
 
 `Motion` animates a node's entry: `slide_down(rows)`, `slide_up(rows)`,
 `slide_in(cols)`, `fade_in()`, and `.fade()` to add a fade to any of them. Apply
-with `node.transition(motion, tween)`, which reads the tween at `now()`.
+with `node.transition(motion, tween)`, which reads the tween at `frame_ms()`.
 
 ## Other helpers
 
