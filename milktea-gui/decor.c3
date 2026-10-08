@@ -221,6 +221,16 @@ fn void decor_begin(DecorRegion r) {
 	}
 }
 
+// decor_intersect is the part of reg inside the box (x0, y0)-(x1, y1).
+fn DecorRegion decor_intersect(DecorRegion reg, int x0, int y0, int x1, int y1) @local {
+	if (x0 < reg.x) x0 = reg.x;
+	if (y0 < reg.y) y0 = reg.y;
+	if (x1 > reg.x + reg.w) x1 = reg.x + reg.w;
+	if (y1 > reg.y + reg.h) y1 = reg.y + reg.h;
+	if (x1 <= x0 || y1 <= y0) return { };
+	return { x0, y0, x1 - x0, y1 - y0 };
+}
+
 // decor_sigma is the Gaussian sigma for a CSS-style blur radius in points.
 fn float decor_sigma(float blur) => blur > 0.0f ? blur / 2.0f : 0.0f;
 
@@ -263,8 +273,8 @@ fn void decor_mask(DecorRegion reg, DecorShape sh, char[] mask) @local {
 
 // decor_blur approximates a Gaussian of the given sigma in pixels with three
 // box blurs, each a horizontal and a vertical pass with a running sum: the
-// cost is a few adds per pixel whatever the radius. Past the region's edge
-// the nearest pixel repeats, which is what an inner shadow needs (outside the
+// cost is a few adds per pixel whatever the radius. Past the mask's edge the
+// nearest pixel repeats, which is what an inner shadow needs (outside the
 // hole is all shadow) and harmless for a drop shadow (its edge is clear).
 fn void decor_blur(char[] mask, int w, int h, float sigma) @local {
 	if (sigma < 0.5f || w < 1 || h < 1) return;
@@ -283,6 +293,15 @@ fn void decor_blur(char[] mask, int w, int h, float sigma) @local {
 		decor_box_h(mask, tmp, w, h, rad);
 		decor_box_v(tmp, mask, w, h, rad);
 	}
+}
+
+// decor_scale_for is how much a blur of this sigma can be shrunk by. A wide
+// shadow has no detail finer than a few pixels, so it is drawn and blurred at
+// 1/k the size and scaled back up while compositing: k squared less work for
+// no visible difference, as long as sigma stays a few pixels at the small size.
+fn int decor_scale_for(float sigma) @local {
+	int k = (int)(sigma / 2.5f);
+	return k < 1 ? 1 : k;
 }
 
 fn void decor_box_h(char[] src, char[] dst, int w, int h, int rad) @local {
@@ -310,22 +329,74 @@ fn void decor_box_v(char[] src, char[] dst, int w, int h, int rad) @local {
 	}
 }
 
-// decor_composite lays colour over the region through alpha (0..255 per
-// pixel), source-over in plutovg's premultiplied ARGB.
-fn void decor_composite(DecorRegion reg, char[] alpha, DecorRGBA c) @local {
+// div255 is x / 255 rounded, exact over 0..65535, without a divide.
+macro uint div255(uint x) {
+	uint t = x + 128;
+	return (t + (t >> 8)) >> 8;
+}
+
+// decor_composite lays colour over reg through mask, source-over in plutovg's
+// premultiplied ARGB. The mask is k times smaller than reg on each axis and
+// sampled bilinearly, so a shadow blurred at a reduced size is scaled back up
+// in the same pass that draws it; k = 1 reads it pixel for pixel.
+fn void decor_composite(DecorRegion reg, char[] mask, int mw, int mh, int k, DecorRGBA c) @local {
+	uint ca = (uint)(c.a * 255.0f + 0.5f);
+	if (ca == 0 || reg.w < 1 || reg.h < 1) return;
+	uint cr = (uint)(c.r * 255.0f + 0.5f);
+	uint cg = (uint)(c.g * 255.0f + 0.5f);
+	uint cb = (uint)(c.b * 255.0f + 0.5f);
 	char* data = plutovg_surface_get_data(g_decor.surface);
 	int stride = plutovg_surface_get_stride(g_decor.surface);
+	char* m = mask.ptr;
+
+	// Where each column samples the mask: two source columns and the weight
+	// of the second, in 1/256ths. Worked out once rather than per pixel.
+	int[] xa = mem::new_array(int, (sz)reg.w);
+	int[] xb = mem::new_array(int, (sz)reg.w);
+	uint[] tx = mem::new_array(uint, (sz)reg.w);
+	defer { mem::free(xa); mem::free(xb); mem::free(tx); }
+	for (int x = 0; x < reg.w; x++) {
+		if (k == 1) { xa[x] = x; xb[x] = x; tx[x] = 0; continue; }
+		float f = ((float)x + 0.5f) / (float)k - 0.5f;
+		int x0 = (int)math::floor(f);
+		tx[x] = (uint)((f - (float)x0) * 256.0f);
+		xa[x] = math::clamp(x0, 0, mw - 1);
+		xb[x] = math::clamp(x0 + 1, 0, mw - 1);
+	}
+
 	for (int y = 0; y < reg.h; y++) {
+		char* ra;
+		char* rb;
+		uint ty = 0;
+		if (k == 1) {
+			ra = m + (sz)y * mw;
+			rb = ra;
+		} else {
+			float f = ((float)y + 0.5f) / (float)k - 0.5f;
+			int y0 = (int)math::floor(f);
+			ty = (uint)((f - (float)y0) * 256.0f);
+			ra = m + (sz)math::clamp(y0, 0, mh - 1) * mw;
+			rb = m + (sz)math::clamp(y0 + 1, 0, mh - 1) * mw;
+		}
 		uint* row = (uint*)(data + (sz)(reg.y + y) * stride + (sz)reg.x * 4);
 		for (int x = 0; x < reg.w; x++) {
-			float a = (float)alpha[(sz)y * reg.w + x] / 255.0f * c.a;
-			if (a <= 0.0f) continue;
+			uint v;
+			if (k == 1) {
+				v = ra[x];
+			} else {
+				uint t = tx[x];
+				uint top = (uint)ra[xa[x]] * (256 - t) + (uint)ra[xb[x]] * t;
+				uint bot = (uint)rb[xa[x]] * (256 - t) + (uint)rb[xb[x]] * t;
+				v = (top * (256 - ty) + bot * ty) >> 16;
+			}
+			if (v == 0) continue;
+			uint a = div255(v * ca);
+			uint keep = 255 - a;
 			uint p = row[x];
-			float keep = 1.0f - a;
-			uint na = (uint)(a * 255.0f + (float)(p >> 24) * keep + 0.5f);
-			uint nr = (uint)(c.r * a * 255.0f + (float)((p >> 16) & 0xff) * keep + 0.5f);
-			uint ng = (uint)(c.g * a * 255.0f + (float)((p >> 8) & 0xff) * keep + 0.5f);
-			uint nb = (uint)(c.b * a * 255.0f + (float)(p & 0xff) * keep + 0.5f);
+			uint na = a + div255(((p >> 24) & 0xff) * keep);
+			uint nr = div255(cr * a) + div255(((p >> 16) & 0xff) * keep);
+			uint ng = div255(cg * a) + div255(((p >> 8) & 0xff) * keep);
+			uint nb = div255(cb * a) + div255((p & 0xff) * keep);
 			row[x] = (math::min(na, 255u) << 24) | (math::min(nr, 255u) << 16)
 				| (math::min(ng, 255u) << 8) | math::min(nb, 255u);
 		}
@@ -349,29 +420,44 @@ fn void decor_paint(xray::Decoration d, DecorRegion reg) {
 
 	// Masks first: making one uses the surface, so nothing can be painted on
 	// it until they are all in hand.
-	sz n = (sz)reg.w * reg.h;
 	char[] drop;
 	char[] inner;
+	int dk = 1;
+	int dw = reg.w;
+	int dh = reg.h;
 	if (d.shadow) {
+		// Drawn and blurred at 1/dk the size, in the region's top-left
+		// corner of the surface; decor_composite scales it back up.
+		float sigma = decor_sigma(d.shadow_blur) * s;
+		dk = decor_scale_for(sigma);
+		dw = (reg.w + dk - 1) / dk;
+		dh = (reg.h + dk - 1) / dk;
 		float sp = d.shadow_spread * s;
-		drop = mem::new_array(char, n);
-		decor_mask(reg, decor_shape(x + d.shadow_dx * s - sp, y + d.shadow_dy * s - sp,
-			w + sp * 2.0f, h + sp * 2.0f, r + sp), drop);
-		decor_blur(drop, reg.w, reg.h, decor_sigma(d.shadow_blur) * s);
+		float f = 1.0f / (float)dk;
+		drop = mem::new_array(char, (sz)dw * dh);
+		decor_mask({ reg.x, reg.y, dw, dh }, decor_shape(
+			(float)reg.x + (x + d.shadow_dx * s - sp - (float)reg.x) * f,
+			(float)reg.y + (y + d.shadow_dy * s - sp - (float)reg.y) * f,
+			(w + sp * 2.0f) * f, (h + sp * 2.0f) * f, (r + sp) * f), drop);
+		decor_blur(drop, dw, dh, sigma * f);
 	}
-	if (d.inner_shadow) {
+	// The inner shadow is clipped to the shape, so it only needs the shape's
+	// own box, not the margin a drop shadow reaches into.
+	DecorRegion ireg = decor_intersect(reg, (int)x - 1, (int)y - 1, (int)(x + w) + 2, (int)(y + h) + 2);
+	if (d.inner_shadow && ireg.w > 0 && ireg.h > 0) {
 		// The shadow is everything outside the hole the shape makes once it
 		// is offset and pulled in by the spread, blurred, then kept to the
 		// shape itself.
 		float sp = d.inner_spread * s;
-		inner = mem::new_array(char, n);
-		decor_mask(reg, decor_shape(x + d.inner_dx * s + sp, y + d.inner_dy * s + sp,
+		sz ni = (sz)ireg.w * ireg.h;
+		inner = mem::new_array(char, ni);
+		decor_mask(ireg, decor_shape(x + d.inner_dx * s + sp, y + d.inner_dy * s + sp,
 			w - sp * 2.0f, h - sp * 2.0f, r - sp), inner);
 		foreach (&a : inner) *a = 255 - *a;
-		decor_blur(inner, reg.w, reg.h, decor_sigma(d.inner_blur) * s);
-		char[] clip = mem::new_array(char, n);
+		decor_blur(inner, ireg.w, ireg.h, decor_sigma(d.inner_blur) * s);
+		char[] clip = mem::new_array(char, ni);
 		defer mem::free(clip);
-		decor_mask(reg, body, clip);
+		decor_mask(ireg, body, clip);
 		foreach (i, &a : inner) *a = (char)((int)*a * (int)clip[i] / 255);
 	}
 	defer {
@@ -379,7 +465,7 @@ fn void decor_paint(xray::Decoration d, DecorRegion reg) {
 		if (inner.ptr) mem::free(inner);
 	}
 
-	if (d.shadow) decor_composite(reg, drop, decor_rgba(d.shadow_color, 0.35f));
+	if (d.shadow) decor_composite(reg, drop, dw, dh, dk, decor_rgba(d.shadow_color, 0.35f));
 
 	plutovg_canvas_round_rect(g_decor.canvas, x, y, w, h, r, r);
 	switch (d.kind) {
@@ -411,7 +497,7 @@ fn void decor_paint(xray::Decoration d, DecorRegion reg) {
 	}
 	plutovg_canvas_fill(g_decor.canvas);
 
-	if (d.inner_shadow) decor_composite(reg, inner, decor_rgba(d.inner_color, 0.35f));
+	if (inner.ptr) decor_composite(ireg, inner, ireg.w, ireg.h, 1, decor_rgba(d.inner_color, 0.35f));
 
 	// Border drawn inside the rect: the stroke straddles the path, so the path
 	// is inset by half the width and the fill above stays flush with the edge.
