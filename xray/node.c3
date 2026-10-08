@@ -121,13 +121,13 @@ enum AlignItems : char {
 // Direction of a container's main axis. STACK has no main axis: every child
 // is solved against the parent's whole rect, and later children paint over
 // earlier ones.
-enum NodeDirection : char {
+enum NodeDirection : char @private {
 	ROW,
 	COLUMN,
 	STACK,
 }
 
-const sz MAX_NODE_CHILDREN = 32;
+const sz MAX_NODE_CHILDREN @private = 32;
 
 // Node is one box in a layout tree. It is either a container (children, a
 // direction) or a leaf (content), never usefully both — a node with content

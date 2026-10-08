@@ -109,7 +109,7 @@ fn Constraint range_fit(sz lo, sz hi, MeasureFn measure, void* ctx) {
 // no_measure is what a constraint with no measure callback falls back to —
 // callers differ (0 for the flex-distribution passes, the full available
 // span for a lone stack child) so it isn't baked in here.
-fn sz resolve_fit(Constraint c, sz cross, sz no_measure = 0) {
+fn sz resolve_fit(Constraint c, sz cross, sz no_measure = 0) @private {
 	sz size = c.measure ? c.measure(c.ctx, cross) : no_measure;
 	if (size < 0) size = 0;
 	if (size < c.fit_min) size = c.fit_min;

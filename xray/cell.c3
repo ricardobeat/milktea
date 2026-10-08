@@ -207,7 +207,7 @@ fn String Style.diff_sgr(&self, Style prev) {
 // Cell — a single terminal cell.
 // ============================================================
 
-const sz CELL_MAX_BYTES = 8;
+const sz CELL_MAX_BYTES @private = 8;
 
 struct Cell {
 	char[CELL_MAX_BYTES] content;

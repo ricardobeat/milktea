@@ -109,11 +109,11 @@ fn sz Node.content_height(&self, sz width) {
 
 // MeasureFn adapters, so a CFIT constraint can point back at the node it
 // belongs to. The solver passes the size available on the other axis.
-fn sz node_measure_w(void* ctx, sz height) {
+fn sz node_measure_w(void* ctx, sz height) @private {
 	return ((Node*)ctx).content_width(height);
 }
 
-fn sz node_measure_h(void* ctx, sz width) {
+fn sz node_measure_h(void* ctx, sz width) @private {
 	return ((Node*)ctx).content_height(width);
 }
 

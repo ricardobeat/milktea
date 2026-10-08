@@ -18,10 +18,10 @@ import std::core::dstring;
 // WriteFn is the signature for the terminal output function.
 alias WriteFn = fn void(char[] bytes);
 
-const String SYNC_BEGIN      = "\x1b[?2026h";
-const String SYNC_END        = "\x1b[?2026l";
-const String HIDE_CURSOR_SEQ = "\x1b[?25l";
-const String SHOW_CURSOR_SEQ = "\x1b[?25h";
+const String SYNC_BEGIN      @private = "\x1b[?2026h";
+const String SYNC_END        @private = "\x1b[?2026l";
+const String HIDE_CURSOR_SEQ @private = "\x1b[?25l";
+const String SHOW_CURSOR_SEQ @private = "\x1b[?25h";
 
 struct Renderer {
 	ScreenBuffer* screen;
