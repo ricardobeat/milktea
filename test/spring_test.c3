@@ -126,3 +126,18 @@ fn void test_no_stiffness_holds_still() @test {
 	s.update_at(100, 0);
 	assert_near(s.value_at(1000), 5, 1e-9, "value");
 }
+
+fn void test_settles_at_is_when_it_stops_moving() @test {
+	Spring s = milktea::spring(0, milktea::spring_snappy());
+	s.update_at(10, 1000);
+	sz t = s.settles_at();
+	assert(t > 1000, "takes time to get there");
+	assert(!s.moving_at(t), "at rest when it says");
+	assert(s.moving_at(t - milktea::FRAME_MS), "and not a frame sooner");
+}
+
+fn void test_a_resting_spring_settles_at_once() @test {
+	Spring s = milktea::spring(5, milktea::spring_smooth());
+	s.update_at(5, 2000);
+	assert(s.settles_at() == 2000, "already there, got %d", s.settles_at());
+}

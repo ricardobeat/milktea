@@ -14,13 +14,11 @@ import std::math;
 // moving when last told where to go, and every read solves the spring's
 // motion from there. So update() is the only call that changes it, view()
 // only reads, and how often frames happen to land has no effect on the path.
-// update() also keeps the frames coming, re-arming its timer while the spring
-// moves:
+// Each change also works out when the spring will settle and asks the runtime
+// for frames until then (see frames_until), so the model runs no timer:
 //
 //     // update()
 //     if (msg.kind == MOUSE) self.x.update(msg.mouse.col);
-//     milktea::cancel(self);
-//     return self.x.moving() ? milktea::tick(FRAME_MS, owner: self) : null;
 //
 //     // view()
 //     double x = self.x.value();
@@ -115,6 +113,7 @@ fn void Spring.update_at(&self, double target, sz now_ms) {
 	self.start_velocity = s.velocity;
 	self.start_ms       = now_ms;
 	self.target         = target;
+	frames_until(self.settles_at());
 }
 
 // set places the spring at `value`, moving at `velocity` units per second,
@@ -126,6 +125,7 @@ fn void Spring.set_at(&self, double value, double velocity, sz now_ms) {
 	self.start_value    = value;
 	self.start_velocity = velocity;
 	self.start_ms       = now_ms;
+	frames_until(self.settles_at());
 }
 
 // value is where the spring is now.
@@ -145,6 +145,24 @@ fn bool Spring.moving(self) => self.moving_at(now());
 fn bool Spring.moving_at(self, sz now_ms) {
 	SpringState s = self.state_at(now_ms);
 	return math::abs(s.value - self.target) > self.rest || math::abs(s.velocity) > self.rest;
+}
+
+// The longest a spring is followed when working out where it settles. Past
+// this a spring is too slow to be animating anything; it simply lands on
+// whatever frame comes next.
+const sz SPRING_SETTLE_LIMIT_MS = 30_000;
+
+// settles_at is when the spring comes to rest, on the now() clock: the first
+// frame at which it no longer counts as moving. A spring already at rest
+// settles at its start.
+fn sz Spring.settles_at(self) {
+	// Walk the solved path a frame at a time. A few dozen closed-form reads per
+	// change is cheap, and it asks exactly the question moving() answers, so
+	// the frames stop when the view would stop seeing any change.
+	for (sz t = self.start_ms; t < self.start_ms + SPRING_SETTLE_LIMIT_MS; t += FRAME_MS) {
+		if (!self.moving_at(t)) return t;
+	}
+	return self.start_ms + SPRING_SETTLE_LIMIT_MS;
 }
 
 // ── Solving ──────────────────────────────────────────────────────────────────

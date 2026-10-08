@@ -9,9 +9,9 @@
 //   in time  — the light rides a spring after the cursor, and holding a
 //              button blooms its radius outward for as long as it stays down.
 //
-// update() says where things should go and keeps a frame timer running while
-// anything is still moving; view() only reads where they are. A resting
-// spotlight costs nothing.
+// update() says where things should go and view() only reads where they are.
+// The springs keep frames coming until they settle, and a held button keeps
+// its own timer, since a bloom has no end. A resting spotlight costs nothing.
 module spotlight;
 
 import milktea;
@@ -73,21 +73,15 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 		case WINDOW_SIZE:
 			self.resize(msg.window_size.width, msg.window_size.height);
 		case MOUSE:
-			self.follow(msg.mouse);
+			return self.follow(msg.mouse);
+		case TICK:
+			// The bloom's frame: the only timer this program runs.
+			if (self.holding) return milktea::tick(milktea::FRAME_MS);
 		case KEY:
 			if (is_quit(msg.key)) return milktea::quit();
 		default:
 	}
-	return self.next_frame();
-}
-
-// Keep frames coming while anything moves. Cancel first, so a burst of mouse
-// events re-arms one timer rather than stacking one per event; each of those
-// events repaints anyway.
-fn milktea::Cmd Model.next_frame(&self) {
-	milktea::cancel(self);
-	if (!self.moving()) return null;
-	return milktea::tick(milktea::FRAME_MS, owner: self);
+	return null;
 }
 
 fn void Model.resize(&self, sz w, sz h) {
@@ -101,19 +95,22 @@ fn void Model.resize(&self, sz w, sz h) {
 	}
 }
 
-fn void Model.follow(&self, milktea::MouseMsg m) {
+fn milktea::Cmd Model.follow(&self, milktea::MouseMsg m) {
 	self.seen_mouse = true;
 	self.light_x.update(m.col);
 	self.light_y.update(m.row);
 
-	if (is_wheel(m.button)) return;
+	if (is_wheel(m.button)) return null;
 	switch (m.action) {
 		case MOUSE_PRESS:
-			if (self.holding) return;
+			if (self.holding) return null;
 			self.holding    = true;
 			self.pressed_at = milktea::now();
+			// A bloom grows for as long as the button stays down, with nothing
+			// to say when it ends, so it runs a frame timer until the release.
+			return milktea::tick(milktea::FRAME_MS);
 		case MOUSE_RELEASE:
-			if (!self.holding) return;
+			if (!self.holding) return null;
 			// Hand the bloom back to the spring as it stands — its size and the
 			// speed it was growing at — so the light carries on outward for a
 			// moment before it is reeled back in.
@@ -122,6 +119,7 @@ fn void Model.follow(&self, milktea::MouseMsg m) {
 			self.holding = false;
 		default:
 	}
+	return null;
 }
 
 // Seconds the button has been down.
@@ -130,11 +128,6 @@ fn double Model.held(&self) => (double)(milktea::now() - self.pressed_at) / 1000
 fn double Model.light_radius(&self) {
 	double r = self.radius.value();
 	return self.holding ? r + bloom(self.held()) : r;
-}
-
-fn bool Model.moving(&self) {
-	if (self.holding) return true;
-	return self.light_x.moving() || self.light_y.moving() || self.radius.moving();
 }
 
 // How far the bloom has spread after `held` seconds. The growth eases in over

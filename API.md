@@ -386,13 +386,16 @@ in/out/in-out family, and `EASE_OUT_BACK` — which deliberately overshoots past
 A `Spring` eases toward a target that can change at any time, keeping its
 momentum through each change. It is solved exactly from the moment it was last
 updated, so reading it never writes it: `update()` aims it, `view()` reads it.
+Each change asks the runtime for frames until the spring settles, so the model
+runs no timer for it.
 
 ```c3
 Spring s = milktea::spring(0, milktea::spring_smooth());
 s.update(target);    // aim from wherever it is now (in update())
 s.value();           // where it is now (in view())
 s.velocity();        // units per second
-s.moving();          // false once settled: stop re-arming the frame timer
+s.moving();          // false once settled
+s.settles_at();      // when it comes to rest, on the now() clock
 s.set(value, velocity = 0);  // jump, or fling with a velocity
 ```
 
