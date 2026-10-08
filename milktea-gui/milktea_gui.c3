@@ -70,6 +70,11 @@ alias GlfwMouseButtonFn = fn void(void* window, int button, int action, int mods
 extern fn void* glfw_get_current_context() @cname("glfwGetCurrentContext");
 extern fn GlfwMouseButtonFn glfw_set_mouse_button_callback(void* window, GlfwMouseButtonFn cb)
 	@cname("glfwSetMouseButtonCallback");
+// The window-size callback, chained the same way, is how a frame gets drawn
+// during a live resize: see window_size_hook.
+alias GlfwSizeFn = fn void(void* window, int width, int height);
+extern fn GlfwSizeFn glfw_set_window_size_callback(void* window, GlfwSizeFn cb)
+	@cname("glfwSetWindowSizeCallback");
 
 // cursor_screen_pos reports the pointer in screen space, which is the only
 // frame of reference a window drag can use: a window-relative position moves
@@ -688,6 +693,46 @@ fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
 	return false;
 }
 
+// raylib's own window-size callback, kept so the hook can call it first, and
+// whether a frame is being drawn from inside the hook.
+GlfwSizeFn g_prev_window_size @local;
+bool g_in_resize @local;
+// The main loop is in the middle of a frame. A resize the frame itself asked
+// for (the zoom button maximising the window) calls the hook right there,
+// and drawing a second frame inside the first would tangle both; the next
+// pass of the loop picks the new size up instead.
+bool g_in_frame @local;
+
+// window_size_hook draws a frame whenever the window changes size. While the
+// user drags its edge, macOS runs its own event loop and does not hand control
+// back until they let go, so the main loop cannot draw; without this the
+// window shows a stretched or blank old frame until the drag ends. raylib's
+// callback runs first, so the screen size and viewport are already updated.
+fn void window_size_hook(void* window, int width, int height) {
+	if (g_prev_window_size != null) g_prev_window_size(window, width, height);
+	if (g_loop == null || g_in_resize) return;
+	if (g_in_frame) {
+		g_dirty = true;
+		return;
+	}
+	g_in_resize = true;
+	g_dirty = true;
+	if (!gui_frame(g_loop)) g_loop.should_quit = true;
+	g_in_resize = false;
+}
+
+// frame_end finishes a drawn frame. end_drawing also polls for events, which
+// GLFW does not allow from inside one of its callbacks, so a frame drawn from
+// window_size_hook flushes and swaps by hand instead.
+fn void frame_end() @local {
+	if (g_in_resize) {
+		rl::gl_draw_render_batch_active();
+		rl::swap_screen_buffer();
+		return;
+	}
+	rl::end_drawing();
+}
+
 // IDLE_WAIT is how long a frame with nothing to draw sleeps before looking
 // for input again.
 const double IDLE_WAIT = 1.0 / 120.0;
@@ -697,6 +742,9 @@ const double IDLE_WAIT = 1.0 / 120.0;
 // pass: polling first and sleeping after left every click and key waiting a
 // whole sleep before anything looked at it.
 fn void idle_wait() @local {
+	// Inside window_size_hook the platform is running the event loop; there
+	// is nothing to wait for and polling is not allowed.
+	if (g_in_resize) return;
 	rl::wait_time(IDLE_WAIT);
 	rl::poll_input_events();
 }
@@ -719,6 +767,42 @@ fn void write_screenshot(GuiOptions opts, rl::RLRenderTexture2D from) @local {
 	rl::export_image(img, (ZString)opts.screenshot_path.zstr_tcopy());
 	rl::unload_image(img);
 }
+
+// GuiLoop is everything one pass of the GUI loop carries over to the next.
+// It lives in run()'s frame; g_loop points at it while the loop runs, so the
+// window-size callback can draw a frame in the middle of a live resize.
+struct GuiLoop {
+	milktea::Model m;
+	GuiOptions opts;
+	bool rounded;
+	rl::RLFont font;
+	bool split_atlas;
+	rl::RLFont rule_font;
+	CellFit text_fit;
+	CellFit rule_fit;
+	bool shot;
+	rl::RLRenderTexture2D shot_target;
+	rl::RLCamera2D shot_cam;
+	rl::RLRenderTexture2D target;
+	rl::RLShader round_shader;
+	int round_radius_loc;
+	int round_size_loc;
+	milktea::Program* prog;
+	xray::Cell[] prev_cells;
+	sz prev_count;
+	bool prev_valid;
+	xray::PaintOp[] prev_paint;
+	bool should_quit;
+	bool drag_pending;
+	bool drag_active;
+	bool drag_abs;
+	int drag_win_x;
+	int drag_win_y;
+	int drag_ptr_x;
+	int drag_ptr_y;
+}
+
+GuiLoop* g_loop @local;
 
 fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	bool rounded = opts.corner_radius > 0.0f;
@@ -748,6 +832,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// press too short for raylib's per-frame sampling is still seen.
 	g_prev_mouse_button = glfw_set_mouse_button_callback(
 		glfw_get_current_context(), &mouse_button_hook);
+	g_prev_window_size = glfw_set_window_size_callback(
+		glfw_get_current_context(), &window_size_hook);
 	// raylib closes the window on ESC unless told otherwise, which is wrong
 	// for anything built on this loop: ESC is a key the model gets to read
 	// like any other, and a view that uses it to leave a menu or a dialog
@@ -970,423 +1056,54 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	int drag_ptr_x = 0;
 	int drag_ptr_y = 0;
 
-	while (!should_quit && !rl::window_should_close()) {
-		// Messages handed to the program from outside the loop — milktea::send
-		// from another thread, or request_quit() from a callback that had no
-		// Cmd to return. Same drain Program.run() does, and it runs before
-		// everything else so a request made during the previous turn (a click
-		// handler asking to close the window, say) takes effect at once.
-		milktea::Msg sent;
-		while (prog.send_recv(&sent)) {
-			if (sent.kind != milktea::MsgKind.NONE && dispatch_gui(m, sent)) {
-				should_quit = true;
-				break;
-			}
-		}
-		if (should_quit) break;
-
-		// Fire expired timers registered via milktea::tick()/every() —
-		// mirrors Program.run()'s timer loop, since this GUI loop bypasses
-		// Program.run() entirely and drives update() by hand.
-		sz now = milktea::time_ms();
-		for (sz i = 0; i < milktea::MAX_TIMERS; i++) {
-			if (prog.timers[i].active && now >= prog.timers[i].deadline_ms) {
-				milktea::Cmd cb = prog.timers[i].callback;
-				void* owner = prog.timers[i].owner;
-				prog.timers[i].active = false;
-				milktea::Msg tmsg = cb();
-				tmsg.owner = owner;
-				if (tmsg.kind != milktea::MsgKind.NONE && dispatch_gui(m, tmsg)) {
-					should_quit = true;
-					break;
-				}
-				now = milktea::time_ms();
-			}
-		}
-		if (should_quit) break;
-
-		// A size request and a window resize answer the same question — how
-		// many cells fit — so the request only swaps the font and the cell
-		// size, and lets the resize path below work out the rest. Forcing
-		// that path to run is what makes the new grid reach the model: the
-		// window itself did not change, so is_window_resized() is false.
-		bool size_changed = false;
-		if (g_size_request) {
-			g_size_request = false;
-			if (split_atlas) rl::unload_font(rule_font);
-			rl::unload_font(font);
-			opts.cell_w = g_req_cell_w;
-			opts.cell_h = g_req_cell_h;
-			opts.font_size = g_req_font_size;
-			font = load_mono_font(opts.font_size);
-			shapes_from_font(font);
-			split_atlas = opts.font_size != opts.cell_h;
-			rule_font = split_atlas ? load_mono_font(opts.cell_h) : font;
-			text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h);
-			rule_fit = split_atlas
-				? cell_fit(rule_font, opts.cell_h, opts.cell_w, opts.cell_h)
-				: text_fit;
-			rl::set_window_min_size(opts.cell_w * 4, opts.cell_h * 4);
-			$if env::DARWIN:
-				// The inline title bar is cell_h tall, so it has to be told
-				// too or the app's top row and the strip stop agreeing.
-				if (opts.chrome_rows > 0) {
-					int br = milktea_macos_inline_titlebar(
-						opts.cell_h, opts.hide_window_buttons ? 1 : 0);
-					if (br >= 0) g_chrome_buttons_right = br;
-				}
-			$endif
-			size_changed = true;
-			g_dirty = true;
-		}
-
-		prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
-		prog.layout_area = { .w = shot ? (sz)opts.cols * opts.cell_w : rl::get_screen_width(),
-			.h = shot ? (sz)opts.rows * opts.cell_h : rl::get_screen_height() };
-
-		if (rl::is_window_resized() || size_changed) {
-			g_dirty = true;
-			if (rounded) {
-				rl::unload_render_texture(target);
-				target = rl::load_render_texture(rl::get_screen_width(), rl::get_screen_height());
-			}
-			int new_cols = rl::get_screen_width() / opts.cell_w;
-			int new_rows = rl::get_screen_height() / opts.cell_h;
-			if (new_cols < 1) new_cols = 1;
-			if (new_rows < 1) new_rows = 1;
-			if (new_cols != opts.cols || new_rows != opts.rows || size_changed) {
-				opts.cols = new_cols;
-				opts.rows = new_rows;
-				prog.cached_ws.ws_col = (ushort)new_cols;
-				prog.cached_ws.ws_row = (ushort)new_rows;
-				milktea::Msg wm = { .kind = milktea::MsgKind.WINDOW_SIZE, .window_size = { new_cols, new_rows } };
-				if (dispatch_gui(m, wm)) { should_quit = true; break; }
-			}
-		}
-
-		if (drag_pending) {
-			if (!rl::is_mouse_button_down(rl::RLMouseButton.LEFT)) {
-				drag_pending = false;
-				drag_active = false;
-			} else {
-				// Both branches answer the same question — how far has the
-				// pointer travelled since the press — and the window is then
-				// placed at its press position plus that, so each frame is
-				// computed from the press rather than from the frame before
-				// it and nothing accumulates.
-				int px;
-				int py;
-				int dx;
-				int dy;
-				if (drag_abs && cursor_screen_pos(&px, &py)) {
-					dx = px - drag_ptr_x;
-					dy = py - drag_ptr_y;
-				} else {
-					// Window-relative fallback. It reads the pointer through
-					// the window that is being moved, so it is a frame behind
-					// whenever the window moved last frame.
-					rl::RLVector2 wp = rl::get_window_position();
-					dx = (int)wp.x + rl::get_mouse_x() - drag_ptr_x;
-					dy = (int)wp.y + rl::get_mouse_y() - drag_ptr_y;
-				}
-				if (!drag_active && (dx > DRAG_SLOP || dx < -DRAG_SLOP
-					|| dy > DRAG_SLOP || dy < -DRAG_SLOP)) {
-					drag_active = true;
-				}
-				if (drag_active) {
-					rl::set_window_position(drag_win_x + dx, drag_win_y + dy);
-				}
-			}
-		}
-
-		Mods mods = read_mods();
-
-		// Runes first (letters/digits/punctuation), then non-printable keys —
-		// raylib queues both independently per frame.
-		//
-		// ctrl+letter is deliberately skipped here and synthesized in
-		// translate_key() instead: platforms disagree on whether it produces
-		// text at all, and letting both paths fire would deliver the keypress
-		// twice. Shift is left off runes because it is already baked into the
-		// character ('A' vs 'a'); reporting it again would make a model
-		// testing `shift` see every capital as modified.
-		int ch;
-		while ((ch = rl::get_char_pressed()) != 0) {
-			if (mods.ctrl || mods.super) continue;
-			milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch, .alt = mods.alt };
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
-		}
-		rl::RLKeyboardKey key;
-		while ((key = rl::get_key_pressed()) != rl::RLKeyboardKey.NONE) {
-			if (try k = translate_key(key, mods)) {
-				if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
-			}
-		}
-
-		// A held key repeats through GLFW_REPEAT, and raylib records that per
-		// key for the frame rather than queueing it (see IsKeyPressedRepeat) —
-		// so the repeats never arrive through the press queue above and every
-		// code has to be asked about by name. KB_MENU is the highest key
-		// raylib names, so the sweep covers the table; translate_key() drops
-		// the codes that mean nothing to a model. Without this a held arrow
-		// or backspace moves once and then sits still, which is what no key
-		// repeat looks like in a window.
-		//
-		// Text is deliberately not swept: raylib's char queue already carries
-		// the repeats of a held letter, and dispatching those again here
-		// would type each one twice.
-		for (int code = 1; code <= (int)rl::RLKeyboardKey.KB_MENU; code++) {
-			rl::RLKeyboardKey repeated = (rl::RLKeyboardKey)code;
-			if (!rl::is_key_pressed_repeat(repeated)) continue;
-			if (try k = translate_key(repeated, mods)) {
-				if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = k })) { should_quit = true; }
-			}
-		}
-		if (should_quit) break;
-
-		// frame_no counts every iteration of the GUI loop, not just the ones
-		// that actually rendered: test scripts schedule events at "frame
-		// N" and want that to mean "after N ticks of the input pump", not
-		// "after N renders" (which would be indeterminate during idle).
-		milktea::g_program.frame_no++;
-
-		// Pending synthetic click / pointer: the test API parks them here and
-		// the GUI backend fires them through the same dispatch path a real
-		// mouse uses, so target lookup, id forwarding, hover bookkeeping and
-		// the resulting on_click / on_hover_in chains behave exactly as in
-		// a live session — only the raylib input poll is skipped.
-		if (milktea::g_program.test_click_armed
-				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_click_frame) {
-			sz tc = milktea::g_program.test_pending_click_col;
-			sz tr = milktea::g_program.test_pending_click_row;
-			milktea::g_program.test_click_armed = false;
-			io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
-				milktea::g_program.frame_no, tc, tr,
-				milktea::g_program.click_target_count);
-			milktea::dispatch_click(tc * opts.cell_w, tr * opts.cell_h);
-			milktea::MouseMsg fm = { .button = milktea::MouseButton.MOUSE_LEFT,
-				.action = milktea::MouseAction.MOUSE_PRESS, .row = tr, .col = tc };
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = fm })) { should_quit = true; break; }
-		}
-		if (milktea::g_program.test_pointer_armed
-				&& milktea::g_program.frame_no >= milktea::g_program.test_pending_pointer_frame) {
-			sz pc = milktea::g_program.test_pending_pointer_col;
-			sz pr = milktea::g_program.test_pending_pointer_row;
-			milktea::g_program.test_pointer_armed = false;
-			io::eprintfn("[test] frame %d: pointer col=%d row=%d",
-				milktea::g_program.frame_no, pc, pr);
-			milktea::dispatch_hover(pc * opts.cell_w, pr * opts.cell_h);
-			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
-				.action = milktea::MouseAction.MOUSE_MOTION, .row = pr, .col = pc };
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
-		}
-		// The MILKTEA_DEBUG_KEY_AT key, if one was armed and its frame has
-		// arrived. It goes through dispatch_gui exactly as a keystroke read
-		// from the keyboard does, so a shell run sees the same result.
-		if (g_key_armed && milktea::g_program.frame_no >= g_key_frame) {
-			g_key_armed = false;
-			io::eprintfn("[test] frame %d: key code=%d rune=%d",
-				milktea::g_program.frame_no, (int)g_key_msg.code, (int)g_key_msg.rune);
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = g_key_msg })) { should_quit = true; break; }
-		}
-		int mx, my;
-		pointer_pixel(opts, &mx, &my);
-		sz mcol = xray::floor_cell(mx, opts.cell_w);
-		sz mrow = xray::floor_cell(my, opts.cell_h);
-		if (mx != g_prev_mcol || my != g_prev_mrow) {
-			// Hover is an edge event: walking every target each frame would
-			// be a no-op while the pointer stays put, but the edge crossing
-			// is what tells a node "you are now hovered" / "you are no
-			// longer". Same dispatch path the terminal loop uses on a real
-			// MOUSE_MOTION, kept in sync so a model written against either
-			// backend sees identical behaviour.
-			milktea::dispatch_hover(mx, my);
-			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
-				.action = milktea::MouseAction.MOUSE_MOTION, .row = mrow, .col = mcol };
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
-			g_prev_mcol = mx;
-			g_prev_mrow = my;
-		}
-		bool left_pressed = g_left_press_pending != 0
-			|| rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT);
-		g_left_press_pending = 0;
-		if (left_pressed) {
-			if (milktea::debug_mouse()) {
-				io::eprintfn("[mouse] press at px=%d,%d -> col=%d row=%d (cell %dx%d) drag=%s",
-					rl::get_mouse_x(), rl::get_mouse_y(), mcol, mrow,
-					opts.cell_w, opts.cell_h, is_drag_point(opts, mx, my));
-			}
-			if (is_drag_point(opts, mx, my)) {
-				rl::RLVector2 wp = rl::get_window_position();
-				drag_pending = true;
-				drag_active = false;
-				drag_win_x = (int)wp.x;
-				drag_win_y = (int)wp.y;
-				drag_abs = cursor_screen_pos(&drag_ptr_x, &drag_ptr_y);
-				if (!drag_abs) {
-					drag_ptr_x = drag_win_x + rl::get_mouse_x();
-					drag_ptr_y = drag_win_y + rl::get_mouse_y();
-				}
-			}
-			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol };
-			// Fires on_click/on_click_outside against last frame's layout
-			// before the raw MouseMsg reaches update() — same order as the
-			// terminal event loop's dispatch(): a press counts as a pointer
-			// move, so it settles hover first and then delivers the press.
-			milktea::dispatch_click(mx, my);
-			milktea::dispatch_hover(mx, my);
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
-		}
-		if (rl::is_mouse_button_released(rl::RLMouseButton.LEFT)) {
-			milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_RELEASE, .row = mrow, .col = mcol };
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
-		}
-		float wheel = rl::get_mouse_wheel_move();
-		if (wheel != 0.0f) {
-			milktea::MouseMsg mm = {
-				.button = wheel > 0 ? milktea::MouseButton.MOUSE_WHEEL_UP : milktea::MouseButton.MOUSE_WHEEL_DOWN,
-				.action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol,
-			};
-			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
-		}
-		if (should_quit) break;
-
-		if (!g_dirty) {
-			// Nothing moved this frame, so shot_target holds the last drawn
-			// frame — the one every scheduled event has already been folded
-			// into. A shot is owed as soon as those events have all fired:
-			// without this the loop would idle forever, never reaching the
-			// render branch that takes the shot, for any run whose last
-			// event (often a click on a row that is already current, a
-			// window control, or empty bar space) left the grid identical.
-			if (shot && prev_valid && !milktea::g_program.test_click_armed
-				&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
-				write_screenshot(opts, shot_target);
-				rl::unload_render_texture(shot_target);
-				break;
-			}
-			idle_wait();
-			continue;
-		}
-		g_dirty = false;
-
-		milktea::View v = m.view();
-
-		sz cell_count = v.cells.ptr != null ? v.cells_width * v.cells_height : 0;
-		bool same_paint = prev_paint.len == v.paint_ops.len
-			&& mem::equals(prev_paint, v.paint_ops);
-		bool unchanged = prev_valid && same_paint && cell_count == prev_count &&
-			(cell_count == 0 || mem::equals(prev_cells, v.cells[:cell_count]));
-		if (unchanged) {
-			// Same owed shot as above: the grid is identical but the click
-			// may still be the last thing the run was asked to wait for.
-			if (shot && prev_valid && !milktea::g_program.test_click_armed
-				&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
-				write_screenshot(opts, shot_target);
-				rl::unload_render_texture(shot_target);
-				break;
-			}
-			// begin/end_drawing normally does this for us; standing in for
-			// it keeps input flowing while idle.
-			idle_wait();
-			continue;
-		}
-		if (cell_count != prev_count) {
-			if (prev_cells.ptr != null) mem::free(prev_cells);
-			prev_cells = cell_count > 0 ? mem::new_array(xray::Cell, cell_count) : {};
-			prev_count = cell_count;
-		}
-		if (cell_count > 0) prev_cells[..] = v.cells[:cell_count];
-		prev_valid = true;
-		if (prev_paint.len != v.paint_ops.len) {
-			if (prev_paint.ptr != null) mem::free(prev_paint.ptr);
-			prev_paint = v.paint_ops.len > 0 ? mem::new_array(xray::PaintOp, v.paint_ops.len) : {};
-		}
-		if (prev_paint.len > 0) prev_paint[..] = v.paint_ops[..];
-
-		rl::begin_drawing();
-		if (shot) {
-			rl::begin_texture_mode(shot_target);
-			rl::begin_mode2d(shot_cam);
-		} else if (rounded) {
-			rl::begin_texture_mode(target);
-		}
-
-		rl::clear_background(rl::BLACK);
-		if (v.paint_ops.len > 0) {
-			foreach (op : v.paint_ops) {
-				switch (op.kind) {
-					case xray::PaintKind.DECORATION:
-						decor_draw(op.decoration, opts, (int)prog.layout_area.w, (int)prog.layout_area.h);
-					case xray::PaintKind.TINT:
-						int tcol = (int)op.col;
-						int trow = (int)op.row;
-						rl::draw_rectangle(op.pixels ? tcol : tcol * opts.cell_w,
-							op.pixels ? trow : trow * opts.cell_h,
-							opts.cell_w, opts.cell_h, to_rl(op.tint, rl::BLANK));
-					case xray::PaintKind.CELL:
-						paint_gui_cell(op.cell, (int)op.col, (int)op.row, opts, font, rule_font,
-							text_fit, rule_fit, split_atlas, true, op.pixels, (int)op.bg_w, (int)op.bg_h);
-				}
-			}
-		} else if (v.cells.ptr != null) {
-			for (sz row = 0; row < v.cells_height; row++) {
-				for (sz col = 0; col < v.cells_width; col++) {
-					paint_gui_cell(v.cells[row * v.cells_width + col], (int)col, (int)row,
-						opts, font, rule_font, text_fit, rule_fit, split_atlas, false);
-				}
-			}
-		}
-
-		if (shot) {
-			rl::end_mode2d();
-			rl::end_texture_mode();
-		} else if (rounded) {
-			rl::end_texture_mode();
-			rl::clear_background(rl::BLANK);
-			float[2] tex_size = { (float)target.texture.width, (float)target.texture.height };
-			round_shader.set_value(round_size_loc, &tex_size, rl::RLShaderUniformDataType.VEC2);
-			round_shader.set_value(round_radius_loc, &opts.corner_radius, rl::RLShaderUniformDataType.FLOAT);
-			rl::begin_shader_mode(round_shader);
-			// Render textures are stored bottom-up; flip the source rect's
-			// height negative to draw them right-side up, same trick raylib's
-			// own examples use.
-			rl::draw_texture_rec(
-				target.texture,
-				{ 0, 0, (float)target.texture.width, -(float)target.texture.height },
-				{ 0, 0 }, rl::WHITE);
-			rl::end_shader_mode();
-		}
-		// A screenshot has to run before the swap below (after it, the back
-		// buffer holds an older frame) and it has to flush raylib's pending
-		// draw batch first, or the readback misses whatever was drawn last and
-		// those cells come out empty.
-		//
-		// A scheduled test event holds the shot back: MILKTEA_DEBUG_CLICK_AT,
-		// _POINTER_AT and _KEY_AT all fire some frames in, and a shot taken
-		// before them would be a picture of the state they were meant to
-		// change.
-		if (shot && !milktea::g_program.test_click_armed
-			&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
-			rl::gl_draw_render_batch_active();
-			write_screenshot(opts, shot_target);
-			rl::unload_render_texture(shot_target);
-			rl::end_drawing();
-			break;
-		}
-
-		rl::end_drawing();
+	GuiLoop lp = {
+		.m = m,
+		.opts = opts,
+		.rounded = rounded,
+		.font = font,
+		.split_atlas = split_atlas,
+		.rule_font = rule_font,
+		.text_fit = text_fit,
+		.rule_fit = rule_fit,
+		.shot = shot,
+		.shot_target = shot_target,
+		.shot_cam = shot_cam,
+		.target = target,
+		.round_shader = round_shader,
+		.round_radius_loc = round_radius_loc,
+		.round_size_loc = round_size_loc,
+		.prog = &prog,
+		.prev_cells = prev_cells,
+		.prev_count = prev_count,
+		.prev_valid = prev_valid,
+		.prev_paint = prev_paint,
+		.should_quit = should_quit,
+		.drag_pending = drag_pending,
+		.drag_active = drag_active,
+		.drag_abs = drag_abs,
+		.drag_win_x = drag_win_x,
+		.drag_win_y = drag_win_y,
+		.drag_ptr_x = drag_ptr_x,
+		.drag_ptr_y = drag_ptr_y,
+	};
+	g_loop = &lp;
+	while (!lp.should_quit && !rl::window_should_close()) {
+		g_in_frame = true;
+		bool go_on = gui_frame(&lp);
+		g_in_frame = false;
+		if (!go_on) break;
 	}
+	g_loop = null;
 
-	if (prev_cells.ptr != null) mem::free(prev_cells);
-	if (prev_paint.ptr != null) mem::free(prev_paint.ptr);
-	if (prog.draw_buf != null && prog.draw_buf.paint_ops.is_initialized()) {
-		prog.draw_buf.paint_ops.free();
+	if (lp.prev_cells.ptr != null) mem::free(lp.prev_cells);
+	if (lp.prev_paint.ptr != null) mem::free(lp.prev_paint.ptr);
+	if (lp.prog.draw_buf != null && lp.prog.draw_buf.paint_ops.is_initialized()) {
+		lp.prog.draw_buf.paint_ops.free();
 	}
 	decor_shutdown();
-	if (rounded) {
-		rl::unload_shader(round_shader);
-		rl::unload_render_texture(target);
+	if (lp.rounded) {
+		rl::unload_shader(lp.round_shader);
+		rl::unload_render_texture(lp.target);
 	}
 	rl::close_window();
 
@@ -1394,12 +1111,426 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// accepting, wait for senders already past their check, then destroy the
 	// mutex they would have locked. Without this a sender from another thread
 	// could push into a queue whose mutex is gone.
-	prog.send_accepting.store(false);
-	while (prog.send_inflight.load() > 0) {
+	lp.prog.send_accepting.store(false);
+	while (lp.prog.send_inflight.load() > 0) {
 		thread::yield();
 	}
-	prog.send_mu.destroy();
+	lp.prog.send_mu.destroy();
 	milktea::g_program = null;
+}
+
+// gui_frame runs one pass of the GUI loop: messages, timers, resize, input,
+// and a frame drawn if anything changed. It returns false when the loop should
+// stop. The main loop calls it, and so does the window-size callback while the
+// window is being resized, when the main loop is stuck in the platform's own
+// event loop and could not draw otherwise.
+fn bool gui_frame(GuiLoop* l) @local {
+	// Messages handed to the program from outside the loop — milktea::send
+	// from another thread, or request_quit() from a callback that had no
+	// Cmd to return. Same drain Program.run() does, and it runs before
+	// everything else so a request made during the previous turn (a click
+	// handler asking to close the window, say) takes effect at once.
+	milktea::Msg sent;
+	while (l.prog.send_recv(&sent)) {
+		if (sent.kind != milktea::MsgKind.NONE && dispatch_gui(l.m, sent)) {
+			l.should_quit = true;
+			break;
+		}
+	}
+	if (l.should_quit) return false;
+
+	// Fire expired timers registered via milktea::tick()/every() —
+	// mirrors Program.run()'s timer loop, since this GUI loop bypasses
+	// Program.run() entirely and drives update() by hand.
+	sz now = milktea::time_ms();
+	for (sz i = 0; i < milktea::MAX_TIMERS; i++) {
+		if (l.prog.timers[i].active && now >= l.prog.timers[i].deadline_ms) {
+			milktea::Cmd cb = l.prog.timers[i].callback;
+			void* owner = l.prog.timers[i].owner;
+			l.prog.timers[i].active = false;
+			milktea::Msg tmsg = cb();
+			tmsg.owner = owner;
+			if (tmsg.kind != milktea::MsgKind.NONE && dispatch_gui(l.m, tmsg)) {
+				l.should_quit = true;
+				break;
+			}
+			now = milktea::time_ms();
+		}
+	}
+	if (l.should_quit) return false;
+
+	// A size request and a window resize answer the same question — how
+	// many cells fit — so the request only swaps the font and the cell
+	// size, and lets the resize path below work out the rest. Forcing
+	// that path to run is what makes the new grid reach the model: the
+	// window itself did not change, so is_window_resized() is false.
+	bool size_changed = false;
+	if (g_size_request) {
+		g_size_request = false;
+		if (l.split_atlas) rl::unload_font(l.rule_font);
+		rl::unload_font(l.font);
+		l.opts.cell_w = g_req_cell_w;
+		l.opts.cell_h = g_req_cell_h;
+		l.opts.font_size = g_req_font_size;
+		l.font = load_mono_font(l.opts.font_size);
+		shapes_from_font(l.font);
+		l.split_atlas = l.opts.font_size != l.opts.cell_h;
+		l.rule_font = l.split_atlas ? load_mono_font(l.opts.cell_h) : l.font;
+		l.text_fit = cell_fit(l.font, l.opts.font_size, l.opts.cell_w, l.opts.cell_h);
+		l.rule_fit = l.split_atlas
+			? cell_fit(l.rule_font, l.opts.cell_h, l.opts.cell_w, l.opts.cell_h)
+			: l.text_fit;
+		rl::set_window_min_size(l.opts.cell_w * 4, l.opts.cell_h * 4);
+		$if env::DARWIN:
+			// The inline title bar is cell_h tall, so it has to be told
+			// too or the app's top row and the strip stop agreeing.
+			if (l.opts.chrome_rows > 0) {
+				int br = milktea_macos_inline_titlebar(
+					l.opts.cell_h, l.opts.hide_window_buttons ? 1 : 0);
+				if (br >= 0) g_chrome_buttons_right = br;
+			}
+		$endif
+		size_changed = true;
+		g_dirty = true;
+	}
+
+	l.prog.layout_metrics = { .pixels = true, .cell_w = l.opts.cell_w, .cell_h = l.opts.cell_h };
+	l.prog.layout_area = { .w = l.shot ? (sz)l.opts.cols * l.opts.cell_w : rl::get_screen_width(),
+		.h = l.shot ? (sz)l.opts.rows * l.opts.cell_h : rl::get_screen_height() };
+
+	if (rl::is_window_resized() || size_changed) {
+		g_dirty = true;
+		if (l.rounded) {
+			rl::unload_render_texture(l.target);
+			l.target = rl::load_render_texture(rl::get_screen_width(), rl::get_screen_height());
+		}
+		int new_cols = rl::get_screen_width() / l.opts.cell_w;
+		int new_rows = rl::get_screen_height() / l.opts.cell_h;
+		if (new_cols < 1) new_cols = 1;
+		if (new_rows < 1) new_rows = 1;
+		if (new_cols != l.opts.cols || new_rows != l.opts.rows || size_changed) {
+			l.opts.cols = new_cols;
+			l.opts.rows = new_rows;
+			l.prog.cached_ws.ws_col = (ushort)new_cols;
+			l.prog.cached_ws.ws_row = (ushort)new_rows;
+			milktea::Msg wm = { .kind = milktea::MsgKind.WINDOW_SIZE, .window_size = { new_cols, new_rows } };
+			if (dispatch_gui(l.m, wm)) { l.should_quit = true; return false; }
+		}
+	}
+
+	if (l.drag_pending) {
+		if (!rl::is_mouse_button_down(rl::RLMouseButton.LEFT)) {
+			l.drag_pending = false;
+			l.drag_active = false;
+		} else {
+			// Both branches answer the same question — how far has the
+			// pointer travelled since the press — and the window is then
+			// placed at its press position plus that, so each frame is
+			// computed from the press rather than from the frame before
+			// it and nothing accumulates.
+			int px;
+			int py;
+			int dx;
+			int dy;
+			if (l.drag_abs && cursor_screen_pos(&px, &py)) {
+				dx = px - l.drag_ptr_x;
+				dy = py - l.drag_ptr_y;
+			} else {
+				// Window-relative fallback. It reads the pointer through
+				// the window that is being moved, so it is a frame behind
+				// whenever the window moved last frame.
+				rl::RLVector2 wp = rl::get_window_position();
+				dx = (int)wp.x + rl::get_mouse_x() - l.drag_ptr_x;
+				dy = (int)wp.y + rl::get_mouse_y() - l.drag_ptr_y;
+			}
+			if (!l.drag_active && (dx > DRAG_SLOP || dx < -DRAG_SLOP
+				|| dy > DRAG_SLOP || dy < -DRAG_SLOP)) {
+				l.drag_active = true;
+			}
+			if (l.drag_active) {
+				rl::set_window_position(l.drag_win_x + dx, l.drag_win_y + dy);
+			}
+		}
+	}
+
+	Mods mods = read_mods();
+
+	// Runes first (letters/digits/punctuation), then non-printable keys —
+	// raylib queues both independently per frame.
+	//
+	// ctrl+letter is deliberately skipped here and synthesized in
+	// translate_key() instead: platforms disagree on whether it produces
+	// text at all, and letting both paths fire would deliver the keypress
+	// twice. Shift is left off runes because it is already baked into the
+	// character ('A' vs 'a'); reporting it again would make a model
+	// testing `shift` see every capital as modified.
+	int ch;
+	while ((ch = rl::get_char_pressed()) != 0) {
+		if (mods.ctrl || mods.super) continue;
+		milktea::KeyMsg k = { .code = milktea::KeyCode.RUNE, .rune = (uint)ch, .alt = mods.alt };
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.KEY, .key = k })) { l.should_quit = true; }
+	}
+	rl::RLKeyboardKey key;
+	while ((key = rl::get_key_pressed()) != rl::RLKeyboardKey.NONE) {
+		if (try k = translate_key(key, mods)) {
+			if (dispatch_gui(l.m, { .kind = milktea::MsgKind.KEY, .key = k })) { l.should_quit = true; }
+		}
+	}
+
+	// A held key repeats through GLFW_REPEAT, and raylib records that per
+	// key for the frame rather than queueing it (see IsKeyPressedRepeat) —
+	// so the repeats never arrive through the press queue above and every
+	// code has to be asked about by name. KB_MENU is the highest key
+	// raylib names, so the sweep covers the table; translate_key() drops
+	// the codes that mean nothing to a model. Without this a held arrow
+	// or backspace moves once and then sits still, which is what no key
+	// repeat looks like in a window.
+	//
+	// Text is deliberately not swept: raylib's char queue already carries
+	// the repeats of a held letter, and dispatching those again here
+	// would type each one twice.
+	for (int code = 1; code <= (int)rl::RLKeyboardKey.KB_MENU; code++) {
+		rl::RLKeyboardKey repeated = (rl::RLKeyboardKey)code;
+		if (!rl::is_key_pressed_repeat(repeated)) continue;
+		if (try k = translate_key(repeated, mods)) {
+			if (dispatch_gui(l.m, { .kind = milktea::MsgKind.KEY, .key = k })) { l.should_quit = true; }
+		}
+	}
+	if (l.should_quit) return false;
+
+	// frame_no counts every iteration of the GUI loop, not just the ones
+	// that actually rendered: test scripts schedule events at "frame
+	// N" and want that to mean "after N ticks of the input pump", not
+	// "after N renders" (which would be indeterminate during idle).
+	milktea::g_program.frame_no++;
+
+	// Pending synthetic click / pointer: the test API parks them here and
+	// the GUI backend fires them through the same dispatch path a real
+	// mouse uses, so target lookup, id forwarding, hover bookkeeping and
+	// the resulting on_click / on_hover_in chains behave exactly as in
+	// a live session — only the raylib input poll is skipped.
+	if (milktea::g_program.test_click_armed
+			&& milktea::g_program.frame_no >= milktea::g_program.test_pending_click_frame) {
+		sz tc = milktea::g_program.test_pending_click_col;
+		sz tr = milktea::g_program.test_pending_click_row;
+		milktea::g_program.test_click_armed = false;
+		io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
+			milktea::g_program.frame_no, tc, tr,
+			milktea::g_program.click_target_count);
+		milktea::dispatch_click(tc * l.opts.cell_w, tr * l.opts.cell_h);
+		milktea::MouseMsg fm = { .button = milktea::MouseButton.MOUSE_LEFT,
+			.action = milktea::MouseAction.MOUSE_PRESS, .row = tr, .col = tc };
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = fm })) { l.should_quit = true; return false; }
+	}
+	if (milktea::g_program.test_pointer_armed
+			&& milktea::g_program.frame_no >= milktea::g_program.test_pending_pointer_frame) {
+		sz pc = milktea::g_program.test_pending_pointer_col;
+		sz pr = milktea::g_program.test_pending_pointer_row;
+		milktea::g_program.test_pointer_armed = false;
+		io::eprintfn("[test] frame %d: pointer col=%d row=%d",
+			milktea::g_program.frame_no, pc, pr);
+		milktea::dispatch_hover(pc * l.opts.cell_w, pr * l.opts.cell_h);
+		milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
+			.action = milktea::MouseAction.MOUSE_MOTION, .row = pr, .col = pc };
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { l.should_quit = true; }
+	}
+	// The MILKTEA_DEBUG_KEY_AT key, if one was armed and its frame has
+	// arrived. It goes through dispatch_gui exactly as a keystroke read
+	// from the keyboard does, so a shell run sees the same result.
+	if (g_key_armed && milktea::g_program.frame_no >= g_key_frame) {
+		g_key_armed = false;
+		io::eprintfn("[test] frame %d: key code=%d rune=%d",
+			milktea::g_program.frame_no, (int)g_key_msg.code, (int)g_key_msg.rune);
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.KEY, .key = g_key_msg })) { l.should_quit = true; return false; }
+	}
+	int mx, my;
+	pointer_pixel(l.opts, &mx, &my);
+	sz mcol = xray::floor_cell(mx, l.opts.cell_w);
+	sz mrow = xray::floor_cell(my, l.opts.cell_h);
+	if (mx != g_prev_mcol || my != g_prev_mrow) {
+		// Hover is an edge event: walking every target each frame would
+		// be a no-op while the pointer stays put, but the edge crossing
+		// is what tells a node "you are now hovered" / "you are no
+		// longer". Same dispatch path the terminal loop uses on a real
+		// MOUSE_MOTION, kept in sync so a model written against either
+		// backend sees identical behaviour.
+		milktea::dispatch_hover(mx, my);
+		milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
+			.action = milktea::MouseAction.MOUSE_MOTION, .row = mrow, .col = mcol };
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { l.should_quit = true; }
+		g_prev_mcol = mx;
+		g_prev_mrow = my;
+	}
+	bool left_pressed = g_left_press_pending != 0
+		|| rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT);
+	g_left_press_pending = 0;
+	if (left_pressed) {
+		if (milktea::debug_mouse()) {
+			io::eprintfn("[mouse] press at px=%d,%d -> col=%d row=%d (cell %dx%d) drag=%s",
+				rl::get_mouse_x(), rl::get_mouse_y(), mcol, mrow,
+				l.opts.cell_w, l.opts.cell_h, is_drag_point(l.opts, mx, my));
+		}
+		if (is_drag_point(l.opts, mx, my)) {
+			rl::RLVector2 wp = rl::get_window_position();
+			l.drag_pending = true;
+			l.drag_active = false;
+			l.drag_win_x = (int)wp.x;
+			l.drag_win_y = (int)wp.y;
+			l.drag_abs = cursor_screen_pos(&l.drag_ptr_x, &l.drag_ptr_y);
+			if (!l.drag_abs) {
+				l.drag_ptr_x = l.drag_win_x + rl::get_mouse_x();
+				l.drag_ptr_y = l.drag_win_y + rl::get_mouse_y();
+			}
+		}
+		milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol };
+		// Fires on_click/on_click_outside against last frame's layout
+		// before the raw MouseMsg reaches update() — same order as the
+		// terminal event loop's dispatch(): a press counts as a pointer
+		// move, so it settles hover first and then delivers the press.
+		milktea::dispatch_click(mx, my);
+		milktea::dispatch_hover(mx, my);
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { l.should_quit = true; }
+	}
+	if (rl::is_mouse_button_released(rl::RLMouseButton.LEFT)) {
+		milktea::MouseMsg mm = { .button = milktea::MouseButton.MOUSE_LEFT, .action = milktea::MouseAction.MOUSE_RELEASE, .row = mrow, .col = mcol };
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { l.should_quit = true; }
+	}
+	float wheel = rl::get_mouse_wheel_move();
+	if (wheel != 0.0f) {
+		milktea::MouseMsg mm = {
+			.button = wheel > 0 ? milktea::MouseButton.MOUSE_WHEEL_UP : milktea::MouseButton.MOUSE_WHEEL_DOWN,
+			.action = milktea::MouseAction.MOUSE_PRESS, .row = mrow, .col = mcol,
+		};
+		if (dispatch_gui(l.m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { l.should_quit = true; }
+	}
+	if (l.should_quit) return false;
+
+	if (!g_dirty) {
+		// Nothing moved this frame, so shot_target holds the last drawn
+		// frame — the one every scheduled event has already been folded
+		// into. A shot is owed as soon as those events have all fired:
+		// without this the loop would idle forever, never reaching the
+		// render branch that takes the shot, for any run whose last
+		// event (often a click on a row that is already current, a
+		// window control, or empty bar space) left the grid identical.
+		if (l.shot && l.prev_valid && !milktea::g_program.test_click_armed
+			&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
+			write_screenshot(l.opts, l.shot_target);
+			rl::unload_render_texture(l.shot_target);
+			return false;
+		}
+		idle_wait();
+		return true;
+	}
+	g_dirty = false;
+
+	milktea::View v = l.m.view();
+
+	sz cell_count = v.cells.ptr != null ? v.cells_width * v.cells_height : 0;
+	bool same_paint = l.prev_paint.len == v.paint_ops.len
+		&& mem::equals(l.prev_paint, v.paint_ops);
+	bool unchanged = l.prev_valid && same_paint && cell_count == l.prev_count &&
+		(cell_count == 0 || mem::equals(l.prev_cells, v.cells[:cell_count]));
+	if (unchanged) {
+		// Same owed shot as above: the grid is identical but the click
+		// may still be the last thing the run was asked to wait for.
+		if (l.shot && l.prev_valid && !milktea::g_program.test_click_armed
+			&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
+			write_screenshot(l.opts, l.shot_target);
+			rl::unload_render_texture(l.shot_target);
+			return false;
+		}
+		// begin/end_drawing normally does this for us; standing in for
+		// it keeps input flowing while idle.
+		idle_wait();
+		return true;
+	}
+	if (cell_count != l.prev_count) {
+		if (l.prev_cells.ptr != null) mem::free(l.prev_cells);
+		l.prev_cells = cell_count > 0 ? mem::new_array(xray::Cell, cell_count) : {};
+		l.prev_count = cell_count;
+	}
+	if (cell_count > 0) l.prev_cells[..] = v.cells[:cell_count];
+	l.prev_valid = true;
+	if (l.prev_paint.len != v.paint_ops.len) {
+		if (l.prev_paint.ptr != null) mem::free(l.prev_paint.ptr);
+		l.prev_paint = v.paint_ops.len > 0 ? mem::new_array(xray::PaintOp, v.paint_ops.len) : {};
+	}
+	if (l.prev_paint.len > 0) l.prev_paint[..] = v.paint_ops[..];
+
+	rl::begin_drawing();
+	if (l.shot) {
+		rl::begin_texture_mode(l.shot_target);
+		rl::begin_mode2d(l.shot_cam);
+	} else if (l.rounded) {
+		rl::begin_texture_mode(l.target);
+	}
+
+	rl::clear_background(rl::BLACK);
+	if (v.paint_ops.len > 0) {
+		foreach (op : v.paint_ops) {
+			switch (op.kind) {
+				case xray::PaintKind.DECORATION:
+					decor_draw(op.decoration, l.opts, (int)l.prog.layout_area.w, (int)l.prog.layout_area.h);
+				case xray::PaintKind.TINT:
+					int tcol = (int)op.col;
+					int trow = (int)op.row;
+					rl::draw_rectangle(op.pixels ? tcol : tcol * l.opts.cell_w,
+						op.pixels ? trow : trow * l.opts.cell_h,
+						l.opts.cell_w, l.opts.cell_h, to_rl(op.tint, rl::BLANK));
+				case xray::PaintKind.CELL:
+					paint_gui_cell(op.cell, (int)op.col, (int)op.row, l.opts, l.font, l.rule_font,
+						l.text_fit, l.rule_fit, l.split_atlas, true, op.pixels, (int)op.bg_w, (int)op.bg_h);
+			}
+		}
+	} else if (v.cells.ptr != null) {
+		for (sz row = 0; row < v.cells_height; row++) {
+			for (sz col = 0; col < v.cells_width; col++) {
+				paint_gui_cell(v.cells[row * v.cells_width + col], (int)col, (int)row,
+					l.opts, l.font, l.rule_font, l.text_fit, l.rule_fit, l.split_atlas, false);
+			}
+		}
+	}
+
+	if (l.shot) {
+		rl::end_mode2d();
+		rl::end_texture_mode();
+	} else if (l.rounded) {
+		rl::end_texture_mode();
+		rl::clear_background(rl::BLANK);
+		float[2] tex_size = { (float)l.target.texture.width, (float)l.target.texture.height };
+		l.round_shader.set_value(l.round_size_loc, &tex_size, rl::RLShaderUniformDataType.VEC2);
+		l.round_shader.set_value(l.round_radius_loc, &l.opts.corner_radius, rl::RLShaderUniformDataType.FLOAT);
+		rl::begin_shader_mode(l.round_shader);
+		// Render textures are stored bottom-up; flip the source rect's
+		// height negative to draw them right-side up, same trick raylib's
+		// own examples use.
+		rl::draw_texture_rec(
+			l.target.texture,
+			{ 0, 0, (float)l.target.texture.width, -(float)l.target.texture.height },
+			{ 0, 0 }, rl::WHITE);
+		rl::end_shader_mode();
+	}
+	// A screenshot has to run before the swap below (after it, the back
+	// buffer holds an older frame) and it has to flush raylib's pending
+	// draw batch first, or the readback misses whatever was drawn last and
+	// those cells come out empty.
+	//
+	// A scheduled test event holds the shot back: MILKTEA_DEBUG_CLICK_AT,
+	// _POINTER_AT and _KEY_AT all fire some frames in, and a shot taken
+	// before them would be a picture of the state they were meant to
+	// change.
+	if (l.shot && !milktea::g_program.test_click_armed
+		&& !milktea::g_program.test_pointer_armed && !g_key_armed) {
+		rl::gl_draw_render_batch_active();
+		write_screenshot(l.opts, l.shot_target);
+		rl::unload_render_texture(l.shot_target);
+		frame_end();
+		return false;
+	}
+
+	frame_end();
+	return true;
 }
 
 fn void paint_gui_cell(xray::Cell cell, int col, int row, GuiOptions opts,
