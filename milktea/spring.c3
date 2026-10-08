@@ -150,7 +150,7 @@ fn bool Spring.moving_at(self, sz now_ms) {
 // The longest a spring is followed when working out where it settles. Past
 // this a spring is too slow to be animating anything; it simply lands on
 // whatever frame comes next.
-const sz SPRING_SETTLE_LIMIT_MS = 30_000;
+const sz SPRING_SETTLE_LIMIT_MS @private = 30_000;
 
 // settles_at is when the spring comes to rest, on the frame_ms() clock: the first
 // frame at which it no longer counts as moving. A spring already at rest
@@ -167,7 +167,7 @@ fn sz Spring.settles_at(self) {
 
 // ── Solving ──────────────────────────────────────────────────────────────────
 
-struct SpringState {
+struct SpringState @private {
 	double value;
 	double velocity;
 }

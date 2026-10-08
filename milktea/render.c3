@@ -3,48 +3,48 @@ module milktea;
 import std::core::dstring;
 import xray;
 
-const String SGR_HIDE_CURSOR      = "\x1b[?25l";
-const String SGR_SHOW_CURSOR      = "\x1b[?25h";
-const String SGR_ALT_ON           = "\x1b[?1049h";
-const String SGR_ALT_OFF          = "\x1b[?1049l";
-const String SGR_CLEAR_HOME       = "\x1b[H\x1b[2J";
-const String SGR_FOCUS_ON         = "\x1b[?1004h";
-const String SGR_FOCUS_OFF        = "\x1b[?1004l";
+const String SGR_HIDE_CURSOR      @private = "\x1b[?25l";
+const String SGR_SHOW_CURSOR      @private = "\x1b[?25h";
+const String SGR_ALT_ON           @private = "\x1b[?1049h";
+const String SGR_ALT_OFF          @private = "\x1b[?1049l";
+const String SGR_CLEAR_HOME       @private = "\x1b[H\x1b[2J";
+const String SGR_FOCUS_ON         @private = "\x1b[?1004h";
+const String SGR_FOCUS_OFF        @private = "\x1b[?1004l";
 // Bracketed paste mode (XTerm mode 2004): wraps pasted text in ESC[200~ ... ESC[201~
 // so pasted ESC sequences are never misinterpreted as key sequences.
-const String SGR_PASTE_ON         = "\x1b[?2004h";
-const String SGR_PASTE_OFF        = "\x1b[?2004l";
-const String SGR_MOUSE_SGR_ON     = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
-const String SGR_MOUSE_SGR_OFF    = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
-const String SGR_MOUSE_ALL_ON     = "\x1b[?1003h\x1b[?1006h";
-const String SGR_MOUSE_ALL_OFF    = "\x1b[?1006l\x1b[?1003l";
+const String SGR_PASTE_ON         @private = "\x1b[?2004h";
+const String SGR_PASTE_OFF        @private = "\x1b[?2004l";
+const String SGR_MOUSE_SGR_ON     @private = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+const String SGR_MOUSE_SGR_OFF    @private = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+const String SGR_MOUSE_ALL_ON     @private = "\x1b[?1003h\x1b[?1006h";
+const String SGR_MOUSE_ALL_OFF    @private = "\x1b[?1006l\x1b[?1003l";
 // DEC mode 1016: SGR-Pixels mouse reporting. Same wire format as SGR (mode 1006)
 // except x/y are reported in pixels relative to the terminal window instead of
 // cell coordinates. Opt-in via View.set_mouse_pixels; only meaningful while a
 // mouse mode (cell-motion or all-motion) is also active.
-const String SGR_MOUSE_PIXELS_ON  = "\x1b[?1016h";
-const String SGR_MOUSE_PIXELS_OFF = "\x1b[?1016l";
-const String SGR_CURSOR_BLINK_OFF = "\x1b[?12l";
-const String SGR_CURSOR_BLINK_ON  = "\x1b[?12h";
+const String SGR_MOUSE_PIXELS_ON  @private = "\x1b[?1016h";
+const String SGR_MOUSE_PIXELS_OFF @private = "\x1b[?1016l";
+const String SGR_CURSOR_BLINK_OFF @private = "\x1b[?12l";
+const String SGR_CURSOR_BLINK_ON  @private = "\x1b[?12h";
 
 // OSC 22 — set/reset the mouse pointer shape (xterm, kitty, most modern terminals).
 // name: any CSS cursor keyword, e.g. "crosshair", "text", "pointer", "default".
-fn String mouse_cursor_seq(String name) {
+fn String mouse_cursor_seq(String name) @private {
 	return string::tformat("\x1b]22;%s\x1b\\", name);
 }
-const String OSC_MOUSE_CURSOR_RESET = "\x1b]22;\x1b\\";
+const String OSC_MOUSE_CURSOR_RESET @private = "\x1b]22;\x1b\\";
 
 // OSC 12 — set the terminal cursor color.
 // color: CSS/X11 color name or hex, e.g. "#ff6600" or "red".
-fn String cursor_color_seq(String color) {
+fn String cursor_color_seq(String color) @private {
 	return string::tformat("\x1b]12;%s\x1b\\", color);
 }
 // Reset cursor color to terminal default.
-const String OSC_CURSOR_COLOR_RESET = "\x1b]112\x1b\\";
+const String OSC_CURSOR_COLOR_RESET @private = "\x1b]112\x1b\\";
 
 // cursor_style_seq returns the ANSI escape to set cursor shape.
 // Matches Go's encodeCursorStyle: (shape * 2) + 1, +1 if not blinking.
-fn String cursor_style_seq(CursorShape shape, bool blink) {
+fn String cursor_style_seq(CursorShape shape, bool blink) @private {
 	sz style = ((sz)shape * 2) + 1;
 	if (!blink) style++;
 	return string::tformat("\x1b[%d q", style);
@@ -55,7 +55,7 @@ fn String cursor_style_seq(CursorShape shape, bool blink) {
 // cells_to_string flattens a cell view into an ANSI string, one line per row.
 // The differential renderer normally consumes the grid directly; this is the
 // path for test mode and for any caller holding only a string sink.
-fn String cells_to_string(View v) {
+fn String cells_to_string(View v) @private {
 	DString out = dstring::temp();
 	xray::Style pen = xray::default_style();
 
@@ -191,8 +191,8 @@ fn void disable_bracketed_paste() {
 //
 // CSI > 1 u  — push progressive enhancement, flag 1
 // CSI < u    — pop (restore the previous flags layer)
-const String SGR_KITTY_KBD_ON  = "\x1b[>1u";
-const String SGR_KITTY_KBD_OFF = "\x1b[<u";
+const String SGR_KITTY_KBD_ON  @private = "\x1b[>1u";
+const String SGR_KITTY_KBD_OFF @private = "\x1b[<u";
 
 fn void enable_kitty_keyboard() {
 	write_stdout((char[])SGR_KITTY_KBD_ON);
@@ -208,8 +208,8 @@ fn void disable_kitty_keyboard() {
 //
 // CSI > 3 u  — push progressive enhancement, flags 1 (disambiguate) + 2 (report events)
 // CSI < u    — pop (restore the previous flags layer, i.e. back to flag 1 alone)
-const String SGR_KITTY_KEY_EVENTS_ON  = "\x1b[>3u";
-const String SGR_KITTY_KEY_EVENTS_OFF = "\x1b[<u";
+const String SGR_KITTY_KEY_EVENTS_ON  @private = "\x1b[>3u";
+const String SGR_KITTY_KEY_EVENTS_OFF @private = "\x1b[<u";
 
 fn void enable_kitty_key_events() {
 	write_stdout((char[])SGR_KITTY_KEY_EVENTS_ON);
@@ -232,6 +232,6 @@ fn void disable_mouse_pixels() {
 	write_stdout((char[])SGR_MOUSE_PIXELS_OFF);
 }
 
-fn String cursor_to(sz row, sz col) {
+fn String cursor_to(sz row, sz col) @private {
 	return string::tformat("\x1b[%d;%dH", row, col);
 }

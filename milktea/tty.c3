@@ -3,14 +3,14 @@ import std::atomic;
 
 faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;
 
-const int STDIN_FILENO  = 0;
-const int STDOUT_FILENO = 1;
-const int TCSANOW       = 0;
+const int STDIN_FILENO  @private = 0;
+const int STDOUT_FILENO @private = 1;
+const int TCSANOW       @private = 0;
 const short POLLIN      = 1;
 
 // TIOCGWINSZ is provided by <sys/ioctl.h> in tty_winsize.c — not needed here.
 // SIGWINCH is 28 on both macOS and Linux.
-const int SIGWINCH = 28;
+const int SIGWINCH @private = 28;
 
 extern fn int tcgetattr(int fd, char* termios_buf);
 extern fn int tcsetattr(int fd, int flags, char* termios_buf);
@@ -34,7 +34,7 @@ extern fn int raise(int signum);
 extern fn int kill(int pid, int signum);
 extern fn int getpid();
 
-struct TtyState {
+struct TtyState @private {
 	char[256] termios_buf;
 }
 
@@ -105,20 +105,20 @@ bool g_term_bg_known = false;
 // How long probe_terminal_caps waits for replies before giving up. Terminals
 // that support none of the queries (alacritty, GNU Screen) pay this cost at
 // startup; keep it small.
-const sz PROBE_TIMEOUT_MS = 150;
+const sz PROBE_TIMEOUT_MS @private = 150;
 
-fn void report_cell_size_reply(sz height, sz width) {
+fn void report_cell_size_reply(sz height, sz width) @private {
 	if (height <= 0 || width <= 0) return;
 	g_cell_h_px = height;
 	g_cell_w_px = width;
 	g_cell_px_known = true;
 }
 
-fn void report_tgp_reply() {
+fn void report_tgp_reply() @private {
 	g_tgp_replied = true;
 }
 
-fn void report_term_bg_reply(int r, int g, int b) {
+fn void report_term_bg_reply(int r, int g, int b) @private {
 	g_term_bg_r = r;
 	g_term_bg_g = g;
 	g_term_bg_b = b;
@@ -253,7 +253,7 @@ fn void handle_probe_string(bool is_osc, char[] body) @local {
 // of buf and returns the number of bytes consumed. Noise bytes (e.g. keys the
 // user typed during the probe) are skipped; an incomplete trailing sequence is
 // left in the buffer for the next round or returned to the input stream.
-fn sz parse_probe_replies(char[] buf) {
+fn sz parse_probe_replies(char[] buf) @private {
 	sz pos = 0;
 	while (pos < buf.len) {
 		if (buf[pos] != 0x1b) {
@@ -292,7 +292,7 @@ fn sz parse_probe_replies(char[] buf) {
 // — keystrokes typed during the probe, trailing incomplete sequences — are
 // copied to leftover (up to its length) so the event loop can process them
 // like any other input; the return value is the number of bytes copied.
-fn sz probe_terminal_caps(char[] leftover) {
+fn sz probe_terminal_caps(char[] leftover) @private {
 	write_stdout((char[])"\x1b[16t");
 	write_stdout((char[])"\x1b]1337;ReportCellSize\x07");
 	// Background-color query. Terminals that support it answer
@@ -364,15 +364,15 @@ bool g_tty_saved = false;
 
 bool* g_in_alt_screen_ptr = null;
 
-const int SIGINT  = 2;
-const int SIGTERM = 15;
+const int SIGINT  @private = 2;
+const int SIGTERM @private = 15;
 
-fn void sigwinch_handler(int sig) {
+fn void sigwinch_handler(int sig) @private {
 	g_win_resized.store(true, RELAXED);
 }
 
 // fatal_signal_handler restores the terminal and re-raises the signal with default action.
-fn void fatal_signal_handler(int sig) {
+fn void fatal_signal_handler(int sig) @private {
 	// Drop graphics state first, while the alt screen (if any) is still up —
 	// avoids flashing tiles onto the restored normal screen.
 	if (g_cleanup_fn != null) g_cleanup_fn();
@@ -400,7 +400,7 @@ fn void fatal_signal_handler(int sig) {
 	raise(sig);
 }
 
-fn void setup_signals(TtyState saved, bool* in_alt_screen) {
+fn void setup_signals(TtyState saved, bool* in_alt_screen) @private {
 	g_saved_tty = saved;
 	g_tty_saved = true;
 	g_in_alt_screen_ptr = in_alt_screen;
@@ -417,7 +417,7 @@ fn void setup_signals(TtyState saved, bool* in_alt_screen) {
 // g_in_alt_screen_ptr aimed at a reclaimed frame — a later SIGINT would read
 // whatever now occupies that slot. Sequential Program runs are supported, so
 // this is a reachable path, not just a shutdown nicety.
-fn void teardown_signals() {
+fn void teardown_signals() @private {
 	signal(SIGWINCH, null);
 	signal(SIGINT, null);
 	signal(SIGTERM, null);
@@ -425,7 +425,7 @@ fn void teardown_signals() {
 	g_tty_saved = false;
 }
 
-fn TtyState? raw_mode_enter() {
+fn TtyState? raw_mode_enter() @private {
 	TtyState saved;
 
 	if (tcgetattr(STDIN_FILENO, &saved.termios_buf[0]) < 0) {
@@ -442,7 +442,7 @@ fn TtyState? raw_mode_enter() {
 	return saved;
 }
 
-fn void raw_mode_restore(TtyState saved) {
+fn void raw_mode_restore(TtyState saved) @private {
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved.termios_buf[0]);
 }
 
@@ -461,7 +461,7 @@ fn sz wall_time_ms() {
 	return (sz)c3_time_ms();
 }
 
-fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
+fn sz read_stdin_timeout(char[] buf, int timeout_ms) @private {
 	if (buf.len == 0) return 0;
 
 	PollFd pfd;
@@ -477,7 +477,7 @@ fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
 	return n;
 }
 
-fn sz read_stdin(char[] buf) {
+fn sz read_stdin(char[] buf) @private {
 	return read_stdin_timeout(buf, 50);
 }
 

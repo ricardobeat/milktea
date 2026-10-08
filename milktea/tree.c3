@@ -68,7 +68,7 @@ const xray::AlignItems ALIGN_END    = xray::AlignItems.ALIGN_END;
 // paint time rather than build time is what makes .fill(1) meaningful on a
 // bordered box — the border is drawn around the final rect, not around the
 // text's own width.
-struct StyledText (xray::Content) {
+struct StyledText (xray::Content) @private {
 	glaze::Style style;
 	String text;
 }

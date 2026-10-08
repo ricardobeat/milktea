@@ -89,9 +89,9 @@ struct ParseResult {
 	sz consumed;
 }
 
-const sz CSI_MAX_PARAMS = 8;
+const sz CSI_MAX_PARAMS @private = 8;
 
-struct CSIParse {
+struct CSIParse @private {
 	sz[CSI_MAX_PARAMS] params;
 	sz[CSI_MAX_PARAMS] subparams; // ':'-separated subparameter of each param; 0 = absent
 	sz param_count;
@@ -106,7 +106,7 @@ struct CSIParse {
 // hostile or garbled sequence from wrapping the accumulator negative, which
 // would make parse_csi drop the parameter entirely and change param_count,
 // silently rerouting the sequence to the wrong handler.
-const sz CSI_PARAM_MAX = 0x10FFFF;
+const sz CSI_PARAM_MAX @private = 0x10FFFF;
 
 fn sz accumulate_param(sz acc, char digit) @local {
 	if (acc > (CSI_PARAM_MAX - 9) / 10) return CSI_PARAM_MAX;
@@ -114,7 +114,7 @@ fn sz accumulate_param(sz acc, char digit) @local {
 	return next > CSI_PARAM_MAX ? CSI_PARAM_MAX : next;
 }
 
-fn CSIParse parse_csi(char[] buf) {
+fn CSIParse parse_csi(char[] buf) @private {
 	CSIParse csi;
 	csi.param_count = 0;
 	csi.final_byte = 0;
@@ -203,7 +203,7 @@ fn CSIParse parse_csi(char[] buf) {
 	return csi;
 }
 
-fn sz csi_param(CSIParse csi, sz idx, sz default_val) {
+fn sz csi_param(CSIParse csi, sz idx, sz default_val) @private {
 	if (idx < csi.param_count) return csi.params[idx];
 	return default_val;
 }
@@ -211,12 +211,12 @@ fn sz csi_param(CSIParse csi, sz idx, sz default_val) {
 // csi_subparam returns the ':'-separated subparameter of params[idx] (e.g. the
 // kitty keyboard protocol event type in "mods:event"), or default_val if the
 // param is out of range or has no subparameter (0 means "absent").
-fn sz csi_subparam(CSIParse csi, sz idx, sz default_val) {
+fn sz csi_subparam(CSIParse csi, sz idx, sz default_val) @private {
 	if (idx < csi.param_count && csi.subparams[idx] != 0) return csi.subparams[idx];
 	return default_val;
 }
 
-struct KeyMods {
+struct KeyMods @private {
 	bool shift;
 	bool alt;
 	bool ctrl;
@@ -230,7 +230,7 @@ struct KeyMods {
 // This must be a bitmask test, not a set of equality comparisons against
 // 2/4/6/8 — those silently dropped every modifier once any higher bit was
 // set, so ctrl+meta+Up (mod 13) arrived with no modifiers at all.
-fn KeyMods decode_xterm_mods(sz mod) {
+fn KeyMods decode_xterm_mods(sz mod) @private {
 	sz bits = mod > 0 ? mod - 1 : 0;
 	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0 };
 }
@@ -241,7 +241,7 @@ fn KeyMods decode_xterm_mods(sz mod) {
 // tilde keys) carry this subparam too — decoding it only in the 'u' path made
 // every one of those keys fire twice per stroke, once on press and again on
 // release.
-fn KeyAction decode_kitty_event(CSIParse csi, sz idx) {
+fn KeyAction decode_kitty_event(CSIParse csi, sz idx) @private {
 	switch (csi_subparam(csi, idx, 1)) {
 		case 2: return KEY_REPEAT;
 		case 3: return KEY_RELEASE;
@@ -249,7 +249,7 @@ fn KeyAction decode_kitty_event(CSIParse csi, sz idx) {
 	}
 }
 
-fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) {
+fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) @private {
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift, KEY_PRESS },
@@ -261,7 +261,7 @@ fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift
 // make_key_action is like make_key but sets a KeyAction other than the default
 // press. Used exclusively by the kitty keyboard protocol 'u' path when the app
 // has opted in to key-release/repeat reporting.
-fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, KeyAction action, sz consumed) {
+fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, KeyAction action, sz consumed) @private {
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift, action },
@@ -279,7 +279,7 @@ fn ParseResult make_mouse(
 	bool alt,
 	bool ctrl,
 	sz consumed
-) {
+) @private {
 	return {
 		MsgKind.MOUSE,
 		{ NONE, 0, false, false, false, KEY_PRESS },

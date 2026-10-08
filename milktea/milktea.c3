@@ -180,7 +180,7 @@ fn View View.add_overlay(self, sz x, sz y, sz w, sz h, String content, char alph
 // should_support_sync_output checks env vars to estimate whether the
 // terminal supports synchronized output (mode 2026). This is a heuristic
 // matching the Go version's shouldQuerySynchronizedOutput().
-fn bool should_support_sync_output() {
+fn bool should_support_sync_output() @private {
 	// SSH sessions — most modern SSH terminals support it
 	char* ssh_tty = getenv("SSH_TTY");
 	if (ssh_tty != null) return true;
@@ -278,19 +278,19 @@ interface Model {
 }
 
 // Constants
-const sz MAX_BATCH  = 16;
-const sz MAX_TIMERS = 32;
-const sz MAX_CLICK_TARGETS = 32;
+const sz MAX_BATCH  @private = 16;
+const sz MAX_TIMERS @private = 32;
+const sz MAX_CLICK_TARGETS @private = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
-const sz ESC_HOLD_MS = 50;
+const sz ESC_HOLD_MS @private = 50;
 // Longest OSC 22 mouse cursor name tracked across frames. The longest CSS
 // cursor keyword is "no-drop"/"nesw-resize" class at 12 chars; 32 leaves room
 // for terminal-specific names. Longer names still render — they just always
 // re-emit, since they can't be cached for comparison.
-const sz MAX_MOUSE_CURSOR_LEN = 32;
+const sz MAX_MOUSE_CURSOR_LEN @private = 32;
 
-struct TimerEntry {
+struct TimerEntry @private {
 	bool active;
 	sz deadline_ms;
 	Cmd callback;
@@ -402,9 +402,9 @@ InputQueue g_input_queue;
 // The reader thread pushes; the main event loop drains.
 // ============================================================
 
-const sz INPUT_BUF_SIZE = 4096;
+const sz INPUT_BUF_SIZE @private = 4096;
 
-struct InputQueue {
+struct InputQueue @private {
 	char[INPUT_BUF_SIZE] buf;
 	sz head;
 	sz tail;
@@ -416,7 +416,7 @@ struct InputQueue {
 	sz dropped;
 }
 
-fn void? input_queue_init(InputQueue* q) {
+fn void? input_queue_init(InputQueue* q) @private {
 	q.head = 0;
 	q.tail = 0;
 	q.closed = false;
@@ -428,21 +428,21 @@ fn void? input_queue_init(InputQueue* q) {
 // It is safe to call while the reader is still running — it locks the mutex,
 // sets closed, and broadcasts so the reader wakes from its cond wait.
 // After this call, join the reader thread before calling input_queue_destroy.
-fn void input_queue_close(InputQueue* q) {
+fn void input_queue_close(InputQueue* q) @private {
 	q.mu.lock();
 	q.closed = true;
 	q.cond.broadcast();
 	q.mu.unlock();
 }
 
-fn void input_queue_destroy(InputQueue* q) {
+fn void input_queue_destroy(InputQueue* q) @private {
 	// At this point the reader thread must have already been joined.
 	// Destroying the condvar and mutex while the reader is alive is UB.
 	q.cond.destroy();
 	q.mu.destroy();
 }
 
-fn void input_queue_push(InputQueue* q, char[] data) {
+fn void input_queue_push(InputQueue* q, char[] data) @private {
 	q.mu.lock();
 	for (sz i = 0; i < data.len; i++) {
 		sz next = (q.head + 1) % INPUT_BUF_SIZE;
@@ -461,7 +461,7 @@ fn void input_queue_push(InputQueue* q, char[] data) {
 
 // input_queue_take_dropped reads and resets the dropped-byte counter under
 // the queue mutex. Returns 0 when nothing was dropped.
-fn sz input_queue_take_dropped(InputQueue* q) {
+fn sz input_queue_take_dropped(InputQueue* q) @private {
 	q.mu.lock();
 	sz n = q.dropped;
 	q.dropped = 0;
@@ -469,7 +469,7 @@ fn sz input_queue_take_dropped(InputQueue* q) {
 	return n;
 }
 
-fn sz input_queue_drain(InputQueue* q, char[] out) {
+fn sz input_queue_drain(InputQueue* q, char[] out) @private {
 	q.mu.lock();
 	defer q.mu.unlock();
 	sz count = 0;
@@ -483,7 +483,7 @@ fn sz input_queue_drain(InputQueue* q, char[] out) {
 
 // input_queue_wait blocks until data is available or timeout_ms elapses.
 // Called with the queue unlocked; returns with queue unlocked.
-fn void input_queue_wait(InputQueue* q, sz timeout_ms) {
+fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private {
 	q.mu.lock();
 	if (q.tail == q.head && !q.closed) {
 		(void)q.cond.wait_timeout(&q.mu, (time::Duration)((long)timeout_ms * time::MS));
@@ -491,7 +491,7 @@ fn void input_queue_wait(InputQueue* q, sz timeout_ms) {
 	q.mu.unlock();
 }
 
-fn bool input_queue_is_closed(InputQueue* q) {
+fn bool input_queue_is_closed(InputQueue* q) @private {
 	q.mu.lock();
 	bool c = q.closed;
 	q.mu.unlock();
@@ -504,7 +504,7 @@ fn bool input_queue_is_closed(InputQueue* q) {
 // by stdout writes.
 // ============================================================
 
-fn int input_reader_fn(void* arg) {
+fn int input_reader_fn(void* arg) @private {
 	InputQueue* q = (InputQueue*)arg;
 	char[256] tmp;
 
@@ -900,7 +900,7 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // snap_delay returns how long to wait from `wall` to reach the next multiple
 // of `interval_ms`. Always in (0, interval_ms], so a timer re-armed exactly on
 // a boundary waits a full interval rather than firing again immediately.
-fn sz snap_delay(sz wall, sz interval_ms) {
+fn sz snap_delay(sz wall, sz interval_ms) @private {
 	if (interval_ms <= 0) return 1;
 	sz elapsed = wall % interval_ms;
 	return elapsed == 0 ? interval_ms : interval_ms - elapsed;
@@ -1554,7 +1554,7 @@ fn void Program.remember_mouse_cursor(Program* self, String name) {
 // For the cell path that is the grid height; for the string path it is the
 // newline count plus one. Inline rendering needs this to size the screen
 // buffer to the content rather than to the terminal.
-fn sz view_content_rows(View v) {
+fn sz view_content_rows(View v) @private {
 	if (v.cells.ptr != null) return v.cells_height;
 	sz rows = 1;
 	for (sz i = 0; i < v.content.len; i++) {
@@ -1572,7 +1572,7 @@ fn sz view_content_rows(View v) {
 // view_content_cols returns the widest display column the view's content
 // reaches. Inline blocks are sized to this rather than the terminal width so
 // the renderer never paints trailing blanks over columns it does not own.
-fn sz view_content_cols(View v) {
+fn sz view_content_cols(View v) @private {
 	if (v.cells.ptr != null) return v.cells_width;
 	sz widest = 0;
 	sz cur = 0;
