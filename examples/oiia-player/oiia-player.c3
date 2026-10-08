@@ -634,7 +634,7 @@ fn sz clamp_color(sz v) {
 	return v;
 }
 
-fn milktea::View App.view(App* self) @dynamic {
+fn milktea::Node* App.view(App* self) @dynamic {
 	sz w = self.width;
 	sz h = self.height;
 	if (w < 2) w = 80;
@@ -679,7 +679,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return milktea::cell_view(cells, w, h);
+		return milktea::grid(cells, w, h);
 	}
 
 	if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -919,7 +919,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return milktea::cell_view(self.model.cells, w, h);
+		return milktea::grid(self.model.cells, w, h);
 	}
 
 	// Fallback: loading screen
@@ -935,7 +935,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			cells[(sz)(h / 2) * w + (sz)(start_x) + i] = xray::new_cell(msg[i:1], 1, txt_style);
 		}
 	}
-	return milktea::cell_view(cells, w, h);
+	return milktea::grid(cells, w, h);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────

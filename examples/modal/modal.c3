@@ -34,7 +34,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	glaze::Style backdrop = { .bg = glaze::color_hex("#1b2a4a"), .bg_gradient = glaze::color_hex("#4a2b52"), };
 	glaze::Style hint     = { .fg = glaze::color_hex("#8a8aa0"), .bg = glaze::color_hex("#4a2b52") };
 	glaze::Style panel = {
@@ -56,14 +56,14 @@ fn milktea::View Model.view(Model* self) @dynamic {
 			.transition(milktea::slide_down(5).fade(), self.anim);
 	}
 
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::vstack().add(milktea::text("", backdrop).fill(1))
 			.add(milktea::text("space toggles the modal · esc dismisses · q quits", hint).height(xray::cells(1))))
-		.add(dialog));
+		.add(dialog);
 }
 
 fn int main() {
 	Model m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

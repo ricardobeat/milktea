@@ -72,7 +72,7 @@ const sz SECTION_GAP = 1;
 // Columns between a label and its input.
 const sz LABEL_GAP = 1;
 
-fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
+fn milktea::Node* InputsModel.view(InputsModel* self) @dynamic {
 	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style label_s = glaze::style().align(glaze::Position.LEFT, glaze::Position.TOP);
 	glaze::Style hint_s  = glaze::style().foreground(glaze::color_hex("#666666"));
@@ -92,14 +92,14 @@ fn milktea::View InputsModel.view(InputsModel* self) @dynamic {
 			.background(glaze::color_hex("#00d7ff")).with_bold(true)
 		: glaze::style().foreground(glaze::color_hex("#888888"));
 
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::vstack()
 			.with_gap(SECTION_GAP)
 			.add(milktea::text("Sign Up", title_s).height(milktea::cells(1)))
 			.add(form.height(milktea::cells(3)))
 			.add(milktea::text("  Submit  ", btn_s).height(milktea::cells(1)))
 			.add(milktea::text("TAB/Shift+TAB switch | ENTER submit | ESC quit", hint_s)
-				.height(milktea::cells(1)))));
+				.height(milktea::cells(1))));
 }
 
 // label_cols is the width of the label column: the longest label, so the

@@ -21,7 +21,7 @@ User-facing docs cover the API in depth — this file only adds what they don't:
 ## milktea — runtime loop
 
 `update` receives key/window/timer messages and returns a `Cmd` (e.g. `milktea::quit()`).
-`view` returns a `View` built from a cell grid or a plain string.
+`view` returns a `Node*`: a tree, a string (`text`), or a cell grid (`canvas`/`grid`).
 Launch with `milktea::@run_program(&model)`.
 
 ### Timers — `tick()` vs `every()`
@@ -106,20 +106,23 @@ and trigger no reset.
 Use `draw_border` on the `ScreenBuffer` when you need the inner `Rect` back for layout; use
 glaze's `.border()` (README → Borders) when you just want a box around a string.
 
-## Returning a View
+## Returning a view
 
-**Simple case** — build a string (with glaze), hand it to milktea. See README → "View types":
+**Simple case** — build a string (with glaze), hand it to milktea. See README → "What view returns":
 
 ```c3
-return milktea::view(glaze_string);
+return milktea::text(glaze_string);
 ```
 
 **Cell-grid case** — use this only when you need the xray `ScreenBuffer` for precise x,y placement:
 
 ```c3
-return self.canvas.view();                       // grid held in a ScreenBuffer
-return milktea::cell_view(self.cells, w, h);     // grid you allocated yourself
+return milktea::canvas(self.canvas);              // grid held in a ScreenBuffer
+return milktea::grid(self.cells, w, h);           // grid you allocated yourself
 ```
+
+A grid is a node like any other, so UI can sit over it in a `root()` layer,
+or be painted into the buffer itself with `canvas.paint(tree)`.
 
 Alt screen is a program option, not a view flag:
 
@@ -135,7 +138,7 @@ self.canvas.clear();
 
 // 2. split screen with layout constraints
 Rect[2] zones;
-layout_v(screen, { constraint_fill(1), constraint_len(1) }[..], zones[..]);
+layout_v(screen, { fill(1), cells(1) }[..], zones[..]);
 
 // 3. draw border, get inner rect
 Rect inner = self.canvas.draw_border(zones[0], rounded_border(), border_sty);
@@ -144,7 +147,7 @@ Rect inner = self.canvas.draw_border(zones[0], rounded_border(), border_sty);
 self.canvas.render_ansi_string(inner.x, inner.y, glaze_string, ...);
 
 // 5. return
-return self.canvas.view();
+return milktea::canvas(self.canvas);
 ```
 
 ## `sz` or `int`

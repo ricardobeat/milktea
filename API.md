@@ -33,7 +33,7 @@ lifecycle hooks are optional.
 interface Model {
     fn Cmd init();
     fn Cmd update(Msg msg);
-    fn View view();
+    fn Node* view();
     fn void on_mount()   @optional;
     fn void on_destroy() @optional;
     fn void on_focus()   @optional;
@@ -69,12 +69,12 @@ fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
     return null;
 }
 
-fn milktea::View Counter.view(Counter* self) @dynamic {
+fn milktea::Node* Counter.view(Counter* self) @dynamic {
     glaze::Style box = glaze::style()
         .foreground(glaze::color_hex("#00d7ff"))
         .padding(1, 3, 1, 3)
         .with_border(glaze::ROUNDED);
-    return milktea::view(box.render(string::tformat("Counter: %d", self.value)));
+    return milktea::text(box.render(string::tformat("Counter: %d", self.value)));
 }
 
 fn int main() {
@@ -109,11 +109,11 @@ p.run()!!;
 ## Two ways to write `view`
 
 **Strings** — build one with `glaze`, optionally solving rects with
-`xray::layout`, and hand it to `view`. Simple and composable; joining
+`xray::layout`, and return `text(s)`. Simple and composable; joining
 discards coordinates, so pieces land in argument order and cannot overlap.
 
 **A node tree** — build with `milktea::root()`/`vstack()`/`hstack()` and return
-`milktea::draw(root)`. The solver assigns every node a rect and each node paints
+the root. The solver assigns every node a rect and each node paints
 itself there, so nodes nest, overlap, take components, and report cursor
 positions. Prefer this once a layout nests deeply or contains widgets.
 
@@ -227,39 +227,25 @@ return milktea::tick(100, &produce);
 
 ## Views
 
-A `View` carries content and per-frame terminal state. Whether it renders on the
-alternate screen is a program option, not part of the view.
+`view()` returns a `Node*`. Whether it renders on the alternate screen is a
+program option, not part of the view: with `.alt_screen = true` the tree is
+solved against the whole terminal, and without it the program runs inline, as
+tall as the tree's content.
 
-| Function | Content |
+| Node | Content |
 |---|---|
-| `view(s)` | A string |
-| `cell_view(cells, w, h)` | A caller-owned `xray::Cell` grid |
-| `ScreenBuffer.view()` | The grid inside a `ScreenBuffer`, sized from the buffer |
-| `draw(root)` | A node tree solved against the whole terminal |
-| `draw_inline(root)` | The same tree, sized to its content height |
+| `text(s, style = {})` | A string; unstyled, painted as it is |
+| `canvas(buf, cursor = {})` | The grid inside a `ScreenBuffer`, sized from the buffer |
+| `grid(cells, w, h, cursor = {})` | A caller-owned `xray::Cell` grid |
 
-`View` builder methods (each returns the view):
-
-```c3
-.set_cursor(x, y)
-.set_cursor_shape(x, y, CursorShape shape, bool blink)
-.set_cursor_color(String color)
-.draw(xray::Rect rect, glaze::Style style, String content)  // cell views
-```
+`cursor` is a `ContentCursor` relative to the grid's top left: `.x`, `.y`,
+`.has_cursor = true`, and `.shape` (a `CursorShape`), `.blink`, `.color`.
+Components report their own cursor, so a tree of them needs none.
 
 `CursorShape` is `CURSOR_BLOCK`/`CURSOR_UNDERLINE`/`CURSOR_BAR`; `MouseMode` is
 `MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Content
 that floats over the rest goes in a layer of a `zstack` or `root`, placed with
 `.at(x, y)`, `.place(...)` or `.center()`.
-
-`View.draw(rect, style, content)` paints styled content into a cell-backed
-view's grid at `rect`, and returns the view so calls chain:
-
-```c3
-return self.canvas.view()
-    .draw(header_rect, title_style, "My App")
-    .draw(body_rect,   body_style,  body_text);
-```
 
 ## Options
 
@@ -344,23 +330,24 @@ turns true.
 alias Node, Rect, Content, ContentCursor, Shadow, InnerShadow, Constraint;
 alias component = xray::content_node;
 alias root, vstack, hstack, zstack, shadow, inner_shadow;
-alias cells, fill, percent, min, max;
+alias cells, fill, percent, min, max, fit;
 const START, CENTER, END, BETWEEN, AROUND, EVENLY;      // JustifyContent
 const STRETCH, ALIGN_START, ALIGN_CENTER, ALIGN_END;    // AlignItems
 fn Node* text(String s, glaze::Style style = {});
+fn Node* canvas(xray::ScreenBuffer* buf, ContentCursor cursor = {});
+fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {});
 ```
 
-`root()` is the mandatory outermost node and is a zstack, so anything added to
-it sits over the rest of the tree — that is how a modal works. `.add()`
-returns the same node, so chained and statement forms are the same call and
-conditional content is a plain `if`.
+`root()` is a zstack, so each child added to it sits over the ones before —
+that is how a modal works. `.add()` returns the same node, so chained and
+statement forms are the same call and conditional content is a plain `if`.
 
 ```c3
-return milktea::draw(milktea::root()
+return milktea::root()
     .add(milktea::vstack()
-        .add(milktea::text("  My App", title_s).height(milktea::cells(1)))
+        .add(milktea::text("  My App", title_s))
         .add(milktea::text(self.body, body_s).fill(1))
-        .add(self.list.node())));
+        .add(self.list.node()));
 ```
 
 ## Tweens and motion
@@ -722,7 +709,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     return milktea::tick(80, &on_spin);
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     String inline_cell = self.spinner.render();
     tgp::InstId id     = self.spinner.place(0, 0);
     // ...

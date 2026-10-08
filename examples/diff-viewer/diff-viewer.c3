@@ -135,7 +135,7 @@ fn void adjust_scroll(DiffModel* self) {
 	}
 }
 
-fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
+fn milktea::Node* DiffModel.view(DiffModel* self) @dynamic {
 	DString out = dstring::temp();
 
 	glaze::Style header_style = glaze::style().foreground(glaze::color_hex("#666666"));
@@ -162,7 +162,7 @@ fn milktea::View DiffModel.view(DiffModel* self) @dynamic {
 	);
 	out.append_string(footer);
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn String format_diff_line(DiffModel* self, DiffLine* line, bool is_cursor) {

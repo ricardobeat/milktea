@@ -92,8 +92,8 @@ fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
-	if (self.width == 0 || self.height == 0) return milktea::view("");
+fn milktea::Node* SpaceModel.view(SpaceModel* self) @dynamic {
+	if (self.width == 0 || self.height == 0) return milktea::text("");
 	if (!self.matrix_init) self.compute_colors();
 
 	sz w      = self.width;
@@ -139,7 +139,7 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, w, view_h);
+	return milktea::grid(self.view_cells, w, view_h);
 }
 
 fn int main() {

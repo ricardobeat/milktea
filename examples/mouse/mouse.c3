@@ -67,7 +67,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 
 	glaze::Style info_style = glaze::style().foreground(glaze::color_hex("#ff00ff"));
@@ -115,7 +115,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 	out.append_string("\n\n");
 	out.append_string(hint_style.render("Click/drag to track  |  c to clear  |  q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

@@ -4,19 +4,17 @@ import std::core::mem;
 import glaze;
 import xray;
 
-// Tree layout. A view is built as a tree of nodes, solved against the screen,
-// then painted at the coordinates the solver chose:
+// Tree layout. A view is a tree of nodes, which the runtime solves against the
+// screen and paints at the coordinates the solver chose:
 //
-//   fn milktea::View Model.view(&self) @dynamic {
-//       return milktea::draw(milktea::root()
-//           .add(milktea::vstack()
-//               .add(milktea::text("Title", title_s).with_height(1))
-//               .add(milktea::text(self.body, body_s).fill(1))));
+//   fn milktea::Node* Model.view(&self) @dynamic {
+//       return milktea::vstack()
+//           .add(milktea::text("Title", title_s))
+//           .add(milktea::text(self.body, body_s).fill(1));
 //   }
 //
-// The string-building API (glaze::join_vertical over rects) still works and is
-// the better fit for simple stacked output. Use a tree when pieces overlap,
-// when nesting gets deep, or when a component should size itself.
+// A whole screen built as one glaze string is a tree of one: text(s). A frame
+// drawn cell by cell is canvas(buf) or grid(cells, w, h).
 
 // Re-exports, so an app needs to import only milktea and glaze.
 alias Node           = xray::Node;
@@ -48,6 +46,7 @@ alias fill     = xray::fill;
 alias percent  = xray::percent;
 alias min      = xray::min;
 alias max      = xray::max;
+alias fit      = xray::fit;
 
 // Alignment constants, named for what they do to a node rather than for the
 // axis they act on.
@@ -71,9 +70,11 @@ const xray::AlignItems ALIGN_END    = xray::AlignItems.ALIGN_END;
 struct StyledText (xray::Content) @private {
 	glaze::Style style;
 	String text;
+	bool plain;
 }
 
 fn String StyledText.render(&self, xray::Rect r) @dynamic {
+	if (self.plain) return self.text;
 	return self.style.with_width(r.w).with_height(r.h).render(self.text);
 }
 
@@ -106,22 +107,64 @@ fn sz StyledText.measure_width(&self, sz height) @dynamic {
 }
 
 // text puts a string in the tree, styled by `style` (plain by default).
+//
+// Unstyled, the string is painted as it is, escapes and all, rather than
+// fitted to the rect: a screen built with glaze already has its own shape.
 fn Node* text(String s, glaze::Style style = {}) {
 	StyledText* st = mem::tnew(StyledText);
 	st.style = style;
 	st.text = s;
+	glaze::Style plain = {};
+	st.plain = mem::equals(&style, &plain, glaze::Style::size);
 	return xray::content_node(st);
 }
 
+// Grid is a cell grid owned by the caller, painted into the tree as it is.
+struct Grid (xray::Content) @private {
+	xray::Cell[] cells;
+	sz w, h;
+	xray::ContentCursor cursor_at;
+}
+
+fn void Grid.paint(&self, xray::ScreenBuffer* dst, xray::Rect r) @dynamic {
+	dst.put_cells(self.cells, self.w, self.h, r);
+}
+
+fn sz Grid.measure(&self, sz width) @dynamic => self.h;
+fn sz Grid.measure_width(&self, sz height) @dynamic => self.w;
+
+fn xray::ContentCursor Grid.cursor(&self, xray::Rect r) @dynamic {
+	if (!self.cursor_at.has_cursor) return {};
+	xray::ContentCursor c = self.cursor_at;
+	c.x += r.x;
+	c.y += r.y;
+	return c;
+}
+
+// canvas puts a ScreenBuffer's cells in the tree: a frame drawn cell by cell,
+// such as a game's. `cursor`, if it has one, is relative to the buffer's top
+// left. The buffer must outlive the frame; the usual owner is the model.
+fn Node* canvas(xray::ScreenBuffer* buf, ContentCursor cursor = {}) {
+	return grid(buf.cells, buf.width, buf.height, cursor);
+}
+
+// grid is canvas for a cell slice the caller allocated itself, `w` cells wide
+// and `h` tall.
+fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {}) {
+	Grid* g = mem::tnew(Grid);
+	*g = { .cells = cells, .w = w, .h = h, .cursor_at = cursor };
+	return xray::content_node(g);
+}
+
 // draw solves the tree against the whole terminal and paints it.
-fn View draw(Node* root) {
+fn View draw(Node* root) @private {
 	return draw_in(root, screen_width(), screen_height());
 }
 
 // draw_inline sizes the tree to its content height, so the painted block is
 // only as tall as the tree needs. The block is capped at the terminal height:
 // taller than that cannot be addressed relatively without scrolling.
-fn View draw_inline(Node* root) {
+fn View draw_inline(Node* root) @private {
 	sz w = screen_width();
 	sz h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;

@@ -49,7 +49,7 @@ fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View FocusModel.view(FocusModel* self) @dynamic {
+fn milktea::Node* FocusModel.view(FocusModel* self) @dynamic {
 	glaze::Style focused_style = glaze::style().foreground(glaze::color_hex("#00ff00")).with_bold(true)
 		.padding(2, 4, 2, 4)
 		.with_border(glaze::ROUNDED);
@@ -72,7 +72,7 @@ fn milktea::View FocusModel.view(FocusModel* self) @dynamic {
 			string::tformat("Focus reporting: %s\nPress t to toggle | q to quit", self.reporting ? "ON" : "OFF")
 		)
 	);
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

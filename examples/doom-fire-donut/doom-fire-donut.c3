@@ -133,7 +133,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	sz w  = self.fire_w;
 	sz h  = self.fire_h;
 	sz vh = h / 2;
@@ -177,7 +177,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, vh);
+	return milktea::grid(self.cells, w, vh);
 }
 
 fn int main() {

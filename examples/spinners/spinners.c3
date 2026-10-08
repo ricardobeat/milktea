@@ -89,7 +89,7 @@ struct SpinnerDef {
 	sz count;
 }
 
-fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
+fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 	SpinnerDef[6] spinners;
 	spinners[0] = { .name = "Dots", .frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" }, .count = 8 };
 	spinners[1] = { .name = "Lines", .frames = { "-", "\\", "|", "/", "-", "\\", "|", "/" }, .count = 4 };
@@ -163,7 +163,7 @@ fn milktea::View SpinnersModel.view(SpinnersModel* self) @dynamic {
 	content.append_char('\n');
 	content.append_string(label.render("Press q or ESC to quit"));
 
-	return milktea::view(box_style.render(content.str_view()));
+	return milktea::text(box_style.render(content.str_view()));
 }
 
 fn int main() {

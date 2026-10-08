@@ -11,7 +11,7 @@ fn milktea::Cmd Mod.update(&self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
 	return null;
 }
-fn milktea::View Mod.view(&self) @dynamic {
+fn milktea::Node* Mod.view(&self) @dynamic {
 	glaze::Style box = glaze::style().with_border(glaze::ROUNDED);
 	glaze::Style nm = glaze::style().align(glaze::Position.RIGHT, glaze::Position.CENTER);
 	milktea::Node* col = milktea::vstack().with_gap(1);
@@ -21,7 +21,7 @@ fn milktea::View Mod.view(&self) @dynamic {
 	col.add(milktea::hstack().height(milktea::cells(3)).with_gap(1)
 		.add(milktea::text("two", nm).width(milktea::cells(6)))
 		.add(milktea::component(&self.b).fill(1)));
-	return milktea::draw(milktea::root().add(col));
+	return milktea::root().add(col);
 }
 
 fn bool contains_seq(String h, String n) {

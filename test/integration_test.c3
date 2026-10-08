@@ -46,8 +46,8 @@ fn void TestModel.on_destroy(TestModel* self) @dynamic {
 	self.destroyed = true;
 }
 
-fn milktea::View TestModel.view(TestModel* self) @dynamic {
-	return milktea::view(string::tformat("count=%d", self.counter));
+fn milktea::Node* TestModel.view(TestModel* self) @dynamic {
+	return milktea::text(string::tformat("count=%d", self.counter));
 }
 
 // ============================================================
@@ -159,8 +159,8 @@ fn milktea::Cmd SizeTrackerModel.update(SizeTrackerModel* self, milktea::Msg msg
 	return null;
 }
 
-fn milktea::View SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
-	return milktea::view(string::tformat("%dx%d", self.last_w, self.last_h));
+fn milktea::Node* SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
+	return milktea::text(string::tformat("%dx%d", self.last_w, self.last_h));
 }
 
 fn void SizeTrackerModel.on_mount(SizeTrackerModel* self) @dynamic {
@@ -233,8 +233,8 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	return milktea::view("");
+fn milktea::Node* TimerModel.view(TimerModel* self) @dynamic {
+	return milktea::text("");
 }
 
 // test_tick_fires verifies tick() delivers TICK messages and the model
@@ -320,8 +320,8 @@ fn milktea::Cmd ZeroIntervalModel.update(ZeroIntervalModel* self, milktea::Msg m
 	return null;
 }
 
-fn milktea::View ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
-	return milktea::view("ok");
+fn milktea::Node* ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
+	return milktea::text("ok");
 }
 
 fn void ZeroIntervalModel.on_mount(ZeroIntervalModel* self) @dynamic { }
@@ -360,8 +360,8 @@ fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
-	return milktea::view("still here");
+fn milktea::Node* NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
+	return milktea::text("still here");
 }
 
 // test_test_mode_terminates_without_quit pins down that the event loop ends
@@ -404,15 +404,15 @@ fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea:
 	return null;
 }
 
-fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
+fn milktea::Node* NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
 	self.frames++;
 	// Off the top-left corner, and off the right/bottom edge. An alpha
 	// below 255 selects the blending path, which does its own destination
 	// bounds check rather than going through ScreenBuffer.set_cell.
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::text("base content"))
 		.add(milktea::text("overlay").at(-5, -3).width(xray::cells(10)).height(xray::cells(6)).alpha(128))
-		.add(milktea::text("overlay").at(78, 22).width(xray::cells(10)).height(xray::cells(6)).alpha(128)));
+		.add(milktea::text("overlay").at(78, 22).width(xray::cells(10)).height(xray::cells(6)).alpha(128));
 }
 
 fn void test_overlay_with_negative_origin_is_clipped() @test {
@@ -445,8 +445,8 @@ fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dyn
 	return null;
 }
 
-fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
-	return milktea::view("race");
+fn milktea::Node* SendRaceModel.view(SendRaceModel* self) @dynamic {
+	return milktea::text("race");
 }
 
 fn int send_race_sender(void* arg) @private {
@@ -511,10 +511,10 @@ fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
+fn milktea::Node* ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
 	self.w_in_view = milktea::screen_width();
 	self.h_in_view = milktea::screen_height();
-	return milktea::view("size");
+	return milktea::text("size");
 }
 
 // The accessors report the program's injected size from inside update/view,
@@ -555,7 +555,7 @@ fn milktea::Cmd TreeModel.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View TreeModel.view(&self) @dynamic {
+fn milktea::Node* TreeModel.view(&self) @dynamic {
 	glaze::Style plain = {};
 	milktea::Node* root = milktea::root()
 		.add(milktea::vstack()
@@ -567,7 +567,7 @@ fn milktea::View TreeModel.view(&self) @dynamic {
 		root.add(milktea::text("MODAL", plain).center());
 	}
 
-	return self.inline_mode ? milktea::draw_inline(root) : milktea::draw(root);
+	return self.inline_mode ? root : root;
 }
 
 fn void test_draw_places_header_and_footer_at_the_edges() @test {
@@ -659,8 +659,8 @@ fn milktea::Cmd CellModel.update(CellModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View CellModel.view(CellModel* self) @dynamic {
-	return milktea::cell_view(self.cells, self.w, self.h);
+fn milktea::Node* CellModel.view(CellModel* self) @dynamic {
+	return milktea::grid(self.cells, self.w, self.h);
 }
 
 // A View carries cells_width/cells_height separately from the cells slice, so

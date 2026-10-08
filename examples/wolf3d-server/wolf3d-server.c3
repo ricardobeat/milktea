@@ -438,7 +438,7 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
+fn milktea::Node* Wolf3D.view(Wolf3D* self) @dynamic {
 	sz w  = self.width;
 	sz h  = self.height;
 	sz ph = h * 2;
@@ -804,7 +804,7 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 // ── Server Implementation ──────────────────────────────────────────────────
@@ -1080,8 +1080,10 @@ fn int handle_client(void* arg) {
 		char[1024] buf;
 		while (running) {
 			@pool() {
-				milktea::View v = app.view();
-				render_cells_to(v.cells, v.cells_width, v.cells_height, &s);
+				// view() draws the frame into app.cells, which is all the
+				// tree it returns holds; send those straight to the socket.
+				app.view();
+				render_cells_to(app.cells, app.width, app.height, &s);
 			};
 
 			// Poll socket with 0ms timeout — only read if data is available,

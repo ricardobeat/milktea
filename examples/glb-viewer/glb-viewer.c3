@@ -27,7 +27,7 @@ fn milktea::Cmd glb::GlbModel.update(glb::GlbModel* self, milktea::Msg msg) @dyn
 	return null;
 }
 
-fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
+fn milktea::Node* glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 	self.render();
 
 	sz w  = self.width;
@@ -60,7 +60,7 @@ fn milktea::View glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(cells, w, h);
+	return milktea::grid(cells, w, h);
 }
 
 // ── File picker ───────────────────────────────────────────────────────────────
@@ -396,7 +396,7 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View App.view(App* self) @dynamic {
+fn milktea::Node* App.view(App* self) @dynamic {
 	if (self.mode == VIEWING && self.model != null) {
 		self.model.cam_px = self.cam_px;
 		self.model.cam_py = self.cam_py;
@@ -442,7 +442,7 @@ fn milktea::View App.view(App* self) @dynamic {
 	}
 
 	out.append_string(hint_style.render("\u2191/\u2193 or j/k to navigate \u00b7 enter to open \u00b7 q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main(String[] args) {

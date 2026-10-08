@@ -40,7 +40,7 @@ fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
+fn milktea::Node* FullscreenModel.view(FullscreenModel* self) @dynamic {
 	glaze::Style number = glaze::style().foreground(glaze::color_hex("#ff5555")).with_bold(true);
 
 	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
@@ -57,7 +57,7 @@ fn milktea::View FullscreenModel.view(FullscreenModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(label.render("Press ESC or q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

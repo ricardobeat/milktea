@@ -71,7 +71,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	sz w = milktea::screen_width();
 	sz h = milktea::screen_height();
 
@@ -287,10 +287,8 @@ fn milktea::View Model.view(&self) @dynamic {
 		screen.set_cell((sz)p.col, (sz)p.row, xray::new_cell(ch, 1, s));
 	}
 
-	milktea::View view = screen.view();
 	// screen is owned by the model (self.screen); freed in on_destroy.
-
-	return view;
+	return milktea::canvas(screen);
 }
 
 fn void Model.on_destroy(&self) @dynamic {

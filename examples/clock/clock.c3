@@ -350,7 +350,7 @@ fn milktea::Cmd ClockModel.update(ClockModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
+fn milktea::Node* ClockModel.view(ClockModel* self) @dynamic {
 	xray::ScreenBuffer* sb = self.canvas;
 	sb.clear();
 
@@ -419,7 +419,7 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 		draw_cloud(sb, &self.clouds[i]);
 	}
 
-	return sb.view();
+	return milktea::canvas(sb);
 }
 
 fn int main() {

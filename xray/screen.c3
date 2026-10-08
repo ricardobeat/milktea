@@ -744,9 +744,8 @@ fn void ScreenBuffer.render_ansi_string(
 		if (text[i] == '\t') {
 			// Tab: advance to next 8-column boundary
 			sz next_tab = (c / 8 + 1) * 8;
-			while (c < next_tab && c < self.width) {
-				Cell cell = new_cell(" ", 1, style);
-				self.set_cell(c, r, cell);
+			while (c < next_tab && c < max_col) {
+				if (r < max_row) self.set_cell(c, r, new_cell(" ", 1, style));
 				c++;
 			}
 			i++;
@@ -1304,6 +1303,30 @@ fn void ScreenBuffer.blit(&self, sz dst_x, sz dst_y, ScreenBuffer* src, bool tra
 				prev_wide = c.width == 2;
 			}
 		}
+	}
+}
+
+// put_cells copies a src_w×src_h grid of cells into this buffer with its top
+// left at x, y, clipped to `clip` and to the buffer. Rows are copied whole, so
+// a game frame lands without going through set_cell one cell at a time.
+fn void ScreenBuffer.put_cells(&self, Cell[] src, sz src_w, sz src_h, Rect clip) {
+	sz x0 = clip.x < 0 ? 0 : clip.x;
+	sz y0 = clip.y < 0 ? 0 : clip.y;
+	sz x1 = clip.x + clip.w;
+	sz y1 = clip.y + clip.h;
+	if (x1 > self.width) x1 = self.width;
+	if (y1 > self.height) y1 = self.height;
+	if (x1 - clip.x > src_w) x1 = clip.x + src_w;
+	if (y1 - clip.y > src_h) y1 = clip.y + src_h;
+	// The slice may hold fewer rows than src_h claims, if the grid was
+	// reallocated between building the node and painting it.
+	if (src_w > 0 && y1 - clip.y > (sz)src.len / src_w) y1 = clip.y + (sz)src.len / src_w;
+	if (x0 >= x1 || y0 >= y1) return;
+
+	for (sz y = y0; y < y1; y++) {
+		sz from = (y - clip.y) * src_w + (x0 - clip.x);
+		mem::copy(&self.cells[y * self.width + x0], &src[from], (usz)(x1 - x0) * Cell::size);
+		self.dirty_lines[y] = true;
 	}
 }
 

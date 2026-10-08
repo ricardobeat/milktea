@@ -65,7 +65,7 @@ fn milktea::Cmd PickerModel.update(PickerModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
-fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
+fn milktea::Node* PickerModel.view(PickerModel* self) @dynamic {
 	DString out = dstring::temp();
 
 	if (self.has_error) {
@@ -74,7 +74,7 @@ fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
 	}
 
 	out.append_string(self.fp.view());
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

@@ -173,19 +173,19 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	String title = "\x1b[1;37m  CURSOR GALLERY\x1b[0m  \x1b[2;37m tab/shift+tab · q quit\x1b[0m";
 
 	milktea::Node* body = milktea::hstack().with_gap(COL_GAP);
 	body.add(self.column(0).fill(1));
 	body.add(self.column(N / 2).fill(1));
 
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::vstack()
 			.with_gap(TITLE_GAP)
 			.with_padding(TOP_MARGIN, SIDE_MARGIN, 0, SIDE_MARGIN)
 			.add(milktea::text(title).height(milktea::cells(1)))
-			.add(body.fill(1))));
+			.add(body.fill(1)));
 }
 
 // column builds one stack of entry rows, starting at entry `first`.
@@ -219,5 +219,5 @@ fn milktea::Node* Model.entry_row(&self, sz i) {
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

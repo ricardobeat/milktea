@@ -34,10 +34,10 @@ fn milktea::Cmd NowModel.update(NowModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View NowModel.view(NowModel* self) @dynamic {
+fn milktea::Node* NowModel.view(NowModel* self) @dynamic {
 	self.view_ms = frame_ms();
 	if (frame_ms() != self.view_ms) self.steady = false;
-	return view("");
+	return text("");
 }
 
 fn void test_frame_ms_is_stamped_per_callback() @test {
@@ -77,8 +77,8 @@ fn milktea::Cmd RepaintModel.update(RepaintModel* self, milktea::Msg msg) @dynam
 	return null;
 }
 
-fn milktea::View RepaintModel.view(RepaintModel* self) @dynamic {
-	return draw(root().add(text("tick")).animate(self.fps));
+fn milktea::Node* RepaintModel.view(RepaintModel* self) @dynamic {
+	return root().add(text("tick")).animate(self.fps);
 }
 
 fn sz repaint_timers(Program* p) {
@@ -127,7 +127,7 @@ fn milktea::Cmd FramesModel.update(FramesModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
-fn milktea::View FramesModel.view(FramesModel* self) @dynamic => view("");
+fn milktea::Node* FramesModel.view(FramesModel* self) @dynamic => text("");
 
 fn void test_frames_until_arms_one_repaint_timer() @test {
 	FramesModel m = { .ahead = 1000 };

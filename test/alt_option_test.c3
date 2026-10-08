@@ -5,7 +5,7 @@ import std::io;
 struct Probe { sz n; }
 fn milktea::Cmd Probe.init(&self) @dynamic => null;
 fn milktea::Cmd Probe.update(&self, milktea::Msg msg) @dynamic => milktea::quit();
-fn milktea::View Probe.view(&self) @dynamic => milktea::view("x");
+fn milktea::Node* Probe.view(&self) @dynamic => milktea::text("x");
 
 fn void test_alt_option_emits_enter_and_exit() @test {
 	Probe m = { };

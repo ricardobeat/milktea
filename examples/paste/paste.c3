@@ -80,7 +80,7 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 	}
 }
 
-fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
+fn milktea::Node* PasteModel.view(PasteModel* self) @dynamic {
 	sz w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
 	sz h = milktea::screen_height();
 
@@ -131,7 +131,7 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(status_text);
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

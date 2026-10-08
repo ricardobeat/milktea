@@ -31,7 +31,7 @@ fn milktea::Cmd CanvasModel.update(CanvasModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
-fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
+fn milktea::Node* CanvasModel.view(CanvasModel* self) @dynamic {
 	glaze::Style card_style = glaze::style().with_width(20).with_height(10)
 		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex("#7c3aed"))
@@ -53,14 +53,14 @@ fn milktea::View CanvasModel.view(CanvasModel* self) @dynamic {
 		.add(milktea::text("Press any key to swap the cards, or q to quit.", footer_style).at(0, last_row));
 
 	if (self.flip) {
-		screen.add(milktea::text(b, card_style).at(10, 2));
-		screen.add(milktea::text(a, card_style).at(0, 0));
+		screen.add(milktea::text(b).at(10, 2));
+		screen.add(milktea::text(a).at(0, 0));
 	} else {
-		screen.add(milktea::text(a, card_style).at(0, 0));
-		screen.add(milktea::text(b, card_style).at(10, 2));
+		screen.add(milktea::text(a).at(0, 0));
+		screen.add(milktea::text(b).at(10, 2));
 	}
 
-	return milktea::draw(screen);
+	return screen;
 }
 
 fn int main() {

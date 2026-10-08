@@ -34,8 +34,8 @@ fn void KeyProbeModel.on_mount(KeyProbeModel* self) @dynamic {
 fn void KeyProbeModel.on_destroy(KeyProbeModel* self) @dynamic {
 }
 
-fn milktea::View KeyProbeModel.view(KeyProbeModel* self) @dynamic {
-	return milktea::view("probe");
+fn milktea::Node* KeyProbeModel.view(KeyProbeModel* self) @dynamic {
+	return milktea::text("probe");
 }
 
 // ============================================================
@@ -166,8 +166,8 @@ fn void DispatchProbeModel.on_mount(DispatchProbeModel* self) @dynamic {
 fn void DispatchProbeModel.on_destroy(DispatchProbeModel* self) @dynamic {
 }
 
-fn milktea::View DispatchProbeModel.view(DispatchProbeModel* self) @dynamic {
-	return milktea::view("dispatch-probe");
+fn milktea::Node* DispatchProbeModel.view(DispatchProbeModel* self) @dynamic {
+	return milktea::text("dispatch-probe");
 }
 
 // ============================================================

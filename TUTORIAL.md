@@ -186,7 +186,7 @@ Printable characters arrive as `KeyCode.RUNE`, with the actual character in
 ## 4. view — drawing the screen
 
 This is the fun part, and where layout and styling come together. The view runs
-after every update and returns a `View`.
+after every update and returns the tree of nodes to draw.
 
 ### Step 1 — pick colors
 
@@ -194,7 +194,7 @@ The whole UI themes off a single accent that changes with the phase — warm
 peach for focus, soft mint for breaks.
 
 ```c3
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     bool focus = self.phase == Phase.FOCUS;
 
     glaze::Color accent = focus
@@ -265,22 +265,26 @@ Here is where the layout happens. Rather than computing positions, you describe
 the shape and each node is given a rect to paint itself into.
 
 Three horizontal bands — a one-line title, a body that takes whatever's left,
-and a one-line status bar — with the body split into a fixed sidebar and a
-timer panel:
+and a one-line status bar — with the body split into a sidebar and a timer
+panel:
 
 ```c3
-    return milktea::draw(milktea::root()
+    return milktea::root()
         .add(milktea::vstack()
             .add(milktea::text(" 🍵 milktea pomodoro", title_s).height(milktea::cells(1)))
             .add(milktea::hstack()
                 .fill(1)
                 .with_gap(PANEL_GAP)
-                .add(milktea::text(side, side_s).width(milktea::cells(SIDEBAR_COLS)))
+                // The sidebar is as wide as its text; the timer takes the rest.
+                .add(milktea::text(side, side_s))
                 .add(milktea::text(clock, timer_s).fill(1)))
             .add(milktea::text("  space pause · tab switch · r reset · q quit", status_s)
-                .height(milktea::cells(1)))));
+                .height(milktea::cells(1))));
 }
 ```
+
+A node given no size is as big as its content along the stack and stretches
+across it, the way CSS flexbox does it — so the sidebar needs no width.
 
 The constraint vocabulary:
 
@@ -290,6 +294,7 @@ The constraint vocabulary:
 | `fill(w)`    | share the leftover space, weighted by `w` |
 | `percent(p)` | `p`% of the available space |
 | `min(n)` / `max(n)` | clamp to a bound |
+| `fit()`      | as big as the content |
 
 `with_gap(1)` puts a column between the two panels. Without it their borders
 sit flush and the sidebar's right edge is overwritten — a gap is the layout's
@@ -298,10 +303,9 @@ job, not something to fake with padding.
 Because everything is solved against the live terminal size, the UI reflows on
 resize with no manual math.
 
-`milktea::draw` puts the app on the terminal's alternate screen — the
-full-window mode `vim` and `less` use. For a tool that shares the screen with
-your scrollback, `milktea::draw_inline` sizes the block to its content
-instead.
+A timer wants the whole window, so `main` runs it on the terminal's alternate
+screen — the full-window mode `vim` and `less` use. Without that option, a
+program shares the screen with your scrollback and is as tall as its tree.
 
 ---
 
@@ -313,7 +317,7 @@ restores the terminal on exit.
 ```c3
 fn int main() {
     Model m = { };
-    milktea::@run(&m);
+    milktea::@run(&m, { .alt_screen = true });
     return 0;
 }
 ```

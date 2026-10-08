@@ -15,7 +15,7 @@ fn milktea::Cmd Toggler.update(&self, milktea::Msg msg) @dynamic {
 	}
 	return null;
 }
-fn milktea::View Toggler.view(&self) @dynamic => milktea::view("x");
+fn milktea::Node* Toggler.view(&self) @dynamic => milktea::text("x");
 
 const String MOUSE_ALL_ON  = "\x1b[?1003h";
 const String MOUSE_CELL_ON = "\x1b[?1002h";

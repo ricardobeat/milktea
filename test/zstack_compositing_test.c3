@@ -7,7 +7,7 @@ import std::io;
 struct Probe { bool flip; }
 fn milktea::Cmd Probe.init(&self) @dynamic => null;
 fn milktea::Cmd Probe.update(&self, milktea::Msg msg) @dynamic => null;
-fn milktea::View Probe.view(&self) @dynamic {
+fn milktea::Node* Probe.view(&self) @dynamic {
 	glaze::Style card_a = glaze::style().with_width(20).with_height(10)
 		.with_border(glaze::ROUNDED).border_fg(glaze::color_hex("#ff0000"));
 	glaze::Style card_b = glaze::style().with_width(20).with_height(10)
@@ -21,7 +21,7 @@ fn milktea::View Probe.view(&self) @dynamic {
 		screen.add(milktea::text("A", card_a).at(0, 0));
 		screen.add(milktea::text("B", card_b).at(10, 2));
 	}
-	return milktea::draw(screen);
+	return screen;
 }
 
 fn void test_zstack_at_composites_in_order() @test {

@@ -1086,9 +1086,9 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 
 // ── Screen Conversion & Overlay Painting ──────────────────────────────────────
 
-fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
+fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::view("");
+		return milktea::text("");
 	}
 
 	sz w = self.term_w;
@@ -1204,7 +1204,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		default:
 	}
 
-	return milktea::cell_view(self.view_cells, w, h);
+	return milktea::grid(self.view_cells, w, h);
 }
 
 // ── Overlays ──────────────────────────────────────────────────────────────────

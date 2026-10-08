@@ -156,7 +156,7 @@ fn bool is_quit(milktea::KeyMsg k) {
 
 // ── View ─────────────────────────────────────────────────────────────────────
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	xray::ScreenBuffer* canvas = self.canvas;
 	canvas.clear();
 
@@ -166,7 +166,7 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	self.draw_field(canvas, zones[0]);
 	draw_hint(canvas, zones[1]);
-	return canvas.view();
+	return milktea::canvas(canvas);
 }
 
 fn void Model.draw_field(&self, xray::ScreenBuffer* canvas, xray::Rect area) {

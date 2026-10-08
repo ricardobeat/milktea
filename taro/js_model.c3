@@ -409,7 +409,7 @@ fn milktea::Cmd JsModel.js_tick_cmd(&self) @inline {
 	return milktea::tick(delay);
 }
 
-fn milktea::View JsModel.view(&self) @dynamic {
+fn milktea::Node* JsModel.view(&self) @dynamic {
 	sz w = self.term_w > 0 ? self.term_w : 80;
 	sz h = self.term_h > 0 ? self.term_h : 24;
 
@@ -481,16 +481,15 @@ fn milktea::View JsModel.view(&self) @dynamic {
 		render_debug_overlay(self.screen, w, h);
 	}
 
-	milktea::View view = self.screen.view();
-
+	milktea::ContentCursor cursor;
 	sz cx, cy;
 	String cursor_color;
 	bool suppress_native;
 	if (get_focused_cursor(&cx, &cy, &cursor_color, &suppress_native) && !suppress_native) {
-		view = view.set_cursor_shape(cx, cy, milktea::CursorShape.CURSOR_BLOCK, true);
-		if (cursor_color.len > 0) {
-			view = view.set_cursor_color(cursor_color);
-		}
+		cursor = {
+			.x = cx, .y = cy, .has_cursor = true,
+			.shape = (sz)milktea::CursorShape.CURSOR_BLOCK, .blink = true, .color = cursor_color,
+		};
 	}
 
 
@@ -511,7 +510,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 			rss);
 	}
 
-	return view;
+	return milktea::canvas(self.screen, cursor);
 }
 
 fn void JsModel.on_destroy(&self) @dynamic {

@@ -54,7 +54,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	String[8] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧" };
 	String spin      = frames[self.spin_frame % 8];
 	sz mins         = self.seconds / 60;
@@ -96,7 +96,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	out.append_string(joined);
 	out.append_char('\n');
 	out.append_string(hint.render("TAB switch focus | n reset | q quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

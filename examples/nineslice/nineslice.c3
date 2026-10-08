@@ -610,7 +610,7 @@ fn void solve_grid(xray::Rect area, xray::Rect[] rects) {
 	}
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	if (self.gfx_active()) self.gfx.flush();
 
 	sz sw = milktea::screen_width();
@@ -686,5 +686,5 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.background(glaze::color_hex(SCREEN_BG))
 		.render("click or arrows select   -/+ radius   t graphics on/off   q quit"));
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }

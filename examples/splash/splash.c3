@@ -93,7 +93,7 @@ fn void SplashModel.on_focus(SplashModel* self) @dynamic {
 fn void SplashModel.on_blur(SplashModel* self) @dynamic {
 }
 
-fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
+fn milktea::Node* SplashModel.view(SplashModel* self) @dynamic {
 	sz w = self.width;
 	sz h = self.height;
 	if (w < 2) w = 80;
@@ -154,7 +154,7 @@ fn milktea::View SplashModel.view(SplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, w, rows);
+	return milktea::grid(self.view_cells, w, rows);
 }
 
 fn int main() {

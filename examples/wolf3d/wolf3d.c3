@@ -149,7 +149,7 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
+fn milktea::Node* Wolf3D.view(Wolf3D* self) @dynamic {
 	sz w  = self.width;
 	sz h  = self.height;
 	sz ph = h * 2;
@@ -271,7 +271,7 @@ fn milktea::View Wolf3D.view(Wolf3D* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main(String[] args) {

@@ -747,9 +747,9 @@ fn void FlappyModel.draw_score_hud(&self) {
 
 // ── Screen Conversion & Overlay Painting ──────────────────────────────────────
 
-fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
+fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::view("");
+		return milktea::text("");
 	}
 
 	sz w = self.term_w;
@@ -832,7 +832,7 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 		default:
 	}
 
-	return milktea::cell_view(self.view_cells, w, h);
+	return milktea::grid(self.view_cells, w, h);
 }
 
 // ── Overlay UI Renders ────────────────────────────────────────────────────────

@@ -295,7 +295,7 @@ fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
-fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
+fn milktea::Node* Fire3DModel.view(Fire3DModel* self) @dynamic {
 	sz w    = self.width;
 	sz h    = self.height;
 	sz total = (sz)(w * h);
@@ -382,7 +382,7 @@ fn milktea::View Fire3DModel.view(Fire3DModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main() {

@@ -373,7 +373,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	sz w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
 	sz h = milktea::screen_height();
 
@@ -560,7 +560,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 			.shadow(xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2)));
 	}
 
-	return milktea::draw(root);
+	return root;
 }
 
 fn int main() {

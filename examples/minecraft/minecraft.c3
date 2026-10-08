@@ -816,7 +816,7 @@ macro sz tex_hash(sz a, sz b, sz c, sz d, sz e, sz f) {
 	return h;
 }
 
-fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
+fn milktea::Node* Minecraft.view(Minecraft* self) @dynamic {
 	// Only rebuild the face list when the world has changed — the O(n²)
 	// neighbor scan is cheap enough for ~260 blocks, but there is no point
 	// doing it 30× per second when nothing moved.
@@ -1176,7 +1176,7 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		self.cells[(h - 1) * w + hint_x + (sz)ci] = xray::new_cell((String)buf[:1], 1, hud_style);
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main(String[] args) {

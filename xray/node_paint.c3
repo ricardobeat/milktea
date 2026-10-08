@@ -97,12 +97,21 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	}
 
 	if (n.content != null && r.w > 0 && r.h > 0) {
-		String s = n.content.render(r);
-		if (s.len > 0) {
-			if (n.alpha_value < 255 && scratch != null) {
-				self.paint_blended(r, s, n.alpha_value, scratch);
-			} else {
-				self.render_ansi_string((sz)r.x, (sz)r.y, s, default_style());
+		if (&n.content.paint) {
+			n.content.paint(self, r);
+		} else if (&n.content.render) {
+			String s = n.content.render(r);
+			if (s.len > 0) {
+				if (n.alpha_value < 255 && scratch != null) {
+					self.paint_blended(r, s, n.alpha_value, scratch);
+				} else if (r.x + r.w > 0 && r.y + r.h > 0) {
+					// Clipped to the rect: a string is not always the size it
+					// was asked to be, and one that is not would spill into
+					// its neighbours.
+					sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
+					sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
+					self.render_ansi_string((sz)r.x, (sz)r.y, s, default_style(), max_row, max_col);
+				}
 			}
 		}
 

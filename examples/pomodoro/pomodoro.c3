@@ -14,8 +14,7 @@ import std::io;
 
 // ── Model ────────────────────────────────────────────────────────────────────
 
-// Width of the stats sidebar, and of the progress bar inside the timer panel.
-const sz SIDEBAR_COLS  = 22;
+// Width of the progress bar inside the timer panel.
 const sz PROGRESS_CELLS = 28;
 // Columns between the sidebar and the timer panel. Without it the two borders
 // sit flush and the sidebar's right edge is overwritten.
@@ -103,7 +102,7 @@ fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
 
 // ── view ─────────────────────────────────────────────────────────────────────
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	bool focus = self.phase == Phase.FOCUS;
 
 	// Warm pastel accents — one per phase.
@@ -145,20 +144,21 @@ fn milktea::View Model.view(&self) @dynamic {
 		focus ? "focus" : "break",
 		self.running ? "running" : "paused");
 
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::vstack()
 			.add(milktea::text(" 🍵 milktea pomodoro", title_s).height(milktea::cells(1)))
 			.add(milktea::hstack()
 				.fill(1)
 				.with_gap(PANEL_GAP)
-				.add(milktea::text(side, side_s).width(milktea::cells(SIDEBAR_COLS)))
+				// The sidebar is as wide as its text; the timer takes the rest.
+				.add(milktea::text(side, side_s))
 				.add(milktea::text(clock, timer_s).fill(1)))
 			.add(milktea::text("  space pause · tab switch · r reset · q quit", status_s)
-				.height(milktea::cells(1)))));
+				.height(milktea::cells(1))));
 }
 
 fn int main() {
 	Model m = { };
-	milktea::@run(&m);
+	milktea::@run(&m, { .alt_screen = true });
 	return 0;
 }

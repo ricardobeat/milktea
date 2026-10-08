@@ -280,7 +280,7 @@ fn void SuperSplashModel.on_blur(SuperSplashModel* self) @dynamic {
 
 // ─── View ────────────────────────────────────────────────────
 
-fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
+fn milktea::Node* SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	sz w = self.width;
 	sz h = self.height;
 	if (w < 2) w = 80;
@@ -513,7 +513,7 @@ fn milktea::View SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main() {

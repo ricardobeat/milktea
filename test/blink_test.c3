@@ -37,9 +37,9 @@ fn milktea::Cmd BlinkModel.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View BlinkModel.view(&self) @dynamic {
+fn milktea::Node* BlinkModel.view(&self) @dynamic {
 	self.frames++;
-	return milktea::draw(milktea::root().add(milktea::component(&self.field)));
+	return milktea::root().add(milktea::component(&self.field));
 }
 
 fn void test_drawn_cursor_keeps_rescheduling_itself() @test {

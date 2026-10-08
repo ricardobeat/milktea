@@ -95,7 +95,7 @@ fn String pad_center(String s, sz width) {
 	return out.str_view();
 }
 
-fn milktea::View SquiggleModel.view(SquiggleModel* self) @dynamic {
+fn milktea::Node* SquiggleModel.view(SquiggleModel* self) @dynamic {
 	DString out = dstring::temp();
 	sz iw = BOX_W - 2;
 
@@ -128,7 +128,7 @@ fn milktea::View SquiggleModel.view(SquiggleModel* self) @dynamic {
 
 	for (sz cx = 0; cx < BOX_W; cx++) out.append_string(self.cell(cx, BOX_H - 1));
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

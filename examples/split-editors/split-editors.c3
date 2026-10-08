@@ -253,7 +253,7 @@ fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
+fn milktea::Node* SplitModel.view(SplitModel* self) @dynamic {
 	glaze::Style hint = glaze::style().foreground(glaze::color_hex("#666666"));
 	bool show_cursor     = self.cursor_blink != 0;
 
@@ -291,7 +291,7 @@ fn milktea::View SplitModel.view(SplitModel* self) @dynamic {
 			)
 		)
 	);
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

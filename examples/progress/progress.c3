@@ -55,7 +55,7 @@ fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dyn
 	return null;
 }
 
-fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
+fn milktea::Node* ProgressModel.view(ProgressModel* self) @dynamic {
 	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(0, 0, 1, 0);
 
@@ -117,7 +117,7 @@ fn milktea::View ProgressModel.view(ProgressModel* self) @dynamic {
 		content.append_string(hint.render("  |  f fast  |  s slow  |  r restart  |  q quit"));
 	}
 
-	return milktea::view(box_style.render(content.str_view()));
+	return milktea::text(box_style.render(content.str_view()));
 }
 
 fn int main() {

@@ -63,7 +63,7 @@ fn String lorem_line(sz i) {
 	return fragments[i % 10];
 }
 
-fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
+fn milktea::Node* ViewportModel.view(ViewportModel* self) @dynamic {
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(0, 2, 0, 0);
 	glaze::Style line_style = glaze::style().foreground(glaze::color_hex("#cccccc"));
@@ -114,7 +114,7 @@ fn milktea::View ViewportModel.view(ViewportModel* self) @dynamic {
 		)
 	);
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

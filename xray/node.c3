@@ -8,6 +8,10 @@ import std::core::mem;
 // solver chose. Implementations return a string sized to that rect; it may
 // carry ANSI escapes, which paint decodes with render_ansi_string. xray does
 // not know how those escapes are produced — milktea builds them with glaze.
+//
+// Content that already holds cells, such as a game's frame, implements paint
+// instead: it writes straight into the buffer, inside r, and render is not
+// called.
 // 
 // measure reports how tall the content wants to be at a given width, and
 // measure_width how wide it wants to be at a given height. Both are consulted
@@ -22,7 +26,8 @@ import std::core::mem;
 // unimplemented. Content that owns one only when focused should return
 // has_cursor = false when it is not, rather than relying on paint order.
 interface Content {
-	fn String render(Rect r);
+	fn String render(Rect r) @optional;
+	fn void paint(ScreenBuffer* dst, Rect r) @optional;
 	fn sz measure(sz width) @optional;
 	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;

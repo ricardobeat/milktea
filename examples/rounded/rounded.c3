@@ -303,7 +303,7 @@ fn void append_box(DString* out, Model* m, sz b) {
 	}
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	if (self.tgp_ok) self.gfx.flush();
 
 	DString out = dstring::temp();
@@ -330,5 +330,5 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		.foreground(glaze::color_hex("#888888"))
 		.render("↑/↓ select box   ←/→ or -/+ radius   q quit"));
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }

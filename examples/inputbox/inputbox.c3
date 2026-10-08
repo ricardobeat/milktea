@@ -51,7 +51,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	sz w = milktea::screen_width();
 	sz h = milktea::screen_height();
 
@@ -80,7 +80,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, hint_v);
-	return milktea::view(doc);
+	return milktea::text(doc);
 }
 
 fn void Model.on_destroy(&self) @dynamic {

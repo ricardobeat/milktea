@@ -83,10 +83,10 @@ Messages come in several kinds:
 
 ## view
 
-`view` turns the model into something to display. It runs after every `update`. Return a `View`.
+`view` turns the model into something to display. It runs after every `update`, and returns a tree of nodes; a screen built as one glaze string is a tree of one.
 
 ```c3
-fn milktea::View Counter.view(Counter* self) @dynamic {
+fn milktea::Node* Counter.view(Counter* self) @dynamic {
     glaze::Style box = glaze::style()
         .foreground(glaze::color_hex("#00d7ff"))
         .with_bold(true)
@@ -94,7 +94,7 @@ fn milktea::View Counter.view(Counter* self) @dynamic {
         .with_border(glaze::ROUNDED);
 
     String content = string::tformat("Counter: %d\nUse ↑↓ to change, q to quit", self.value);
-    return milktea::view(box.render(content));
+    return milktea::text(box.render(content));
 }
 ```
 
@@ -186,21 +186,20 @@ A view is a tree of nodes. The solver gives each node a rect, and each node
 paints itself there — so pieces can overlap, nest, and size themselves.
 
 ```c3
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     glaze::Style title_s  = { .fg = glaze::color_hex("#00d7ff"), .bold = true };
     glaze::Style body_s   = { .fg = glaze::color_hex("#ffffff") };
     glaze::Style status_s = { .fg = glaze::color_hex("#555555") };
 
-    return milktea::draw(milktea::root()
-        .add(milktea::vstack()
-            .add(milktea::text("  My App", title_s).height(milktea::cells(1)))
-            .add(milktea::text(self.body, body_s).fill(1))
-            .add(milktea::text("  Ready", status_s).height(milktea::cells(1)))));
+    return milktea::vstack()
+        .add(milktea::text("  My App", title_s))
+        .add(milktea::text(self.body, body_s).fill(1))
+        .add(milktea::text("  Ready", status_s));
 }
 ```
 
-`milktea::root()` is the outermost node and is always present. Anything added
-to it sits over the rest of the tree, which is how a modal works:
+`milktea::root()` is a stack of layers: each child added to it sits over the
+ones before, which is how a modal works:
 
 ```c3
 if (self.confirming_quit) {
@@ -257,9 +256,9 @@ so the terminal cursor follows the layout rather than a hand-counted row.
 
 ### Inline mode
 
-`milktea::draw()` uses the whole terminal. `milktea::draw_inline()` measures
-the tree and claims only as many rows as it needs, leaving the scrollback
-alone.
+A program run with `.alt_screen = true` fills the terminal with its tree.
+Without it the program runs inline: the tree is measured and claims only as
+many rows as it needs, leaving the scrollback alone.
 
 ### Solving to rects instead
 
@@ -409,7 +408,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     // ...
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     String cell = self.spinner.render();          // 1-cell image, in text
     tgp::InstId id = self.spinner.place(0, 0);    // absolute placement
     // ...
@@ -481,17 +480,20 @@ milktea automatically pushes the [kitty keyboard protocol](https://sw.kovidgoyal
 
 ---
 
-## View types
+## What view returns
 
-A view carries content; whether that content lands on the alternate screen is a
-program option, not a property of the view.
+`view` returns a node. Whether it lands on the alternate screen is a program
+option, not a property of the view.
 
-| Function | Content |
+| Node | Content |
 |----------|---------|
-| `milktea::view(s)` | A string, styled with glaze |
-| `milktea::cell_view(cells, w, h)` | A cell grid you own |
-| `buf.view()` | The grid inside an `xray::ScreenBuffer` |
-| `milktea::draw(root)` | A solved node tree |
+| `milktea::text(s)` | A string, styled with glaze |
+| `milktea::canvas(buf)` | The grid inside an `xray::ScreenBuffer` |
+| `milktea::grid(cells, w, h)` | A cell grid you own |
+| `milktea::vstack()`, `root()`, … | A tree of any of these |
+
+`canvas` and `grid` take an optional `milktea::ContentCursor`, relative to the
+grid's top left, for where the terminal cursor goes.
 
 Run full-screen by passing the option to `@run`:
 

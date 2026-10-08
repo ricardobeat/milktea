@@ -155,7 +155,7 @@ fn xray::Node* dialog_node(sz screen_w, String body, glaze::Style style) {
 	return milktea::text(text, style.with_width(bw)).center();
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	Theme th = theme();
 	sz w = milktea::screen_width();
 
@@ -184,5 +184,5 @@ fn milktea::View Model.view(&self) @dynamic {
 		modal = dialog_node(w, self.dialog.text(), th.dialog);
 	}
 
-	return milktea::draw(milktea::root().add(body).add(modal));
+	return milktea::root().add(body).add(modal);
 }

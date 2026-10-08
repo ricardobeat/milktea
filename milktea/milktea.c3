@@ -26,7 +26,7 @@ enum MouseMode : int {
 // Cursor represents a cursor on the terminal screen.
 // x, y are 0-indexed relative to the top-left corner of the View content.
 // color is an optional hex color string (e.g. "#ff6600"). Empty = terminal default.
-struct Cursor {
+struct Cursor @private {
 	sz x;
 	sz y;
 	CursorShape shape;
@@ -34,7 +34,9 @@ struct Cursor {
 	String color;
 }
 
-struct View {
+// View is one painted frame, as the renderer takes it: a cell grid or a
+// string, and where the terminal cursor goes.
+struct View @private {
 	String content;
 	Cursor cursor;
 	bool has_cursor;
@@ -45,24 +47,19 @@ struct View {
 }
 
 // view creates a View displaying the given string.
-//
-// Whether the string lands on the alternate screen or inline is a property of
-// the program: see Options.alt_screen and @run.
-fn View view(String content) {
+fn View view(String content) @private {
 	return { .content = content };
 }
 
 // cell_view creates a View backed by a caller-owned cell grid.
 //
-// The slice must stay alive until the frame is rendered; the usual owner is a
-// field on the model. For a grid held in an xray::ScreenBuffer, buf.view()
-// takes the geometry from the buffer itself.
-fn View cell_view(xray::Cell[] cells, sz width, sz height) {
+// The slice must stay alive until the frame is rendered.
+fn View cell_view(xray::Cell[] cells, sz width, sz height) @private {
 	return { .cells = cells, .cells_width = width, .cells_height = height };
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
-fn Cursor new_cursor(sz x, sz y) {
+fn Cursor new_cursor(sz x, sz y) @private {
 	return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
 }
 
@@ -188,7 +185,7 @@ struct Options {
 interface Model {
 	fn Cmd init();
 	fn Cmd update(Msg msg);
-	fn View view();
+	fn Node* view();
 	fn void on_mount() @optional;
 	fn void on_destroy() @optional;
 	fn void on_focus() @optional;
@@ -1624,7 +1621,10 @@ fn Msg repaint_msg() @local => {};
 fn void Program.render_current_view(Program* self) {
 	@pool() {
 		self.stamp_now();
-		View v = self.model.view();
+		// The alternate screen is the program's to fill; inline, the block is
+		// as tall as the tree.
+		Node* root = self.model.view();
+		View v = self.options.alt_screen ? draw(root) : draw_inline(root);
 		self.schedule_repaint(v.repaint_ms);
 		// Enable/disable mouse reporting when mouse_mode changes
 		if (self.want_mouse_mode != self.mouse_mode) {
