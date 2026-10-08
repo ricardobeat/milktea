@@ -173,8 +173,8 @@ fn void test_content_that_declines_the_cursor_is_ignored() @test {
 }
 
 fn void test_repaint_interval_is_the_smallest_requested() @test {
-	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).repaint_after(500))
-		.add(xray::content_node(fixed(0, 1)).repaint_after(80))
+	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).animate(2))
+		.add(xray::content_node(fixed(0, 1)).animate(12))
 		.add(xray::content_node(fixed(0, 1)));
 	r.solve(xray::new_rect(0, 0, 10, 3));
 
@@ -183,7 +183,7 @@ fn void test_repaint_interval_is_the_smallest_requested() @test {
 		sb.destroy();
 		mem::free(sb);
 	}
-	assert(sb.paint(r).repaint_ms == 80, "fastest node wins");
+	assert(sb.paint(r).repaint_ms == 83, "fastest node wins");
 }
 
 // An alpha-0 node is skipped by paint, but its repaint request must still be
@@ -192,7 +192,7 @@ fn void test_repaint_interval_is_the_smallest_requested() @test {
 fn void test_invisible_node_still_requests_repaint() @test {
 	xray::Node* r = xray::root()
 		.add(xray::content_node(fixed(2, 1)).width(xray::cells(2)).height(xray::cells(1)).at(1, 1)
-			.alpha(0).repaint_after(16));
+			.alpha(0).animate(60));
 	r.solve(xray::new_rect(0, 0, 10, 5));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 5);

@@ -83,7 +83,7 @@ fn xray::Node* animate(xray::Node* node, Motion motion, Tween* tw) {
 	// Ask for the next frame only while there is one to draw. paint() collects
 	// the smallest request in the tree and milktea::draw arms a single timer
 	// for it, so a settled animation costs nothing.
-	if (running) node.repaint_after((sz)FRAME_MS);
+	if (running) node.animate();
 
 	return node;
 }

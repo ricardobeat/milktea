@@ -380,11 +380,16 @@ fn Node* Node.alpha(&self, char a) {
 	return self;
 }
 
-// repaint_after asks the runtime to paint this tree again in ms milliseconds.
-// Content that animates on its own — a border cycling colors — calls this so
-// the app does not have to run a timer for it.
-fn Node* Node.repaint_after(&self, sz ms) {
-	self.repaint_ms = ms;
+// animate marks this node's content as changing over time, fps times a
+// second, so the runtime keeps painting it for as long as it is on screen.
+// Content that animates on its own — a spinner, a border cycling colors —
+// calls this so the app does not have to run a timer for it. fps <= 0 stops.
+fn Node* Node.animate(&self, sz fps = 60) {
+	if (fps <= 0) {
+		self.repaint_ms = 0;
+		return self;
+	}
+	self.repaint_ms = fps < 1000 ? 1000 / fps : 1;
 	return self;
 }
 

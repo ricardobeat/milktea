@@ -161,7 +161,9 @@ and `sz` is what the allocator and `read`/`write` already speak.
   points (`ThreadFn` is `fn int(void*)`), and anything an `extern fn` names.
   Cast at the boundary, in the call, not by widening the field.
 - **Colour channels** — `alpha`, `opacity`, and the RGB components.
-- **Rates and discriminants** — `fps`, `Msg.tag`.
+- **Discriminants** — `Msg.tag`.
+
+Rates are `sz` too: `Node.animate(fps)` takes whole frames per second.
 
 `WinSize` keeps `ushort`, because it is the real `struct winsize` from
 `TIOCGWINSZ`; `get_window_size()` widens once on the way out.

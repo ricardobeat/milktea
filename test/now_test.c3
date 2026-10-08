@@ -65,9 +65,9 @@ fn void test_now_outside_a_program_reads_the_live_clock() @test {
 
 // ── Tree repaints ────────────────────────────────────────────────────────────
 
-// A drawn tree whose root asks for a repaint every repaint_ms (0 = never).
+// A drawn tree whose root animates at fps (0 = not at all).
 struct RepaintModel {
-	sz repaint_ms;
+	sz fps;
 }
 
 fn milktea::Cmd RepaintModel.init(RepaintModel* self) @dynamic => null;
@@ -78,7 +78,7 @@ fn milktea::Cmd RepaintModel.update(RepaintModel* self, milktea::Msg msg) @dynam
 }
 
 fn milktea::View RepaintModel.view(RepaintModel* self) @dynamic {
-	return draw(root().add(text(glaze::style(), "tick")).repaint_after(self.repaint_ms));
+	return draw(root().add(text(glaze::style(), "tick")).animate(self.fps));
 }
 
 fn sz repaint_timers(Program* p) {
@@ -90,7 +90,7 @@ fn sz repaint_timers(Program* p) {
 }
 
 fn void test_tree_repaint_arms_one_timer() @test {
-	RepaintModel m = { .repaint_ms = 16 };
+	RepaintModel m = { .fps = 60 };
 	DString out = dstring::temp();
 	// Several keys render several frames; each re-arms rather than stacks.
 	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
@@ -99,7 +99,7 @@ fn void test_tree_repaint_arms_one_timer() @test {
 }
 
 fn void test_tree_without_repaint_arms_nothing() @test {
-	RepaintModel m = { .repaint_ms = 0 };
+	RepaintModel m = { .fps = 0 };
 	DString out = dstring::temp();
 	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
 	p.run()!!;

@@ -521,7 +521,7 @@ n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight);
 n.with_justify(j); n.with_align(a); n.with_gap(g);
 n.with_padding(top, right, bottom, left);
 n.place(j, a); n.at(x, y); n.center(); n.offset(dx, dy);
-n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.repaint_after(ms);
+n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.animate(fps = 60);
 n.on_click(handler, ctx); n.on_click_outside(handler, ctx);
 n.solve(area); n.rect(); n.child_rect(i); n.count();
 ```
