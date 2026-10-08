@@ -688,6 +688,19 @@ fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
 	return false;
 }
 
+// IDLE_WAIT is how long a frame with nothing to draw sleeps before looking
+// for input again.
+const double IDLE_WAIT = 1.0 / 120.0;
+
+// idle_wait stands in for a frame when nothing changed: it sleeps, then
+// polls. In that order, because the loop reads input at the top of the next
+// pass: polling first and sleeping after left every click and key waiting a
+// whole sleep before anything looked at it.
+fn void idle_wait() @local {
+	rl::wait_time(IDLE_WAIT);
+	rl::poll_input_events();
+}
+
 // write_screenshot captures the frame that was just drawn and writes it to
 // opts.screenshot_path as a PNG. On a HiDPI display the readback covers more
 // than the window's render area, with the frame in a corner of it, so the
@@ -1252,8 +1265,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				rl::unload_render_texture(shot_target);
 				break;
 			}
-			rl::poll_input_events();
-			rl::wait_time(1.0 / 60.0);
+			idle_wait();
 			continue;
 		}
 		g_dirty = false;
@@ -1275,9 +1287,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				break;
 			}
 			// begin/end_drawing normally does this for us; standing in for
-			// it keeps input flowing and the frame rate capped while idle.
-			rl::poll_input_events();
-			rl::wait_time(1.0 / 60.0);
+			// it keeps input flowing while idle.
+			idle_wait();
 			continue;
 		}
 		if (cell_count != prev_count) {
