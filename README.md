@@ -19,7 +19,7 @@ Milktea is part of a small family of libraries:
 | `glaze` | Styles, colors, borders, text layout |
 | `xray` | Cell grid, screen buffer, constraint solver |
 | `tgp` | Kitty-graphics images (see "Images with tgp") |
-| `xray::layout` | `vstack` / `hstack` layout helpers |
+| `xray::layout` | `vertical` / `horizontal` rect-splitting helpers |
 
 You only need to import what you use. A simple app needs just `milktea` and `glaze`.
 
@@ -265,7 +265,7 @@ view as a string:
 ```c3
 xray::Rect top, body, bottom;
 
-layout::vstack(layout::screen(w, h), {
+layout::vertical(layout::screen(w, h), {
     layout::slot(xray::cells(1),  &top),
     layout::slot(xray::fill(1),   &body),
     layout::slot(xray::cells(1),  &bottom),
@@ -519,8 +519,8 @@ The `examples/` directory has runnable demos for most features:
 | `counter` | Minimal TEA loop, key handling |
 | `spinner` | Timed ticks, custom messages |
 | `timer` | `boba::Timer` component, pause/resume |
-| `inputbox` | Layout with `vstack`, text input |
-| `split-editors` | `hstack`, multiple panes, tab focus |
+| `inputbox` | Layout with `layout::vertical`, text input |
+| `split-editors` | `layout_h`, multiple panes, tab focus |
 | `dos-app` | Complex nested layout, modals, menus |
 | `color-swatches` | Color spaces, mouse motion |
 | `doom-fire` | Fullscreen animation, cell-level rendering |

@@ -29,8 +29,8 @@ struct LayoutOptions {
 	sz gap;
 }
 
-// vstack solves constraints vertically and writes results into each slot.out.
-fn void vstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
+// vertical solves constraints vertically and writes results into each slot.out.
+fn void vertical(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
 	if (n > 64) n = 64;
@@ -45,8 +45,8 @@ fn void vstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	}
 }
 
-// hstack solves constraints horizontally and writes results into each slot.out.
-fn void hstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
+// horizontal solves constraints horizontally and writes results into each slot.out.
+fn void horizontal(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
 	if (n > 64) n = 64;

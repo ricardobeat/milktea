@@ -86,7 +86,7 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 
 	// Layout: textarea area (fill) + one-line status bar.
 	xray::Rect editor_r, status_r;
-	layout::vstack(layout::screen(w, h), {
+	layout::vertical(layout::screen(w, h), {
 		layout::slot(layout::fill(1), &editor_r),
 		layout::slot(layout::cells(1),  &status_r),
 	});

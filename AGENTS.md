@@ -14,7 +14,7 @@ User-facing docs cover the API in depth — this file only adds what they don't:
 | images (kitty graphics) | `README.md` → "Images with tgp" |
 | model/update/view/main skeleton | `README.md` → "The model", "init", "update", "view", "main" |
 | styling, colors, borders | `README.md` → "Styling with glaze" |
-| splitting the screen (`vstack`/`hstack`) | `README.md` → "Layout with xray::layout" |
+| splitting the screen (`layout::vertical`/`horizontal`) | `README.md` → "Layout with xray::layout" |
 | walkthrough | `TUTORIAL.md` (builds a pomodoro timer step by step) |
 | internals (event loop, render pipeline) | `ARCHITECTURE.md` |
 
@@ -56,7 +56,7 @@ README → "Styling with glaze".
 Two independent tools that compose.
 
 **Layout** — solves constraints against a `Rect`. The ergonomic wrapper
-(`vstack`/`hstack`, `slot()`, `LayoutOptions.gap`, `layout::screen()`) is
+(`vertical`/`horizontal`, `slot()`, `LayoutOptions.gap`, `layout::screen()`) is
 documented in README → "Layout with xray::layout". The raw splitters and
 constraint kinds, which README doesn't cover, live in `xray/layout.c3`:
 

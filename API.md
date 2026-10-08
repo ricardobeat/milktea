@@ -520,7 +520,7 @@ xray::layout_h_gap(area, cs[..], 1, out[..]);
 
 ```c3
 xray::Rect top, body, bottom;
-layout::vstack(layout::screen(w, h), {
+layout::vertical(layout::screen(w, h), {
     layout::slot(layout::cells(1), &top),
     layout::slot(layout::fill(1),  &body),
     layout::slot(layout::cells(1), &bottom),
@@ -528,7 +528,7 @@ layout::vstack(layout::screen(w, h), {
 ```
 
 `screen(w, h)` is `new_rect(0, 0, w, h)`. Constraint shorthands here are
-`cells`, `fill`, `percent`, `min`, `max`. `hstack` is the horizontal twin.
+`cells`, `fill`, `percent`, `min`, `max`. `horizontal` is the horizontal twin.
 
 ## Node tree
 

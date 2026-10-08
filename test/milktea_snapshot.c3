@@ -12,7 +12,7 @@ fn void test_snap_vstack_basic() @test {
 	xray::Rect area = xray::new_rect(0, 0, 40, 10);
 
 	xray::Rect r0, r1;
-	layout::vstack(area, {
+	layout::vertical(area, {
 		layout::slot(layout::cells(3),    &r0),
 		layout::slot(layout::fill(1),   &r1),
 	});
@@ -30,7 +30,7 @@ fn void test_snap_hstack_basic() @test {
 	xray::Rect area = xray::new_rect(0, 0, 60, 3);
 
 	xray::Rect r0, r1;
-	layout::hstack(area, {
+	layout::horizontal(area, {
 		layout::slot(layout::cells(20),   &r0),
 		layout::slot(layout::fill(1),   &r1),
 	});
@@ -48,7 +48,7 @@ fn void test_snap_vstack_with_border() @test {
 	xray::Rect area = xray::new_rect(0, 0, 40, 12);
 
 	xray::Rect r0, r1, r2;
-	layout::vstack(area, {
+	layout::vertical(area, {
 		layout::slot(layout::cells(1),    &r0),
 		layout::slot(layout::fill(1),   &r1),
 		layout::slot(layout::cells(1),    &r2),
@@ -71,7 +71,7 @@ fn void test_snap_hstack_three_cols() @test {
 	xray::Rect area = xray::new_rect(0, 0, 60, 3);
 
 	xray::Rect r0, r1, r2;
-	layout::hstack(area, {
+	layout::horizontal(area, {
 		layout::slot(layout::cells(15),   &r0),
 		layout::slot(layout::fill(2),   &r1),
 		layout::slot(layout::fill(1),   &r2),

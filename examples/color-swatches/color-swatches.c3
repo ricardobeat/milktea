@@ -178,7 +178,7 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	xray::Rect r00, r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11;
 	xray::Rect r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22;
-	layout::vstack(area, {
+	layout::vertical(area, {
 		layout::slot(layout::cells(1), &r00),
 		layout::slot(layout::cells(1), &r01),
 		layout::slot(layout::cells(1), &r02),
