@@ -370,6 +370,7 @@ t.update(target);    // run to target from wherever it is now (in update())
 t.value();           // where it is now (in view())
 t.moving();          // false once it arrives
 t.settles_at();      // when it arrives, on the frame_ms() clock
+t.showing();         // over 0..1: on its way in, in, or still on its way out
 t.set(value);        // jump, no animation
 t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha(); // over 0..1
 ```

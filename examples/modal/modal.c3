@@ -23,7 +23,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		case milktea::KeyCode.CTRL_C:
 			return milktea::quit();
 		case milktea::KeyCode.ESC:
-			// Head back from wherever it is, so a half-open modal closes
+			// Turn around from wherever it is, so a half-open modal closes
 			// from half-way rather than jumping.
 			self.anim.update(0);
 		case milktea::KeyCode.RUNE:
@@ -49,7 +49,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	};
 
 	xray::Node* dialog = null;
-	if (self.anim.value() > 0) {
+	if (self.anim.showing()) {
 		dialog = milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
 			.shadow(milktea::shadow(1, 1, 160, blur: 2, half_blocks: true)
 				.with_color(glaze::color_hex("#05050c")))

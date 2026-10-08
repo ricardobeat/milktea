@@ -152,6 +152,23 @@ fn void test_a_new_target_mid_flight_carries_on_from_there() @test {
 	assert_near(tw.value_at(1100), 12.5, 0.0001, "halfway from 5 to 20");
 }
 
+fn void test_showing_lasts_until_it_comes_to_rest_at_zero() @test {
+	// Outside a program showing() reads the live clock, so each run is placed
+	// well clear of it: one long enough to still be going, one long finished.
+	sz now = milktea::frame_ms();
+	Tween tw = milktea::tween(0, 100_000, Easing.LINEAR);
+	assert(!tw.showing(), "resting at 0 is hidden");
+	tw.update_at(1, now);
+	assert(tw.showing(), "on its way in");
+	tw.set_at(1, now);
+	assert(tw.showing(), "in");
+	tw.update_at(0, now);
+	assert(tw.showing(), "still on its way out");
+	tw = milktea::tween(1, 100, Easing.LINEAR);
+	tw.update_at(0, now - 10_000);
+	assert(!tw.showing(), "gone once it lands");
+}
+
 fn void test_set_jumps() @test {
 	Tween tw = milktea::tween(0, 100, Easing.LINEAR);
 	tw.update_at(1, 1000);

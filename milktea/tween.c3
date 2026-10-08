@@ -20,7 +20,7 @@ import dye;
 //     if (key == ' ') self.open.update(self.open.target == 0 ? 1 : 0);
 //
 //     // view()
-//     if (self.open.value() > 0) ... .transition(slide_down(5), self.open)
+//     if (self.open.showing()) ... .transition(slide_down(5), self.open)
 //
 // The plain calls read the frame clock, frame_ms(). Each has an _at twin
 // taking the time explicitly, for tests and for code running outside a
@@ -149,6 +149,11 @@ fn bool Tween.moving_at(self, sz now_ms) => now_ms < self.settles_at();
 
 // settles_at is when the current run ends, on the frame_ms() clock.
 fn sz Tween.settles_at(self) => self.start_ms + self.run_ms;
+
+// showing reports whether whatever a tween over 0..1 presents is on screen:
+// on its way in, in, or still on its way out. Only a tween resting at 0 is
+// hidden.
+fn bool Tween.showing(self) => self.target != 0 || self.moving();
 
 // The helpers below map a tween running over 0..1 onto other ranges.
 
