@@ -606,7 +606,7 @@ fn void test_layout_h_gap() @test {
 
 fn void test_layout_h_max() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { at_most(5), fill(1) };
+	Constraint[2] constraints = { max(5), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w <= 5);
@@ -616,7 +616,7 @@ fn void test_layout_h_max() @test {
 
 fn void test_layout_h_min() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { at_least(8), fill(1) };
+	Constraint[2] constraints = { min(8), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w >= 8);
@@ -637,7 +637,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 	// A lone CMAX child used to swallow the entire axis: pass 2 clamped it to
 	// the cap, then the remainder loop handed the slack straight back.
 	Rect[1] out;
-	Constraint[1] constraints = { at_most(5) };
+	Constraint[1] constraints = { max(5) };
 	layout_h(new_rect(0, 0, 80, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 5);
@@ -646,7 +646,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 fn void test_layout_all_max_respect_caps() @test {
 	// With every child capped, the last one absorbed all the leftover space.
 	Rect[3] out;
-	Constraint[3] constraints = { at_most(2), at_most(2), at_most(2) };
+	Constraint[3] constraints = { max(2), max(2), max(2) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 2);
@@ -657,7 +657,7 @@ fn void test_layout_all_max_respect_caps() @test {
 fn void test_layout_max_then_len_respects_cap() @test {
 	// A zero-length trailing child must not let the CMAX child grow past its cap.
 	Rect[2] out;
-	Constraint[2] constraints = { at_most(20), cells(0) };
+	Constraint[2] constraints = { max(20), cells(0) };
 	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 20);
@@ -667,7 +667,7 @@ fn void test_layout_min_stays_inside_area() @test {
 	// Oversubscribed CMIN children used to be emitted at their full requested
 	// size, putting the second rect's right edge at 80 in a 30-wide area.
 	Rect[2] out;
-	Constraint[2] constraints = { at_least(40), at_least(40) };
+	Constraint[2] constraints = { min(40), min(40) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w + out[1].w <= 30);
@@ -687,7 +687,7 @@ fn void test_layout_fill_consumes_full_axis() @test {
 fn void test_layout_vertical_stays_inside_area() @test {
 	// Same invariant on the vertical axis, including the gap accounting.
 	Rect[3] out;
-	Constraint[3] constraints = { at_most(4), fill(1), at_least(50) };
+	Constraint[3] constraints = { max(4), fill(1), min(50) };
 	layout_v_gap(new_rect(0, 0, 20, 24), constraints[..], 1, out[..]);
 
 	assert(out[0].h <= 4);
@@ -1493,12 +1493,12 @@ fn void test_absolute_diff_column_accounts_for_wide_glyphs() @test {
 }
 
 fn void test_layout_min_alone_absorbs_leftover_space() @test {
-	// A lone at_least(n) with no fill/max sibling has nothing else to claim
+	// A lone min(n) with no fill/max sibling has nothing else to claim
 	// the leftover space, so it should grow to fill it — otherwise it just
 	// leaves a gap, which is what the old (broken) "CMIN is always fixed"
 	// semantics did.
 	Rect[1] out;
-	Constraint[1] constraints = { at_least(8) };
+	Constraint[1] constraints = { min(8) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w == 20);

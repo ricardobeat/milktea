@@ -338,7 +338,7 @@ turns true.
 alias Node, Rect, Content, ContentCursor, Shadow, InnerShadow, Constraint;
 alias component = xray::content_node;
 alias root, vstack, hstack, zstack, shadow, inner_shadow;
-alias cells, fill, percent, at_least, at_most;
+alias cells, fill, percent, min, max;
 const START, CENTER, END, BETWEEN, AROUND, EVENLY;      // JustifyContent
 const STRETCH, ALIGN_START, ALIGN_CENTER, ALIGN_END;    // AlignItems
 fn Node* text(glaze::Style style, String s);
@@ -501,8 +501,8 @@ r.right(); r.bottom(); r.contains(px, py);
 r.inset(left, top, right, bottom);
 ```
 
-`Constraint` kinds: `cells(n)`, `fill(weight)`, `percent(p)`, `at_least(n)`,
-`at_most(n)`, `fit(measure, ctx)`, `min_fit(n, ...)`, `max_fit(n, ...)`,
+`Constraint` kinds: `cells(n)`, `fill(weight)`, `percent(p)`, `min(n)`,
+`max(n)`, `fit(measure, ctx)`, `min_fit(n, ...)`, `max_fit(n, ...)`,
 `range_fit(lo, hi, ...)`.
 
 Raw splitters write into a caller-supplied array:

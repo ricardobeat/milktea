@@ -46,8 +46,8 @@ alias inner_shadow = xray::inner_shadow;
 alias cells    = xray::cells;
 alias fill     = xray::fill;
 alias percent  = xray::percent;
-alias at_least = xray::at_least;
-alias at_most  = xray::at_most;
+alias min      = xray::min;
+alias max      = xray::max;
 
 // Alignment constants, named for what they do to a node rather than for the
 // axis they act on.

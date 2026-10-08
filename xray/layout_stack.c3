@@ -8,8 +8,8 @@ import xray;
 fn xray::Constraint cells(sz n)     => xray::cells(n);
 fn xray::Constraint fill(sz weight) => xray::fill(weight);
 fn xray::Constraint percent(sz p)   => xray::percent(p);
-fn xray::Constraint min(sz n)       => xray::at_least(n);
-fn xray::Constraint max(sz n)       => xray::at_most(n);
+fn xray::Constraint min(sz n)       => xray::min(n);
+fn xray::Constraint max(sz n)       => xray::max(n);
 
 // screen returns a Rect covering the full terminal at (0,0).
 fn xray::Rect screen(sz w, sz h) => xray::new_rect(0, 0, w, h);

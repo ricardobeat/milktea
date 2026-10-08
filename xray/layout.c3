@@ -58,11 +58,11 @@ fn Constraint cells(sz n) {
 	return { .kind = ConstraintKind.CLEN, .value = n };
 }
 
-fn Constraint at_least(sz n) {
+fn Constraint min(sz n) {
 	return { .kind = ConstraintKind.CMIN, .value = n };
 }
 
-fn Constraint at_most(sz n) {
+fn Constraint max(sz n) {
 	return { .kind = ConstraintKind.CMAX, .value = n };
 }
 
@@ -79,7 +79,7 @@ fn Constraint fit(MeasureFn measure, void* ctx) {
 }
 
 // min_fit is fit(), floored: content grows the size past n, but never below
-// it. Where at_least(n) has no content to grow toward at all — a bare
+// it. Where min(n) has no content to grow toward at all — a bare
 // number can only ever fall back to whatever leftover space nothing else
 // on the axis claims — this measures a real Content/child tree (the same
 // machinery fit() uses) and floors that measurement, the CSS min-width
@@ -252,7 +252,7 @@ fn sz layout_axis_cross(sz total, sz gap, sz cross, Constraint[] cs, sz[] out_si
 
 	// Distribute any remainder to the last fill child — or, when nothing on
 	// the axis has a real grow factor at all, to the last CMIN child, so an
-	// at_least(n) row with no fill() sibling still absorbs slack instead of
+	// min(n) row with no fill() sibling still absorbs slack instead of
 	// leaving a gap. Real flex-grow always wins when both are present: a
 	// min-width item does not expand just because it has a floor, only
 	// because nothing else claimed the space (same as CSS/ratatui).
@@ -290,7 +290,7 @@ fn sz layout_axis_cross(sz total, sz gap, sz cross, Constraint[] cs, sz[] out_si
 	// Copy to output, clamping the running total to the axis budget. Fixed
 	// constraints (CLEN/CMIN/CPERCENT/CFIT) are individually capped at
 	// `available` but can still oversubscribe it collectively — e.g. two
-	// at_least(40) children in a 30-wide area. Truncating here keeps the
+	// min(40) children in a 30-wide area. Truncating here keeps the
 	// caller's invariant that every returned rect lies inside `area`, so
 	// downstream drawing never runs past the parent.
 	sz used = 0;

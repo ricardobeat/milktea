@@ -290,7 +290,7 @@ The constraint vocabulary:
 | `cells(n)`   | exactly `n` cells |
 | `fill(w)`    | share the leftover space, weighted by `w` |
 | `percent(p)` | `p`% of the available space |
-| `at_least(n)` / `at_most(n)` | clamp to a bound |
+| `min(n)` / `max(n)` | clamp to a bound |
 
 `with_gap(1)` puts a column between the two panels. Without it their borders
 sit flush and the sidebar's right edge is overwritten — a gap is the layout's

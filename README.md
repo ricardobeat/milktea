@@ -230,8 +230,8 @@ Containers take `.with_gap(n)`, `.with_padding(top, right, bottom, left)`,
 ```c3
 milktea::cells(n)     // exactly n cells
 milktea::percent(p)   // percentage of the parent
-milktea::at_least(n)  // at least n cells
-milktea::at_most(n)   // at most n cells
+milktea::min(n)       // at least n cells
+milktea::max(n)       // at most n cells
 ```
 
 `.fill(weight)` divides whatever space is left over among siblings.
