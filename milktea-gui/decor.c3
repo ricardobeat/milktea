@@ -503,7 +503,18 @@ fn void decor_cache_clear() @local {
 }
 
 // decor_draw composites one decoration at its place in the paint stream.
+// decor_invisible reports a decoration that would draw nothing: a clear solid
+// fill with no border or shadow. Apps use one to have a node's text painted
+// with a clear background (see xray's decorated content), and skipping it
+// keeps those from filling the texture cache.
+fn bool decor_invisible(xray::Decoration d) @local {
+	if (d.kind != xray::DecorationKind.SOLID || d.shadow || d.inner_shadow) return false;
+	if (d.border > 0.0f && decor_rgba(d.border_color).a > 0.0f) return false;
+	return decor_rgba(d.color).a <= 0.0f;
+}
+
 fn void decor_draw(xray::Decoration d, GuiOptions opts, int width, int height) {
+	if (decor_invisible(d)) return;
 	decor_ensure(width, height,
 		rl::get_window_scale_dpi().x);
 	if (!decor_available()) return;

@@ -102,6 +102,13 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	// also sits at alpha 0, and it must still ask for the next frame.
 	if (n.alpha_value == 0) return;
 
+	// The cursor is drawn after everything else (see draw_cursor), so a node
+	// painted later over the cursor's cell — a menu, a dialog — has to take it
+	// away, or it would show on top of whatever covers the text it sits in.
+	if (res.cursor.has_cursor && n.paints() && n.covers_cell(res.cursor.x, res.cursor.y)) {
+		res.cursor.has_cursor = false;
+	}
+
 	// The shadow goes down first so the content lands on top of it. A node's
 	// alpha scales the shadow along with the content: they are one object, so
 	// a half-faded panel casting a solid shadow would read as two.
@@ -221,4 +228,23 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 			self.dirty_lines[dy] = true;
 		}
 	}
+}
+// paints reports whether a node puts anything on screen of its own, as
+// opposed to only laying out its children.
+fn bool Node.paints(&self) @local {
+	return self.content != null || self.decoration.kind != DecorationKind.NONE;
+}
+
+// covers_cell reports whether any part of the node's solved rect falls in the
+// grid cell (cx, cy). In a GUI the rect is in pixels and need not be aligned
+// to the grid, so a partial overlap counts.
+fn bool Node.covers_cell(&self, sz cx, sz cy) @local {
+	Rect r = self.computed_rect;
+	sz uw = self.layout_metrics.unit_w();
+	sz uh = self.layout_metrics.unit_h();
+	sz x0 = floor_cell(r.x, uw);
+	sz y0 = floor_cell(r.y, uh);
+	sz x1 = -floor_cell(-(r.x + r.w), uw);
+	sz y1 = -floor_cell(-(r.y + r.h), uh);
+	return cx >= x0 && cx < x1 && cy >= y0 && cy < y1;
 }
