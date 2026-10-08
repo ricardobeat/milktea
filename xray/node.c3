@@ -194,8 +194,8 @@ struct Node {
 fn Node* new_node(NodeDirection dir) @local {
 	Node* n = mem::tnew(Node);
 	n.alpha_value = 255; // opaque is the default; 0 means fully invisible
-	n.size_w = fill(1);
-	n.size_h = fill(1);
+	n.size_w = { .kind = ConstraintKind.CAUTO };
+	n.size_h = { .kind = ConstraintKind.CAUTO };
 	n.direction = dir;
 	n.justify = JustifyContent.JUSTIFY_START;
 	n.align = AlignItems.ALIGN_STRETCH;
@@ -248,13 +248,34 @@ fn Node* Node.add_content(&self, Content c) {
 // so a caller does not have to remember which is which for the container it
 // is in. In a column, height is the main axis and width the cross axis; in a
 // row it is the other way around.
+//
+// A node with neither set follows CSS flexbox: in a row or column it is as
+// big as its content along the main axis and stretches across the other, and
+// in a stack it fills the whole layer.
 fn Node* Node.width(&self, Constraint c) {
-	self.size_w = c;
+	self.size_w = self.own_measure(c, true);
 	return self;
 }
 
 fn Node* Node.height(&self, Constraint c) {
-	self.size_h = c;
+	self.size_h = self.own_measure(c, false);
+	return self;
+}
+
+// own_measure points a fit() constraint, which carries no measure of its own,
+// at this node, so it measures the node's content.
+fn Constraint Node.own_measure(&self, Constraint c, bool width) @local {
+	if (c.kind == ConstraintKind.CFIT && c.measure == null) {
+		c.measure = width ? &node_measure_w : &node_measure_h;
+		c.ctx = self;
+	}
+	return c;
+}
+
+// fit sizes this node to its content on both axes: the opposite of fill.
+fn Node* Node.fit(&self) {
+	self.size_w = measured(&node_measure_w, self);
+	self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
@@ -264,12 +285,12 @@ fn Node* Node.height(&self, Constraint c) {
 // panel whose natural size should usually win but that would look cramped
 // below some width — a modal with a one-word body, say.
 fn Node* Node.min_width(&self, sz n) {
-	self.size_w = min_fit(n, &node_measure_w, self);
+	self.size_w = min_measured(n, &node_measure_w, self);
 	return self;
 }
 
 fn Node* Node.min_height(&self, sz n) {
-	self.size_h = min_fit(n, &node_measure_h, self);
+	self.size_h = min_measured(n, &node_measure_h, self);
 	return self;
 }
 
@@ -313,10 +334,9 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 	self.justify = j;
 	self.align = a;
 	// Fit only the axes the caller has not already sized, so .width(30) before
-	// .center() survives and only the height is measured. An axis still set to
-	// the default fill has nothing to preserve.
-	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
-	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
+	// .center() survives and only the height is measured.
+	if (self.size_w.kind == ConstraintKind.CAUTO) self.size_w = measured(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CAUTO) self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
@@ -331,8 +351,8 @@ fn Node* Node.at(&self, sz x, sz y) {
 	self.offset_x = x;
 	self.offset_y = y;
 	self.pinned = true;
-	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
-	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
+	if (self.size_w.kind == ConstraintKind.CAUTO) self.size_w = measured(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CAUTO) self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 

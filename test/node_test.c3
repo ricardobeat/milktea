@@ -85,6 +85,67 @@ fn void test_hstack_divides_cross_axis() @test {
 	assert(right.got.h == 4, "full height");
 }
 
+// solve_and_paint lays r out in a w×h area and paints it, so each Fixed in it
+// records the rect it got.
+fn void solve_and_paint(xray::Node* r, sz w, sz h) {
+	r.solve(xray::new_rect(0, 0, w, h));
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(w, h);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+}
+
+fn void test_column_child_defaults_to_its_content_height_and_full_width() @test {
+	Fixed* a = fixed(5, 2);
+	Fixed* b = fixed(3, 1);
+	solve_and_paint(xray::vstack().add(xray::content_node(a)).add(xray::content_node(b)), 20, 10);
+
+	assert(a.got.h == 2 && b.got.h == 1, "as tall as their content, got %d and %d", a.got.h, b.got.h);
+	assert(b.got.y == 2, "packed at the top, got %d", b.got.y);
+	assert(a.got.w == 20 && b.got.w == 20, "stretched across");
+}
+
+fn void test_row_child_defaults_to_its_content_width_and_full_height() @test {
+	Fixed* a = fixed(5, 2);
+	solve_and_paint(xray::hstack().add(xray::content_node(a)), 20, 10);
+
+	assert(a.got.w == 5, "as wide as its content, got %d", a.got.w);
+	assert(a.got.h == 10, "stretched down, got %d", a.got.h);
+}
+
+fn void test_unstretched_column_child_is_its_content_width() @test {
+	Fixed* a = fixed(5, 2);
+	solve_and_paint(xray::vstack().with_align(xray::AlignItems.ALIGN_CENTER).add(xray::content_node(a)), 21, 10);
+
+	assert(a.got.w == 5, "content width, got %d", a.got.w);
+	assert(a.got.x == 8, "centred across, got %d", a.got.x);
+}
+
+fn void test_stack_child_defaults_to_filling_the_layer() @test {
+	Fixed* bg = fixed(5, 2);
+	solve_and_paint(xray::zstack().add(xray::content_node(bg)), 20, 10);
+
+	assert(bg.got.w == 20 && bg.got.h == 10, "fills, got %dx%d", bg.got.w, bg.got.h);
+}
+
+fn void test_fit_sizes_a_stack_child_to_its_content() @test {
+	Fixed* box = fixed(5, 2);
+	solve_and_paint(xray::root().add(xray::content_node(box).fit()), 20, 10);
+
+	assert(box.got.w == 5 && box.got.h == 2, "content size, got %dx%d", box.got.w, box.got.h);
+	assert(box.got.x == 0 && box.got.y == 0, "at the top left");
+}
+
+fn void test_fit_constraint_measures_one_axis() @test {
+	Fixed* box = fixed(5, 2);
+	solve_and_paint(xray::root().add(xray::content_node(box).width(xray::fit())), 20, 10);
+
+	assert(box.got.w == 5, "content width, got %d", box.got.w);
+	assert(box.got.h == 10, "the other axis still fills, got %d", box.got.h);
+}
+
 fn void test_nested_stacks_solve_through() @test {
 	Fixed* body = fixed(0, 0);
 

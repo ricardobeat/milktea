@@ -232,11 +232,15 @@ milktea::cells(n)     // exactly n cells
 milktea::percent(p)   // percentage of the parent
 milktea::min(n)       // at least n cells
 milktea::max(n)       // at most n cells
+milktea::fit()        // as big as its content
 ```
 
-`.fill(weight)` divides whatever space is left over among siblings.
-`.center()` sizes a node to its content and puts it in the middle of its
-parent. A node given neither fills.
+A node given no size follows CSS flexbox. In a `vstack` or `hstack` it is as
+big as its content along the stack and stretches across it; in a `zstack` or
+`root` it fills the whole layer. `.fill(weight)` makes a node grow into the
+space left over, divided among its siblings by weight, and `.fit()` is the
+opposite: as big as its content on both axes. `.center()` sizes a node to its
+content and puts it in the middle of its parent.
 
 ### Components
 

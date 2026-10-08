@@ -177,8 +177,8 @@ fn milktea::View Model.view(&self) @dynamic {
 	String title = "\x1b[1;37m  CURSOR GALLERY\x1b[0m  \x1b[2;37m tab/shift+tab · q quit\x1b[0m";
 
 	milktea::Node* body = milktea::hstack().with_gap(COL_GAP);
-	body.add(self.column(0));
-	body.add(self.column(N / 2));
+	body.add(self.column(0).fill(1));
+	body.add(self.column(N / 2).fill(1));
 
 	return milktea::draw(milktea::root()
 		.add(milktea::vstack()

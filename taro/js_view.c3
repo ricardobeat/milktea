@@ -436,7 +436,7 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 				BoxMeasureCtx* ctx = mem::tnew(BoxMeasureCtx);
 				ctx.rt = rt;
 				ctx.vnode = child;
-				return xray::fit(&_measure_box_height, ctx);
+				return xray::measured(&_measure_box_height, ctx);
 			}
 			return xray::cells(1);
 		}
@@ -459,7 +459,7 @@ fn xray::Constraint child_constraint(Runtime* rt, void* child, bool is_col, xray
 				BoxMeasureCtx* ctx = mem::tnew(BoxMeasureCtx);
 				ctx.rt = rt;
 				ctx.vnode = child;
-				return xray::fit(&_measure_box_height, ctx);
+				return xray::measured(&_measure_box_height, ctx);
 			}
 		}
 	}

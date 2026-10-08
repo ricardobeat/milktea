@@ -142,9 +142,14 @@ fn void Node.solve(&self, Rect area) {
 	Rect[MAX_NODE_CHILDREN] child_rects;
 
 	// The main axis belongs to the parent, so it picks which of each child's
-	// two constraints applies along it.
+	// two constraints applies along it. A child with no size of its own is as
+	// big as its content along it.
 	for (sz i = 0; i < cc; i++) {
-		constraints[i] = row ? self.children[i].size_w : self.children[i].size_h;
+		Node* child = self.children[i];
+		constraints[i] = row ? child.size_w : child.size_h;
+		if (constraints[i].kind == ConstraintKind.CAUTO) {
+			constraints[i] = row ? measured(&node_measure_w, child) : measured(&node_measure_h, child);
+		}
 	}
 
 	if (row) {
@@ -178,8 +183,19 @@ fn void Node.solve(&self, Rect area) {
 	sz cross_origin = row ? inner.y : inner.x;
 
 	for (sz i = 0; i < cc; i++) {
-		Constraint cross = row ? self.children[i].size_h : self.children[i].size_w;
+		Node* child     = self.children[i];
+		Constraint cross = row ? child.size_h : child.size_w;
 		sz main_size    = row ? child_rects[i].w : child_rects[i].h;
+
+		// With no cross size of its own a child stretches, as in CSS; under
+		// any other alignment it is as big as its content instead.
+		if (cross.kind == ConstraintKind.CAUTO) {
+			if (self.align == AlignItems.ALIGN_STRETCH) {
+				cross = fill(1);
+			} else {
+				cross = row ? measured(&node_measure_h, child) : measured(&node_measure_w, child);
+			}
+		}
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
 		// for a specific cross size still gets it — otherwise .with_width(30)

@@ -504,8 +504,9 @@ r.inset(left, top, right, bottom);
 ```
 
 `Constraint` kinds: `cells(n)`, `fill(weight)`, `percent(p)`, `min(n)`,
-`max(n)`, `fit(measure, ctx)`, `min_fit(n, ...)`, `max_fit(n, ...)`,
-`range_fit(lo, hi, ...)`.
+`max(n)`, `fit()` (a node's content size), and for rect splitting with no node
+to measure, `measured(measure, ctx)`, `min_measured(n, ...)`,
+`max_measured(n, ...)`, `range_measured(lo, hi, ...)`.
 
 Raw splitters write into a caller-supplied array:
 
@@ -537,7 +538,7 @@ layout::vertical(layout::screen(w, h), {
 ```c3
 Node* n = xray::vstack();   // or hstack(), zstack(), root(), content_node(c)
 n.add(child); n.add_content(c);
-n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight);
+n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight); n.fit();
 n.with_justify(j); n.with_align(a); n.with_gap(g);
 n.with_padding(top, right, bottom, left);
 n.place(j, a); n.at(x, y); n.center(); n.offset(dx, dy);
@@ -545,6 +546,10 @@ n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.animate(fps = 60);
 n.on_click(handler, ctx); n.on_click_outside(handler, ctx);
 n.solve(area); n.rect(); n.child_rect(i); n.count();
 ```
+
+A node with no width or height is as big as its content along a row or
+column and stretches across it (or, under any alignment but `ALIGN_STRETCH`,
+is its content size there too); in a stack it fills the layer.
 
 `JustifyContent`: `JUSTIFY_START/CENTER/END/SPACE_BETWEEN/SPACE_AROUND/SPACE_EVENLY`.
 `AlignItems`: `ALIGN_STRETCH/START/CENTER/END`. `MAX_NODE_CHILDREN` is 32.

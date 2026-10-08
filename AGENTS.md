@@ -61,16 +61,16 @@ documented in README → "Layout with xray::layout". The raw splitters and
 constraint kinds, which README doesn't cover, live in `xray/layout.c3`:
 
 ```c3
-Constraint[3] cs = { constraint_len(1), constraint_fill(1), constraint_len(1) };
+Constraint[3] cs = { cells(1), fill(1), cells(1) };
 Rect[3] out;
 layout_v(area, cs[..], out[..]);        // vertical split
 layout_h(area, cs[..], out[..]);        // horizontal split
 layout_v_gap(area, cs[..], 1, out[..]); // with 1-row gap
 ```
 
-Constraint kinds: `constraint_len(n)` fixed, `constraint_fill(w)` weighted fill,
-`constraint_percent(p)`, `constraint_min(n)`, `constraint_max(n)`,
-`constraint_fit(measure, ctx)` sized by a measure callback.
+Constraint kinds: `cells(n)` fixed, `fill(w)` weighted fill, `percent(p)`,
+`min(n)`, `max(n)`, `fit()` a node's content size, `measured(measure, ctx)`
+sized by a measure callback.
 
 For flexbox-style nested trees use `FlexNode`: `flex_row()` / `flex_col()` with
 `.with_direction/.with_justify/.with_align/.with_gap/.with_padding/.with_main_size/
