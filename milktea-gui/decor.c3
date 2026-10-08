@@ -94,6 +94,7 @@ DecorPainter g_decor @local;
 fn bool decor_available() => g_decor.ready;
 
 fn void decor_shutdown() {
+	decor_cache_clear();
 	if (g_decor.texture.id != 0) {
 		rl::unload_texture(g_decor.texture);
 		g_decor.texture = { };
@@ -166,13 +167,56 @@ fn void decor_ensure(int width, int height, float scale) {
 	decor_init(width, height, scale);
 }
 
-// decor_begin clears the surface to fully transparent, ready for this frame's
-// decorations.
-fn void decor_begin() {
+// DecorRegion is the part of the surface one decoration can touch, in device
+// pixels. Clearing, converting and uploading only that much is what keeps a
+// decoration cheap: the surface is the whole window at device scale, and
+// doing the full thing per decoration cost tens of milliseconds a frame.
+struct DecorRegion {
+	int x;
+	int y;
+	int w;
+	int h;
+}
+
+// decor_region is the device-pixel box decor_paint can reach for d: its rect
+// grown by the shadow's offset and blur, plus a little for antialiasing,
+// clamped to the surface. An empty box (w or h 0) means nothing to draw.
+fn DecorRegion decor_region(xray::Decoration d) {
+	float s = g_decor.scale;
+	float x0 = (float)d.rect.x * s;
+	float y0 = (float)d.rect.y * s;
+	float x1 = x0 + (float)d.rect.w * s;
+	float y1 = y0 + (float)d.rect.h * s;
+	if (d.shadow) {
+		float blur = d.shadow_blur * s;
+		float dx = d.shadow_dx * s;
+		float dy = d.shadow_dy * s;
+		if (x0 + dx - blur < x0) x0 = x0 + dx - blur;
+		if (y0 + dy - blur < y0) y0 = y0 + dy - blur;
+		if (x1 + dx + blur > x1) x1 = x1 + dx + blur;
+		if (y1 + dy + blur > y1) y1 = y1 + dy + blur;
+	}
+	int ix0 = (int)x0 - 2;
+	int iy0 = (int)y0 - 2;
+	int ix1 = (int)x1 + 3;
+	int iy1 = (int)y1 + 3;
+	if (ix0 < 0) ix0 = 0;
+	if (iy0 < 0) iy0 = 0;
+	if (ix1 > g_decor.width) ix1 = g_decor.width;
+	if (iy1 > g_decor.height) iy1 = g_decor.height;
+	if (ix1 <= ix0 || iy1 <= iy0) return { };
+	return { ix0, iy0, ix1 - ix0, iy1 - iy0 };
+}
+
+// decor_begin clears the region of the surface to fully transparent, ready
+// for a decoration painted inside it.
+fn void decor_begin(DecorRegion r) {
 	if (!g_decor.ready) return;
 	char* data = plutovg_surface_get_data(g_decor.surface);
 	int stride = plutovg_surface_get_stride(g_decor.surface);
-	mem::set(data, 0, (sz)stride * g_decor.height);
+	for (int y = r.y; y < r.y + r.h; y++) {
+		mem::set(data + (sz)y * stride + (sz)r.x * 4, 0, (sz)r.w * 4);
+	}
 }
 
 // decor_paint rasterises one decoration. Rect coordinates are the view's
@@ -261,22 +305,78 @@ fn void decor_paint(xray::Decoration d) {
 	}
 }
 
-// decor_upload converts the surface into the texture and returns it, ready to
-// be drawn at the window's logical size.
-fn rl::RLTexture2D decor_upload() {
-	if (!g_decor.ready) return { };
+// DecorCached is one decoration already rasterised into a texture of its own.
+// The rounded rects, gradients and shadows a view decorates with are the same
+// from one frame to the next, so the expensive part — rasterising on the CPU
+// and uploading — runs only when one changes; otherwise it is one quad.
+struct DecorCached {
+	xray::Decoration d;
+	float scale;
+	DecorRegion r;
+	rl::RLTexture2D tex;
+	long used;
+}
+
+const DECOR_CACHE = 32;
+DecorCached[DECOR_CACHE] g_decor_cache @local;
+long g_decor_clock @local;
+
+// decor_cached returns the texture for d, rasterising it on a miss into the
+// least recently used slot.
+fn DecorCached* decor_cached(xray::Decoration d) @local {
+	g_decor_clock++;
+	DecorCached* lru = &g_decor_cache[0];
+	foreach (&c : g_decor_cache) {
+		if (c.tex.id != 0 && c.scale == g_decor.scale && mem::equals(((char*)&c.d)[:xray::Decoration::size], ((char*)&d)[:xray::Decoration::size])) {
+			c.used = g_decor_clock;
+			return c;
+		}
+		if (c.used < lru.used) lru = c;
+	}
+	DecorRegion r = decor_region(d);
+	if (r.w == 0 || r.h == 0) return null;
+	decor_begin(r);
+	decor_paint(d);
 	char* src = plutovg_surface_get_data(g_decor.surface);
 	int stride = plutovg_surface_get_stride(g_decor.surface);
-	plutovg_convert_argb_to_rgba(g_decor.pixels.ptr, src,
-		g_decor.width, g_decor.height, stride);
-	rl::gl_update_texture(g_decor.texture.id, 0, 0, g_decor.width, g_decor.height,
-		(int)rl::RLPixelFormat.UNCOMPRESSED_R8G8B8A8, g_decor.pixels.ptr);
-	return g_decor.texture;
+	for (int y = 0; y < r.h; y++) {
+		plutovg_convert_argb_to_rgba(g_decor.pixels.ptr + (sz)y * r.w * 4,
+			src + (sz)(r.y + y) * stride + (sz)r.x * 4, r.w, 1, stride);
+	}
+	if (lru.tex.id != 0 && (lru.r.w != r.w || lru.r.h != r.h)) {
+		rl::unload_texture(lru.tex);
+		lru.tex = { };
+	}
+	if (lru.tex.id == 0) {
+		rl::RLImage img = {
+			.data = g_decor.pixels.ptr,
+			.width = r.w,
+			.height = r.h,
+			.mipmaps = 1,
+			.format = rl::RLPixelFormat.UNCOMPRESSED_R8G8B8A8,
+		};
+		lru.tex = rl::load_texture_from_image(img);
+		lru.tex.set_filter(rl::RLTextureFilter.BILINEAR);
+	} else {
+		rl::gl_update_texture(lru.tex.id, 0, 0, r.w, r.h,
+			(int)rl::RLPixelFormat.UNCOMPRESSED_R8G8B8A8, g_decor.pixels.ptr);
+	}
+	lru.d = d;
+	lru.scale = g_decor.scale;
+	lru.r = r;
+	lru.used = g_decor_clock;
+	return lru;
 }
-// Flush before reusing the texture: queued geometry may still reference its
-// previous contents. Each decoration is composited at its place in the stream.
+
+fn void decor_cache_clear() @local {
+	foreach (&c : g_decor_cache) {
+		if (c.tex.id != 0) rl::unload_texture(c.tex);
+		*c = { };
+	}
+}
+
+// decor_draw composites one decoration at its place in the paint stream.
 fn void decor_draw(xray::Decoration d, GuiOptions opts, int width, int height) {
-	rl::gl_draw_render_batch_active();
 	decor_ensure(width, height,
 		rl::get_window_scale_dpi().x);
 	if (!decor_available()) return;
@@ -286,12 +386,11 @@ fn void decor_draw(xray::Decoration d, GuiOptions opts, int width, int height) {
 		d.rect.w *= opts.cell_w;
 		d.rect.h *= opts.cell_h;
 	}
-	decor_begin();
-	decor_paint(d);
-	rl::RLTexture2D tex = decor_upload();
-	rl::draw_texture_pro(tex,
-		{ 0, 0, (float)tex.width, (float)tex.height },
-		{ 0, 0, (float)width, (float)height },
+	DecorCached* c = decor_cached(d);
+	if (c == null) return;
+	float s = g_decor.scale;
+	rl::draw_texture_pro(c.tex,
+		{ 0, 0, (float)c.r.w, (float)c.r.h },
+		{ (float)c.r.x / s, (float)c.r.y / s, (float)c.r.w / s, (float)c.r.h / s },
 		{ 0, 0 }, 0.0f, rl::WHITE);
-	rl::gl_draw_render_batch_active();
 }

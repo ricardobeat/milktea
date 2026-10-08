@@ -626,6 +626,22 @@ fn CellFit cell_fit(rl::RLFont f, int font_size, int cell_w, int cell_h) @local 
 	return fit;
 }
 
+// shapes_from_font points raylib's shape drawing at a solid pixel inside the
+// font atlas — the middle of the full block glyph. Cell backgrounds are
+// rectangles and cell text is glyphs; with the two on different textures,
+// every cell switched texture twice and each switch cost a draw call, ten
+// thousand a frame. On one texture the whole grid batches together.
+fn void shapes_from_font(rl::RLFont font) @local {
+	if (font.recs == null) return;
+	int i = rl::get_glyph_index(font, 0x2588);
+	if (i < 0 || i >= font.glyph_count || font.glyphs[i].value != 0x2588) return;
+	float w = font.recs[i].width;
+	float h = font.recs[i].height;
+	if (w < 4 || h < 4) return;
+	rl::set_shapes_texture(font.texture,
+		{ (float)(int)(font.recs[i].x + w / 2), (float)(int)(font.recs[i].y + h / 2), 1, 1 });
+}
+
 fn rl::RLFont load_mono_font(int font_size) {
 	float dpi_scale = rl::get_window_scale_dpi().x;
 	if (dpi_scale < 1.0f) dpi_scale = 1.0f;
@@ -729,6 +745,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// milktea::clipboard go through it rather than the terminal's ways.
 	milktea::use_clipboard(&gui_clipboard_write, &gui_clipboard_read);
 	rl::RLFont font = load_mono_font(opts.font_size);
+	shapes_from_font(font);
 	// A point size the app could not fit to its cell exactly leaves the rules
 	// to a second atlas at the cell's height. When the two agree — the usual
 	// case — there is nothing to load and both names point at one font.
@@ -989,6 +1006,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			opts.cell_h = g_req_cell_h;
 			opts.font_size = g_req_font_size;
 			font = load_mono_font(opts.font_size);
+			shapes_from_font(font);
 			split_atlas = opts.font_size != opts.cell_h;
 			rule_font = split_atlas ? load_mono_font(opts.cell_h) : font;
 			text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h);
