@@ -25,20 +25,20 @@ fn xray::ContentCursor Field.cursor(&self, xray::Rect r) @dynamic {
 
 struct BlinkModel {
 	Field field;
-	sz ticks;
+	sz frames;
 }
 
-fn milktea::Cmd BlinkModel.init(&self) @dynamic => null;
+// The app's one timer only ends the run; it is what the repaints are counted
+// against, not what drives them.
+fn milktea::Cmd BlinkModel.init(&self) @dynamic => milktea::tick(200);
 
 fn milktea::Cmd BlinkModel.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
-		self.ticks++;
-		if (self.ticks > 5) return milktea::quit();
-	}
+	if (msg.kind == milktea::MsgKind.TICK) return milktea::quit();
 	return null;
 }
 
 fn milktea::View BlinkModel.view(&self) @dynamic {
+	self.frames++;
 	return milktea::draw(milktea::root().add(milktea::component(&self.field)));
 }
 
@@ -47,9 +47,9 @@ fn void test_drawn_cursor_keeps_rescheduling_itself() @test {
 	DString out = dstring::temp();
 	milktea::Program p = milktea::@test_program(&m, &out, 20, 3);
 
-	// No input and no app timer: the only thing that can keep this program
-	// running is the cursor asking to be painted again.
+	// No input, and update() changes nothing: every frame after the first is
+	// the cursor asking to be painted again. A 20ms blink over 200ms is ~10.
 	p.run()!!;
 
-	assert(m.ticks > 5, "expected repeated repaints, got %d", m.ticks);
+	assert(m.frames > 5, "expected repeated repaints, got %d", m.frames);
 }

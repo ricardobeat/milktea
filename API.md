@@ -203,11 +203,18 @@ terminals with `View.set_report_key_events(true)` ever send the latter two.
 | `tick(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer, delay from now |
 | `every(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer snapped to the next wall-clock multiple of `ms` |
 | `cancel(owner)` | Cancels timers registered with that owner pointer |
+| `frames_until(deadline_ms)` | Repaint every frame until `deadline_ms` on the `now()` clock |
 
 Both timers are one-shot: re-arm from `update` to keep them firing. `tick` is
 for animation, where only the gap between frames matters; `every` is for
 clocks and countdowns, which must stay locked to absolute time despite update
 and render cost.
+
+`frames_until` is for something that keeps changing after `update` set it
+going, such as a tween running to its end. The runtime keeps painting until the
+deadline, and so does a drawn tree with a node that calls `.animate(fps)`. Both
+feed one repaint timer, aligned to the `now()` clock. A repaint is not a
+message: `view` runs again, but `update` does not.
 
 A custom `Cmd` is just a function returning a `Msg`:
 

@@ -105,3 +105,57 @@ fn void test_tree_without_repaint_arms_nothing() @test {
 	p.run()!!;
 	assert(repaint_timers(&p) == 0, "got %d repaint timers", repaint_timers(&p));
 }
+
+// ── frames_until ─────────────────────────────────────────────────────────────
+
+// Asks for frames `ahead` ms past now (negative = already over) on starting
+// and on every key, and counts the update() calls it saw.
+struct FramesModel {
+	sz ahead;
+	sz updates;
+}
+
+fn milktea::Cmd FramesModel.init(FramesModel* self) @dynamic {
+	frames_until(now() + self.ahead);
+	return null;
+}
+
+fn milktea::Cmd FramesModel.update(FramesModel* self, milktea::Msg msg) @dynamic {
+	self.updates++;
+	if (msg.kind == KEY && msg.key.rune == 'q') return quit();
+	if (msg.kind == KEY) frames_until(now() + self.ahead);
+	return null;
+}
+
+fn milktea::View FramesModel.view(FramesModel* self) @dynamic => view("");
+
+fn void test_frames_until_arms_one_repaint_timer() @test {
+	FramesModel m = { .ahead = 1000 };
+	DString out = dstring::temp();
+	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
+	p.run()!!;
+	assert(repaint_timers(&p) == 1, "got %d repaint timers", repaint_timers(&p));
+}
+
+fn void test_frames_until_in_the_past_arms_nothing() @test {
+	FramesModel m = { .ahead = -1 };
+	DString out = dstring::temp();
+	Program p = @test_program_input(&m, &out, 80, 24, "abcq");
+	p.run()!!;
+	assert(repaint_timers(&p) == 0, "got %d repaint timers", repaint_timers(&p));
+}
+
+// Repaints are not messages: frames run out without update() hearing of them.
+fn void test_repaints_do_not_reach_update() @test {
+	FramesModel m = { .ahead = 60 };
+	DString out = dstring::temp();
+	Program p = @test_program_input(&m, &out, 80, 24, "a");
+	p.run()!!;
+	assert(repaint_timers(&p) == 0, "frames stopped after the deadline");
+	// The window size and the key; none of the repaints in between.
+	assert(m.updates == 2, "update() saw %d messages", m.updates);
+}
+
+fn void test_frames_until_outside_a_program_is_ignored() @test {
+	frames_until(now() + 1000); // must not crash with no program running
+}

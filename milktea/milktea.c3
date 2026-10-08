@@ -336,6 +336,8 @@ struct Program {
 	// init(), update() and view() call, so one call reads one instant.
 	sz now_ms;
 	ClockFn clock; // null = the monotonic clock; see with_clock
+	// Paint every frame until this time on the now() clock; see frames_until.
+	sz frames_until_ms;
 
 	// Test / injection support
 	bool test_mode;
@@ -644,6 +646,16 @@ fn sz monotonic_ms() {
 fn sz now() {
 	if (g_program == null) return time_ms();
 	return g_program.now_ms;
+}
+
+// frames_until keeps the runtime painting every frame until `deadline_ms` on
+// the now() clock. It is for a value that goes on changing by itself after
+// update() set it going — a tween running to its end, a spring settling — so
+// the model need not run a frame timer for it. Requests merge, the latest
+// deadline winning. Outside a program it does nothing.
+fn void frames_until(sz deadline_ms) {
+	if (g_program == null) return;
+	if (deadline_ms > g_program.frames_until_ms) g_program.frames_until_ms = deadline_ms;
 }
 
 // stamp_now advances the frame clock to the current time. Called right before
@@ -1628,21 +1640,28 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 	r.resize(cols, rows);
 }
 
-// schedule_repaint arms the timer behind a view's repaint_ms. Cancel first:
-// view() runs every frame, so without it each frame would leave another timer
-// behind. The program doubles as the owner token — one view, one repaint timer.
+// schedule_repaint arms the runtime's one repaint timer after each frame: at
+// the rate the drawn tree animates at (`ms`, from Node.animate), or every
+// frame while something is still on its way (see frames_until), whichever is
+// sooner. Cancel first: every frame re-arms it, and without that each would
+// leave another timer behind. The program doubles as the owner token.
 fn void Program.schedule_repaint(&self, sz ms) {
 	cancel(self);
+	if (self.now_ms < self.frames_until_ms && (ms <= 0 || FRAME_MS < ms)) ms = FRAME_MS;
 	if (ms <= 0) return;
-	// every(), not tick(): the deadline is snapped to the next multiple of the
-	// interval in absolute time, so the frame this arms lands on the same grid
-	// as the last one. tick() would wait the full interval from *now*, adding
-	// however long this frame took to every period — a rate that sags under
-	// load and drifts out of step with the terminal's own refresh. The repaint
-	// is re-armed from scratch each frame, so the snapping is what keeps
-	// successive frames evenly spaced.
-	every(ms, &tick_msg, self);
+	// Land on the next multiple of the interval on the monotonic clock, the
+	// one now() reads. Content that picks its frame from now() then changes on
+	// every repaint and holds each frame for exactly one interval; a delay
+	// counted from the end of this frame would drift against it and now and
+	// then show a frame twice.
+	sz t = time_ms();
+	tick(snap_delay(t, ms), &repaint_msg, self);
 }
+
+// repaint_msg is what the repaint timer delivers: no message at all, so the
+// runtime paints again without calling update(). Nothing changed in the
+// model; only the time it is drawn at.
+fn Msg repaint_msg() @local => {};
 
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
