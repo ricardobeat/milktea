@@ -4,12 +4,14 @@ import milktea;
 import glaze;
 import xray;
 
+// The tween is the modal's whole state: which way it is heading, and since
+// when. It starts closed, at the far end of a reversed run.
 struct Model {
-	bool open;
 	milktea::Tween anim;
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
+	self.anim = milktea::tween(180, milktea::Easing.EASE_OUT_CUBIC).reversed();
 	return null;
 }
 
@@ -21,25 +23,15 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		case milktea::KeyCode.CTRL_C:
 			return milktea::quit();
 		case milktea::KeyCode.ESC:
-			if (self.open) self.dismiss();
+			// Turn around from wherever it is, so a half-open modal closes
+			// from half-way rather than jumping.
+			if (!self.anim.reverse) self.anim = self.anim.reversed();
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
-			if (k.rune == ' ') {
-				if (self.open) {
-					self.dismiss();
-				} else {
-					self.open = true;
-					self.anim = milktea::tween_at(milktea::now(), 180, milktea::Easing.EASE_OUT_CUBIC);
-				}
-			}
+			if (k.rune == ' ') self.anim = self.anim.reversed();
 		default:
 	}
 	return null;
-}
-
-fn void Model.dismiss(Model* self) {
-	self.open = false;
-	self.anim = milktea::tween_at(milktea::now(), 150, milktea::Easing.EASE_IN_CUBIC, true);
 }
 
 fn milktea::View Model.view(Model* self) @dynamic {
@@ -57,10 +49,11 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	};
 
 	xray::Node* dialog = null;
-	if (self.open || !self.anim.done()) {
-		dialog = milktea::animate(milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
+	if (self.anim.showing()) {
+		dialog = milktea::text(panel, "Animated Modal\n\nfade + slide, driven by a Tween").center()
 			.shadow(milktea::shadow(1, 1, 160, blur: 2, half_blocks: true)
-				.with_color(glaze::color_hex("#05050c"))), milktea::slide_down(5).fade(), &self.anim);
+				.with_color(glaze::color_hex("#05050c")))
+			.transition(milktea::slide_down(5).fade(), self.anim);
 	}
 
 	return milktea::draw(milktea::root()

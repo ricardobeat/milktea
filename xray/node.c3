@@ -350,7 +350,7 @@ fn Node* Node.center(&self) {
 // That is the difference from at(), which names an absolute position and
 // discards justify/align entirely, and from padding, which grows the node so
 // its background paints over the displaced area. Sliding a node is a matter of
-// animating this, which is what milktea::animate does.
+// animating this, which is what milktea's Node.transition does.
 // 
 // The displacement is applied after the child's rect is solved, so it can push
 // a node past its parent's edge; the painter clips whatever lands outside.

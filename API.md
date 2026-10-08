@@ -360,16 +360,24 @@ return milktea::draw(milktea::root()
 ## Tweens and motion
 
 ```c3
-Tween t = milktea::tween(300, Easing.EASE_OUT_CUBIC);
-t.step();            // advance one 16ms frame (or step(dt_ms))
-t.advance_to(now);   // advance to an absolute monotonic time
-t.value();           // 0.0 .. 1.0, eased
+Tween t = milktea::tween_at(milktea::now(), 300, Easing.EASE_OUT_CUBIC); // in update()
+t.value();           // 0.0 .. 1.0, eased, at now()
 t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha();
-t.done(); t.restart();
+t.done();            // reached its end
+t.reversed();        // turn around from where it is, same duration and easing
+t.showing();         // on its way in, in, or still on its way out
+t.restart();
 ```
 
-`tween_reversed` and `tween_at(now, ...)` build the same thing running backwards
-or anchored to a start time. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
+`tween_at` starts a clock-driven tween: it records its start, every read
+solves its progress from `now()`, and starting it asks the runtime for frames
+until it ends, so the model runs no timer. `value_at`, `done_at`,
+`showing_at`, `reversed_at` and `elapsed_at` take the time explicitly.
+
+`tween(ms)` and `tween_reversed(ms)` build a step-driven tween instead, for a
+model that drives its own frames: `t.step()` advances one 16ms frame (or
+`step(dt_ms)`). `tween(ms).reversed()` is a clock-driven tween already at its
+start, which is how a closed panel waits to be opened. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
 in/out/in-out family, and `EASE_OUT_BACK` — which deliberately overshoots past
 1 before settling, so clamp anything that must stay in range.
 
@@ -404,7 +412,7 @@ Parameters are `SpringParams { stiffness, damping }`, built with:
 
 `Motion` animates a node's entry: `slide_down(rows)`, `slide_up(rows)`,
 `slide_in(cols)`, `fade_in()`, and `.fade()` to add a fade to any of them. Apply
-with `milktea::animate(node, motion, &tween)`.
+with `node.transition(motion, tween)`, which reads the tween at `now()`.
 
 ## Other helpers
 

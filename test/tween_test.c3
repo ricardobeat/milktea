@@ -188,53 +188,85 @@ fn void test_lerp_color_interpolates() @test {
 
 fn void test_tween_at_reads_progress_from_the_clock() @test {
 	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
-	assert_near(tw.value(), 0.0, 0.0001, "not started");
+	assert_near(tw.value_at(1000), 0.0, 0.0001, "not started");
+	assert(!tw.done_at(1050), "still running halfway");
+	assert_near(tw.value_at(1050), 0.5, 0.0001, "halfway by the clock");
+	assert(tw.done_at(1100), "finished at the duration");
+	assert_near(tw.value_at(1100), 1.0, 0.0001, "ends at 1");
+}
 
-	assert(tw.advance_to(1050), "still running halfway");
-	assert_near(tw.value(), 0.5, 0.0001, "halfway by the clock");
-
-	assert(!tw.advance_to(1100), "finished at the duration");
-	assert(tw.done(), "done");
-	assert_near(tw.value(), 1.0, 0.0001, "ends at 1");
+fn void test_tween_at_reads_never_change_it() @test {
+	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
+	tw.value_at(1090);
+	assert_near(tw.value_at(1050), 0.5, 0.0001, "a later read does not move an earlier one");
 }
 
 fn void test_tween_at_clamps_a_late_frame() @test {
 	// A frame that arrives long after the end must not overrun.
 	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
-	tw.advance_to(9999);
-	assert(tw.elapsed_ms == 100, "clamped, got %d", tw.elapsed_ms);
-	assert_near(tw.value(), 1.0, 0.0001, "settled");
+	assert(tw.elapsed_at(9999) == 100, "clamped, got %d", tw.elapsed_at(9999));
+	assert_near(tw.value_at(9999), 1.0, 0.0001, "settled");
 }
 
 fn void test_tween_at_survives_a_backwards_clock() @test {
-	// Reading a time before the start must not wrap the unsigned elapsed.
+	// Reading a time before the start reads as not begun.
 	Tween tw = milktea::tween_at(5000, 100, Easing.LINEAR);
-	tw.advance_to(4000);
-	assert(tw.elapsed_ms == 0, "reads as not begun, got %d", tw.elapsed_ms);
-	assert_near(tw.value(), 0.0, 0.0001, "still at the start");
+	assert(tw.elapsed_at(4000) == 0, "reads as not begun, got %d", tw.elapsed_at(4000));
+	assert_near(tw.value_at(4000), 0.0, 0.0001, "still at the start");
 }
 
 fn void test_tween_at_zero_clock_is_still_clock_driven() @test {
-	// started_ms == 0 is the "not clock-driven" sentinel, so a caller whose
-	// clock genuinely reads 0 must not be silently ignored.
+	// A caller whose clock genuinely reads 0 must not be mistaken for a
+	// step-driven tween.
 	Tween tw = milktea::tween_at(0, 100, Easing.LINEAR);
-	assert(tw.started_ms != 0, "start nudged off the sentinel");
-	tw.advance_to(51);
-	assert(tw.elapsed_ms > 0, "advances rather than sitting at zero");
+	assert(tw.elapsed_at(51) == 51, "advances rather than sitting at zero");
 }
 
-fn void test_advance_to_leaves_a_step_driven_tween_alone() @test {
-	// A tween built with tween() has no clock; advance_to must not reset the
-	// progress step() has accumulated.
+fn void test_clock_reads_leave_a_step_driven_tween_alone() @test {
+	// A tween built with tween() has no clock; reading it at a time must not
+	// lose the progress step() has accumulated.
 	Tween tw = milktea::tween(100, Easing.LINEAR);
 	tw.step(50);
-	tw.advance_to(999999);
-	assert(tw.elapsed_ms == 50, "step progress preserved, got %d", tw.elapsed_ms);
+	assert(tw.elapsed_at(999999) == 50, "step progress preserved, got %d", tw.elapsed_at(999999));
 }
 
 fn void test_tween_at_reverse_runs_backwards() @test {
 	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR, true);
-	assert_near(tw.value(), 1.0, 0.0001, "starts at the target");
-	tw.advance_to(1100);
-	assert_near(tw.value(), 0.0, 0.0001, "ends at the start");
+	assert_near(tw.value_at(1000), 1.0, 0.0001, "starts at the target");
+	assert_near(tw.value_at(1100), 0.0, 0.0001, "ends at the start");
+}
+
+// ── reversing ───────────────────────────────────────────────────────────────
+
+fn void test_reversed_turns_around_where_it_is() @test {
+	Tween tw = milktea::tween_at(1000, 100, Easing.EASE_OUT_CUBIC);
+	Tween back = tw.reversed_at(1030);
+	assert_near(back.value_at(1030), tw.value_at(1030), 0.0001, "no jump at the turn");
+	assert(back.reverse, "heading back");
+	assert(!back.done_at(1059), "the way back takes as long as the way out did");
+	assert(back.done_at(1060), "and no longer");
+	assert_near(back.value_at(1060), 0.0, 0.0001, "back at the start");
+}
+
+fn void test_reversed_twice_resumes_the_way_out() @test {
+	Tween tw = milktea::tween_at(1000, 100, Easing.LINEAR);
+	Tween again = tw.reversed_at(1040).reversed_at(1060);
+	assert_near(again.value_at(1060), 0.2, 0.0001, "40 out, 20 back");
+	assert(!again.reverse, "heading out again");
+	assert(again.done_at(1140), "the remaining 80 to the end");
+}
+
+fn void test_an_unstarted_tween_reverses_to_its_start() @test {
+	Tween closed = milktea::tween(180, Easing.EASE_OUT_CUBIC).reversed_at(5000);
+	assert(closed.done_at(5000), "already settled");
+	assert_near(closed.value_at(5000), 0.0, 0.0001, "at the start");
+	assert(!closed.showing_at(5000), "nothing on screen");
+	assert(closed.reversed_at(5000).showing_at(5000), "opening shows it");
+}
+
+fn void test_showing_lasts_until_a_reverse_run_ends() @test {
+	Tween out = milktea::tween_at(1000, 100, Easing.LINEAR, true);
+	assert(out.showing_at(1099), "still on its way out");
+	assert(!out.showing_at(1100), "gone once it lands");
+	assert(milktea::tween_at(1000, 100, Easing.LINEAR).showing_at(1000), "on its way in");
 }

@@ -2,27 +2,26 @@ module milktea;
 
 import xray;
 
-// Animating a node. `animate` reads a Tween against the paint clock and writes
-// the result into the node's offset and alpha, then asks for the next frame
-// through the node's own repaint request — so an animated view needs no frame
-// messages, no timer bookkeeping and no phase tracking in the model:
+// Transitions: moving a node between two states as a Tween runs — a modal
+// sliding in and fading up, then back out. `Node.transition` reads the tween
+// at now() and writes the result into the node's offset and alpha, so it
+// drops into a view's builder chain and changes nothing but the node:
 // 
-//     fn milktea::View Model.view(&self) @dynamic {
-//         return milktea::draw(milktea::root()
-//             .add(milktea::animate(
-//                 milktea::text(panel, body).center(),
-//                 milktea::slide_down(6).fade(),
-//                 &self.anim)));
-//     }
+//     dialog = milktea::text(panel, body).center()
+//         .transition(milktea::slide_down(6).fade(), self.anim);
 // 
-// The model's only job is to start the tween:
+// The model's only job is to start the tween, which also keeps frames coming
+// until it ends:
 // 
 //     self.anim = milktea::tween_at(milktea::now(), 260);
 // 
-// This lives in milktea rather than xray because it needs a clock, and xray
-// deliberately has none — it takes now_ms from its caller (see
-// xray::ScreenBuffer.draw_cursor). Everything it writes is a plain xray field,
-// so the node stays an ordinary node.
+// This is the other half of Node.animate. A node that animates changes for as
+// long as it is on screen — a spinner, a caret — and says so from the view. A
+// transition is a change of state, which update() starts and the tween times.
+// 
+// This lives in milktea rather than xray because it needs Tween and the frame
+// clock, and xray deliberately has neither. Everything it writes is a plain
+// xray field, so the node stays an ordinary node.
 
 // Motion describes what an animation does to a node: where it travels from,
 // and whether it fades. The offsets are the *starting* displacement, which the
@@ -56,34 +55,21 @@ fn Motion Motion.fade(self) {
 // fade_in animates opacity alone, leaving position to the solver.
 fn Motion fade_in() => { .from_dx = 0, .from_dy = 0, .fades = true };
 
-// animate applies `motion` to `node` according to `tw`'s current progress and
-// returns the node, so it drops into a builder chain. It is safe to call on a
-// null node (draw trees are built with conditional children), and on a
-// finished tween — a settled animation writes its end state and stops asking
-// for frames.
-// 
-// The tween is taken by pointer because a clock-driven one updates itself here
-// against the paint clock; that is what lets the model own the Tween as plain
-// state and never touch it again after starting it.
-fn xray::Node* animate(xray::Node* node, Motion motion, Tween* tw) {
-	if (node == null || tw == null) return node;
-
-	bool running = tw.advance_to((long)now());
+// transition applies `motion` to the node according to `tw`'s progress at
+// now() and returns the node, so it drops into a builder chain. A finished
+// tween writes the motion's end state: the node rests where the layout solver
+// put it, fully opaque — or, played in reverse, fully away.
+fn xray::Node* xray::Node.transition(&self, Motion motion, Tween tw) {
+	if (self == null) return self;
 
 	// The motion's offsets are where the node starts; the tween carries them
 	// to zero, so the node settles exactly on its solved position rather than
 	// near it. lerp rounds to nearest, which keeps the travel smooth in both
 	// directions instead of biasing toward zero.
 	if (motion.from_dx != 0 || motion.from_dy != 0) {
-		node.offset(tw.lerp(motion.from_dx, 0), tw.lerp(motion.from_dy, 0));
+		self.offset(tw.lerp(motion.from_dx, 0), tw.lerp(motion.from_dy, 0));
 	}
 
-	if (motion.fades) node.alpha(tw.alpha());
-
-	// Ask for the next frame only while there is one to draw. paint() collects
-	// the smallest request in the tree and milktea::draw arms a single timer
-	// for it, so a settled animation costs nothing.
-	if (running) node.animate();
-
-	return node;
+	if (motion.fades) self.alpha(tw.alpha());
+	return self;
 }
