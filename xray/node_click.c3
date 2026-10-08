@@ -1,6 +1,7 @@
 module xray;
 
 import std::io;
+import std::collections::list;
 
 // ClickTarget is one node's mouse hooks plus its solved rect, extracted from
 // a tree after solve() so the hooks can be fired against a later mouse event
@@ -19,6 +20,8 @@ struct ClickTarget {
 	ClickFn on_click_outside;
 	ClickFn on_hover_in;
 	ClickFn on_hover_out;
+	// The node blocks the pointer for everything collected before it.
+	bool blocks;
 }
 
 // collect_click_targets walks a solved tree and appends one ClickTarget per
@@ -26,15 +29,13 @@ struct ClickTarget {
 // earlier siblings before later ones) — the same order paint() uses, so the
 // last entry for any overlapping rect is the topmost one.
 //
-// out is a caller-owned fixed buffer (Program keeps one across frames);
-// *count is both the starting offset and, on return, the new total. Targets
-// beyond `out.len` are silently dropped, matching the fixed-buffer-drops
-// convention used elsewhere (timers, send queue, input ring).
-fn void collect_click_targets(Node* n, ClickTarget[] out, sz* count) {
-	if (n == null || *count >= (sz)out.len) return;
+// out is caller-owned (Program keeps one across frames) and is appended to;
+// it grows as needed, so a busy screen never loses targets.
+fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
+	if (n == null) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null
-		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null) {
-		out[*count] = {
+		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.blocks_pointer) {
+		out.push({
 			.rect = n.computed_rect,
 			.metrics = n.layout_metrics,
 			.inset_x = n.layout_metrics.pixels ? n.decoration.pad_left : 0,
@@ -45,12 +46,21 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, sz* count) {
 			.on_click_outside = n.on_click_outside_fn,
 			.on_hover_in = n.on_hover_in_fn,
 			.on_hover_out = n.on_hover_out_fn,
-		};
-		(*count)++;
+			.blocks = n.blocks_pointer,
+		});
 	}
 	for (sz i = 0; i < n.child_count; i++) {
-		collect_click_targets(n.children[i], out, count);
+		collect_click_targets(n.children[i], out);
 	}
+}
+
+// pointer_floor is the index of the topmost blocking target over (col, row):
+// targets before it are covered there. 0 when nothing blocks the point.
+fn sz pointer_floor(ClickTarget[] targets, sz col, sz row) @local {
+	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
+		if (targets[i].blocks && targets[i].rect.contains(col, row)) return i;
+	}
+	return 0;
 }
 
 // dispatch_click fires the hooks in `targets` for a press at (col, row):
@@ -72,6 +82,10 @@ fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 			io::eprintfn("  [%d] rect x=%d y=%d w=%d h=%d hit=%s click=%s id=%s",
 				i, r.x, r.y, r.w, r.h, r.contains(col, row), targets[i].on_click != null,
 				targets[i].id_str.len > 0 ? targets[i].id_str : "(ptr)");
+		}
+		if (targets[i].on_click == null && targets[i].blocks && targets[i].rect.contains(col, row)) {
+			if (dbg) io::eprintfn("  -> blocked by [%d]", i);
+			break;
 		}
 		if (targets[i].on_click != null && targets[i].rect.contains(col, row)) {
 			if (dbg) io::eprintfn("  -> firing on_click of [%d]", i);
@@ -106,10 +120,14 @@ fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 fn void dispatch_hover(ClickTarget[] targets, sz col, sz row,
 		ClickTarget[] prev, sz prev_count, sz prev_col, sz prev_row, bool dbg) {
 	if (col == prev_col && row == prev_row) return;
+	// A target under a blocking one is not hovered while the pointer is over
+	// the blocker, so moving onto a modal reads as leaving what it covers.
+	sz floor_now = pointer_floor(targets, col, row);
+	sz floor_prev = pointer_floor(targets, prev_col, prev_row);
 	foreach (i, t : targets) {
 		if (t.on_hover_in == null && t.on_hover_out == null) continue;
-		bool inside_now = t.rect.contains(col, row);
-		bool inside_prev = t.rect.contains(prev_col, prev_row);
+		bool inside_now = (sz)i >= floor_now && t.rect.contains(col, row);
+		bool inside_prev = (sz)i >= floor_prev && t.rect.contains(prev_col, prev_row);
 		if (inside_now && !inside_prev && t.on_hover_in != null) {
 			if (dbg) io::eprintfn("  -> firing on_hover_in of [%d]", i);
 			t.on_hover_in(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
@@ -129,16 +147,11 @@ fn void dispatch_hover(ClickTarget[] targets, sz col, sz row,
 // falls in some drag region or it does not — but keeping the two walks alike
 // keeps them easy to read together.
 //
-// out is a caller-owned fixed buffer; *count is both the starting offset and,
-// on return, the new total. Regions beyond out.len are dropped silently, same
-// as click targets.
-fn void collect_drag_regions(Node* n, Rect[] out, sz* count) {
-	if (n == null || *count >= (sz)out.len) return;
-	if (n.window_drag_area) {
-		out[*count] = n.computed_rect;
-		(*count)++;
-	}
+// out is caller-owned and appended to.
+fn void collect_drag_regions(Node* n, List{Rect}* out) {
+	if (n == null) return;
+	if (n.window_drag_area) out.push(n.computed_rect);
 	for (sz i = 0; i < n.child_count; i++) {
-		collect_drag_regions(n.children[i], out, count);
+		collect_drag_regions(n.children[i], out);
 	}
 }

@@ -222,6 +222,11 @@ struct Node {
 	// ignores it.
 	bool window_drag_area;
 
+	// The node covers what is beneath it for the pointer, as a modal does:
+	// clicks inside it stop at it, and nodes painted before it get no hover
+	// while the pointer is over it. See block_pointer.
+	bool blocks_pointer;
+
 	// A vector background emitted before this node's glyphs and children in
 	// the GUI paint stream. Terminal cell backgrounds are unchanged.
 	Decoration decoration;
@@ -548,6 +553,15 @@ fn Node* Node.on_hover_out(&self, ClickFn handler) {
 // both a drag handle and clickable. Only a GUI build acts on it.
 fn Node* Node.window_drag(&self, bool on = true) {
 	self.window_drag_area = on;
+	return self;
+}
+
+// block_pointer makes the node cover what is beneath it for the pointer: a
+// click inside it never reaches a node painted before it, and those nodes do
+// not hover while the pointer is over it. A modal's backdrop is the use: the
+// panel takes the clicks, and the screen behind it stops reacting.
+fn Node* Node.block_pointer(&self, bool on = true) {
+	self.blocks_pointer = on;
 	return self;
 }
 

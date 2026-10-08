@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::mem;
+import std::collections::list;
 import glaze;
 import xray;
 
@@ -190,10 +191,12 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear
 	// and refill every draw() so a click always lands against what is
 	// actually on screen right now.
-	g_program.click_target_count = 0;
-	xray::collect_click_targets(root, g_program.click_targets[..], &g_program.click_target_count);
-	g_program.drag_region_count = 0;
-	xray::collect_drag_regions(root, g_program.drag_regions[..], &g_program.drag_region_count);
+	if (!g_program.click_targets.is_initialized()) g_program.click_targets.init(mem);
+	if (!g_program.drag_regions.is_initialized()) g_program.drag_regions.init(mem);
+	g_program.click_targets.clear();
+	xray::collect_click_targets(root, &g_program.click_targets);
+	g_program.drag_regions.clear();
+	xray::collect_drag_regions(root, &g_program.drag_regions);
 
 	View v = {
 		.paint_ops = buf.record_paint ? buf.paint_ops.array_view() : {},

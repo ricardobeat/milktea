@@ -4,6 +4,7 @@ import xray;
 import milktea;
 import glaze;
 import std::core::mem;
+import std::collections::list;
 
 const xray::LayoutMetrics PIXELS = { .pixels = true, .cell_w = 10, .cell_h = 20 };
 
@@ -79,9 +80,11 @@ fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* root = xray::root().decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 2, 1, 4)).add(child);
 	root.solve({ .w = 200, .h = 100 }, PIXELS);
-	xray::ClickTarget[4] targets;
-	sz count;
-	xray::collect_click_targets(root, targets[..], &count);
+	List{xray::ClickTarget} list;
+	list.tinit();
+	xray::collect_click_targets(root, &list);
+	xray::ClickTarget[] targets = list.array_view();
+	sz count = (sz)targets.len;
 	assert(count == 1);
 	xray::dispatch_click(targets[:count], 3, 3, false);
 	assert(hit.count == 0);
@@ -99,8 +102,10 @@ fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	assert(hit.entered == 1 && hit.left == 1);
 	child.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(1, 2, 3, 4));
 	root.solve({ .w = 200, .h = 100 }, PIXELS);
-	count = 0;
-	xray::collect_click_targets(root, targets[..], &count);
+	list.clear();
+	xray::collect_click_targets(root, &list);
+	targets = list.array_view();
+	count = (sz)targets.len;
 	xray::dispatch_click(targets[:count], 17, 4, false);
 	assert(hit.col == 0 && hit.row == 0);
 	xray::dispatch_click(targets[:count], 18, 4, false);
@@ -246,4 +251,35 @@ fn void test_pixel_fixed_size_does_not_scale_with_font() @test {
 	expect_rect(circle.rect(), xray::new_rect(13, 8, 14, 14));
 	root.solve({ .w = 4, .h = 3 });
 	expect_rect(circle.rect(), xray::new_rect(1, 1, 2, 1));
+}
+
+// A blocking node stops a click from reaching what is beneath it, and while
+// the pointer is over it the covered nodes are not hovered: moving onto a
+// modal reads as leaving the list behind it.
+fn void test_block_pointer_covers_what_is_beneath() @test {
+	Hit hit;
+	xray::Node* under = milktea::text({}, "row").width(xray::cells(10)).height(xray::cells(1))
+		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
+	xray::Node* modal = xray::root().width(xray::cells(5)).height(xray::cells(5)).at(0, 0).block_pointer();
+	xray::Node* root = xray::root().add(under).add(modal);
+	root.solve(xray::new_rect(0, 0, 20, 10));
+
+	List{xray::ClickTarget} list;
+	list.tinit();
+	xray::collect_click_targets(root, &list);
+	xray::ClickTarget[] targets = list.array_view();
+
+	// Under the modal: no click, no hover.
+	xray::dispatch_click(targets, 2, 0, false);
+	assert(hit.count == 0, "the click stops at the modal");
+	xray::dispatch_hover(targets, 2, 0, {}, 0, 15, 5, false);
+	assert(hit.entered == 0, "no hover under the modal");
+
+	// Beside it, the row behaves as before.
+	xray::dispatch_click(targets, 7, 0, false);
+	assert(hit.count == 1, "the row still takes clicks outside the modal");
+	xray::dispatch_hover(targets, 7, 0, {}, 0, 2, 0, false);
+	assert(hit.entered == 1, "moving off the modal onto the row hovers it");
+	xray::dispatch_hover(targets, 2, 0, {}, 0, 7, 0, false);
+	assert(hit.left == 1, "moving onto the modal leaves the row");
 }

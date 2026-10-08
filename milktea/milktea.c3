@@ -2,6 +2,7 @@ module milktea;
 
 import std::core::dstring;
 import std::core::mem;
+import std::collections::list;
 import std::core::mem::allocators;
 import std::thread;
 import std::atomic;
@@ -281,8 +282,6 @@ interface Model {
 // Constants
 const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
-const sz MAX_CLICK_TARGETS = 32;
-const sz MAX_DRAG_REGIONS = 8;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS = 50;
@@ -318,12 +317,10 @@ struct Program {
 	// Mouse hit-testing: repopulated by draw() every frame from the just-
 	// solved tree (xray::collect_click_targets), so a MOUSE_PRESS is matched
 	// against the layout that was actually on screen when the click landed
-	// rather than the app re-deriving widget geometry by hand. Fixed-size
-	// like the other per-frame buffers below — a screen with more than
-	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
-	// timers/send_queue/pending.
-	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
-	sz click_target_count;
+	// rather than the app re-deriving widget geometry by hand. It grows as
+	// needed: a fixed cap dropped the last targets of a busy screen, which
+	// are the topmost ones (a dialog's buttons over a long list).
+	List{xray::ClickTarget} click_targets;
 	// Last pointer position and last hovered targets, used by dispatch_hover
 	// to fire on_hover_in / on_hover_out only on real edge crossings. Targets
 	// themselves are not stored — the same click_targets list is filtered each
@@ -335,8 +332,7 @@ struct Program {
 	// Areas the app offered as drag handles for the OS window (xray::Node
 	// .window_drag), refilled by draw() from the same solved tree. Only a GUI
 	// build reads them; in a terminal there is no window to move.
-	xray::Rect[MAX_DRAG_REGIONS] drag_regions;
-	sz drag_region_count;
+	List{xray::Rect} drag_regions;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -615,12 +611,12 @@ fn xray::Rect layout_area() {
 // xray::Node.window_drag.
 fn xray::Rect[] drag_regions() {
 	if (g_program == null) return {};
-	return g_program.drag_regions[:g_program.drag_region_count];
+	return g_program.drag_regions.array_view();
 }
 
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
-	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count],
+	xray::dispatch_click(g_program.click_targets.array_view(),
 		col, row, g_program.debug_mouse);
 }
 
@@ -631,13 +627,13 @@ fn void dispatch_click(sz col, sz row) {
 // pointer position. (-1, -1) on the first call skips every prior target.
 fn void dispatch_hover(sz col, sz row) {
 	if (g_program == null) return;
-	xray::ClickTarget[] targs = g_program.click_targets[:g_program.click_target_count];
+	xray::ClickTarget[] targs = g_program.click_targets.array_view();
 	if (g_program.hover_has_prev) {
-		xray::dispatch_hover(targs, col, row, targs, g_program.click_target_count,
+		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
 			g_program.hover_prev_col, g_program.hover_prev_row,
 			g_program.debug_mouse);
 	} else {
-		xray::dispatch_hover(targs, col, row, targs, g_program.click_target_count,
+		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
 			-1, -1, g_program.debug_mouse);
 	}
 	g_program.hover_prev_col = col;
@@ -1216,6 +1212,8 @@ fn void? Program.run(Program* self) {
 			mem::free(self.draw_scratch);
 			self.draw_scratch = null;
 		}
+		self.click_targets.free();
+		self.drag_regions.free();
 
 		if (self.renderer != null) {
 			self.renderer.destroy();

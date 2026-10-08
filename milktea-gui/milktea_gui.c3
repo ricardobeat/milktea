@@ -1100,6 +1100,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	if (lp.prog.draw_buf != null && lp.prog.draw_buf.paint_ops.is_initialized()) {
 		lp.prog.draw_buf.paint_ops.free();
 	}
+	lp.prog.click_targets.free();
+	lp.prog.drag_regions.free();
 	decor_shutdown();
 	if (lp.rounded) {
 		rl::unload_shader(lp.round_shader);
@@ -1316,7 +1318,7 @@ fn bool gui_frame(GuiLoop* l) @local {
 		milktea::g_program.test_click_armed = false;
 		io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
 			milktea::g_program.frame_no, tc, tr,
-			milktea::g_program.click_target_count);
+			milktea::g_program.click_targets.len());
 		milktea::dispatch_click(tc * l.opts.cell_w, tr * l.opts.cell_h);
 		milktea::MouseMsg fm = { .button = milktea::MouseButton.MOUSE_LEFT,
 			.action = milktea::MouseAction.MOUSE_PRESS, .row = tr, .col = tc };
