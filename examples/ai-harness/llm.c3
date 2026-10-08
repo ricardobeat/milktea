@@ -23,7 +23,7 @@ struct Config {
 	char[512] url;
 	char[512] api_key;
 	char[512] model;
-	int timeout_ms;
+	sz timeout_ms;
 }
 
 struct HistoryEntry {
@@ -462,7 +462,7 @@ fn void agent_loop_real(Job* job) {
 			((ZString)&job.config.url[0]).str_view().zstr_copy(mem),
 			((ZString)&job.config.api_key[0]).str_view().zstr_copy(mem),
 			body_str.zstr_view(),
-			job.config.timeout_ms,
+			(int)job.config.timeout_ms,
 			&stream_raw_cb, &sctx, &status);
 		body_str.free();
 		// Any trailing partial line is incomplete; drop it with the buffer.

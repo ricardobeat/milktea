@@ -27,7 +27,7 @@ struct PaintResult {
 // is grown as needed and reused across nodes and frames, so callers should
 // hang one off something long-lived and pass its address. Passing null
 // disables blending: those nodes paint opaque.
-fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null, long now_ms = 0) {
+fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null, sz now_ms = 0) {
 	PaintResult res;
 	self.paint_node(root, &res, scratch);
 	self.draw_cursor(&res, now_ms);
@@ -43,14 +43,14 @@ const sz CURSOR_BLINK_MS = 500;
 // everything else has painted.
 // 
 // now_ms drives the blink. xray has no clock of its own, so the caller
-// supplies one; milktea::draw passes milktea::time_ms().
-fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
+// supplies one; milktea::draw passes milktea::frame_ms().
+fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, sz now_ms) {
 	ContentCursor c = res.cursor;
 	if (!c.has_cursor || c.draw == null) return;
 	if (c.x < 0 || c.y < 0 || (sz)c.x >= self.width || (sz)c.y >= self.height) return;
 
 	sz period = c.blink_ms > 0 ? c.blink_ms : CURSOR_BLINK_MS;
-	bool blink = ((now_ms / (long)period) % 2) == 0;
+	bool blink = ((now_ms / period) % 2) == 0;
 
 	Cell* cell   = self.cell_at((sz)c.x, (sz)c.y);
 	String under = (cell != null && cell.content_len > 0) ? cell.content_str() : "";

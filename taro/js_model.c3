@@ -54,8 +54,8 @@ DebugLog g_debug_log = { };
 const sz TIMING_MAX = 512;
 
 struct TimingSample {
-	long js_ms;
-	long vnode_ms;
+	sz js_ms;
+	sz vnode_ms;
 }
 
 struct TimingStats {
@@ -66,7 +66,7 @@ struct TimingStats {
 
 TimingStats g_timing = { };
 
-fn void timing_push(long js_ms, long vnode_ms) {
+fn void timing_push(sz js_ms, sz vnode_ms) {
 	TimingSample s = { .js_ms = js_ms, .vnode_ms = vnode_ms };
 	g_timing.buf[g_timing.head] = s;
 	g_timing.head = (g_timing.head + 1) % TIMING_MAX;
@@ -74,18 +74,18 @@ fn void timing_push(long js_ms, long vnode_ms) {
 }
 
 struct TimingAgg {
-	long avg_js;
-	long avg_vnode;
-	long peak_js;
-	long peak_vnode;
+	sz avg_js;
+	sz avg_vnode;
+	sz peak_js;
+	sz peak_vnode;
 	sz n;
 }
 
 fn TimingAgg timing_agg() {
-	long sum_js = 0;
-	long sum_vn = 0;
-	long peak_js = 0;
-	long peak_vn = 0;
+	sz sum_js = 0;
+	sz sum_vn = 0;
+	sz peak_js = 0;
+	sz peak_vn = 0;
 	sz n = g_timing.count;
 	sz start = n >= TIMING_MAX ? g_timing.head : 0;
 	for (sz i = 0; i < n; i++) {
@@ -231,9 +231,9 @@ fn void render_debug_overlay(xray::ScreenBuffer* screen, sz screen_w, sz screen_
 
 	// Build panel content
 	DString body = dstring::temp();
-	body.append_string(string::tformat("js  avg=%d pk=%d", (sz)agg.avg_js, (sz)agg.peak_js));
+	body.append_string(string::tformat("js  avg=%d pk=%d", agg.avg_js, agg.peak_js));
 	body.append_string("\n");
-	body.append_string(string::tformat("vn  avg=%d pk=%d", (sz)agg.avg_vnode, (sz)agg.peak_vnode));
+	body.append_string(string::tformat("vn  avg=%d pk=%d", agg.avg_vnode, agg.peak_vnode));
 	body.append_string("\n");
 	body.append_string(string::tformat("frames=%d", agg.n));
 
@@ -267,9 +267,9 @@ fn void render_debug_overlay(xray::ScreenBuffer* screen, sz screen_w, sz screen_
 
 // Requested tick delay from the last render pass. -1 means no tick requested.
 // Components call request_render_tick() during render_vnode to register a wakeup.
-long g_render_tick_ms = -1;
+sz g_render_tick_ms = -1;
 
-fn void request_render_tick(long delay_ms) {
+fn void request_render_tick(sz delay_ms) {
 	if (g_render_tick_ms < 0 || delay_ms < g_render_tick_ms) {
 		g_render_tick_ms = delay_ms;
 	}
@@ -396,7 +396,7 @@ fn milktea::Cmd JsModel.update(&self, milktea::Msg msg) @dynamic {
 fn milktea::Cmd JsModel.js_tick_cmd(&self) @inline {
 	if (self.rt.is_job_pending()) return milktea::tick(1);
 	if (self.rt.has_pending_fetch()) return milktea::tick(1);
-	long next_ms = self.rt.next_timer_ms();
+	sz next_ms = self.rt.next_timer_ms();
 	// Take the minimum of JS timer deadline and render-requested tick
 
 
@@ -413,7 +413,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	sz w = self.term_w > 0 ? self.term_w : 80;
 	sz h = self.term_h > 0 ? self.term_h : 24;
 
-	long t_js_start = taro_now_ms();
+	sz t_js_start = now_ms();
 	void* fn_val = self.rt.get_prop(self.js_model_obj, "view");
 	void* result = null;
 	if (fn_val != null && self.rt.is_function(fn_val)) {
@@ -422,7 +422,7 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	} else {
 		if (fn_val != null) self.rt.free_value(fn_val);
 	}
-	long t_js_ms = taro_now_ms() - t_js_start;
+	sz t_js_ms = now_ms() - t_js_start;
 
 	// vnode path: walk the tree, fill a ScreenBuffer, return cell view
 	// Always use screen buffer so we can overlay errors on top
@@ -440,9 +440,9 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	if (result != null && is_vnode(&self.rt, result)) {
 		g_render_tick_ms = -1;
 		reset_focused_cursor();
-		long t_vnode_start = taro_now_ms();
+		sz t_vnode_start = now_ms();
 		render_vnode(&self.rt, result, self.screen, area);
-		long t_vnode_ms = taro_now_ms() - t_vnode_start;
+		sz t_vnode_ms = now_ms() - t_vnode_start;
 		if (g_debug_log.enabled) {
 			timing_push(t_js_ms, t_vnode_ms);
 		}

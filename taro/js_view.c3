@@ -476,8 +476,8 @@ const sz DRAW_CACHE_MAX_CELLS = 16384; // max ~128x128 cells per entry
 
 struct DrawCacheEntry {
 	sz x, y, w, h;
-	long last_ms;
-	long interval_ms;
+	sz last_ms;
+	sz interval_ms;
 	sz cell_count;
 	xray::Cell[DRAW_CACHE_MAX_CELLS] cells;
 	bool active;
@@ -494,7 +494,7 @@ fn DrawCacheEntry* draw_cache_find(sz x, sz y, sz w, sz h) @local {
 	return null;
 }
 
-fn DrawCacheEntry* draw_cache_get_or_create(sz x, sz y, sz w, sz h, long interval_ms) @local {
+fn DrawCacheEntry* draw_cache_get_or_create(sz x, sz y, sz w, sz h, sz interval_ms) @local {
 	sz total = w * h;
 	if (total > DRAW_CACHE_MAX_CELLS) return null;
 	DrawCacheEntry* existing = draw_cache_find(x, y, w, h);
@@ -718,7 +718,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					area.h - border_pad,
 					style.border_animation,
 					style,
-					taro_now_ms()
+					now_ms()
 				);
 				screen.render_ansi_string(
 					(sz)area.x,
@@ -727,7 +727,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					xray::default_style(),
 					(sz)(area.y + area.h)
 				);
-				request_render_tick((long)glaze::border_anim_tick_ms(style.border_animation));
+				request_render_tick(glaze::border_anim_tick_ms(style.border_animation));
 			}
 			// Inner rect sits inside border + padding
 			xray::Rect inner = xray::new_rect(area.x + offset_x, area.y + offset_y, inner_w, inner_h);
@@ -775,7 +775,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					content_h,
 					style.border_animation,
 					style,
-					taro_now_ms()
+					now_ms()
 				);
 				// Render content, then overlay animated border on top.
 				screen.render_ansi_string(
@@ -792,7 +792,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 					xray::default_style(),
 					(sz)(area.y + area.h)
 				);
-				request_render_tick((long)glaze::border_anim_tick_ms(style.border_animation));
+				request_render_tick(glaze::border_anim_tick_ms(style.border_animation));
 			} else {
 				if (get_prop_int(rt, props, "width", 0) == 0) {
 					style = style.with_width(area.w);
@@ -825,13 +825,13 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 		}
 
 		boba::SpinnerFrames fs = boba::spinner_frames(kind);
-		sz frame                = (sz)((taro_now_ms() / (long)fs.interval_ms) % (long)fs.count);
+		sz frame                = (now_ms() / fs.interval_ms) % fs.count;
 		String frame_str         = fs.frames[frame];
 		if (fg.kind != glaze::ColorKind.NONE) {
 			frame_str = glaze::style().foreground(fg).render(frame_str);
 		}
 		screen.render_ansi_string((sz)area.x, (sz)area.y, frame_str, xray::default_style());
-		request_render_tick((long)fs.interval_ms);
+		request_render_tick(fs.interval_ms);
 	} else if (type == "textarea") {
 		// Textarea: stateful component backed by boba::Textarea
 		// Props: id (required), focused (bool), placeholder (string),
@@ -898,7 +898,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						area.h - border_pad,
 						frame_style.border_animation,
 						frame_style,
-						taro_now_ms()
+						now_ms()
 					);
 					screen.render_ansi_string(
 						(sz)area.x,
@@ -907,7 +907,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						xray::default_style(),
 						(sz)(area.y + area.h)
 					);
-					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_animation));
+					request_render_tick(glaze::border_anim_tick_ms(frame_style.border_animation));
 				}
 			}
 			// Write content lines directly into the inner rect
@@ -945,9 +945,9 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 				if (draw_fn && !rt.is_null(draw_fn) && rt.is_function(draw_fn)) {
 					sz interval_ms = props ? get_prop_int(rt, props, "cursorInterval", 500) : 500;
 					if (interval_ms < 16) interval_ms = 16;
-					long now   = taro_now_ms();
-					bool blink = ((now / (long)interval_ms) % 2) == 0;
-					request_render_tick((long)interval_ms);
+					sz now   = now_ms();
+					bool blink = ((now / interval_ms) % 2) == 0;
+					request_render_tick(interval_ms);
 
 					void* x_arg       = rt.new_int32((int)g_focused_cursor.x);
 					void* y_arg       = rt.new_int32((int)g_focused_cursor.y);
@@ -1096,7 +1096,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						area.h - border_pad,
 						frame_style.border_animation,
 						frame_style,
-						taro_now_ms()
+						now_ms()
 					);
 					screen.render_ansi_string(
 						(sz)area.x,
@@ -1105,7 +1105,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 						xray::default_style(),
 						(sz)(area.y + area.h)
 					);
-					request_render_tick((long)glaze::border_anim_tick_ms(frame_style.border_animation));
+					request_render_tick(glaze::border_anim_tick_ms(frame_style.border_animation));
 				}
 			}
 
@@ -1193,7 +1193,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			sz fps = get_prop_int(rt, props, "animate", 0);
 			bool anim_bool = !fps ? get_prop_bool(rt, props, "animate") : false;
 			bool has_animate = fps > 0 || anim_bool;
-			long interval_ms = has_animate ? (fps > 0 ? 1000 / fps : 16) : 0;
+			sz interval_ms = has_animate ? (fps > 0 ? 1000 / fps : 16) : 0;
 			if (interval_ms < 1) interval_ms = 1;
 
 			DrawCacheEntry* cache = null;
@@ -1201,7 +1201,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 			if (has_animate) {
 				cache = draw_cache_get_or_create(area.x, area.y, area.w, area.h, interval_ms);
 				if (cache) {
-					long now = taro_now_ms();
+					sz now = now_ms();
 					if (cache.last_ms > 0 && (now - cache.last_ms) < interval_ms) {
 						should_redraw = false;
 					}
@@ -1272,7 +1272,7 @@ fn void render_vnode(Runtime* rt, void* vnode, xray::ScreenBuffer* screen, xray:
 
 				if (cache) {
 					draw_cache_store(cache, screen);
-					cache.last_ms = taro_now_ms();
+					cache.last_ms = now_ms();
 				}
 			} else if (cache && cache.cell_count > 0) {
 				draw_cache_replay(cache, screen);

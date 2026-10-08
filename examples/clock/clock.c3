@@ -379,11 +379,11 @@ fn milktea::View ClockModel.view(ClockModel* self) @dynamic {
 		}
 	}
 
-	long now  = c3_time_ms_long();
-	long secs = now / 1000;
-	sz h     = ((sz)(secs / 3600)) % 24;
-	sz m     = ((sz)(secs / 60)) % 60;
-	sz s     = (sz)(secs % 60);
+	sz now  = (sz)c3_time_ms_long();
+	sz secs = now / 1000;
+	sz h    = (secs / 3600) % 24;
+	sz m    = (secs / 60) % 60;
+	sz s    = secs % 60;
 
 	char h0_c = (char)('0' + h / 10);
 	char h1_c = (char)('0' + h % 10);

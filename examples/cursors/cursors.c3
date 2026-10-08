@@ -28,8 +28,8 @@ fn String cursor_crosshair(sz x, sz y, bool blink, String under) {
 }
 
 fn String cursor_snake(sz x, sz y, bool blink, String under) {
-	long now  = milktea::frame_ms();
-	sz phase = (sz)((now / 150) % 4);
+	sz now   = milktea::frame_ms();
+	sz phase = (now / 150) % 4;
 	switch (phase) {
 		case 0: return "█";
 		case 1: return "▓";
@@ -39,15 +39,15 @@ fn String cursor_snake(sz x, sz y, bool blink, String under) {
 }
 
 fn String cursor_rainbow(sz x, sz y, bool blink, String under) {
-	long now = milktea::frame_ms();
+	sz now = milktea::frame_ms();
 	double t = ((double)(now % 1500)) / 1500.0;
 	return glaze::style().foreground(glaze::hcl(t * 360.0, 100.0, 60.0)).render("█");
 }
 
 fn String cursor_matrix(sz x, sz y, bool blink, String under) {
 	if (!blink && under.len > 0) return under;
-	long now = milktea::frame_ms();
-	sz idx  = (sz)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
+	sz now = milktea::frame_ms();
+	sz idx  = ((now / 80) + x * 7 + y * 13) % 48;
 	uint cp  = 0x30A1u + (uint)idx; // katakana block
 	char[4] buf;
 	sz len;

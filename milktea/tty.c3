@@ -461,7 +461,7 @@ fn sz wall_time_ms() {
 	return (sz)c3_time_ms();
 }
 
-fn sz read_stdin_timeout(char[] buf, int timeout_ms) @private {
+fn sz read_stdin_timeout(char[] buf, sz timeout_ms) @private {
 	if (buf.len == 0) return 0;
 
 	PollFd pfd;
@@ -469,7 +469,7 @@ fn sz read_stdin_timeout(char[] buf, int timeout_ms) @private {
 	pfd.events = POLLIN;
 	pfd.revents = 0;
 
-	int poll_result = poll(&pfd, 1, timeout_ms);
+	int poll_result = poll(&pfd, 1, (int)timeout_ms);
 	if (poll_result <= 0) return 0;
 
 	sz n = read(STDIN_FILENO, &buf[0], buf.len);
