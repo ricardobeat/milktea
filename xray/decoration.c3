@@ -54,12 +54,25 @@ struct Decoration {
 	Color border_color;
 
 	// Drop shadow: offset in points, blur radius in points, colour with the
-	// alpha it should composite at.
+	// alpha it should composite at. Blur follows CSS: the edge fades over
+	// blur points either side, a Gaussian with a sigma of blur / 2. Spread
+	// grows the shape before it is blurred.
 	bool shadow;
 	float shadow_dx;
 	float shadow_dy;
 	float shadow_blur;
+	float shadow_spread;
 	Color shadow_color;
+
+	// Inner shadow: the same, cast inward from the shape's edges and clipped
+	// to it, as if the shape were a hole the light falls into. Spread pulls
+	// the edge further in.
+	bool inner_shadow;
+	float inner_dx;
+	float inner_dy;
+	float inner_blur;
+	float inner_spread;
+	Color inner_color;
 }
 
 // solid fills the shape with one colour.
@@ -115,13 +128,25 @@ fn Decoration Decoration.with_border(self, float width, Color c) {
 	return d;
 }
 
-fn Decoration Decoration.with_shadow(self, float dx, float dy, float blur, Color c) {
+fn Decoration Decoration.with_shadow(self, float dx, float dy, float blur, Color c, float spread = 0) {
 	Decoration d = self;
 	d.shadow = true;
 	d.shadow_dx = dx;
 	d.shadow_dy = dy;
 	d.shadow_blur = blur;
+	d.shadow_spread = spread;
 	d.shadow_color = c;
+	return d;
+}
+
+fn Decoration Decoration.with_inner_shadow(self, float dx, float dy, float blur, Color c, float spread = 0) {
+	Decoration d = self;
+	d.inner_shadow = true;
+	d.inner_dx = dx;
+	d.inner_dy = dy;
+	d.inner_blur = blur;
+	d.inner_spread = spread;
+	d.inner_color = c;
 	return d;
 }
 
