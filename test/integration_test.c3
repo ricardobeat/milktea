@@ -342,68 +342,6 @@ fn void test_every_zero_no_crash() @test {
 }
 
 // ============================================================
-// add_overlay field round-trip tests
-// ============================================================
-
-// test_add_overlay_defaults verifies that add_overlay with only positional
-// args leaves transparent=false and layer_style zero-initialised, preserving
-// backward-compatible behaviour for all existing call sites.
-fn void test_add_overlay_defaults() @test {
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(1, 2, 10, 5, "hello");
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(o.x == 1);
-	assert(o.y == 2);
-	assert(o.w == 10);
-	assert(o.h == 5);
-	assert(o.alpha == 0);
-	// Defaults must be false / zero — behaviour preserved for existing callers.
-	assert(!o.transparent);
-	assert(!o.layer_style.shadow.enabled);
-	assert(!o.layer_style.inner_shadow.enabled);
-}
-
-// test_add_overlay_transparent_and_shadow verifies that the transparent and
-// layer_style params are stored in the Overlay entry when supplied.
-fn void test_add_overlay_transparent_and_shadow() @test {
-	xray::LayerStyle ls = {
-		.shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2),
-	};
-
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(0, 0, 20, 8, "popup", transparent: true, layer_style: ls);
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(o.transparent);
-	assert(o.layer_style.shadow.enabled);
-	assert(o.layer_style.shadow.offset_x == 1);
-	// offset_y is stored in half-rows, so one row is 2.
-	assert(o.layer_style.shadow.offset_y == 2);
-	assert(o.layer_style.shadow.opacity == 128);
-	assert(o.layer_style.shadow.blur == 2);
-	// Inner shadow untouched when only shadow was set.
-	assert(!o.layer_style.inner_shadow.enabled);
-}
-
-// test_add_overlay_inner_shadow verifies inner_shadow round-trips correctly.
-fn void test_add_overlay_inner_shadow() @test {
-	xray::LayerStyle ls = {
-		.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
-	};
-
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(0, 0, 30, 10, "panel", layer_style: ls);
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(!o.transparent); // transparent defaults to false
-	assert(!o.layer_style.shadow.enabled);
-	assert(o.layer_style.inner_shadow.enabled);
-}
-// ============================================================
 // Test-mode loop termination
 // ============================================================
 
@@ -446,13 +384,13 @@ fn void test_test_mode_terminates_without_quit() @test {
 }
 
 // ============================================================
-// Overlay clipping
+// Layer clipping
 // ============================================================
 
-// NegativeOverlayModel places an overlay partly off the left/top edge, which
+// NegativeOverlayModel places a layer partly off the left/top edge, which
 // is what happens when a model scrolls or animates a floating panel out of
-// view. sz is signed, so the destination guard (dx >= width) let negative
-// coordinates through to index before the cell buffer.
+// view. sz is signed, so a destination guard of only dx >= width would let
+// negative coordinates through to index before the cell buffer.
 struct NegativeOverlayModel {
 	sz frames;
 }
@@ -468,13 +406,13 @@ fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea:
 
 fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
 	self.frames++;
-	milktea::View v = milktea::view("base content");
-	// Off the top-left corner, and off the right/bottom edge. alpha != 0
-	// selects the per-cell blending path, which does its own destination
+	// Off the top-left corner, and off the right/bottom edge. An alpha
+	// below 255 selects the blending path, which does its own destination
 	// bounds check rather than going through ScreenBuffer.set_cell.
-	v = v.add_overlay(-5, -3, 10, 6, "overlay", alpha: 128);
-	v = v.add_overlay(78, 22, 10, 6, "overlay", alpha: 128);
-	return v;
+	return milktea::draw(milktea::root()
+		.add(milktea::text("base content"))
+		.add(milktea::text("overlay").at(-5, -3).width(xray::cells(10)).height(xray::cells(6)).alpha(128))
+		.add(milktea::text("overlay").at(78, 22).width(xray::cells(10)).height(xray::cells(6)).alpha(128)));
 }
 
 fn void test_overlay_with_negative_origin_is_clipped() @test {

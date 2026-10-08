@@ -60,8 +60,7 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
   which `dispatch()` calls and chains through `update()` again.
 - `View` — either `content: String` (parsed by xray's ANSI parser) or a
   direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus
-  cursor state and up to `MAX_OVERLAYS` (8) `Overlay` entries for
-  floating content (menus, shadows) over the base view. Built fluently:
+  cursor state. Built fluently:
   `view(s).set_cursor(x, y)`. The alternate screen is a program option
   (`Options.alt_screen`), entered once before `init()`; mouse mode, key
   events and the mouse pointer start from `Options` and change through
@@ -138,9 +137,6 @@ freed at block exit):
    - **String path**: otherwise `View.content` is split on `\n`, each line
      parsed via `screen.render_ansi_string()` (understands SGR and CUP,
      skips other CSI).
-   - Overlays are composited: shadow → content (alpha-blended via
-     `Color.blend_over` for `0 < alpha < 255`, or `blit_ansi` when opaque)
-     → inner shadow.
    - `r.end_frame()`: diffs `cells` against `prev_cells`
      (`ScreenBuffer.render_diff`), wraps the diff in synchronized-output
      markers (`ESC[?2026h`/`l`, mode 2026) when supported, hides the
@@ -199,12 +195,10 @@ stderr, which belong to the rendering surface).
   across frames.
 - **Heap ownership**: `xray::new_screen_buffer` and `xray::new_renderer`
   return heap pointers the caller owns.
-  `Program.run()` frees the renderer in its shutdown `defer`. Temporary
-  `ScreenBuffer`s created mid-render for overlay blending always pair
-  their allocation with `defer { tmp.destroy(); mem::free(tmp); }`.
+  `Program.run()` frees the renderer in its shutdown `defer`.
 - **Fixed-capacity buffers over dynamic allocation**: `Program.timers`
   (32), `Program.send_queue` (16), `Program.pending` (512 bytes),
-  `InputQueue.buf` (4096 bytes), and `View.overlays` (8) are fixed-size
+  and `InputQueue.buf` (4096 bytes) are fixed-size
   arrays scanned linearly or treated as ring buffers — no heap churn per
   event/frame on the hot path.
 

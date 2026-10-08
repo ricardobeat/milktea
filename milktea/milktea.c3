@@ -34,19 +34,6 @@ struct Cursor {
 	String color;
 }
 
-struct Overlay {
-	String content;
-	sz x;
-	sz y;
-	sz w;
-	sz h;
-	bool transparent;
-	char alpha; // 0 = opaque (default), 1-254 = blended
-	xray::LayerStyle layer_style;
-}
-
-const sz MAX_OVERLAYS = 8;
-
 struct View {
 	String content;
 	Cursor cursor;
@@ -54,8 +41,6 @@ struct View {
 	xray::Cell[] cells;
 	sz cells_width;
 	sz cells_height;
-	Overlay[MAX_OVERLAYS] overlays;
-	sz overlay_count;
 	sz repaint_ms; // paint again after this long; 0 = wait for the next message
 }
 
@@ -101,36 +86,6 @@ fn View View.set_cursor_shape(self, sz x, sz y, CursorShape shape, bool blink) {
 fn View View.set_cursor_color(self, String color) {
 	View v = self;
 	v.cursor.color = color;
-	return v;
-}
-
-// add_overlay attaches a floating overlay to the view.
-// Overlays are rendered in insertion order, up to MAX_OVERLAYS (8) total.
-// Any call beyond MAX_OVERLAYS is silently ignored — callers that need more
-// overlays must merge content before adding.
-//
-// transparent: when true, blit_ansi skips cells whose content is a space with
-//   default style, letting the background show through instead of overwriting it.
-//   Use for overlays whose content is sparse or irregularly shaped.
-//
-// layer_style: configures drop-shadow and inner-shadow effects rendered around
-//   the overlay. The drop-shadow is composited under the overlay content;
-//   the inner-shadow is composited on top (inside the overlay bounds).
-//   Both fields default to disabled (zero-value LayerStyle).
-fn View View.add_overlay(self, sz x, sz y, sz w, sz h, String content, char alpha = 0,
-	bool transparent = false, xray::LayerStyle layer_style = {})
-{
-	View v = self;
-	if (v.overlay_count < MAX_OVERLAYS) {
-		v.overlays[v.overlay_count] = {
-			.content = content,
-			.x = x, .y = y, .w = w, .h = h,
-			.alpha = alpha,
-			.transparent = transparent,
-			.layer_style = layer_style,
-		};
-		v.overlay_count++;
-	}
 	return v;
 }
 
@@ -1576,12 +1531,6 @@ fn sz view_content_rows(View v) @private {
 	for (sz i = 0; i < v.content.len; i++) {
 		if (v.content[i] == '\n') rows++;
 	}
-	// Overlays are positioned against the same origin and may extend past
-	// the content, so the block has to be tall enough to contain them.
-	for (sz oi = 0; oi < v.overlay_count; oi++) {
-		sz bottom = (sz)v.overlays[oi].y + (sz)v.overlays[oi].h;
-		if (bottom > rows) rows = bottom;
-	}
 	return rows;
 }
 
@@ -1613,10 +1562,6 @@ fn sz view_content_cols(View v) @private {
 		cur += 1;
 	}
 	if (cur > widest) widest = cur;
-	for (sz oi = 0; oi < v.overlay_count; oi++) {
-		sz right = (sz)v.overlays[oi].x + (sz)v.overlays[oi].w;
-		if (right > widest) widest = right;
-	}
 	return widest;
 }
 
@@ -1839,73 +1784,6 @@ fn void Program.render_current_view(Program* self) {
 						}
 					}
 					self.last_content_rows = cur_row;
-				}
-
-				// Render overlays
-				for (sz oi = 0; oi < v.overlay_count; oi++) {
-					Overlay o = v.overlays[oi];
-
-					// Render shadow before content so it appears underneath
-					if (o.layer_style.shadow.enabled) {
-						r.screen.render_shadow(o.x, o.y, o.w, o.h, o.layer_style.shadow);
-					}
-
-					if (o.alpha != 0 && o.alpha < 255) {
-						// Alpha overlay: blend color over existing cells in-place,
-						// preserving underlying characters.
-						//
-						// Reuse r.overlay_scratch to avoid a heap alloc+free per frame.
-						// Lazily allocate on first use; grow (resize) when a larger overlay
-						// arrives. The scratch may be wider/taller than this overlay — that
-						// is fine because the blend loop indexes cells[cy * tmp.width + cx],
-						// which uses the scratch's own stride, so rows stay correctly aligned.
-						xray::ScreenBuffer* tmp = r.overlay_scratch;
-						if (tmp == null) {
-							// First alpha overlay ever seen — allocate the scratch.
-							tmp = xray::new_screen_buffer((sz)o.w, (sz)o.h);
-							r.overlay_scratch = tmp;
-						} else if (tmp.width < (sz)o.w || tmp.height < (sz)o.h) {
-							// Current scratch is too small in at least one dimension; grow it.
-							// Use the larger of old and new for each axis so one resize
-							// accommodates the largest overlay seen so far.
-							sz new_w = tmp.width  < (sz)o.w ? (sz)o.w : tmp.width;
-							sz new_h = tmp.height < (sz)o.h ? (sz)o.h : tmp.height;
-							tmp.resize(new_w, new_h);
-						}
-						// Clear before each use so content from a previous frame's overlay
-						// does not bleed into this overlay's cell region.
-						tmp.clear();
-						tmp.render_ansi_string(0, 0, o.content, xray::default_style());
-						for (sz cy = 0; cy < (sz)o.h; cy++) {
-							for (sz cx = 0; cx < (sz)o.w; cx++) {
-								sz dx = (sz)o.x + cx;
-								sz dy = (sz)o.y + cy;
-								// sz is signed: an overlay scrolled off the left
-								// or top edge yields negative coordinates that
-								// would index before the buffer.
-								if (dx < 0 || dy < 0 || dx >= r.screen.width || dy >= r.screen.height) continue;
-								xray::Cell src = tmp.cells[cy * tmp.width + cx];
-								src.style.bg.a = o.alpha;
-								src.style.fg.a = o.alpha;
-								xray::Cell* dst = &r.screen.cells[dy * r.screen.width + dx];
-								// Blend overlay color over existing cell colors, preserve content
-								if (src.style.bg.kind == xray::ColorKind.TRUECOLOR) {
-									dst.style.bg = src.style.bg.blend_over(dst.style.bg);
-								}
-								if (src.style.fg.kind == xray::ColorKind.TRUECOLOR) {
-									dst.style.fg = src.style.fg.blend_over(dst.style.fg);
-								}
-								r.screen.dirty_lines[dy] = true;
-							}
-						}
-						// tmp is owned by r.overlay_scratch; do NOT free it here.
-					} else {
-						r.screen.blit_ansi((sz)o.x, (sz)o.y, (sz)o.w, (sz)o.h, o.content, o.transparent);
-					}
-
-					if (o.layer_style.inner_shadow.enabled) {
-						r.screen.render_inner_shadow(o.x, o.y, o.w, o.h, o.layer_style.inner_shadow);
-					}
 				}
 
 				// Cursor positioning (CUP) is emitted after end_frame, below.

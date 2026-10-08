@@ -516,28 +516,17 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
 	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
 
-	milktea::View view = milktea::view(doc);
-
-	// Inner shadow on sidebar right edge
-	if (view.overlay_count < milktea::MAX_OVERLAYS) {
-		view.overlays[view.overlay_count] = {
-			.x = sidebar_r.x,
-			.y = sidebar_r.y,
-			.w = sidebar_r.w,
-			.h = sidebar_r.h,
-			.transparent = true,
-			.layer_style = {
-				.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
-			},
-		};
-		view.overlay_count++;
-	}
-
-	if (self.toast.visible()) {
-		self.toast.screen_width = w;
-		self.toast.screen_height = h;
-		view = self.toast.add_overlays(view);
-	}
+	// The page is one string; what floats over it goes in layers above.
+	xray::Node* root = milktea::root()
+		.add(milktea::text(doc))
+		// Inner shadow on the sidebar's right edge: an empty layer over the
+		// sidebar, so only the shadow paints.
+		.add(milktea::vstack()
+			.at(sidebar_r.x, sidebar_r.y)
+			.width(xray::cells(sidebar_r.w))
+			.height(xray::cells(sidebar_r.h))
+			.with_inner_shadow(xray::inner_shadow(right: 3, opacity: 40)))
+		.add(self.toast.node());
 
 	// Toast preview: two floating toasts with different shadow styles
 	if (self.preview.kind == Component.TOAST) {
@@ -559,23 +548,19 @@ fn milktea::View Model.view(Model* self) @dynamic {
 		sz center_y = preview_r.y + preview_r.h / 2;
 
 		// Hard shadow toast (left)
-		sz hard_w = self.preview.toast_hard.toast_width();
-		sz hard_x = center_x - hard_w - 2;
-		sz hard_y = center_y - 2 + float_offset;
-		String hard_rendered = self.preview.toast_hard.style.render(self.preview.toast_hard.message);
-		view = view.add_overlay(hard_x, hard_y, hard_w, boba::TOAST_H, hard_rendered,
-			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0) });
+		boba::Toast* hard = &self.preview.toast_hard;
+		root.add(milktea::text(hard.message, hard.style)
+			.at(center_x - hard.toast_width() - 2, center_y - 2 + float_offset)
+			.shadow(xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 0)));
 
 		// Blurred shadow toast (right)
-		sz blur_w = self.preview.toast_blur.toast_width();
-		sz blur_x = center_x + 2;
-		sz blur_y = center_y - 2 - float_offset;
-		String blur_rendered = self.preview.toast_blur.style.render(self.preview.toast_blur.message);
-		view = view.add_overlay(blur_x, blur_y, blur_w, boba::TOAST_H, blur_rendered,
-			layer_style: { .shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2) });
+		boba::Toast* blur = &self.preview.toast_blur;
+		root.add(milktea::text(blur.message, blur.style)
+			.at(center_x + 2, center_y - 2 - float_offset)
+			.shadow(xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2)));
 	}
 
-	return view;
+	return milktea::draw(root);
 }
 
 fn int main() {

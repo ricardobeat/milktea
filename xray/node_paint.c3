@@ -138,6 +138,25 @@ fn char scale_opacity(char opacity, char alpha) @local {
 	return (char)(((sz)opacity * (sz)alpha + 127) / 255);
 }
 
+// overlay paints an ANSI string over a w×h box at x, y, for a program that
+// draws into its own buffer rather than through a tree. Opaque (alpha 255)
+// replaces what is there, except for blank cells when transparent is set; any
+// other alpha blends the string's colors over the screen and keeps the
+// characters beneath, as a translucent layer does; 0 paints nothing.
+fn void ScreenBuffer.overlay(&self, sz x, sz y, sz w, sz h, String s, char alpha = 255, bool transparent = false) {
+	if (alpha == 0 || w <= 0 || h <= 0) return;
+	if (alpha == 255) {
+		self.blit_ansi(x, y, w, h, s, transparent);
+		return;
+	}
+	ScreenBuffer* scratch = null;
+	defer if (scratch != null) {
+		scratch.destroy();
+		mem::free(scratch);
+	}
+	self.paint_blended({ .x = x, .y = y, .w = w, .h = h }, s, alpha, &scratch);
+}
+
 // paint_blended renders content into a scratch buffer and blends its colors
 // over what is already at r, leaving the underlying characters in place.
 // That is what makes a translucent panel dim the screen behind it instead of

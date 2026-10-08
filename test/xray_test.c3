@@ -1377,6 +1377,49 @@ fn void test_blit_at_negative_origin_is_clipped() @test {
 	assert(dst.cell_at(0, 0) != null);
 }
 
+fn void test_opaque_overlay_replaces_what_is_there() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abcdefghij", default_style());
+
+	sb.overlay(2, 0, 3, 1, "XY");
+
+	assert(sb.cell_at(2, 0).content[0] == 'X');
+	assert(sb.cell_at(3, 0).content[0] == 'Y');
+	assert(sb.cell_at(5, 0).content[0] == 'f', "outside the box is left alone");
+}
+
+fn void test_translucent_overlay_tints_and_keeps_the_characters() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abcdefghij", default_style().set_bg(color_rgb(0, 0, 0)));
+
+	// A white background at half alpha, over black.
+	sb.overlay(-1, 0, 4, 1, "\x1b[48;2;255;255;255mXXXX\x1b[0m", alpha: 128);
+
+	Cell* c = sb.cell_at(1, 0);
+	assert(c.content[0] == 'b', "the character beneath stays");
+	assert(c.style.bg.r > 100 && c.style.bg.r < 160, "half way to white, got %d", c.style.bg.r);
+	assert(sb.cell_at(3, 0).style.bg.r == 0, "past the box is untouched");
+}
+
+fn void test_invisible_overlay_paints_nothing() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abc", default_style());
+	sb.overlay(0, 0, 3, 1, "XYZ", alpha: 0);
+	assert(sb.cell_at(0, 0).content[0] == 'a');
+}
+
 fn void test_blit_ansi_at_negative_origin_is_clipped() @test {
 	ScreenBuffer* dst = new_screen_buffer(20, 5);
 	defer { dst.destroy(); mem::free(dst); }

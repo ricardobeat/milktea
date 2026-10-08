@@ -244,13 +244,13 @@ alternate screen is a program option, not part of the view.
 .set_cursor(x, y)
 .set_cursor_shape(x, y, CursorShape shape, bool blink)
 .set_cursor_color(String color)
-.add_overlay(x, y, w, h, content, alpha = 0, ...)
 .draw(xray::Rect rect, glaze::Style style, String content)  // cell views
 ```
 
 `CursorShape` is `CURSOR_BLOCK`/`CURSOR_UNDERLINE`/`CURSOR_BAR`; `MouseMode` is
-`MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Up to
-`MAX_OVERLAYS` (8) overlays per view.
+`MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Content
+that floats over the rest goes in a layer of a `zstack` or `root`, placed with
+`.at(x, y)`, `.place(...)` or `.center()`.
 
 `View.draw(rect, style, content)` paints styled content into a cell-backed
 view's grid at `rect`, and returns the view so calls chain:
@@ -596,6 +596,8 @@ buf.draw_gradient_border(rect, border, c1, c2);
 buf.fill_gradient_v(rect, c1, c2); buf.fill_gradient_ellipse(...);
 buf.blit(dst_x, dst_y, src, transparent);
 buf.blit_ansi(dst_x, dst_y, w, h, ansi_text, transparent);
+buf.overlay(x, y, w, h, ansi_text, alpha = 255, transparent = false); // < 255 blends, keeps the characters
+buf.render_shadow(x, y, w, h, xray::shadow(...)); buf.render_inner_shadow(x, y, w, h, xray::inner_shadow(...));
 buf.render_ansi(); buf.render_frame(); buf.render_diff_str();
 buf.paint(node_root, &scratch, now_ms);
 ```
@@ -682,7 +684,7 @@ consumed) and some take `update(Msg) -> Cmd`.
 | `Pagination` | `new_pagination(per_page, total)` | `.with_kind`, `.next_page`, `.prev_page`, `.goto_page`, `.total_pages()`, `.page_start/end()` |
 | `Help` | `new_help()` / `default_help()` | `.add_entry(key, desc)`, `.clear`, `.with_styles`, `.with_separator`, `.view_vertical()` |
 | `KeyMap` | `new_keymap()` | `.bind(key, action)`, `.bind_mod(key, action, alt, ctrl)`, `.match(k) -> action`, `.has_binding` |
-| `Toast` | `new_toast()` | `.show(msg)`, `.dismiss`, `.update`, `.visible()`, `.add_overlays(view)` |
+| `Toast` | `new_toast()` | `.show(msg)`, `.dismiss`, `.update`, `.visible()`, `.node()` (null while hidden) |
 
 `TextInput.handle_paste` inserts up to the first newline (single-line
 semantics); `Textarea.handle_paste` inserts the text as given, newlines

@@ -2,6 +2,7 @@ module boba_test @test;
 
 import boba;
 import milktea;
+import xray;
 
 // ============================================================
 // UTF-8 boundary helpers
@@ -224,4 +225,34 @@ fn void test_viewport_selection_uses_display_columns() @test {
 	}
 	assert(matches == 2);
 	vp.free();
+}
+
+// ============================================================
+// Toast
+// ============================================================
+
+fn void test_hidden_toast_has_no_node() @test {
+	boba::Toast t = boba::new_toast();
+	assert(t.node() == null);
+}
+
+fn void test_toast_sits_centred_above_the_bottom_and_grows_upward() @test {
+	boba::Toast t = boba::new_toast();
+	t.show("saved");
+	sz w = t.toast_width();
+
+	// First frame of the slide: one row showing, bottom edge three rows up.
+	xray::Node* root = milktea::root().add(t.node());
+	root.solve(xray::new_rect(0, 0, 40, 20));
+	xray::Rect r = root.child_rect(0);
+	assert(r.w == w && r.h == 1, "one row, got %dx%d", r.w, r.h);
+	assert(r.x == (40 - w) / 2, "centred, got x=%d", r.x);
+	assert(r.y == 16, "bottom at row 17, got y=%d", r.y);
+
+	// Fully in: all three rows, the bottom edge where it was.
+	t.anim_step = boba::TOAST_ANIM_STEPS;
+	root = milktea::root().add(t.node());
+	root.solve(xray::new_rect(0, 0, 40, 20));
+	r = root.child_rect(0);
+	assert(r.h == boba::TOAST_H && r.y == 14, "three rows from y=14, got %d from y=%d", r.h, r.y);
 }
