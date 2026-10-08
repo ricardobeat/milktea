@@ -171,7 +171,7 @@ fn void set_cell_size(int cell_w, int cell_h, int font_size) {
 // click, small enough that a deliberate drag starts at once.
 const int DRAG_SLOP = 3;
 
-// pointer_cell reports the pointer's cell in the grid, preferring a live
+// pointer_pixel reports window-local logical pixels, preferring a live
 // reading of the pointer over raylib's cached one.
 //
 // raylib only learns where the pointer is from motion events: GLFW's mouse
@@ -189,7 +189,7 @@ const int DRAG_SLOP = 3;
 // contains, so hover clears and a press finds no target instead of being
 // rounded into the first row or column. Only the live reading can report
 // that: raylib's cached position cannot leave the window it was last seen in.
-fn void pointer_cell(GuiOptions opts, int* col, int* row) @local {
+fn void pointer_pixel(GuiOptions opts, int* col, int* row) @local {
 	int x = rl::get_mouse_x();
 	int y = rl::get_mouse_y();
 	$if env::DARWIN:
@@ -223,11 +223,11 @@ fn void pointer_cell(GuiOptions opts, int* col, int* row) @local {
 		*row = -1;
 		return;
 	}
-	*col = x / opts.cell_w;
-	*row = y / opts.cell_h;
+	*col = x;
+	*row = y;
 }
 
-// is_drag_point answers whether a press at this cell should be able to drag
+// is_drag_point answers whether a press at this pixel should be able to drag
 // the window. A view that marked nodes with xray::Node.window_drag decides
 // it entirely — those rects move with the layout, so a title bar that is
 // indented, split around the window buttons, or absent on some screens
@@ -242,7 +242,7 @@ fn bool is_drag_point(GuiOptions opts, int col, int row) @local {
 		}
 		return false;
 	}
-	return opts.chrome_rows > 0 && row < opts.chrome_rows;
+	return opts.chrome_rows > 0 && row >= 0 && col >= 0 && row < opts.chrome_rows * opts.cell_h;
 }
 
 fn GuiOptions default_options() {
@@ -795,6 +795,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// Program.run() (which assumes a real or test-mode TTY).
 	milktea::Program prog;
 	prog.record_paint = true;
+	prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
+	prog.layout_area = { .w = opts.cols * opts.cell_w, .h = opts.rows * opts.cell_h };
 	prog.cached_ws.ws_col = (ushort)opts.cols;
 	prog.cached_ws.ws_row = (ushort)opts.rows;
 	milktea::g_program = &prog;
@@ -1007,7 +1009,16 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			g_dirty = true;
 		}
 
+		prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
+		prog.layout_area = { .w = shot ? opts.cols * opts.cell_w : rl::get_screen_width(),
+			.h = shot ? opts.rows * opts.cell_h : rl::get_screen_height() };
+
 		if (rl::is_window_resized() || size_changed) {
+			g_dirty = true;
+			if (rounded) {
+				rl::unload_render_texture(target);
+				target = rl::load_render_texture(rl::get_screen_width(), rl::get_screen_height());
+			}
 			int new_cols = rl::get_screen_width() / opts.cell_w;
 			int new_rows = rl::get_screen_height() / opts.cell_h;
 			if (new_cols < 1) new_cols = 1;
@@ -1018,10 +1029,6 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				prog.cached_ws.ws_col = (ushort)new_cols;
 				prog.cached_ws.ws_row = (ushort)new_rows;
 				milktea::Msg wm = { .kind = milktea::MsgKind.WINDOW_SIZE, .window_size = { new_cols, new_rows } };
-				if (rounded) {
-					rl::unload_render_texture(target);
-					target = rl::load_render_texture(new_cols * opts.cell_w, new_rows * opts.cell_h);
-				}
 				if (dispatch_gui(m, wm)) { should_quit = true; break; }
 			}
 		}
@@ -1125,7 +1132,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets",
 				milktea::g_program.frame_no, tc, tr,
 				milktea::g_program.click_target_count);
-			milktea::dispatch_click(tc, tr);
+			milktea::dispatch_click(tc * opts.cell_w, tr * opts.cell_h);
 			milktea::MouseMsg fm = { .button = milktea::MouseButton.MOUSE_LEFT,
 				.action = milktea::MouseAction.MOUSE_PRESS, .row = tr, .col = tc };
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = fm })) { should_quit = true; break; }
@@ -1137,7 +1144,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			milktea::g_program.test_pointer_armed = false;
 			io::eprintfn("[test] frame %d: pointer col=%d row=%d",
 				milktea::g_program.frame_no, pc, pr);
-			milktea::dispatch_hover(pc, pr);
+			milktea::dispatch_hover(pc * opts.cell_w, pr * opts.cell_h);
 			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
 				.action = milktea::MouseAction.MOUSE_MOTION, .row = pr, .col = pc };
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
@@ -1151,22 +1158,23 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 				milktea::g_program.frame_no, (int)g_key_msg.code, (int)g_key_msg.rune);
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.KEY, .key = g_key_msg })) { should_quit = true; break; }
 		}
-		int mcol;
-		int mrow;
-		pointer_cell(opts, &mcol, &mrow);
-		if (mcol != g_prev_mcol || mrow != g_prev_mrow) {
+		int mx, my;
+		pointer_pixel(opts, &mx, &my);
+		int mcol = xray::floor_cell(mx, opts.cell_w);
+		int mrow = xray::floor_cell(my, opts.cell_h);
+		if (mx != g_prev_mcol || my != g_prev_mrow) {
 			// Hover is an edge event: walking every target each frame would
 			// be a no-op while the pointer stays put, but the edge crossing
 			// is what tells a node "you are now hovered" / "you are no
 			// longer". Same dispatch path the terminal loop uses on a real
 			// MOUSE_MOTION, kept in sync so a model written against either
 			// backend sees identical behaviour.
-			milktea::dispatch_hover(mcol, mrow);
+			milktea::dispatch_hover(mx, my);
 			milktea::MouseMsg hm = { .button = milktea::MouseButton.MOUSE_NONE,
 				.action = milktea::MouseAction.MOUSE_MOTION, .row = mrow, .col = mcol };
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = hm })) { should_quit = true; }
-			g_prev_mcol = mcol;
-			g_prev_mrow = mrow;
+			g_prev_mcol = mx;
+			g_prev_mrow = my;
 		}
 		bool left_pressed = g_left_press_pending != 0
 			|| rl::is_mouse_button_pressed(rl::RLMouseButton.LEFT);
@@ -1175,9 +1183,9 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			if (milktea::debug_mouse()) {
 				io::eprintfn("[mouse] press at px=%d,%d -> col=%d row=%d (cell %dx%d) drag=%s",
 					rl::get_mouse_x(), rl::get_mouse_y(), mcol, mrow,
-					opts.cell_w, opts.cell_h, is_drag_point(opts, mcol, mrow));
+					opts.cell_w, opts.cell_h, is_drag_point(opts, mx, my));
 			}
-			if (is_drag_point(opts, mcol, mrow)) {
+			if (is_drag_point(opts, mx, my)) {
 				rl::RLVector2 wp = rl::get_window_position();
 				drag_pending = true;
 				drag_active = false;
@@ -1194,8 +1202,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			// before the raw MouseMsg reaches update() — same order as the
 			// terminal event loop's dispatch(): a press counts as a pointer
 			// move, so it settles hover first and then delivers the press.
-			milktea::dispatch_click(mcol, mrow);
-			milktea::dispatch_hover(mcol, mrow);
+			milktea::dispatch_click(mx, my);
+			milktea::dispatch_hover(mx, my);
 			if (dispatch_gui(m, { .kind = milktea::MsgKind.MOUSE, .mouse = mm })) { should_quit = true; }
 		}
 		if (rl::is_mouse_button_released(rl::RLMouseButton.LEFT)) {
@@ -1280,13 +1288,14 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			foreach (op : v.paint_ops) {
 				switch (op.kind) {
 					case xray::PaintKind.DECORATION:
-						decor_draw(op.decoration, opts);
+						decor_draw(op.decoration, opts, prog.layout_area.w, prog.layout_area.h);
 					case xray::PaintKind.TINT:
-						rl::draw_rectangle(op.col * opts.cell_w, op.row * opts.cell_h,
+						rl::draw_rectangle(op.pixels ? op.col : op.col * opts.cell_w,
+							op.pixels ? op.row : op.row * opts.cell_h,
 							opts.cell_w, opts.cell_h, to_rl(op.tint, rl::BLANK));
 					case xray::PaintKind.CELL:
 						paint_gui_cell(op.cell, op.col, op.row, opts, font, rule_font,
-							text_fit, rule_fit, split_atlas, true);
+							text_fit, rule_fit, split_atlas, true, op.pixels, op.bg_w, op.bg_h);
 				}
 			}
 		} else if (v.cells.ptr != null) {
@@ -1364,12 +1373,13 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 
 fn void paint_gui_cell(xray::Cell cell, int col, int row, GuiOptions opts,
 		rl::RLFont font, rl::RLFont rule_font, CellFit text_fit, CellFit rule_fit,
-		bool split_atlas, bool ordered) @local {
-	int px = col * opts.cell_w;
-	int py = row * opts.cell_h;
+		bool split_atlas, bool ordered, bool pixels = false, int bg_w = 0, int bg_h = 0) @local {
+	int px = pixels ? col : col * opts.cell_w;
+	int py = pixels ? row : row * opts.cell_h;
 	RLColor bg = ordered && cell.style.bg.kind == xray::ColorKind.TRANSPARENT
 		? rl::BLANK : to_rl(cell.style.bg, rl::BLACK);
-	if (bg[3] != 0) rl::draw_rectangle(px, py, opts.cell_w, opts.cell_h, bg);
+	if (bg[3] != 0) rl::draw_rectangle(px, py,
+		pixels && bg_w > 0 ? bg_w : opts.cell_w, pixels && bg_h > 0 ? bg_h : opts.cell_h, bg);
 	if (cell.content_len == 0 || cell.content[0] == ' ') return;
 	RLColor fg = to_rl(cell.style.fg, rl::WHITE);
 	uint cp;

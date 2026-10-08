@@ -11,6 +11,8 @@ import std::io;
 // forwards both to the callback.
 struct ClickTarget {
 	Rect rect;
+	LayoutMetrics metrics;
+	int inset_x, inset_y;
 	String id_str;
 	void* id_ptr;
 	ClickFn on_click;
@@ -34,6 +36,9 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null) {
 		out[*count] = {
 			.rect = n.computed_rect,
+			.metrics = n.layout_metrics,
+			.inset_x = n.layout_metrics.pixels ? n.decoration.pad_left : 0,
+			.inset_y = n.layout_metrics.pixels ? n.decoration.pad_top : 0,
 			.id_str = n.id_str,
 			.id_ptr = n.id_ptr,
 			.on_click = n.on_click_fn,
@@ -56,7 +61,7 @@ fn void collect_click_targets(Node* n, ClickTarget[] out, int* count) {
 // the click handler first.
 //
 // col and row passed to the callbacks are local to the hit target's rect
-// (i.e. already offset by rect.x / rect.y) so a widget that cares where the
+// after removing GUI decoration padding, so a widget that cares where the
 // press landed inside it can read the position as a 0-based cell within its
 // own content area rather than subtracting its own origin by hand.
 fn void dispatch_click(ClickTarget[] targets, int col, int row, bool dbg) {
@@ -71,14 +76,15 @@ fn void dispatch_click(ClickTarget[] targets, int col, int row, bool dbg) {
 		if (targets[i].on_click != null && targets[i].rect.contains(col, row)) {
 			if (dbg) io::eprintfn("  -> firing on_click of [%d]", i);
 			Rect r = targets[i].rect;
-			targets[i].on_click(targets[i].id_ptr, targets[i].id_str, col - r.x, row - r.y);
+			targets[i].on_click(targets[i].id_ptr, targets[i].id_str, floor_cell(col - r.x - targets[i].inset_x, targets[i].metrics.unit_w()),
+				floor_cell(row - r.y - targets[i].inset_y, targets[i].metrics.unit_h()));
 			break;
 		}
 	}
 	foreach (i, t : targets) {
 		if (t.on_click_outside != null && !t.rect.contains(col, row)) {
 			if (dbg) io::eprintfn("  -> firing on_click_OUTSIDE of [%d]", i);
-			t.on_click_outside(t.id_ptr, t.id_str, col, row);
+			t.on_click_outside(t.id_ptr, t.id_str, floor_cell(col, t.metrics.unit_w()), floor_cell(row, t.metrics.unit_h()));
 		}
 	}
 }
@@ -106,10 +112,12 @@ fn void dispatch_hover(ClickTarget[] targets, int col, int row,
 		bool inside_prev = t.rect.contains(prev_col, prev_row);
 		if (inside_now && !inside_prev && t.on_hover_in != null) {
 			if (dbg) io::eprintfn("  -> firing on_hover_in of [%d]", i);
-			t.on_hover_in(t.id_ptr, t.id_str, col - t.rect.x, row - t.rect.y);
+			t.on_hover_in(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
+				floor_cell(row - t.rect.y - t.inset_y, t.metrics.unit_h()));
 		} else if (!inside_now && inside_prev && t.on_hover_out != null) {
 			if (dbg) io::eprintfn("  -> firing on_hover_out of [%d]", i);
-			t.on_hover_out(t.id_ptr, t.id_str, col - t.rect.x, row - t.rect.y);
+			t.on_hover_out(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
+				floor_cell(row - t.rect.y - t.inset_y, t.metrics.unit_h()));
 		}
 	}
 	(void)prev; (void)prev_count;

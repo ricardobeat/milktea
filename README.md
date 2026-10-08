@@ -237,6 +237,37 @@ milktea::at_most(n)   // at most n cells
 `.center()` sizes a node to its content and puts it in the middle of its
 parent. A node given neither fills.
 
+### GUI layout units
+
+The GUI solves the same node tree in logical pixels. `cells(n)`, existing
+padding, gaps, and pinned offsets still use text cells; xray converts them
+using the current font metrics before solving. Terminal layout stays in cells.
+`xray::pixels(n, terminal_cells)` gives a node a fixed GUI size independent of
+the font; the optional terminal size defaults to zero cells.
+
+Decoration padding is an additional GUI-only inset, in logical pixels:
+
+```c3
+bar.decorate(xray::linear(top_color, bottom_color)
+    .padding(4, 4, 4, 4)); // top, right, bottom, left
+```
+
+Fixed cell sizes and fit-to-content sizes include this extra inset. A one-row
+bar with 4px top and bottom padding is one text row plus 8px tall. Fill and
+percentage sizes use their allocated outer box, with padding taken from inside.
+
+Text measurement and rendering still use whole columns and rows. Their pixel
+origins, decorations, and mouse targets do not snap to the cell grid. Click and
+hover callbacks receive content-local cell coordinates; GUI padding before the
+content can produce negative coordinates. Raw `MouseMsg` coordinates and
+`screen_width()` / `screen_height()` remain in cells.
+
+For manual geometry, `milktea::layout_area()` and solved `Node.rect()` use the
+backend's layout units. `milktea::layout_metrics()` supplies `unit_w()` and
+`unit_h()` for conversion. `Content.render`, `Content.cursor`, and custom fit
+callbacks retain cell units. Standalone xray callers opt into pixels with
+`node.solve(pixel_area, { .pixels = true, .cell_w = 10, .cell_h = 20 })`.
+
 ### Components
 
 Every boba component has a `node()` that puts it in a tree, sizing itself from

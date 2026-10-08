@@ -275,21 +275,23 @@ fn rl::RLTexture2D decor_upload() {
 }
 // Flush before reusing the texture: queued geometry may still reference its
 // previous contents. Each decoration is composited at its place in the stream.
-fn void decor_draw(xray::Decoration d, GuiOptions opts) {
+fn void decor_draw(xray::Decoration d, GuiOptions opts, int width, int height) {
 	rl::gl_draw_render_batch_active();
-	decor_ensure(opts.cols * opts.cell_w, opts.rows * opts.cell_h,
+	decor_ensure(width, height,
 		rl::get_window_scale_dpi().x);
 	if (!decor_available()) return;
-	d.rect.x *= opts.cell_w;
-	d.rect.y *= opts.cell_h;
-	d.rect.w *= opts.cell_w;
-	d.rect.h *= opts.cell_h;
+	if (!d.pixel_rect) {
+		d.rect.x *= opts.cell_w;
+		d.rect.y *= opts.cell_h;
+		d.rect.w *= opts.cell_w;
+		d.rect.h *= opts.cell_h;
+	}
 	decor_begin();
 	decor_paint(d);
 	rl::RLTexture2D tex = decor_upload();
 	rl::draw_texture_pro(tex,
 		{ 0, 0, (float)tex.width, (float)tex.height },
-		{ 0, 0, (float)(opts.cols * opts.cell_w), (float)(opts.rows * opts.cell_h) },
+		{ 0, 0, (float)width, (float)height },
 		{ 0, 0 }, 0.0f, rl::WHITE);
 	rl::gl_draw_render_batch_active();
 }

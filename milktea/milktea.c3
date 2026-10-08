@@ -305,6 +305,8 @@ struct TimerEntry {
 // Enables sequential multi-instance use and proper testability.
 struct Program {
 	bool record_paint;
+	xray::LayoutMetrics layout_metrics;
+	xray::Rect layout_area;
 	Model model;
 	TimerEntry[MAX_TIMERS] timers;
 	// Buffers for tree layout (see draw / draw_inline), kept across frames
@@ -592,13 +594,25 @@ fn int screen_height() {
 	return (int)g_program.cached_ws.ws_row;
 }
 
+// Layout geometry is in logical pixels in GUI programs and cells in terminals.
+// screen_width/screen_height continue to report whole text columns and rows.
+fn xray::LayoutMetrics layout_metrics() {
+	return g_program != null ? g_program.layout_metrics : (xray::LayoutMetrics){};
+}
+
+fn xray::Rect layout_area() {
+	if (g_program != null && g_program.layout_metrics.pixels) return g_program.layout_area;
+	return xray::new_rect(0, 0, screen_width(), screen_height());
+}
+
 // dispatch_click fires on_click/on_click_outside hooks (see xray::Node.on_click,
 // .on_click_outside) against the click targets collected from the last drawn
 // frame — called for every MOUSE_PRESS before the raw MouseMsg reaches
 // model.update(), by dispatch() in the normal event loop and directly by any
 // backend (e.g. a GUI renderer) that drives a Model outside Program.run().
+// Dispatch coordinates use backend layout units; callbacks receive text cells.
 // drag_regions returns the rects the last drawn view offered as OS-window
-// drag handles, in cell coordinates. Empty unless the app marked a node with
+// drag handles, in backend layout coordinates. Empty unless the app marked a node with
 // xray::Node.window_drag.
 fn xray::Rect[] drag_regions() {
 	if (g_program == null) return {};

@@ -135,18 +135,34 @@ fn View draw(Node* root) {
 // without scrolling.
 fn View draw_inline(Node* root) {
 	int w = screen_width();
+	if (root != null) root.set_layout_metrics(layout_metrics());
+	if (root != null && g_program != null && g_program.layout_metrics.pixels) {
+		xray::LayoutMetrics metrics = g_program.layout_metrics;
+		int height = root.natural_height(g_program.layout_area.w);
+		if (height < 1) height = 1;
+		if (height > g_program.layout_area.h) height = g_program.layout_area.h;
+		return draw_in(root, w, (height + metrics.unit_h() - 1) / metrics.unit_h(), false, height);
+	}
 	int h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
 	return draw_in(root, w, h, false);
 }
 
-fn View draw_in(Node* root, int w, int h, bool alt) @local {
+fn View draw_in(Node* root, int w, int h, bool alt, int pixel_height = 0) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
 	if (root == null || w < 1 || h < 1 || g_program == null) return new_view("");
 
+	xray::LayoutMetrics metrics = g_program.layout_metrics;
+	xray::Rect area = xray::new_rect(0, 0, w, h);
+	if (metrics.pixels) {
+		area = alt ? g_program.layout_area : xray::new_rect(0, 0,
+			g_program.layout_area.w, pixel_height > 0 ? pixel_height : h * metrics.unit_h());
+		w = (area.w + metrics.unit_w() - 1) / metrics.unit_w();
+		h = (area.h + metrics.unit_h() - 1) / metrics.unit_h();
+	}
 	if (g_program.draw_buf == null) {
 		g_program.draw_buf = xray::new_screen_buffer((sz)w, (sz)h);
 	} else if (g_program.draw_buf.width != (sz)w || g_program.draw_buf.height != (sz)h) {
@@ -155,7 +171,7 @@ fn View draw_in(Node* root, int w, int h, bool alt) @local {
 	xray::ScreenBuffer* buf = g_program.draw_buf;
 	buf.clear();
 
-	root.solve(xray::new_rect(0, 0, w, h));
+	root.solve(area, metrics);
 	buf.record_paint = g_program.record_paint;
 	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)time_ms());
 

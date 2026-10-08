@@ -35,12 +35,12 @@ fn int constraint_natural(Constraint c, int other, int fallback) @local {
 
 // natural_width is how wide this node wants to be, given the height available.
 fn int Node.natural_width(&self, int height) {
-	return constraint_natural(self.size_w, height, self.content_width(height));
+	return constraint_natural(self.layout_constraint(true), height, self.content_width(height));
 }
 
 // natural_height is how tall this node wants to be, given the width available.
 fn int Node.natural_height(&self, int width) {
-	return constraint_natural(self.size_h, width, self.content_height(width));
+	return constraint_natural(self.layout_constraint(false), width, self.content_height(width));
 }
 
 // content_width measures what is inside this node, ignoring the node's own
@@ -53,7 +53,7 @@ fn int Node.content_width(&self, int height) {
 	if (self.child_count == 0) {
 		int n = 0;
 		if (self.content != null && &self.content.measure_width) {
-			n = self.content.measure_width(inner_h);
+			n = self.content.measure_width(inner_h / self.layout_metrics.unit_h()) * self.layout_metrics.unit_w();
 		}
 		return n + pad_x;
 	}
@@ -64,7 +64,7 @@ fn int Node.content_width(&self, int height) {
 		for (int i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_width(inner_h);
 		}
-		if (self.child_count > 1) total += self.gap * (self.child_count - 1);
+		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Stacked or layered: as wide as the widest child.
 		for (int i = 0; i < self.child_count; i++) {
@@ -85,7 +85,7 @@ fn int Node.content_height(&self, int width) {
 	if (self.child_count == 0) {
 		int n = 0;
 		if (self.content != null && &self.content.measure) {
-			n = self.content.measure(inner_w);
+			n = self.content.measure(inner_w / self.layout_metrics.unit_w()) * self.layout_metrics.unit_h();
 		}
 		return n + pad_y;
 	}
@@ -96,7 +96,7 @@ fn int Node.content_height(&self, int width) {
 		for (int i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_height(inner_w);
 		}
-		if (self.child_count > 1) total += self.gap * (self.child_count - 1);
+		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Side by side or layered: as tall as the tallest child.
 		for (int i = 0; i < self.child_count; i++) {
@@ -118,7 +118,12 @@ fn int node_measure_h(void* ctx, int width) {
 }
 
 // solve assigns every node in the tree a rect inside area.
-fn void Node.solve(&self, Rect area) {
+fn void Node.solve(&self, Rect area, LayoutMetrics metrics = {}) {
+	self.set_layout_metrics(metrics);
+	self.solve_layout(area);
+}
+
+fn void Node.solve_layout(&self, Rect area) {
 	self.computed_rect = area;
 
 	if (self.child_count == 0) return;
@@ -130,7 +135,7 @@ fn void Node.solve(&self, Rect area) {
 	// modal ends up sized to its content in the middle of the screen.
 	if (self.direction == NodeDirection.STACK) {
 		for (int i = 0; i < self.child_count; i++) {
-			self.children[i].solve(self.stack_child_rect(inner, self.children[i]));
+			self.children[i].solve_layout(self.stack_child_rect(inner, self.children[i]));
 		}
 		return;
 	}
@@ -144,13 +149,13 @@ fn void Node.solve(&self, Rect area) {
 	// The main axis belongs to the parent, so it picks which of each child's
 	// two constraints applies along it.
 	for (int i = 0; i < cc; i++) {
-		constraints[i] = row ? self.children[i].size_w : self.children[i].size_h;
+		constraints[i] = self.children[i].layout_constraint(row);
 	}
 
 	if (row) {
-		layout_h_gap(inner, constraints[0:cc], self.gap, child_rects[0:cc]);
+		layout_h_gap(inner, constraints[0:cc], self.layout_gap(), child_rects[0:cc]);
 	} else {
-		layout_v_gap(inner, constraints[0:cc], self.gap, child_rects[0:cc]);
+		layout_v_gap(inner, constraints[0:cc], self.layout_gap(), child_rects[0:cc]);
 	}
 
 	// Main-axis justification: shift the solved rects within whatever space
@@ -159,7 +164,7 @@ fn void Node.solve(&self, Rect area) {
 	for (int i = 0; i < cc; i++) {
 		content_size += row ? child_rects[i].w : child_rects[i].h;
 	}
-	if (cc > 1) content_size += self.gap * (cc - 1);
+	if (cc > 1) content_size += self.layout_gap() * (cc - 1);
 
 	int spare = (row ? inner.w : inner.h) - content_size;
 	if (spare < 0) spare = 0;
@@ -178,7 +183,7 @@ fn void Node.solve(&self, Rect area) {
 	int cross_origin = row ? inner.y : inner.x;
 
 	for (int i = 0; i < cc; i++) {
-		Constraint cross = row ? self.children[i].size_h : self.children[i].size_w;
+		Constraint cross = self.children[i].layout_constraint(!row);
 		int main_size = row ? child_rects[i].w : child_rects[i].h;
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
@@ -204,7 +209,7 @@ fn void Node.solve(&self, Rect area) {
 	}
 
 	for (int i = 0; i < cc; i++) {
-		self.children[i].solve(child_rects[i]);
+		self.children[i].solve_layout(child_rects[i]);
 	}
 }
 
@@ -213,22 +218,22 @@ fn void Node.solve(&self, Rect area) {
 // axis gets that size, positioned by its own justify (horizontally) and align
 // (vertically) — which is what place() sets both of.
 fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
-	int w = resolve_axis(child.size_w, area.w, area.h);
+	int w = resolve_axis(child.layout_constraint(true), area.w, area.h);
 	if (w > area.w) w = area.w;
 	if (w < 0) w = 0;
 	// Height is measured at the width just settled on, not the area's:
 	// content that wraps is taller in a narrower box.
-	int h = resolve_axis(child.size_h, area.h, w);
+	int h = resolve_axis(child.layout_constraint(false), area.h, w);
 	if (h > area.h) h = area.h;
 	if (h < 0) h = 0;
 
 	// A pinned child names its own offset; everything else is placed by its
 	// justify and align within the space it did not fill.
 	int x = child.pinned
-		? child.offset_x
+		? child.offset_x * self.layout_metrics.unit_w()
 		: justify_offset(child.justify, area.w - w, 0, 1);
 	int y = child.pinned
-		? child.offset_y
+		? child.offset_y * self.layout_metrics.unit_h()
 		: align_offset(child.align, area.h - h);
 
 	return { .x = area.x + x, .y = area.y + y, .w = w, .h = h };

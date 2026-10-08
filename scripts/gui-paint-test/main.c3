@@ -8,7 +8,17 @@ import raylib6::rl;
 import std::os::env;
 import std::io;
 
-struct Scene (milktea::Model) { bool changed; }
+struct Scene (milktea::Model) {
+	bool changed;
+	bool checked_padding;
+	int hit_count, hit_col, hit_row;
+}
+fn void padded_click(void* ctx, String id, int col, int row) {
+	Scene* scene = (Scene*)ctx;
+	scene.hit_count++;
+	scene.hit_col = col;
+	scene.hit_row = row;
+}
 fn milktea::Cmd Scene.init(&self) @dynamic => null;
 fn milktea::Cmd Scene.update(&self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.KEY) self.changed = true;
@@ -25,14 +35,36 @@ fn milktea::View Scene.view(&self) @dynamic {
 		.decorate(xray::linear(fill, xray::color_rgb(128, 0, 0)).round(15.0f))
 		.add(milktea::text(green, "").at(2, 2)
 			.width(milktea::cells(2)).height(milktea::cells(2)));
-	return milktea::draw(milktea::root()
+	milktea::View view = milktea::draw(milktea::root()
 		.add(milktea::text(base, ""))
 		.add(panel)
 		.add(milktea::text(blue, "").at(9, 4)
 			.width(milktea::cells(6)).height(milktea::cells(3)))
 		.add(milktea::text(base, "").at(3, 7)
 			.width(milktea::cells(2)).height(milktea::cells(2))
-			.decorate(xray::solid(xray::color_rgb(255, 0, 255)))));
+			.decorate(xray::solid(xray::color_rgb(255, 0, 255))))
+		.add(milktea::vbox(base).at(18, 2)
+			.width(milktea::cells(8)).height(milktea::cells(3))
+			.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(3, 5, 7, 4))
+			.add(milktea::text(green, "").id_with(self).on_click(&padded_click)))
+		.add(milktea::text({ .fg = glaze::color_hex("#00ff00") }, "█").at(18, 10)
+			.width(milktea::cells(8)).height(milktea::cells(1))
+			.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(4, 4, 4, 4))));
+	if (!self.checked_padding) {
+		milktea::dispatch_click(183, 23);
+		assert(self.hit_count == 0);
+		milktea::dispatch_click(184, 23);
+		assert(self.hit_count == 1 && self.hit_col == 0 && self.hit_row == 0);
+		milktea::dispatch_click(193, 32);
+		assert(self.hit_count == 2 && self.hit_col == 0 && self.hit_row == 0);
+		milktea::dispatch_click(194, 33);
+		assert(self.hit_count == 3 && self.hit_col == 1 && self.hit_row == 1);
+		milktea::dispatch_click(264, 23);
+		milktea::dispatch_click(184, 53);
+		assert(self.hit_count == 3);
+		self.checked_padding = true;
+	}
+	return view;
 }
 
 fn void expect_pixel(rl::RLImage image, int x, int y, rl::RLColor expected) {
@@ -51,7 +83,7 @@ fn int main() {
 		.cell_w = 10, .cell_h = 10, .font_size = 10,
 		.screenshot_path = "out/paint.png",
 	});
-	assert(scene.changed);
+	assert(scene.changed && scene.checked_padding && scene.hit_count == 3);
 	rl::RLImage image = rl::load_image("out/paint.png");
 	defer rl::unload_image(image);
 	assert(image.width > 0);
@@ -65,6 +97,19 @@ fn int main() {
 	expect_pixel(image, 45, 45, {0, 255, 0, 255}); // child above parent gradient
 	expect_pixel(image, 100, 50, {0, 0, 255, 255}); // later popup above decoration
 	expect_pixel(image, 35, 75, {255, 0, 255, 255}); // second texture upload
-	io::printn("GUI paint-order pixels passed");
+	expect_pixel(image, 183, 23, {255, 0, 0, 255});
+	expect_pixel(image, 184, 23, {0, 255, 0, 255});
+	expect_pixel(image, 263, 52, {0, 255, 0, 255});
+	expect_pixel(image, 264, 52, {255, 0, 0, 255});
+	expect_pixel(image, 184, 22, {255, 0, 0, 255});
+	expect_pixel(image, 184, 53, {255, 0, 0, 255});
+	expect_pixel(image, 269, 23, {32, 64, 96, 255});
+	expect_pixel(image, 183, 104, {255, 0, 0, 255});
+	expect_pixel(image, 184, 104, {0, 255, 0, 255});
+	expect_pixel(image, 193, 113, {0, 255, 0, 255});
+	expect_pixel(image, 194, 113, {255, 0, 0, 255});
+	expect_pixel(image, 184, 103, {255, 0, 0, 255});
+	expect_pixel(image, 184, 114, {255, 0, 0, 255});
+	io::printn("GUI paint order, pixel padding, and hit targets passed");
 	return 0;
 }

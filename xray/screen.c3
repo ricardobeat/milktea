@@ -14,6 +14,9 @@ import std::collections::list;
 struct ScreenBuffer {
 	// Opt-in GUI command recording; terminal buffers allocate no stream.
 	bool record_paint;
+	LayoutMetrics paint_metrics;
+	int paint_dx, paint_dy;
+	Rect paint_extent;
 	bool decorated_content;
 	List{PaintOp} paint_ops;
 	Cell[] cells; // flat grid: width * height
@@ -158,8 +161,9 @@ fn bool is_block_char(Cell* cell) @local {
 // repair. Reserved for callers that are placing both halves of a wide glyph
 // themselves and must not have the pair torn apart mid-write.
 fn void ScreenBuffer.put_raw_cell(&self, sz col, sz row, Cell cell) {
+	if (self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
-	self.record_cell(col, row, cell);
+	if (!self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	sz idx = row * self.width + col;
 	if (!self.cells[idx].eq(cell)) {
 		self.cells[idx] = cell;
@@ -188,7 +192,8 @@ fn void ScreenBuffer.split_wide_neighbors(&self, sz col, sz row, char incoming_w
 			Style keep = left.style;
 			*left = empty_cell();
 			left.style = keep;
-			self.record_cell(col - 1, row, *left);
+			// Pixel-positioned nodes need not share this cell's origin.
+			if (!self.paint_metrics.pixels) self.record_cell(col - 1, row, *left);
 			self.dirty_lines[row] = true;
 		}
 	}
@@ -199,7 +204,7 @@ fn void ScreenBuffer.split_wide_neighbors(&self, sz col, sz row, char incoming_w
 		blank.style = right.style;
 		if (!right.eq(blank)) {
 			*right = blank;
-			self.record_cell(col + 1, row, blank);
+			if (!self.paint_metrics.pixels) self.record_cell(col + 1, row, blank);
 			self.dirty_lines[row] = true;
 		}
 	}
@@ -216,8 +221,9 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 	// sz is signed: negative coordinates must be rejected explicitly, or they
 	// index before the buffer (a trap in safe builds, silent heap corruption
 	// in the -Os/-O3 example targets).
+	if (self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
-	self.record_cell(col, row, cell);
+	if (!self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	sz idx = row * self.width + col;
 	if (cell.style.bg.kind == ColorKind.TRANSPARENT) {
 		Cell* existing = &self.cells[idx];

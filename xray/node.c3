@@ -4,6 +4,8 @@ import std::core::mem;
 
 // Content is anything that can fill a solved rect with text.
 //
+// Content rects remain in text cells in both backends. GUI painting retains
+// the exact pixel origin separately from these whole-cell coordinates.
 // render is called after layout, so the rect it receives is the size the
 // solver chose. Implementations return a string sized to that rect; it may
 // carry ANSI escapes, which paint decodes with render_ansi_string. xray does
@@ -188,6 +190,7 @@ struct Node {
 	int repaint_ms;
 
 	Rect computed_rect;
+	LayoutMetrics layout_metrics;
 
 	// Mouse hit-testing, collected into Program.click_targets after solve()
 	// (see xray::collect_click_targets / milktea's draw_in). Each hook keeps
@@ -379,10 +382,14 @@ fn Node* Node.with_frame(&self, int top, int right, int bottom, int left) {
 
 // inset_* are the frame and padding together: how far children and measured
 // content sit from the node's edge.
-fn int Node.inset_top(&self) => self.frame_top + self.pad_top;
-fn int Node.inset_right(&self) => self.frame_right + self.pad_right;
-fn int Node.inset_bottom(&self) => self.frame_bottom + self.pad_bottom;
-fn int Node.inset_left(&self) => self.frame_left + self.pad_left;
+fn int Node.inset_top(&self) => (self.frame_top + self.pad_top) * self.layout_metrics.unit_h()
+	+ (self.layout_metrics.pixels ? self.decoration.pad_top : 0);
+fn int Node.inset_right(&self) => (self.frame_right + self.pad_right) * self.layout_metrics.unit_w()
+	+ (self.layout_metrics.pixels ? self.decoration.pad_right : 0);
+fn int Node.inset_bottom(&self) => (self.frame_bottom + self.pad_bottom) * self.layout_metrics.unit_h()
+	+ (self.layout_metrics.pixels ? self.decoration.pad_bottom : 0);
+fn int Node.inset_left(&self) => (self.frame_left + self.pad_left) * self.layout_metrics.unit_w()
+	+ (self.layout_metrics.pixels ? self.decoration.pad_left : 0);
 
 // place centres or aligns this node inside its parent's rect on both axes at
 // once, and sizes it to its content. It is meant for a child of a zstack —

@@ -7,6 +7,7 @@ struct PaintResult {
 	// than one does, the last one painted wins — but content is expected to
 	// claim it only when focused, so that should not arise.
 	ContentCursor cursor;
+	int cursor_dx, cursor_dy;
 
 	// Smallest repaint interval any node asked for, in milliseconds, or 0 if
 	// none did. The runtime schedules one timer from this rather than each
@@ -33,8 +34,14 @@ fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = nu
 		self.paint_ops.clear();
 	}
 	PaintResult res;
+	self.paint_metrics = root != null ? root.layout_metrics : (LayoutMetrics){};
 	self.paint_node(root, &res, scratch);
+	self.paint_dx = res.cursor_dx;
+	self.paint_dy = res.cursor_dy;
+	self.paint_extent = {};
 	self.draw_cursor(&res, now_ms);
+	self.paint_dx = 0;
+	self.paint_dy = 0;
 	return res;
 }
 
@@ -76,7 +83,11 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, long now_ms) {
 
 fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer** scratch) {
 	if (n == null) return;
-	Rect r = n.computed_rect;
+	Rect r = n.content_cell_rect();
+	Rect content_area = n.content_layout_rect();
+	self.paint_dx = content_area.x - r.x * n.layout_metrics.unit_w();
+	self.paint_dy = content_area.y - r.y * n.layout_metrics.unit_h();
+	self.paint_extent = content_area;
 
 	if (n.repaint_ms > 0 && (res.repaint_ms == 0 || n.repaint_ms < res.repaint_ms)) {
 		res.repaint_ms = n.repaint_ms;
@@ -84,12 +95,22 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 
 	// The shadow goes down first so the content lands on top of it.
 	if (n.layer_style.shadow.enabled) {
-		self.render_shadow(r.x, r.y, r.w, r.h, n.layer_style.shadow);
+		Rect outer = n.computed_rect;
+		int w = n.layout_metrics.unit_w();
+		int h = n.layout_metrics.unit_h();
+		int x = floor_cell(outer.x, w);
+		int y = floor_cell(outer.y, h);
+		self.paint_dx = outer.x - x * w;
+		self.paint_dy = outer.y - y * h;
+		self.render_shadow(x, y, outer.w / w, outer.h / h, n.layer_style.shadow);
+		self.paint_dx = content_area.x - r.x * w;
+		self.paint_dy = content_area.y - r.y * h;
 	}
 
 	if (self.record_paint && n.decoration.kind != DecorationKind.NONE) {
 		Decoration d = n.decoration;
-		d.rect = r;
+		d.rect = n.computed_rect;
+		d.pixel_rect = n.layout_metrics.pixels;
 		self.paint_ops.push({ .kind = PaintKind.DECORATION, .decoration = d });
 	}
 	self.decorated_content = n.decoration.kind != DecorationKind.NONE;
@@ -105,7 +126,11 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 
 		if (&n.content.cursor) {
 			ContentCursor c = n.content.cursor(r);
-			if (c.has_cursor) res.cursor = c;
+			if (c.has_cursor) {
+				res.cursor = c;
+				res.cursor_dx = self.paint_dx;
+				res.cursor_dy = self.paint_dy;
+			}
 		}
 	}
 
@@ -117,6 +142,9 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	// Inner shadow sits over the node's own content but under its children,
 	// matching how a shadow inside a box darkens the box rather than what
 	// is stacked on it.
+	self.paint_dx = content_area.x - r.x * n.layout_metrics.unit_w();
+	self.paint_dy = content_area.y - r.y * n.layout_metrics.unit_h();
+	self.paint_extent = content_area;
 	if (n.layer_style.inner_shadow.enabled) {
 		self.render_inner_shadow(r.x, r.y, r.w, r.h, n.layer_style.inner_shadow);
 	}
