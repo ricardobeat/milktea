@@ -51,15 +51,11 @@ struct View {
 	String content;
 	Cursor cursor;
 	bool has_cursor;
-	MouseMode mouse_mode;
 	xray::Cell[] cells;
 	sz cells_width;
 	sz cells_height;
-	String mouse_cursor;
 	Overlay[MAX_OVERLAYS] overlays;
 	sz overlay_count;
-	bool report_key_events;
-	bool mouse_pixels;
 	sz repaint_ms; // paint again after this long; 0 = wait for the next message
 }
 
@@ -86,7 +82,7 @@ fn Cursor new_cursor(sz x, sz y) {
 }
 
 // View builder methods — enable fluent declarative View construction.
-// Example: return view("hello").set_cursor(5, 3).set_mouse_mode(mode);
+// Example: return view("hello").set_cursor(5, 3);
 
 fn View View.set_cursor(self, sz x, sz y) {
 	View v = self;
@@ -105,45 +101,6 @@ fn View View.set_cursor_shape(self, sz x, sz y, CursorShape shape, bool blink) {
 fn View View.set_cursor_color(self, String color) {
 	View v = self;
 	v.cursor.color = color;
-	return v;
-}
-
-fn View View.set_mouse_cursor(self, String name) {
-	View v = self;
-	v.mouse_cursor = name;
-	return v;
-}
-
-fn View View.set_mouse_mode(self, MouseMode mode) {
-	View v = self;
-	v.mouse_mode = mode;
-	return v;
-}
-
-// set_report_key_events opts in to the kitty keyboard protocol's key-release
-// and key-repeat reporting (progressive enhancement flag 2). When enabled,
-// KeyMsg.action carries KEY_PRESS / KEY_REPEAT / KEY_RELEASE; terminals that
-// don't support the kitty protocol are unaffected (the extra push/pop is
-// silently ignored, same as the base kitty keyboard layer). Apps that never
-// call this see byte-identical KeyMsg.action == KEY_PRESS behavior to before
-// this option existed.
-fn View View.set_report_key_events(self, bool on) {
-	View v = self;
-	v.report_key_events = on;
-	return v;
-}
-
-// set_mouse_pixels opts in to DEC mode 1016 (SGR-Pixels mouse reporting).
-// When enabled (and mouse_mode is not MOUSE_MODE_NONE), the terminal reports
-// mouse coordinates in pixels relative to the terminal window in addition to
-// cell coordinates; MouseMsg.px/py carry the raw 0-based pixel values while
-// row/col continue to carry the cell position (converted from pixels using
-// the terminal's reported window/cell size). Terminals that don't support
-// mode 1016 simply ignore it and continue sending cell coordinates — in that
-// case px/py stay 0 and row/col behave exactly as before this option existed.
-fn View View.set_mouse_pixels(self, bool on) {
-	View v = self;
-	v.mouse_pixels = on;
 	return v;
 }
 
@@ -265,6 +222,12 @@ struct Options {
 	// leaving the user's scrollback untouched. The screen is entered before
 	// the first frame and exited on teardown, including on a fatal signal.
 	bool alt_screen;
+	// The terminal modes a program starts with. Each can be changed while it
+	// runs, with the call of the same name: set_mouse_mode and so on.
+	MouseMode mouse_mode;
+	bool mouse_pixels;
+	bool report_key_events;
+	String mouse_cursor;
 }
 
 interface Model {
@@ -323,9 +286,17 @@ struct Program {
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
 	WinSize cached_ws;
+	// The modes the terminal is in, and the ones the program has asked for
+	// (from Options, then set_mouse_mode and friends). Each frame brings the
+	// first in line with the second.
 	MouseMode mouse_mode;
 	bool report_key_events;
 	bool mouse_pixels;
+	MouseMode want_mouse_mode;
+	bool want_report_key_events;
+	bool want_mouse_pixels;
+	char[MAX_MOUSE_CURSOR_LEN] want_mouse_cursor_buf;
+	sz want_mouse_cursor_len;
 	bool debug;
 	char[512] pending;
 	sz pending_len;
@@ -372,10 +343,8 @@ struct Program {
 	xray::Renderer* renderer;
 
 	// Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
-	// Stored as owned bytes rather than a String: the name comes from a View
-	// built inside render_current_view's @pool(), so keeping the slice would
-	// retain temp memory that is freed before the next frame compares against
-	// it. Names are short CSS cursor keywords ("pointer", "nwse-resize").
+	// Stored as owned bytes, like the name asked for in want_mouse_cursor_buf.
+	// Names are short CSS cursor keywords ("pointer", "nwse-resize").
 	char[MAX_MOUSE_CURSOR_LEN] last_mouse_cursor_buf;
 	sz last_mouse_cursor_len;
 	// False once an uncacheable (over-long) name has been emitted, forcing the
@@ -571,6 +540,48 @@ fn sz screen_height() {
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
 	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);
+}
+
+// set_mouse_mode turns mouse reporting on or off from the next frame. A
+// program starts in Options.mouse_mode.
+fn void set_mouse_mode(MouseMode mode) {
+	if (g_program == null) return;
+	g_program.want_mouse_mode = mode;
+}
+
+// set_mouse_pixels opts in to DEC mode 1016 (SGR-Pixels mouse reporting).
+// When enabled (and mouse_mode is not MOUSE_MODE_NONE), the terminal reports
+// mouse coordinates in pixels relative to the terminal window in addition to
+// cell coordinates; MouseMsg.px/py carry the raw 0-based pixel values while
+// row/col continue to carry the cell position (converted from pixels using
+// the terminal's reported window/cell size). Terminals that don't support
+// mode 1016 simply ignore it and continue sending cell coordinates — in that
+// case px/py stay 0 and row/col behave exactly as before this option existed.
+fn void set_mouse_pixels(bool on) {
+	if (g_program == null) return;
+	g_program.want_mouse_pixels = on;
+}
+
+// set_report_key_events opts in to the kitty keyboard protocol's key-release
+// and key-repeat reporting (progressive enhancement flag 2). When enabled,
+// KeyMsg.action carries KEY_PRESS / KEY_REPEAT / KEY_RELEASE; terminals that
+// don't support the kitty protocol are unaffected (the extra push/pop is
+// silently ignored, same as the base kitty keyboard layer). Apps that never
+// call this see byte-identical KeyMsg.action == KEY_PRESS behavior to before
+// this option existed.
+fn void set_report_key_events(bool on) {
+	if (g_program == null) return;
+	g_program.want_report_key_events = on;
+}
+
+// set_mouse_cursor sets the mouse pointer's shape by its CSS name ("pointer",
+// "crosshair"), or puts the terminal's own back with "". The name is copied,
+// so it need not outlive the call; one longer than MAX_MOUSE_CURSOR_LEN is
+// ignored.
+fn void set_mouse_cursor(String name) {
+	if (g_program == null || name.len > MAX_MOUSE_CURSOR_LEN) return;
+	for (sz i = 0; i < name.len; i++) g_program.want_mouse_cursor_buf[i] = name[i];
+	g_program.want_mouse_cursor_len = name.len;
 }
 
 // debug_warn appends a timestamped line to milktea-debug.log.
@@ -1143,6 +1154,11 @@ fn void? Program.run(Program* self) {
 		self.in_alt_screen = true;
 	}
 
+	set_mouse_mode(self.options.mouse_mode);
+	set_mouse_pixels(self.options.mouse_pixels);
+	set_report_key_events(self.options.report_key_events);
+	set_mouse_cursor(self.options.mouse_cursor);
+
 	self.stamp_now();
 	Cmd c0 = self.model.init();
 	if (c0 != null) {
@@ -1666,52 +1682,52 @@ fn void Program.render_current_view(Program* self) {
 		View v = self.model.view();
 		self.schedule_repaint(v.repaint_ms);
 		// Enable/disable mouse reporting when mouse_mode changes
-		if (v.mouse_mode != self.mouse_mode) {
-			if (v.mouse_mode == MOUSE_MODE_NONE) {
-				disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
+		if (self.want_mouse_mode != self.mouse_mode) {
+			if (self.want_mouse_mode == MOUSE_MODE_NONE) {
+				self.emit_sgr(self.mouse_mode == MOUSE_MODE_ALL_MOTION ? SGR_MOUSE_ALL_OFF : SGR_MOUSE_SGR_OFF);
 				// Mouse reporting itself was just turned off — 1016 no longer
 				// applies. Reset it so re-enabling mouse_mode later re-asserts
 				// it explicitly rather than relying on terminal state.
 				if (self.mouse_pixels) {
-					disable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_OFF);
 				}
 			} else {
-				enable_mouse(v.mouse_mode == MOUSE_MODE_ALL_MOTION);
+				self.emit_sgr(self.want_mouse_mode == MOUSE_MODE_ALL_MOTION ? SGR_MOUSE_ALL_ON : SGR_MOUSE_SGR_ON);
 				// Re-assert pixel reporting: some terminals reset SGR-Pixels
 				// mode (1016) when the base mouse tracking mode changes, so
-				// if the view has pixel mode on, turn it back on here too.
+				// if pixel mode is on, turn it back on here too.
 				if (self.mouse_pixels) {
-					enable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_ON);
 				}
 			}
-			self.mouse_mode = v.mouse_mode;
+			self.mouse_mode = self.want_mouse_mode;
 		}
 		// Enable/disable SGR-Pixels mouse reporting (DEC mode 1016) when
 		// mouse_pixels changes. Only meaningful while mouse_mode is active;
 		// still track the flag even if mouse_mode is currently NONE so it
 		// gets asserted the moment mouse_mode turns on (handled above).
-		if (v.mouse_pixels != self.mouse_pixels) {
-			if (v.mouse_pixels) {
-				if (v.mouse_mode != MOUSE_MODE_NONE) {
-					enable_mouse_pixels();
+		if (self.want_mouse_pixels != self.mouse_pixels) {
+			if (self.want_mouse_pixels) {
+				if (self.want_mouse_mode != MOUSE_MODE_NONE) {
+					self.emit_sgr(SGR_MOUSE_PIXELS_ON);
 				}
 			} else {
 				if (self.mouse_mode != MOUSE_MODE_NONE) {
-					disable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_OFF);
 				}
 			}
-			self.mouse_pixels = v.mouse_pixels;
+			self.mouse_pixels = self.want_mouse_pixels;
 		}
 		// Enable/disable kitty key event reporting (press/repeat/release) when
 		// report_key_events changes. Pushed/popped as an extra enhancement layer
 		// on top of the base disambiguate layer pushed at startup.
-		if (v.report_key_events != self.report_key_events) {
-			if (v.report_key_events) {
-				enable_kitty_key_events();
+		if (self.want_report_key_events != self.report_key_events) {
+			if (self.want_report_key_events) {
+				self.emit_sgr(SGR_KITTY_KEY_EVENTS_ON);
 			} else {
-				disable_kitty_key_events();
+				self.emit_sgr(SGR_KITTY_KEY_EVENTS_OFF);
 			}
-			self.report_key_events = v.report_key_events;
+			self.report_key_events = self.want_report_key_events;
 		}
 		if (self.test_mode) {
 			if (self.output_buf != null) {
@@ -1896,13 +1912,14 @@ fn void Program.render_current_view(Program* self) {
 				r.end_frame();
 
 				// Emit OSC 22 mouse cursor shape when it changes.
-				if (!self.mouse_cursor_matches(v.mouse_cursor)) {
-					if (v.mouse_cursor.len > 0) {
-						write_stdout((char[])mouse_cursor_seq(v.mouse_cursor));
+				String mouse_cursor = (String)self.want_mouse_cursor_buf[:self.want_mouse_cursor_len];
+				if (!self.mouse_cursor_matches(mouse_cursor)) {
+					if (mouse_cursor.len > 0) {
+						write_stdout((char[])mouse_cursor_seq(mouse_cursor));
 					} else {
 						write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 					}
-					self.remember_mouse_cursor(v.mouse_cursor);
+					self.remember_mouse_cursor(mouse_cursor);
 				}
 
 				// Emit cursor positioning and shape after the diff frame

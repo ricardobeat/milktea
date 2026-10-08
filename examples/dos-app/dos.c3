@@ -192,8 +192,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		// neither needs a condition here.
 		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
 		.add(self.about.node(self.theme()))
-		.add(self.theme_picker.node(self.theme())))
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_CELL_MOTION);
+		.add(self.theme_picker.node(self.theme())));
 }
 
 fn xray::Node* DosModel.content(&self) {
@@ -242,5 +241,5 @@ fn xray::Node* DosModel.statusbar(&self) {
 
 fn int main() {
 	DosModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION });
 }

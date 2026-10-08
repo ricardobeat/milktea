@@ -287,8 +287,7 @@ fn milktea::View Model.view(&self) @dynamic {
 		screen.set_cell((sz)p.col, (sz)p.row, xray::new_cell(ch, 1, s));
 	}
 
-	milktea::View view = screen.view()
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+	milktea::View view = screen.view();
 	// screen is owned by the model (self.screen); freed in on_destroy.
 
 	return view;
@@ -304,5 +303,5 @@ fn void Model.on_destroy(&self) @dynamic {
 
 fn int main() {
 	Model m;
-	return milktea::@run(&m, { .alt_screen = true });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
 }

@@ -227,10 +227,10 @@ fn void draw_hint(xray::ScreenBuffer* canvas, xray::Rect row) {
 
 fn int main() {
 	Model model;
-	milktea::enable_mouse(all_motion: true);
-	defer milktea::disable_mouse(all_motion: true);
-
-	if (catch err = milktea::@run_program(&model, { .alt_screen = true })) {
+	if (catch err = milktea::@run_program(&model, {
+		.alt_screen = true,
+		.mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION,
+	})) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

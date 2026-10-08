@@ -430,12 +430,15 @@ Terminal support: placements work in kitty, WezTerm, Ghostty, Konsole, iTerm2 an
 
 ## Mouse support
 
-Enable mouse tracking by returning a view with mouse mode set:
+Turn mouse tracking on with a program option:
 
 ```c3
-return milktea::view(doc)
-    .set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+return milktea::@run(&model, { .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
 ```
+
+or while the program runs, from `update`, with
+`milktea::set_mouse_mode(...)`. `set_mouse_cursor("crosshair")` changes the
+pointer the same way, as does the `.mouse_cursor` option.
 
 Then handle mouse messages in `update`:
 

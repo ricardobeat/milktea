@@ -120,15 +120,11 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	milktea::enable_mouse();
-
-	if (catch err = milktea::@run_program(&m, { .alt_screen = true })) {
-		milktea::disable_mouse();
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
 
-	milktea::disable_mouse();
 	io::printn("Bye!");
 	return 0;
 }

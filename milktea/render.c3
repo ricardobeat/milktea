@@ -20,7 +20,7 @@ const String SGR_MOUSE_ALL_ON     @private = "\x1b[?1003h\x1b[?1006h";
 const String SGR_MOUSE_ALL_OFF    @private = "\x1b[?1006l\x1b[?1003l";
 // DEC mode 1016: SGR-Pixels mouse reporting. Same wire format as SGR (mode 1006)
 // except x/y are reported in pixels relative to the terminal window instead of
-// cell coordinates. Opt-in via View.set_mouse_pixels; only meaningful while a
+// cell coordinates. Opt-in via set_mouse_pixels; only meaningful while a
 // mouse mode (cell-motion or all-motion) is also active.
 const String SGR_MOUSE_PIXELS_ON  @private = "\x1b[?1016h";
 const String SGR_MOUSE_PIXELS_OFF @private = "\x1b[?1016l";
@@ -204,31 +204,31 @@ fn void disable_kitty_keyboard() {
 // Opt-in key event reporting (press/repeat/release). Pushed as an additional
 // enhancement layer on top of the base disambiguate layer (flag 1 + flag 2 =
 // 3), so popping it restores exactly the base layer pushed by
-// enable_kitty_keyboard(). Only used when a View sets report_key_events.
+// enable_kitty_keyboard(). Only used once a program sets report_key_events.
 //
 // CSI > 3 u  — push progressive enhancement, flags 1 (disambiguate) + 2 (report events)
 // CSI < u    — pop (restore the previous flags layer, i.e. back to flag 1 alone)
 const String SGR_KITTY_KEY_EVENTS_ON  @private = "\x1b[>3u";
 const String SGR_KITTY_KEY_EVENTS_OFF @private = "\x1b[<u";
 
-fn void enable_kitty_key_events() {
+fn void enable_kitty_key_events() @private {
 	write_stdout((char[])SGR_KITTY_KEY_EVENTS_ON);
 }
-fn void disable_kitty_key_events() {
+fn void disable_kitty_key_events() @private {
 	write_stdout((char[])SGR_KITTY_KEY_EVENTS_OFF);
 }
 
-fn void enable_mouse(bool all_motion = false) {
+fn void enable_mouse(bool all_motion = false) @private {
 	write_stdout((char[])(all_motion ? SGR_MOUSE_ALL_ON : SGR_MOUSE_SGR_ON));
 }
-fn void disable_mouse(bool all_motion = false) {
+fn void disable_mouse(bool all_motion = false) @private {
 	write_stdout((char[])(all_motion ? SGR_MOUSE_ALL_OFF : SGR_MOUSE_SGR_OFF));
 }
 
-fn void enable_mouse_pixels() {
+fn void enable_mouse_pixels() @private {
 	write_stdout((char[])SGR_MOUSE_PIXELS_ON);
 }
-fn void disable_mouse_pixels() {
+fn void disable_mouse_pixels() @private {
 	write_stdout((char[])SGR_MOUSE_PIXELS_OFF);
 }
 

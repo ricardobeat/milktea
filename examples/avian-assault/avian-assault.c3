@@ -1204,7 +1204,7 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		default:
 	}
 
-	return milktea::cell_view(self.view_cells, w, h).set_mouse_cursor("crosshair");
+	return milktea::cell_view(self.view_cells, w, h);
 }
 
 // ── Overlays ──────────────────────────────────────────────────────────────────
@@ -1482,12 +1482,7 @@ fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
 
 fn int main() {
 	AvianAssaultModel* m = mem::new(AvianAssaultModel);
-	milktea::enable_mouse();
-	defer {
-		milktea::disable_mouse();
-	}
-
-	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -76,7 +76,7 @@ struct MouseMsg {
 	bool alt;
 	bool ctrl;
 	// px, py: raw 0-based pixel coordinates from DEC mode 1016 (SGR-Pixels).
-	// Both are 0 unless the app opted in via View.set_mouse_pixels and the
+	// Both are 0 unless the app opted in via set_mouse_pixels and the
 	// terminal actually reported pixel coordinates for this event.
 	sz px;
 	sz py;

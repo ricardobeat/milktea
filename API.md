@@ -189,7 +189,7 @@ struct WindowSizeMsg { sz width, height; }
 directly (`k.rune == 'q'`).
 
 `KeyAction`: `KEY_PRESS`, `KEY_REPEAT`, `KEY_RELEASE`. Only kitty-protocol
-terminals with `View.set_report_key_events(true)` ever send the latter two.
+terminals with `report_key_events` on ever send the latter two.
 
 `MouseAction`: `MOUSE_PRESS`, `MOUSE_RELEASE`, `MOUSE_MOTION`.
 `MouseButton`: `MOUSE_LEFT`, `MOUSE_MIDDLE`, `MOUSE_RIGHT`, `MOUSE_NONE`,
@@ -244,10 +244,6 @@ alternate screen is a program option, not part of the view.
 .set_cursor(x, y)
 .set_cursor_shape(x, y, CursorShape shape, bool blink)
 .set_cursor_color(String color)
-.set_mouse_cursor(String name)          // OSC 22 CSS cursor name
-.set_mouse_mode(MouseMode mode)
-.set_mouse_pixels(bool on)              // SGR-Pixels; fills MouseMsg.px/py
-.set_report_key_events(bool on)         // kitty repeat/release events
 .add_overlay(x, y, w, h, content, alpha = 0, ...)
 .draw(xray::Rect rect, glaze::Style style, String content)  // cell views
 ```
@@ -267,8 +263,8 @@ return self.canvas.view()
 
 ## Options
 
-`Options` is program-level terminal state, fixed for the run and applied before
-the first frame. Pass it as the second argument to any launch macro.
+`Options` is program-level terminal state, applied before the first frame.
+Pass it as the second argument to any launch macro.
 
 ```c3
 return milktea::@run(&model, { .alt_screen = true });
@@ -277,15 +273,25 @@ return milktea::@run(&model, { .alt_screen = true });
 | Field | Effect |
 |---|---|
 | `alt_screen` | Runs on the alternate screen buffer, leaving scrollback untouched |
+| `mouse_mode` | `MOUSE_MODE_NONE` (default), `MOUSE_MODE_CELL_MOTION` or `MOUSE_MODE_ALL_MOTION` |
+| `mouse_pixels` | SGR-Pixels reporting; fills `MouseMsg.px/py` |
+| `report_key_events` | Kitty key repeat/release events |
+| `mouse_cursor` | Mouse pointer shape, by CSS name (`"crosshair"`); `""` is the terminal's own |
 
 The alternate screen is entered before `init()` and exited on teardown,
 including on a fatal signal, so `in_alt_screen()` is already true when `init()`
 runs and screen-tied writes (kitty-graphics images) are safe from the first
 frame.
 
-Mouse mode, key-event reporting and pixel-resolution mouse reporting stay on
-the `View`: each legitimately changes while a program runs, so a view declares
-what it wants and the runtime applies the difference.
+`alt_screen` is fixed for the run. The other four are where the program
+starts, and each can change while it runs, from the next frame on:
+
+```c3
+milktea::set_mouse_mode(MouseMode mode);
+milktea::set_mouse_pixels(bool on);
+milktea::set_report_key_events(bool on);
+milktea::set_mouse_cursor(String name);   // copied; "" resets
+```
 
 ## Runtime accessors
 

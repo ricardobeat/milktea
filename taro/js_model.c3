@@ -482,7 +482,6 @@ fn milktea::View JsModel.view(&self) @dynamic {
 	}
 
 	milktea::View view = self.screen.view();
-	view.mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION;
 
 	sz cx, cy;
 	String cursor_color;

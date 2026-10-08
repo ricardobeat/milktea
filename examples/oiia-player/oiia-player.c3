@@ -942,13 +942,10 @@ fn milktea::View App.view(App* self) @dynamic {
 
 fn int main() {
 	App* app = mem::new(App);
-	milktea::enable_mouse();
-	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
-		milktea::disable_mouse();
+	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
-	milktea::disable_mouse();
 	if (app.view_cells.ptr != null) mem::free(app.view_cells.ptr);
 	mem::free(app);
 	return 0;

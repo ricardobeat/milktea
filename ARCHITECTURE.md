@@ -59,11 +59,13 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
   batch-command buffer in the current code: `update()` returns one `Cmd`,
   which `dispatch()` calls and chains through `update()` again.
 - `View` — either `content: String` (parsed by xray's ANSI parser) or a
-  direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus cursor
-  state, mouse mode, and up to `MAX_OVERLAYS` (8) `Overlay` entries for
+  direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus
+  cursor state and up to `MAX_OVERLAYS` (8) `Overlay` entries for
   floating content (menus, shadows) over the base view. Built fluently:
-  `view(s).set_cursor(x, y).set_mouse_mode(mode)`. The alternate screen
-  is a program option (`Options.alt_screen`), entered once before `init()`.
+  `view(s).set_cursor(x, y)`. The alternate screen is a program option
+  (`Options.alt_screen`), entered once before `init()`; mouse mode, key
+  events and the mouse pointer start from `Options` and change through
+  `set_mouse_mode` and friends.
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`
@@ -125,7 +127,7 @@ chain makes `dispatch()` return `true`, which `run()` treats as "stop."
 freed at block exit):
 
 1. Toggles alt-screen SGR sequences on transition, and mouse-reporting
-   sequences when `View.mouse_mode` changes.
+   sequences when the mouse mode asked for changes.
 2. In test mode, renders the `View` into a `DString` capture buffer
    instead of stdout.
 3. In real mode, drives the `xray::Renderer`:

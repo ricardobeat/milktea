@@ -516,8 +516,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
 	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
 
-	milktea::View view = milktea::view(doc)
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+	milktea::View view = milktea::view(doc);
 
 	// Inner shadow on sidebar right edge
 	if (view.overlay_count < milktea::MAX_OVERLAYS) {
@@ -581,5 +580,5 @@ fn milktea::View Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m, { .alt_screen = true });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
 }

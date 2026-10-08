@@ -458,9 +458,7 @@ fn int main(String[] args) {
 		}
 	}
 
-	milktea::enable_mouse();
-
-	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

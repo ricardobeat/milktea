@@ -48,7 +48,7 @@ fn int main(String[] args) {
 		model.mem_profile = true;
 	}
 
-	milktea::Program p = milktea::@program(&model);
+	milktea::Program p = milktea::@program(&model, { .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION });
 	p.debug = debug;
 	if (catch err = p.run()) {
 		io::eprintfn("Runtime error: %s", err);
