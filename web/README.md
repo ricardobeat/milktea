@@ -186,8 +186,20 @@ composited modal, glaze gradients and animated borders, plus counter/click
 handling, native timers and text input. Syntax errors show
 below the preview and retain the last running program. Reset restores the
 selected preset. Code is saved to localStorage in this browser.
-Syntax highlighting uses a small local tokenizer and a scroll-synchronized
-overlay behind the editable textarea, with no editor library dependency.
+Each preset keeps its glaze styles in a named `const styles = {}` table;
+small style factories handle state-dependent colors so views focus on layout.
+
+Syntax highlighting uses [Highlight.js](https://github.com/highlightjs/highlight.js)
+11.12.0, bundled with only the core and JavaScript grammar (28 KB raw, 11 KB
+gzipped). The bundle and BSD license live in `vendor/`. The textarea overlay
+stays aligned while scrolling, and the editor works without a CDN or npm at
+runtime. To rebuild the vendored bundle, install the maintenance tools outside
+the repository and run:
+
+```sh
+npm install --prefix /tmp/milktea-highlight-build highlight.js@11.12.0 esbuild@0.28.2
+MILKTEA_HIGHLIGHT_PACKAGE=/tmp/milktea-highlight-build/package.json node scripts/build_highlighter.mjs
+```
 
 The editor executes your JavaScript in a preview iframe; it does not compile
 C3 in the browser. A canvas preview must be clicked to focus keyboard input.

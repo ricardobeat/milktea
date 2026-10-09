@@ -53,7 +53,7 @@ try {
   await preview.waitForFunction(()=>window.app.model.palette===1);
   console.log('PASS glaze gradients, borders, animated colors and palette updates');
 
-  assert.ok(await page.locator('#highlight .token-keyword').count()>0);
+  assert.ok(await page.locator('#highlight .hljs-keyword').count()>0);
   await page.$eval('#code',textarea=>{textarea.scrollTop=200;textarea.scrollLeft=60;textarea.dispatchEvent(new Event('scroll'));});
   assert.deepEqual(await page.evaluate(()=>{const t=document.querySelector('#code'),h=document.querySelector('#highlight');return [h.scrollTop===t.scrollTop,h.scrollLeft===t.scrollLeft];}),[true,true]);
   assert.deepEqual(errors,[]);
