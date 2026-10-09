@@ -186,6 +186,8 @@ composited modal, glaze gradients and animated borders, plus counter/click
 handling, native timers and text input. Syntax errors show
 below the preview and retain the last running program. Reset restores the
 selected preset. Code is saved to localStorage in this browser.
+Syntax highlighting uses a small local tokenizer and a scroll-synchronized
+overlay behind the editable textarea, with no editor library dependency.
 
 The editor executes your JavaScript in a preview iframe; it does not compile
 C3 in the browser. A canvas preview must be clicked to focus keyboard input.
