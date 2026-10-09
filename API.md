@@ -608,16 +608,22 @@ for a transparent channel.
 
 ## PixelBuffer
 
-Half-block pixel rendering at twice the vertical resolution.
+A grid of colours to draw pixel art into, then turn into cells.
 
 ```c3
-PixelBuffer* p = xray::new_pixel_buffer(w, h);
+PixelBuffer* p = xray::new_pixel_buffer(w, h * 2);
 p.clear(c); p.set_pixel(col, row, c); p.get_pixel(col, row); p.blend_pixel(...);
 p.fill_rect(rect, c, to, space); p.fill_ellipse(cx, cy, rx, ry, c, to, space);
 p.draw_line(x0, y0, x1, y1, c, to, space);
-p.to_cells(cells, grid_width, base_style);
+p.to_half_blocks(screen);                  // two pixel rows to each cell, as '▀'
+p.to_cells(cells, grid_width, base_style); // one pixel to each cell, as ' '
 p.destroy();
 ```
+
+A cell is about twice as tall as it is wide, so `to_half_blocks` gives
+square pixels: each cell shows its top pixel in the foreground of a `▀` and
+its bottom pixel in the background. `xray::half_block(top, bottom)` builds one
+such cell, for colours computed some other way.
 
 ## Renderer
 

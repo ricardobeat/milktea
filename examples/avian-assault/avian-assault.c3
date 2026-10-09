@@ -1147,36 +1147,15 @@ fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		}
 	}
 
-	// 2. Convert PixelBuffer to terminal cells (half-blocks '▀')
-	xray::Style base = xray::default_style();
-	for (sz vy = 0; vy < h; vy++) {
-		sz py_top = vy * 2;
-		sz py_bot = py_top + 1;
-		sz row_offset = (sz)vy * (sz)w;
-
-		for (sz vx = 0; vx < w; vx++) {
-			xray::Color c_top = self.vbuf.get_pixel(vx, py_top);
-			xray::Color c_bot = self.vbuf.get_pixel(vx, py_bot);
-
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base.set_fg(c_top).set_bg(c_bot);
-
-			self.view_cells[row_offset + (sz)vx] = c;
-		}
-	}
-
-	// 3. Composite UI Overlays into cell buffer
+	// 2. Convert PixelBuffer to terminal cells (half-blocks '▀'), then
+	// composite UI overlays into the same cells
 	ScreenBuffer canvas;
 	canvas.width = (sz)w;
 	canvas.height = (sz)h;
 	canvas.cells = self.view_cells;
 	canvas.prev_cells = self.view_cells;
 	canvas.dirty_lines = mem::temp_array(bool, (sz)h);
+	self.vbuf.to_half_blocks(&canvas);
 
 	// HUD Top Bar during gameplay
 	if (self.state == GameState.AIMING || self.state == GameState.FLYING || self.state == GameState.SETTLING) {

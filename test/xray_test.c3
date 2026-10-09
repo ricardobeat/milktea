@@ -1774,3 +1774,29 @@ fn void test_pixel_buffer_gradient_hcl_space() @test {
 	Color mid = pb.get_pixel(0, 2);
 	assert(!mid.eq(top) && !mid.eq(bottom));
 }
+
+fn void test_half_block_stacks_two_pixels() @test {
+	xray::Cell c = xray::half_block(color_rgb(1, 2, 3), color_rgb(4, 5, 6));
+	assert(c.content[:c.content_len] == "▀");
+	assert(c.width == 1);
+	assert(c.style.fg.eq(color_rgb(1, 2, 3)) && c.style.bg.eq(color_rgb(4, 5, 6)));
+}
+
+fn void test_to_half_blocks_fits_two_pixel_rows_in_each_cell() @test {
+	xray::PixelBuffer* pb = xray::new_pixel_buffer(2, 3);
+	defer { pb.destroy(); mem::free(pb); }
+	pb.set_pixel(1, 0, color_rgb(10, 0, 0));
+	pb.set_pixel(1, 1, color_rgb(20, 0, 0));
+	pb.set_pixel(0, 2, color_rgb(30, 0, 0));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(3, 3);
+	defer { sb.destroy(); mem::free(sb); }
+	pb.to_half_blocks(sb);
+
+	assert(sb.cell_at(1, 0).style.fg.eq(color_rgb(10, 0, 0)));
+	assert(sb.cell_at(1, 0).style.bg.eq(color_rgb(20, 0, 0)));
+	assert(sb.cell_at(0, 1).style.fg.eq(color_rgb(30, 0, 0)), "odd last row fills the top half");
+	assert(sb.cell_at(0, 1).style.bg.is_none());
+	assert(sb.cell_at(2, 0).content[0] == ' ', "columns past the buffer are left alone");
+	assert(sb.cell_at(0, 2).content[0] == ' ', "rows past the buffer are left alone");
+}

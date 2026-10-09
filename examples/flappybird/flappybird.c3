@@ -785,16 +785,8 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 		}
 	}
 
-	// 2. Convert the pixels to cells: each '▀' shows two pixel rows, the top
-	// one in its foreground and the bottom one in its background.
-	for (sz y = 0; y < self.screen.height; y++) {
-		for (sz x = 0; x < self.screen.width; x++) {
-			xray::Style s = xray::default_style()
-				.set_fg(self.vbuf.get_pixel(x, y * 2))
-				.set_bg(self.vbuf.get_pixel(x, y * 2 + 1));
-			self.screen.cells[y * self.screen.width + x] = xray::new_cell("▀", 1, s);
-		}
-	}
+	// 2. Convert the pixels to cells, two pixel rows to each.
+	self.vbuf.to_half_blocks(self.screen);
 
 	// 3. Paint the dialog for this state over the game. It goes into the
 	// game's own cells rather than a layer above them, so its backdrop can

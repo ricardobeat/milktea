@@ -9,7 +9,8 @@ import std::math;
 // when you want to draw pixel art or game sprites without
 // managing Cell contents yourself. to_cells turns the grid into
 // cells for a milktea cell view (space glyph, pixel color as the
-// cell background).
+// cell background); to_half_blocks fits two pixel rows in each
+// cell instead, for square pixels.
 // ============================================================
 
 struct PixelBuffer {
@@ -158,5 +159,38 @@ fn void PixelBuffer.to_cells(&self, Cell[] cells, sz grid_width, Style base_styl
 			c.style = base_style.set_bg(self.pixels[src_base + col]);
 			cells[dst_base + col] = c;
 		}
+	}
+}
+
+// half_block is a '▀' cell showing two pixels stacked: top in the upper half,
+// bottom in the lower. A terminal cell is about twice as tall as it is wide,
+// so each half is roughly square.
+fn Cell half_block(Color top, Color bottom) {
+	Cell c;
+	c.content[0] = 0xe2; // '▀' (U+2580) in UTF-8
+	c.content[1] = 0x96;
+	c.content[2] = 0x80;
+	c.content_len = 3;
+	c.width = 1;
+	c.style = default_style().set_fg(top).set_bg(bottom);
+	return c;
+}
+
+// to_half_blocks draws the buffer into dst with half_block cells, two pixel
+// rows to a cell row, from dst's top left. Whatever does not fit is left out;
+// an odd last pixel row fills the top half of its cell over an empty bottom.
+fn void PixelBuffer.to_half_blocks(&self, ScreenBuffer* dst) {
+	sz w = self.width < dst.width ? self.width : dst.width;
+	sz h = (self.height + 1) / 2;
+	if (h > dst.height) h = dst.height;
+
+	for (sz row = 0; row < h; row++) {
+		Cell* out = &dst.cells[row * dst.width];
+		Color* top = &self.pixels[row * 2 * self.width];
+		bool has_bottom = row * 2 + 1 < self.height;
+		for (sz col = 0; col < w; col++) {
+			out[col] = half_block(top[col], has_bottom ? top[col + self.width] : color_none());
+		}
+		dst.dirty_lines[row] = true;
 	}
 }

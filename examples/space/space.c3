@@ -101,8 +101,6 @@ fn milktea::Node* SpaceModel.view(SpaceModel* self) @dynamic {
 	sz frame  = self.frame;
 	sz view_h = h;
 
-	xray::Style base_style = xray::default_style();
-
 	for (sz vy = 0; vy < view_h; vy++) {
 		sz fire_y     = vy * 2;
 		sz next_y     = fire_y + 1;
@@ -128,14 +126,7 @@ fn milktea::Node* SpaceModel.view(SpaceModel* self) @dynamic {
 				bb = tb;
 			}
 
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base_style.set_fg(xray::color_rgb(tr, tg, tb)).set_bg(xray::color_rgb(br, bg, bb));
-			self.view_cells[row_offset + vx] = c;
+			self.view_cells[row_offset + vx] = xray::half_block(xray::color_rgb(tr, tg, tb), xray::color_rgb(br, bg, bb));
 		}
 	}
 

@@ -112,8 +112,6 @@ fn milktea::Node* SplashModel.view(SplashModel* self) @dynamic {
 		self.view_cells = mem::new_array(xray::Cell, needed);
 	}
 
-	xray::Style base_style = xray::default_style();
-
 	sz pixel_rows = h * 2;
 	for (sz y = 0; y < rows; y++) {
 		sz fy_top     = y * 2;
@@ -142,15 +140,9 @@ fn milktea::Node* SplashModel.view(SplashModel* self) @dynamic {
 			if (hb < 0) hb += 1.0;
 			RgbColor bot = hsv_to_rgb(hb, 0.8, vb);
 
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base_style.set_fg(xray::color_rgb((char)top.r, (char)top.g, (char)top.b))
-				.set_bg(xray::color_rgb((char)bot.r, (char)bot.g, (char)bot.b));
-			self.view_cells[row_offset + x] = c;
+			self.view_cells[row_offset + x] = xray::half_block(
+				xray::color_rgb((char)top.r, (char)top.g, (char)top.b),
+				xray::color_rgb((char)bot.r, (char)bot.g, (char)bot.b));
 		}
 	}
 

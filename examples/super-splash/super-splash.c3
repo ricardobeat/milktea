@@ -291,7 +291,6 @@ fn milktea::Node* SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 	double angle = 0.7854 + t * 0.1;
 
 	// ── Layer 1: render splash background ────────────────────
-	xray::Style base_style = xray::default_style();
 	sz pixel_rows         = h * 2;
 
 	for (sz y = 0; y < h; y++) {
@@ -319,15 +318,9 @@ fn milktea::Node* SuperSplashModel.view(SuperSplashModel* self) @dynamic {
 			if (hb < 0) hb += 1.0;
 			RgbColor bot = hsv_to_rgb(hb, 0.8, vb);
 
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base_style.set_fg(xray::color_rgb((char)top.r, (char)top.g, (char)top.b))
-				.set_bg(xray::color_rgb((char)bot.r, (char)bot.g, (char)bot.b));
-			self.cells[row_offset + x] = c;
+			self.cells[row_offset + x] = xray::half_block(
+				xray::color_rgb((char)top.r, (char)top.g, (char)top.b),
+				xray::color_rgb((char)bot.r, (char)bot.g, (char)bot.b));
 			self.splash_top[row_offset + x] = (Pixel) { (char)top.r, (char)top.g, (char)top.b };
 			self.splash_bot[row_offset + x] = (Pixel) { (char)bot.r, (char)bot.g, (char)bot.b };
 		}
