@@ -803,7 +803,7 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	// 3. Paint the dialog for this state over the game. It goes into the
 	// game's own cells rather than a layer above them, so its backdrop can
 	// dim the pixels it covers.
-	foreach (&o : self.outlines) o.used = false;
+	foreach (&o : self.outlines) o.node = null;
 	milktea::Node* dialog;
 	switch (self.state) {
 		case INTRO:     dialog = self.intro_dialog();
@@ -815,12 +815,20 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	if (dialog) {
 		milktea::Node* ui = milktea::root().add(dialog);
 		ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
+		foreach (&o : self.outlines) {
+			if (o.node != null) blank_edge(self.screen, o.node.computed_rect);
+		}
 		self.screen.paint(ui);
 	}
-	// A dialog that closed takes its outline with it.
+	// Each outline goes where its dialog was laid out, and a dialog that
+	// closed takes its outline with it.
 	if (self.gfx_ok) {
 		foreach (&o : self.outlines) {
-			if (!o.used) o.hide();
+			if (o.node != null) {
+				o.show(o.node.computed_rect);
+			} else {
+				o.hide();
+			}
 		}
 		self.gfx.sync();
 	}
@@ -856,7 +864,8 @@ struct Outline {
 	tgp::Session* gfx;
 	bool made;
 	bool placed;
-	bool used; // painted this frame
+	// The dialog it frames this frame, or null when that dialog is closed.
+	milktea::Node* node;
 	tgp::Glyph[OUTLINE_TILES] tiles;
 	tgp::InstId[OUTLINE_TILES] ids;
 }
@@ -901,7 +910,10 @@ fn Outline* FlappyModel.outline(&self, sz slot, xray::Color tint, xray::Color li
 // show places the outline around r, or moves it there. Every tile is
 // stretched to its cells, so the terminal's cell size does not matter.
 fn void Outline.show(&self, xray::Rect r) {
-	self.used = true;
+	if (r.w < 3 || r.h < 3) {
+		self.hide();
+		return;
+	}
 	sz right = r.x + r.w - 1;
 	sz bottom = r.y + r.h - 1;
 	sz[OUTLINE_TILES] col = { r.x, r.x + 1, right, r.x, right, r.x, r.x + 1, right };
@@ -927,60 +939,50 @@ fn void Outline.hide(&self) {
 
 // ── Dialogs ───────────────────────────────────────────────────────────────────
 
-// Panel is a dialog's backdrop. It dims the game behind the dialog without
-// hiding it — the half blocks keep their glyphs and both their colors are
-// tinted — and frames it with a gradient border unless it is bare. With an
-// outline, the frame is a heavy rounded line instead.
-struct Panel (xray::Content) {
-	xray::Color tint;
-	xray::Color edge_from;
-	xray::Color edge_to;
-	bool bare;
-	Outline* outline;
-}
-
-fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
-	bool rounded = self.outline != null && r.w >= 3 && r.h >= 3;
+// blank_edge clears the cells around the edge of r for an outline. The
+// outline's image tints each cell, blending over its background, and hides
+// any text in it. So a half block becomes a plain cell of its two colors'
+// average.
+fn void blank_edge(ScreenBuffer* dst, xray::Rect r) {
+	if (r.w < 3 || r.h < 3) return;
 	for (sz y = r.y; y < r.y + r.h; y++) {
 		for (sz x = r.x; x < r.x + r.w; x++) {
 			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
+			if (x != r.x && y != r.y && x != r.x + r.w - 1 && y != r.y + r.h - 1) continue;
 			xray::Cell* c = &dst.cells[y * dst.width + x];
-			bool edge = x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1;
-			if (rounded && edge) {
-				// The outline's image tints this cell, blending over its
-				// background, and hides any text in it. So the half block
-				// becomes a plain cell of its two colors' average.
-				xray::Color top = c.style.fg;
-				top.a = 128;
-				xray::Style st = xray::default_style().set_bg(top.blend_over(c.style.bg));
-				*c = xray::new_cell(" ", 1, st);
-				continue;
-			}
-			c.style.fg = self.tint.blend_over(c.style.fg);
-			c.style.bg = self.tint.blend_over(c.style.bg);
+			xray::Color top = c.style.fg;
+			top.a = 128;
+			*c = xray::new_cell(" ", 1, xray::default_style().set_bg(top.blend_over(c.style.bg)));
 		}
-	}
-	if (rounded) {
-		self.outline.show(r);
-	} else if (!self.bare) {
-		// The border sets no background of its own, so it sits on the tint too.
-		dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
 	}
 }
 
 // panel is a dialog box centred on screen, as wide as width or, at 0, as its
-// widest line. Its first line sits under the top border, and the rest stack
+// widest line. Its translucent background dims the game behind it without
+// hiding it, and its border runs from edge_from to edge_to. With kitty
+// graphics the border is the slot's rounded outline instead, drawn over a
+// blank edge. Its first line sits under the top border, and the rest stack
 // below it with a blank row between each. Each dialog has its own outline
 // slot, since the outline's colors are baked into its images.
 fn milktea::Node* FlappyModel.panel(&self, sz slot, sz width, xray::Color tint,
 		xray::Color edge_from, xray::Color edge_to) {
-	Panel* p = mem::tnew(Panel);
-	*p = { tint, edge_from, edge_to, false, self.outline(slot, tint, edge_from) };
-	milktea::Node* n = milktea::component(p);
+	glaze::Style box = {
+		.bg = tint, .border = glaze::ROUNDED,
+		.border_color = edge_from, .border_gradient = edge_to,
+	};
+	Outline* o = self.outline(slot, tint, edge_from);
+	if (o != null) {
+		// The outline's images carry the tint, so the edge cells under them
+		// keep the game's colors, made plain by blank_edge.
+		box.border = glaze::HIDDEN;
+		box.border_bg = xray::color_transparent();
+	}
+
+	milktea::Node* n = milktea::vstack().style(box);
+	if (o != null) o.node = n;
 	if (width > 0) n.width(milktea::cells(width));
 	return n
-		// The border takes the outer row and column on each side.
-		.with_padding(1, 3, 1, 3)
+		.with_padding(0, 2, 0, 2)
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER)
 		.center();
@@ -988,9 +990,7 @@ fn milktea::Node* FlappyModel.panel(&self, sz slot, sz width, xray::Color tint,
 
 // backdrop dims the game behind its lines, with no border.
 fn milktea::Node* backdrop(xray::Color tint) {
-	Panel* p = mem::tnew(Panel);
-	*p = { .tint = tint, .bare = true };
-	return milktea::component(p)
+	return milktea::vstack().style({ .bg = tint })
 		.with_padding(1, 4, 1, 4)
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER);

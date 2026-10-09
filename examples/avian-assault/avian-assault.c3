@@ -1183,40 +1183,20 @@ fn milktea::Node* AvianAssaultModel.hud(&self) {
 			.place(milktea::CENTER, milktea::ALIGN_END));
 }
 
-// Panel is a dialog's backdrop. It dims the game behind the dialog without
-// hiding it — the half blocks keep their glyphs and both their colors are
-// tinted — and frames it with a gradient border unless it is bare.
-struct Panel (xray::Content) {
-	xray::Color tint;
-	xray::Color edge_from;
-	xray::Color edge_to;
-	bool bare;
-}
-
-fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
-	for (sz y = r.y; y < r.y + r.h; y++) {
-		for (sz x = r.x; x < r.x + r.w; x++) {
-			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
-			xray::Cell* c = &dst.cells[y * dst.width + x];
-			c.style.fg = self.tint.blend_over(c.style.fg);
-			c.style.bg = self.tint.blend_over(c.style.bg);
-		}
-	}
-	// The border sets no background of its own, so it sits on the tint too.
-	if (!self.bare) dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
-}
-
 // panel is a dialog box centred on screen, as wide as width or, at 0, as its
-// widest line. Its first line sits under the top border, and the rest stack
-// below it with a blank row between each.
+// widest line. Its translucent background dims the game behind it without
+// hiding it, and its border runs from edge_from to edge_to. Its first line
+// sits under the top border, and the rest stack below it with a blank row
+// between each.
 fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
-	Panel* p = mem::tnew(Panel);
-	*p = { tint, edge_from, edge_to, false };
-	milktea::Node* n = milktea::component(p);
+	glaze::Style box = {
+		.bg = tint, .border = glaze::ROUNDED,
+		.border_color = edge_from, .border_gradient = edge_to,
+	};
+	milktea::Node* n = milktea::vstack().style(box);
 	if (width > 0) n.width(milktea::cells(width));
 	return n
-		// The border takes the outer row and column on each side.
-		.with_padding(1, 3, 1, 3)
+		.with_padding(0, 2, 0, 2)
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER)
 		.center();
@@ -1224,9 +1204,7 @@ fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray:
 
 // backdrop dims the game behind its lines, with no border.
 fn milktea::Node* backdrop(xray::Color tint) {
-	Panel* p = mem::tnew(Panel);
-	*p = { .tint = tint, .bare = true };
-	return milktea::component(p)
+	return milktea::vstack().style({ .bg = tint })
 		.with_padding(1, 4, 1, 4)
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER);
