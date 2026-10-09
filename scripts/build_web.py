@@ -74,19 +74,23 @@ def browser_exports(path):
     path.write_bytes(out)
 
 
-def build(name, config, optimizer):
+def build(name, config, optimizer, engine=False):
     files = set()
     for pattern in [*config['sources'], 'xray/**', 'boba/**', 'milktea-web/**']:
         files.update(p for p in ROOT.glob(pattern + '/*.c3' if pattern.endswith('/**') else pattern) if p.suffix == '.c3')
     mains = [p for p in files if re.search(r'^fn\s+int\s+main\s*\(', p.read_text(), re.M)]
-    if len(mains) != 1:
-        raise SystemExit(f'{name}: expected one main(), found {len(mains)}')
-    module = re.search(r'module\s+([\w:]+)', mains[0].read_text())[1]
-    entry = OUT / f'{name}-entry.c3'
-    entry.write_text(f'module web_entry;\nimport {module};\n'
-                     f'fn void boot() @wasm("mt_boot") {{ @pool() {{ (void){module}::main(); }}; }}\n')
+    if engine:
+        entries = []
+    else:
+        if len(mains) != 1:
+            raise SystemExit(f'{name}: expected one main(), found {len(mains)}')
+        module = re.search(r'module\s+([\w:]+)', mains[0].read_text())[1]
+        entry = OUT / f'{name}-entry.c3'
+        entry.write_text(f'module web_entry;\nimport {module};\n'
+                         f'fn void boot() @wasm("mt_boot") {{ @pool() {{ (void){module}::main(); }}; }}\n')
+        entries = [str(entry.relative_to(ROOT))]
     cmd = ['c3c', 'compile', *[str(p.relative_to(ROOT)) for p in sorted(files)],
-           str(entry.relative_to(ROOT)), '-D', 'MILKTEA_WEB', '--target', 'wasm32',
+           *entries, *(['-D', 'MILKTEA_JS'] if engine else []), '-D', 'MILKTEA_WEB', '--target', 'wasm32',
            '--link-libc=no', '--no-entry', '--reloc=none', '-Oz',
            '-o', str((OUT / name).relative_to(ROOT)), '-z', '--allow-undefined',
            '-z', '--strip-all']
@@ -115,10 +119,15 @@ def build(name, config, optimizer):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--engine', action='store_true', help='build reusable milktea.wasm for JavaScript models')
     parser.add_argument('examples', nargs='*', help='example names (default: all portable examples)')
     parser.add_argument('--wasm-opt', default=os.environ.get('WASM_OPT') or shutil.which('wasm-opt'),
                         help='optional Binaryen wasm-opt path (also detected on PATH or through WASM_OPT)')
     args = parser.parse_args()
+    if args.engine:
+        OUT.mkdir(parents=True, exist_ok=True)
+        build('milktea', {'sources': ['milktea/**', 'glaze/**', 'dye/**', 'tgp/**']}, args.wasm_opt, engine=True)
+        return
     targets = {k.removeprefix('examples/'): v for k, v in json.loads((ROOT / 'project.json').read_text())['targets'].items() if k.startswith('examples/')}
     names = args.examples or [n for n in targets if n not in UNSUPPORTED]
     OUT.mkdir(parents=True, exist_ok=True)
@@ -133,6 +142,9 @@ def main():
             parser.error(f'{name}: requires {UNSUPPORTED[name]}')
         print(f'Building web/{name}', flush=True)
         sizes[name] = build(name, targets[name], args.wasm_opt)
+    if not args.examples:
+        print('Building reusable web/milktea engine', flush=True)
+        build('milktea', {'sources': ['milktea/**', 'glaze/**', 'dye/**', 'tgp/**']}, args.wasm_opt, engine=True)
     # Keep previously built examples available when building just one target.
     available = [n for n in targets if n not in UNSUPPORTED and (OUT / f'{n}.wasm').exists()]
     manifest.write_text(json.dumps({'examples': available, 'unsupported': UNSUPPORTED,

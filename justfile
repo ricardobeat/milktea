@@ -43,3 +43,7 @@ web-serve port="8000":
 # Exercise WASM examples and the browser runtime ABI.
 web-test:
     node --test web/test/*.test.mjs
+
+# Compile only the reusable engine for JavaScript programs.
+web-engine:
+    python3 scripts/build_web.py --engine

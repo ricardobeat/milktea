@@ -42,11 +42,12 @@ export function createRandom(seed = 1) {
   };
 }
 
-export async function instantiateMilktea(bytes, {now, wall = Date.now, log = console.log} = {}) {
+export async function instantiateMilktea(bytes, {now, wall = Date.now, log = console.log, callbacks = {}} = {}) {
   const start = performance.now();
   let instance;
   let random = createRandom();
   const imports = {
+    milktea_js: callbacks,
     milktea: {math_sin: Math.sin, math_cos: Math.cos, now: now ?? (() => performance.now() - start), wall,
       log: (ptr, len) => log(decoder.decode(new Uint8Array(instance.exports.memory.buffer, ptr, len)))},
     env: {pow: Math.pow, powf: (x, y) => Math.fround(Math.pow(x, y)),
