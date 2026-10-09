@@ -3,8 +3,11 @@ import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule} from './engine.mjs
 const encoder = new TextEncoder(), decoder = new TextDecoder();
 const keyNames = ['None','Rune','Enter','Backspace','Escape','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','Delete','PageUp','PageDown','Insert','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Ctrl+C'];
 export const text = (value, options = {}) => ({type:'text', value:String(value), ...options});
-export const column = (children, options = {}) => ({type:'column', children, ...options});
-export const row = (children, options = {}) => ({type:'row', children, ...options});
+export const vstack = (children, options = {}) => ({type:'vstack', children, ...options});
+export const hstack = (children, options = {}) => ({type:'hstack', children, ...options});
+// Keep saved programs using the original names working.
+export const column = vstack;
+export const row = hstack;
 export const stack = (children, options = {}) => ({type:'stack', children, ...options});
 export const tick = (ms = 16) => ({type:'tick', ms});
 export const send = message => ({type:'send', message});
@@ -30,7 +33,7 @@ export async function mount(canvas, program, {wasmURL = new URL('./build/milktea
   const messages = new Map(), clicks = new Map();
   const context = {get cols() {return engine?.cols ?? wasm.mt_screen_width();},
     get rows() {return engine?.rows ?? wasm.mt_screen_height();},
-    get time() {return wasm.mt_js_time();}, text, column, row, stack, tick, send, quit};
+    get time() {return wasm.mt_js_time();}, text, vstack, hstack, column, row, stack, tick, send, quit};
   function queue(message) {
     if (engine?.stopped) throw new Error('Cannot send to a stopped program');
     const id = nextMessage++;
@@ -79,8 +82,8 @@ export async function mount(canvas, program, {wasmURL = new URL('./build/milktea
       new Uint8Array(wasm.memory.buffer,ptr,bytes.length).set(bytes);
       node=wasm.mt_js_text(ptr,bytes.length,fg,bg,(s.bold?1:0)|(s.italic?2:0)|(s.underline?4:0),borders[s.border]??0,padding);
     } else {
-      const direction={column:0,row:1,stack:2}[value.type];
-      if (direction===undefined || !Array.isArray(value.children)) throw new TypeError('View must be text, column, row, or stack');
+      const direction={vstack:0,hstack:1,stack:2,column:0,row:1}[value.type];
+      if (direction===undefined || !Array.isArray(value.children)) throw new TypeError('View must be text, vstack, hstack, or stack');
       node=wasm.mt_js_container(direction);
       for (const child of value.children) wasm.mt_js_add(node,tree(child,depth+1,count));
     }

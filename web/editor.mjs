@@ -1,5 +1,5 @@
 const presets = {
-  counter: `import {text, column, row} from 'milktea';
+  counter: `import {text, vstack, hstack} from 'milktea';
 
 export default {
   init() { return [{count: 0}]; },
@@ -11,11 +11,11 @@ export default {
     return [model];
   },
   view(model, screen) {
-    return column([
+    return vstack([
       text('Counter: ' + model.count, {style: {
         foreground: '#e4b2d6', bold: true, border: 'rounded', padding: 1
       }}),
-      row([
+      hstack([
         text(' − ', {onClick: 'minus', style: {background: '#393047'}}),
         text(' + ', {onClick: 'plus', style: {background: '#393047'}})
       ], {gap: 2}),
@@ -24,7 +24,7 @@ export default {
     ], {gap: 1, center: true});
   }
 };`,
-  clock: `import {text, column, tick} from 'milktea';
+  clock: `import {text, vstack, tick} from 'milktea';
 
 export default {
   init() { return [{frame: 0}, tick(60)]; },
@@ -34,14 +34,14 @@ export default {
   },
   view(model) {
     const dots = '●'.repeat(model.frame % 20 + 1);
-    return column([
+    return vstack([
       text('One-shot timers, re-armed from update', {style: {foreground: '#e4b2d6', bold: true}}),
       text(dots, {style: {foreground: '#64d8c2'}}),
       text('Frame ' + model.frame)
     ], {gap: 1, padding: 2});
   }
 };`,
-  input: `import {text, column} from 'milktea';
+  input: `import {text, vstack} from 'milktea';
 
 export default {
   init() { return [{value: ''}]; },
@@ -55,7 +55,7 @@ export default {
     return [model];
   },
   view(model) {
-    return column([
+    return vstack([
       text('Click here, then type or paste', {style: {foreground: '#e4b2d6'}}),
       text(model.value + '▌', {style: {border: 'rounded', padding: 1}})
     ], {gap: 1, padding: 2});

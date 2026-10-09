@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {instantiateMilktea,gridText,readGrid} from '../engine.mjs';
-import {text,column,row,tick,quit} from '../bindings.mjs';
+import {text,vstack,hstack,tick,quit} from '../bindings.mjs';
 
 test('standalone engine: JS callbacks, native layout/styles, timers, paste, clicks and teardown', async () => {
   let w, now=0, destroyed=0;
@@ -40,7 +40,7 @@ test('standalone engine: JS callbacks, native layout/styles, timers, paste, clic
 });
 
 test('JavaScript descriptors and commands preserve values for native bindings',()=>{
-  assert.deepEqual(column([row([text('a')]),text('b',{onClick:'increment'})],{gap:1}),
-    {type:'column',children:[{type:'row',children:[{type:'text',value:'a'}]},{type:'text',value:'b',onClick:'increment'}],gap:1});
+  assert.deepEqual(vstack([hstack([text('a')]),text('b',{onClick:'increment'})],{gap:1}),
+    {type:'vstack',children:[{type:'hstack',children:[{type:'text',value:'a'}]},{type:'text',value:'b',onClick:'increment'}],gap:1});
   assert.deepEqual(tick(100),{type:'tick',ms:100});assert.deepEqual(quit(),{type:'quit'});
 });

@@ -105,12 +105,12 @@ runs milktea dispatch, timers, xray layout, glaze styling and click handling.
 ```html
 <canvas id="app" style="width:400px;height:240px"></canvas>
 <script type="module">
-  import {mount, text, column} from './bindings.mjs';
+  import {mount, text, vstack} from './bindings.mjs';
   const app = await mount(document.querySelector('#app'), {
     init: () => [{count: 0}],
     update: (msg, model) => [{count: model.count +
       (msg.type === 'key' && msg.key === 'ArrowUp' ? 1 : 0)}],
-    view: model => column([
+    view: model => vstack([
       text(`Count: ${model.count}`, {style: {foreground: '#e4b2d6', bold: true}}),
       text('Press ↑')
     ], {gap: 1, padding: 2})
@@ -134,7 +134,7 @@ modifiers), `paste` (`text`), `focus`, `blur`, and `tick`. A node with
 hit testing. `send` delivers the custom message as supplied.
 
 Views may return strings or descriptors from `text(value, options)`,
-`column(children, options)`, `row(children, options)`, or `stack(children, options)`.
+`vstack(children, options)`, `hstack(children, options)`, or `stack(children, options)`.
 Node options include `width`, `height`, `fill`, `gap`, `padding`, `center` and
 `onClick`. Text's `style` supports `foreground`, `background` (`#rrggbb` or RGB
 integers), `bold`, `italic`, `underline`, `padding`, and `border` (`rounded`,
