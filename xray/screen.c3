@@ -697,7 +697,7 @@ fn void ScreenBuffer.render_ansi_string(
 
 			if (final_byte == 'm') {
 				// SGR — parse parameters and update style
-				style = apply_sgr(params, style);
+				style = apply_sgr(params, style, start_style);
 			} else if (final_byte == 'H') {
 				// CUP — cursor position (row;col), 1-indexed
 				sz semicolon = 0;
@@ -798,11 +798,14 @@ fn void ScreenBuffer.render_ansi_string(
 	}
 }
 
-// apply_sgr parses SGR parameters and returns the updated style.
-fn Style apply_sgr(String params, Style current) @local {
+// apply_sgr parses SGR parameters and returns the updated style. A reset
+// returns to base, the style the string started on, rather than to the
+// terminal's default: a string painted over a background it inherits keeps
+// inheriting it after its own colours end.
+fn Style apply_sgr(String params, Style current, Style base) @local {
 	Style s = current;
 	if (params.len == 0) {
-		return default_style(); // bare \x1b[m = reset
+		return base; // bare \x1b[m = reset
 	}
 
 	sz i = 0;
@@ -901,14 +904,14 @@ fn Style apply_sgr(String params, Style current) @local {
 			continue;
 		}
 
-		apply_sgr_code(&s, val);
+		apply_sgr_code(&s, val, base);
 	}
 	return s;
 }
 
-fn void apply_sgr_code(Style* s, sz code) @local {
+fn void apply_sgr_code(Style* s, sz code, Style base) @local {
 	switch (code) {
-		case 0: *s = default_style();
+		case 0: *s = base;
 		case 1: s.attrs.bold = true;
 		case 2: s.attrs.dim = true;
 		case 3: s.attrs.italic = true;
@@ -931,7 +934,7 @@ fn void apply_sgr_code(Style* s, sz code) @local {
 		case 35: s.fg = color_ansi(5);
 		case 36: s.fg = color_ansi(6);
 		case 37: s.fg = color_ansi(7);
-		case 39: s.fg = color_none();  // default fg
+		case 39: s.fg = base.fg;  // default fg
 		// Background: basic 8
 		case 40: s.bg = color_ansi(0);
 		case 41: s.bg = color_ansi(1);
@@ -941,7 +944,7 @@ fn void apply_sgr_code(Style* s, sz code) @local {
 		case 45: s.bg = color_ansi(5);
 		case 46: s.bg = color_ansi(6);
 		case 47: s.bg = color_ansi(7);
-		case 49: s.bg = color_none();  // default bg
+		case 49: s.bg = base.bg;  // default bg
 		// Foreground: bright 8
 		case 90: s.fg = color_ansi(8);
 		case 91: s.fg = color_ansi(9);
@@ -1178,7 +1181,8 @@ fn void ScreenBuffer.fill_gradient_ellipse(&self, Rect r, Color c1, Color c2, fl
 }
 
 // draw_gradient_border draws a rounded border whose colour interpolates
-// vertically from c1 (top) to c2 (bottom). Returns the inner rect.
+// vertically from c1 (top) to c2 (bottom). Returns the inner rect. It sets no
+// background: each border cell keeps the one already beneath it.
 fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Color c2) {
 	if (r.w < 2 || r.h < 2) return r;
 	sz x0 = (sz)r.x;
@@ -1192,19 +1196,19 @@ fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Col
 	top.append_string(b.top_left);
 	for (sz i = 0; i < r.w - 2; i++) top.append_string(b.top);
 	top.append_string(b.top_right);
-	self.set_string(x0, y0, top.str_view(), (Style){ .fg = c1 });
+	self.set_string(x0, y0, top.str_view(), (Style){ .fg = c1, .bg = color_transparent() });
 
 	// Bottom row: c2
 	DString bot = dstring::temp();
 	bot.append_string(b.bottom_left);
 	for (sz i = 0; i < r.w - 2; i++) bot.append_string(b.bottom);
 	bot.append_string(b.bottom_right);
-	self.set_string(x0, y1, bot.str_view(), (Style){ .fg = c2 });
+	self.set_string(x0, y1, bot.str_view(), (Style){ .fg = c2, .bg = color_transparent() });
 
 	// Sides: interpolate per row
 	for (sz row = y0 + 1; row < y1; row++) {
 		Color c = lerp_color(c1, c2, (sz)(row - y0), max_t);
-		Style sty = { .fg = c };
+		Style sty = { .fg = c, .bg = color_transparent() };
 		self.set_string(x0, row, b.left, sty);
 		self.set_string(x1, row, b.right, sty);
 	}

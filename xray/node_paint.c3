@@ -110,7 +110,11 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 					// its neighbours.
 					sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
 					sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
-					self.render_ansi_string((sz)r.x, (sz)r.y, s, default_style(), max_row, max_col);
+					// Text has no background of its own unless it sets one,
+					// as in CSS: where it does not, what is painted beneath
+					// shows through around its glyphs.
+					Style see_through = default_style().set_bg(color_transparent());
+					self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
 				}
 			}
 		}

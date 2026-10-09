@@ -1,6 +1,7 @@
 module view_nodes_test;
 import milktea;
 import xray;
+import glaze;
 import std::core::mem;
 
 fn xray::ScreenBuffer* painted(milktea::Node* root, sz w, sz h, xray::PaintResult* res = null) {
@@ -69,4 +70,29 @@ fn void test_plain_text_measures_its_lines() @test {
 	milktea::Node* t = milktea::text("one\nthree");
 	assert(t.natural_height(20) == 2);
 	assert(t.natural_width(1) == 5);
+}
+
+fn void test_text_without_a_background_keeps_the_one_beneath() @test {
+	xray::Color under = xray::color_rgb(10, 20, 30);
+	glaze::Style fill = glaze::style().background(under);
+	xray::ScreenBuffer* sb = painted(milktea::root()
+		.add(milktea::text("    ", fill))
+		.add(milktea::text("\x1b[1mhi\x1b[0m!")), 4, 1);
+	defer free_buffer(sb);
+
+	assert(sb.cell_at(0, 0).content[0] == 'h');
+	assert(sb.cell_at(0, 0).style.bg.eq(under), "styled run");
+	assert(sb.cell_at(2, 0).style.bg.eq(under), "after the reset");
+	assert(sb.cell_at(3, 0).style.bg.eq(under), "untouched cell");
+}
+
+fn void test_text_with_a_background_paints_it() @test {
+	glaze::Style fill = glaze::style().background(xray::color_rgb(10, 20, 30));
+	glaze::Style own = glaze::style().background(xray::color_rgb(200, 0, 0));
+	xray::ScreenBuffer* sb = painted(milktea::root()
+		.add(milktea::text("   ", fill))
+		.add(milktea::text("ab", own)), 3, 1);
+	defer free_buffer(sb);
+
+	assert(sb.cell_at(1, 0).style.bg.eq(xray::color_rgb(200, 0, 0)));
 }
