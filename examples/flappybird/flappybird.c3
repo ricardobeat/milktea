@@ -812,23 +812,25 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 
 // Panel is a dialog's backdrop. It dims the game behind the dialog without
 // hiding it — the half blocks keep their glyphs and both their colors are
-// tinted — and frames it with a gradient border.
+// tinted — and frames it with a gradient border unless it is bare.
 struct Panel (xray::Content) {
 	xray::Color tint;
 	xray::Color edge_from;
 	xray::Color edge_to;
+	bool bare;
 }
 
 fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
-	xray::Rect inner = dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = r.y; y < r.y + r.h; y++) {
+		for (sz x = r.x; x < r.x + r.w; x++) {
 			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
 			xray::Cell* c = &dst.cells[y * dst.width + x];
 			c.style.fg = self.tint.blend_over(c.style.fg);
 			c.style.bg = self.tint.blend_over(c.style.bg);
 		}
 	}
+	// The border sets no background of its own, so it sits on the tint too.
+	if (!self.bare) dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
 }
 
 // panel is a dialog box centred on screen, as wide as width or, at 0, as its
@@ -836,7 +838,7 @@ fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
 // below it with a blank row between each.
 fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
 	Panel* p = mem::tnew(Panel);
-	*p = { tint, edge_from, edge_to };
+	*p = { tint, edge_from, edge_to, false };
 	milktea::Node* n = milktea::component(p);
 	if (width > 0) n.width(milktea::cells(width));
 	return n
@@ -845,6 +847,18 @@ fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray:
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER)
 		.center();
+}
+
+// backdrop dims the game behind its lines with no border: a blurred shadow
+// of the same shade fades its edges out into the scene.
+fn milktea::Node* backdrop(xray::Color tint) {
+	Panel* p = mem::tnew(Panel);
+	*p = { .tint = tint, .bare = true };
+	return milktea::component(p)
+		.with_padding(1, 4, 1, 4)
+		.with_gap(1)
+		.with_align(milktea::ALIGN_CENTER)
+		.shadow(xray::shadow(0, 0, tint.a, blur: 3).with_color(xray::color_rgb(tint.r, tint.g, tint.b)));
 }
 
 fn milktea::Node* line(String s, xray::Color fg, bool bold = false) {
@@ -892,10 +906,11 @@ fn milktea::Node* FlappyModel.intro_dialog(&self) {
 		.with_align(milktea::ALIGN_CENTER)
 		.with_gap(1)
 		.add(lane)
-		.add(logo)
-		.add(line("░▒▓ RETRO ARCADE EDITION ▓▒░", xray::color_rgb(220, 240, 255), bold: true))
-		.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
-			.alpha(blink_on ? 255 : 0));
+		.add(backdrop(xray::color_rgba(10, 14, 28, 150))
+			.add(logo)
+			.add(line("░▒▓ RETRO ARCADE EDITION ▓▒░", xray::color_rgb(220, 240, 255), bold: true))
+			.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
+				.alpha(blink_on ? 255 : 0)));
 }
 
 fn milktea::Node* FlappyModel.menu_dialog(&self) {

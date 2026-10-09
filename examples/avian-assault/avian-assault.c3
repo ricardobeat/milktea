@@ -1185,23 +1185,25 @@ fn milktea::Node* AvianAssaultModel.hud(&self) {
 
 // Panel is a dialog's backdrop. It dims the game behind the dialog without
 // hiding it — the half blocks keep their glyphs and both their colors are
-// tinted — and frames it with a gradient border.
+// tinted — and frames it with a gradient border unless it is bare.
 struct Panel (xray::Content) {
 	xray::Color tint;
 	xray::Color edge_from;
 	xray::Color edge_to;
+	bool bare;
 }
 
 fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
-	xray::Rect inner = dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
+	for (sz y = r.y; y < r.y + r.h; y++) {
+		for (sz x = r.x; x < r.x + r.w; x++) {
 			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
 			xray::Cell* c = &dst.cells[y * dst.width + x];
 			c.style.fg = self.tint.blend_over(c.style.fg);
 			c.style.bg = self.tint.blend_over(c.style.bg);
 		}
 	}
+	// The border sets no background of its own, so it sits on the tint too.
+	if (!self.bare) dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
 }
 
 // panel is a dialog box centred on screen, as wide as width or, at 0, as its
@@ -1209,7 +1211,7 @@ fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
 // below it with a blank row between each.
 fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
 	Panel* p = mem::tnew(Panel);
-	*p = { tint, edge_from, edge_to };
+	*p = { tint, edge_from, edge_to, false };
 	milktea::Node* n = milktea::component(p);
 	if (width > 0) n.width(milktea::cells(width));
 	return n
