@@ -831,15 +831,17 @@ fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
 	}
 }
 
-// panel is a dialog box sized to its lines and centred on screen. Its first
-// line sits under the top border, and the rest stack below it with a blank
-// row between each.
+// panel is a dialog box centred on screen, as wide as width or, at 0, as its
+// widest line. Its first line sits under the top border, and the rest stack
+// below it with a blank row between each.
 fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
 	Panel* p = mem::tnew(Panel);
 	*p = { tint, edge_from, edge_to };
-	return milktea::component(p)
-		.width(milktea::cells(width))
-		.with_padding(1, 2, 1, 2)
+	milktea::Node* n = milktea::component(p);
+	if (width > 0) n.width(milktea::cells(width));
+	return n
+		// The border takes the outer row and column on each side.
+		.with_padding(1, 3, 1, 3)
 		.with_gap(1)
 		.with_align(milktea::ALIGN_CENTER)
 		.center();
@@ -964,7 +966,7 @@ const String[5] HOW_TO_PLAY = {
 };
 
 fn milktea::Node* FlappyModel.help_dialog(&self) {
-	return panel(46, xray::color_rgba(12, 16, 28, 178),
+	return panel(0, xray::color_rgba(12, 16, 28, 178),
 			xray::color_rgb(80, 200, 255), xray::color_rgb(140, 100, 255))
 		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
 			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
