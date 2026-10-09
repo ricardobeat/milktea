@@ -1222,16 +1222,14 @@ fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray:
 		.center();
 }
 
-// backdrop dims the game behind its lines with no border: a blurred shadow
-// of the same shade fades its edges out into the scene.
+// backdrop dims the game behind its lines, with no border.
 fn milktea::Node* backdrop(xray::Color tint) {
 	Panel* p = mem::tnew(Panel);
 	*p = { .tint = tint, .bare = true };
 	return milktea::component(p)
 		.with_padding(1, 4, 1, 4)
 		.with_gap(1)
-		.with_align(milktea::ALIGN_CENTER)
-		.shadow(xray::shadow(0, 0, tint.a, blur: 3).with_color(xray::color_rgb(tint.r, tint.g, tint.b)));
+		.with_align(milktea::ALIGN_CENTER);
 }
 
 fn milktea::Node* line(String s, xray::Color fg, bool bold = false) {
@@ -1280,7 +1278,7 @@ fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 	// its place in the layout and paints nothing.
 	bool blink_on = (self.ticks / 10) % 2 == 0;
 
-	return backdrop(xray::color_rgba(28, 14, 16, 150))
+	return backdrop(xray::color_rgba(28, 14, 16, 215))
 		.center()
 		.add(milktea::vstack()
 			.with_align(milktea::ALIGN_CENTER)
