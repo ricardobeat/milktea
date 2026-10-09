@@ -539,16 +539,25 @@ fn InstId Glyph.place(&self, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0)
 // unknown.
 fn InstId Session.place(&self, Glyph g, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0) {
 	if (!supported()) return NO_INSTANCE;
-	sz glyph_idx = -1;	for (sz i = 0; i < self.glyph_count; i++) {
+	sz glyph_idx = -1;
+	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.glyphs[i].base_id == g.base_id) {
 			glyph_idx = i;
 			break;
 		}
 	}
 	if (glyph_idx < 0) return NO_INSTANCE;
-	if (self.placement_count >= MAX_INSTANCES) return NO_INSTANCE;
 
-	sz pid_idx = self.placement_count++;
+	// Reuse a removed placement once sync() has taken it off the screen, so a
+	// view that shows and hides the same images keeps a bounded table.
+	sz pid_idx = -1;
+	for (sz p = 0; p < self.placement_count; p++) {
+		if (!self.placements[p].active && !self.placements[p].shown) { pid_idx = p; break; }
+	}
+	if (pid_idx < 0) {
+		if (self.placement_count >= MAX_INSTANCES) return NO_INSTANCE;
+		pid_idx = self.placement_count++;
+	}
 	self.placements[pid_idx] = {
 		.active = true,
 		.glyph = glyph_idx,

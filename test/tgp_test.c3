@@ -132,6 +132,42 @@ fn void test_place_move_remove_diff() @test {
 	};
 }
 
+fn void test_removed_placement_slot_is_reused() @test {
+	@pool() {
+		g_captured_buf = dstring::temp();
+		tgp::set_sink(&capture);
+		defer tgp::set_sink(null);
+		tgp::set_supported_override(true);
+		defer tgp::set_supported_override(false);
+
+		tgp::Session s = tgp::new_session();
+		char[16] pixels;
+		tgp::Glyph g = s.register({
+			.frames = pixels[..],
+			.count = 1, .width = 2, .height = 2,
+			.fps = 0, .fallback = "x",
+		})!!;
+
+		// Showing and hiding a placement more times than the table holds
+		// must keep working: each removed slot is free again after sync().
+		for (sz i = 0; i < tgp::MAX_INSTANCES * 2; i++) {
+			tgp::InstId id = s.place(g, 1, 1);
+			assert(id == 0);
+			s.sync();
+			s.remove(id);
+			s.sync();
+		}
+
+		// A removed placement that is still on screen keeps its slot until
+		// sync() deletes it, so the next place() takes a new one.
+		tgp::InstId a = s.place(g, 1, 1);
+		s.sync();
+		s.remove(a);
+		tgp::InstId b = s.place(g, 2, 2);
+		assert(b != a);
+	};
+}
+
 fn void test_glyph_render_and_place_sugar() @test {
 	@pool() {
 		g_captured_buf = dstring::temp();
