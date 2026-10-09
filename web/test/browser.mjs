@@ -54,6 +54,38 @@ try {
   await mouse.close();
   console.log('PASS scaled mouse coordinates and high-DPI canvas');
 
+  const fire = await pageFor('<milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:867px;height:523px"></milktea-view>');
+  await fire.waitForFunction(() => !!document.querySelector('#view').engine);
+  const seams = await fire.$eval('#view', async view => {
+    const {readGrid} = await import('/engine.mjs');
+    const a = view.engine;
+    a.pause();
+    const g = readGrid(a.wasm);
+    // Uniform half-block colors reveal antialiased cell edges. Every pixel
+    // inside the grid must be exactly one of these two opaque colors.
+    for (let i = 0; i < g.cols * g.rows; i++) {
+      const s = g.ptr + i * g.stride + g.style;
+      g.bytes.set([3,0,240,80,20,255], s);
+      g.bytes.set([3,0,180,190,40,255], s + g.colorSize);
+    }
+    a.paint(0);
+    const v = a.viewport, d = a.dpr;
+    const left = Math.round(d*v.offsetX), top = Math.round(d*v.offsetY);
+    const width = Math.round(d*(v.offsetX+g.cols*a.cellWidth*v.scaleX))-left;
+    const height = Math.round(d*(v.offsetY+g.rows*a.cellHeight*v.scaleY))-top;
+    const pixels = a.ctx.getImageData(left,top,width,height).data;
+    let unexpected = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const fg = pixels[i]===240 && pixels[i+1]===80 && pixels[i+2]===20;
+      const bg = pixels[i]===180 && pixels[i+1]===190 && pixels[i+2]===40;
+      if ((!fg && !bg) || pixels[i+3]!==255) unexpected++;
+    }
+    return unexpected;
+  });
+  assert.equal(seams, 0, 'fractionally scaled fire cells must have no blended grid seams');
+  await fire.close();
+  console.log('PASS fractional-scale fire cells have no grid seams');
+
   const sizing = await pageFor('<milktea-view id="view" src="/build/counter.wasm" style="width:400px;height:200px"></milktea-view>');
   await sizing.waitForFunction(() => !!document.querySelector('#view').engine);
   assert.deepEqual(await sizing.$eval('#view', v => [v.engine.cols,v.engine.rows]), [40,10]);

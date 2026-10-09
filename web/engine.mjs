@@ -95,20 +95,20 @@ export function cellColor(bytes, p, fallback) {
   return fallback;
 }
 // Block glyphs are geometry so half-block games have no font gaps.
-function block(ctx, cp, x, y, w, h) {
+function block(ctx, cp, x, y, w, h, fillRect) {
   if (drawLegacyGlyph(ctx, cp, x, y, w, h)) return true;
-  if (cp === 0x2580) ctx.fillRect(x, y, w, h / 2);
-  else if (cp >= 0x2581 && cp <= 0x2588) { const size = (cp - 0x2580) / 8; ctx.fillRect(x, y + h * (1 - size), w, h * size); }
-  else if (cp >= 0x2589 && cp <= 0x258f) ctx.fillRect(x, y, w * (0x2590 - cp) / 8, h);
-  else if (cp === 0x2590) ctx.fillRect(x + w / 2, y, w / 2, h);
-  else if (cp === 0x2594) ctx.fillRect(x, y, w, h / 8);
-  else if (cp === 0x2595) ctx.fillRect(x + w * 7 / 8, y, w / 8, h);
+  if (cp === 0x2580) fillRect(x, y, w, h / 2);
+  else if (cp >= 0x2581 && cp <= 0x2588) { const size = (cp - 0x2580) / 8; fillRect(x, y + h * (1 - size), w, h * size); }
+  else if (cp >= 0x2589 && cp <= 0x258f) fillRect(x, y, w * (0x2590 - cp) / 8, h);
+  else if (cp === 0x2590) fillRect(x + w / 2, y, w / 2, h);
+  else if (cp === 0x2594) fillRect(x, y, w, h / 8);
+  else if (cp === 0x2595) fillRect(x + w * 7 / 8, y, w / 8, h);
   else if (cp >= 0x2591 && cp <= 0x2593) {
-    ctx.globalAlpha *= (cp - 0x2590) / 4; ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha *= (cp - 0x2590) / 4; fillRect(x, y, w, h);
   } else if (cp >= 0x2596 && cp <= 0x259f) {
     const masks = [4, 8, 1, 13, 9, 7, 11, 2, 6, 14];
     const mask = masks[cp - 0x2596];
-    for (let i = 0; i < 4; i++) if (mask & (1 << i)) ctx.fillRect(x + (i % 2) * w / 2, y + Math.floor(i / 2) * h / 2, w / 2, h / 2);
+    for (let i = 0; i < 4; i++) if (mask & (1 << i)) fillRect(x + (i % 2) * w / 2, y + Math.floor(i / 2) * h / 2, w / 2, h / 2);
   } else if (cp >= 0x2800 && cp <= 0x28ff) {
     const bits = cp - 0x2800;
     const dots = [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[0,3],[1,3]];
@@ -285,11 +285,22 @@ export class MilkteaCanvas {
     ctx.globalAlpha = 1; ctx.fillStyle = this.background;
     ctx.fillRect(0, 0, v.width, v.height);
     ctx.setTransform(dpr * v.scaleX, 0, 0, dpr * v.scaleY, dpr * v.offsetX, dpr * v.offsetY);
+    // Fractional fit/zoom and DPR put cell edges between backing pixels.
+    // Round shared edges identically so adjacent fills and clips tile without
+    // antialiasing seams. Keep text and pointer coordinates in logical units.
+    const sx = dpr * v.scaleX, sy = dpr * v.scaleY;
+    const ox = dpr * v.offsetX, oy = dpr * v.offsetY;
+    const snapX = x => (Math.round(x * sx + ox) - ox) / sx;
+    const snapY = y => (Math.round(y * sy + oy) - oy) / sy;
+    const fillRect = (x, y, w, h) => {
+      const left = snapX(x), top = snapY(y);
+      ctx.fillRect(left, top, snapX(x + w) - left, snapY(y + h) - top);
+    };
     // Backgrounds first: a continuation cell must not erase a wide glyph.
     for (let i = 0; i < g.cols * g.rows; i++) {
       const p = g.ptr + i * g.stride, s = p + g.style, attrs = g.bytes[s + g.attrs];
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? 0 : g.colorSize), attrs & 32 ? this.foreground : this.background);
-      ctx.fillRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
+      fillRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
     }
     ctx.textBaseline = 'middle';
     for (let i = 0; i < g.cols * g.rows; i++) {
@@ -299,11 +310,13 @@ export class MilkteaCanvas {
       if ((attrs & 16) && blink) continue;
       const text = decoder.decode(g.bytes.subarray(p, p + len));
       const x = (i % g.cols) * cw, y = Math.floor(i / g.cols) * ch;
-      ctx.save(); ctx.beginPath(); ctx.rect(x, y, cw * width, ch); ctx.clip();
+      ctx.save(); ctx.beginPath();
+      ctx.rect(snapX(x), snapY(y), snapX(x + cw * width) - snapX(x), snapY(y + ch) - snapY(y));
+      ctx.clip();
       ctx.globalAlpha = attrs & 2 ? .5 : 1;
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? g.colorSize : 0), attrs & 32 ? this.background : this.foreground);
       ctx.font = `${attrs & 4 ? 'italic ' : ''}${attrs & 1 ? 'bold ' : ''}${this.fontSize}px ${this.font}`;
-      if (!block(ctx, text.codePointAt(0), x, y, cw * width, ch)) ctx.fillText(text, x, y + ch / 2, cw * width);
+      if (!block(ctx, text.codePointAt(0), x, y, cw * width, ch, fillRect)) ctx.fillText(text, x, y + ch / 2, cw * width);
       if (attrs & 8) ctx.fillRect(x, y + ch - 2, cw * width, 1);
       if (attrs & 64) ctx.fillRect(x, y + ch / 2, cw * width, 1);
       ctx.restore();
