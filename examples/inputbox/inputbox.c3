@@ -15,8 +15,9 @@ struct Model {
 }
 
 fn milktea::Cmd Model.init(&self) @dynamic {
-	self.input.tinit();
-	self.output.tinit();
+	// Model state survives the runtime's temporary allocation pools.
+	self.input.init(mem);
+	self.output.init(mem);
 	self.output.append_string("Type something below.\n");
 	self.output.append_string("Enter to submit, q (alone) to quit.");
 	return null;

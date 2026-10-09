@@ -5,6 +5,7 @@ import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
+import std::core::mem;
 
 struct Model {
 	sz mouse_row;
@@ -35,7 +36,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
 			self.dragging = true;
 			if (self.trail_count < self.trail.len) {
-				self.trail[self.trail_count] = string::tformat("(%d,%d)", msg.mouse.col, msg.mouse.row);
+				self.trail[self.trail_count] = string::format(mem, "(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
 			}
 		}
@@ -44,7 +45,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		}
 		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
 			if (self.trail_count < self.trail.len) {
-				self.trail[self.trail_count] = string::tformat("(%d,%d)", msg.mouse.col, msg.mouse.row);
+				self.trail[self.trail_count] = string::format(mem, "(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
 			}
 		}
@@ -60,11 +61,16 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		case milktea::KeyCode.RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'c') {
-				self.trail_count = 0;
+				foreach (point : self.trail[:self.trail_count]) mem::free(point.ptr);
+			self.trail_count = 0;
 			}
 		default:
 	}
 	return null;
+}
+
+fn void Model.on_destroy(Model* self) @dynamic {
+	foreach (point : self.trail[:self.trail_count]) mem::free(point.ptr);
 }
 
 fn milktea::Node* Model.view(Model* self) @dynamic {

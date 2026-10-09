@@ -75,9 +75,11 @@ fn int main() {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
+	$if !$feat(MILKTEA_WEB):
 	if (m.lst.selected >= 0) {
 		io::printfn("You selected: %s", m.lst.items[m.lst.selected].title);
 	}
+	$endif
 	io::printn("Bye!");
 	return 0;
 }

@@ -34,11 +34,13 @@ fn milktea::Cmd SpaceModel.init(SpaceModel* self) @dynamic {
 // Matches Go version: baseValue = ((height-y)/height)^2 with random offset.
 fn void SpaceModel.compute_colors(SpaceModel* self) {
 	sz total = (sz)self.width * (sz)self.height * 2;
-	if (self.color_r == null) {
-		self.color_r = mem::new_array(char, total);
-		self.color_g = mem::new_array(char, total);
-		self.color_b = mem::new_array(char, total);
-	}
+	mem::free(self.color_r);
+	mem::free(self.color_g);
+	mem::free(self.color_b);
+	self.color_r = mem::new_array(char, total);
+	self.color_g = mem::new_array(char, total);
+	self.color_b = mem::new_array(char, total);
+
 	sz pixel_rows = self.height * 2;
 	for (sz y = 0; y < pixel_rows; y++) {
 		for (sz x = 0; x < self.width; x++) {
