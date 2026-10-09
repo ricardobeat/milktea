@@ -1,0 +1,52 @@
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+const require=createRequire(process.env.PLAYWRIGHT_PACKAGE || import.meta.url);
+const playwright=require('playwright');
+const browserName=process.env.MILKTEA_TEST_BROWSER || 'chromium';
+const browser=await playwright[browserName].launch({headless:true});
+const origin=process.env.MILKTEA_TEST_URL || 'http://127.0.0.1:8000';
+try {
+  for (const dpr of [1,1.25,2]) {
+    const page=await browser.newPage({viewport:{width:1100,height:800},deviceScaleFactor:dpr});
+    await page.route('**/seams-test.html',route=>route.fulfill({contentType:'text/html',body:
+      '<script type="module" src="/embed.mjs"></script><milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:756px;height:413px"></milktea-view>'}));
+    await page.goto(`${origin}/seams-test.html`);
+    await page.waitForFunction(()=>!!document.querySelector('#view').engine);
+    for (const name of ['doom-fire','dos-app']) {
+      if (name==='dos-app') {
+        await page.$eval('#view',v=>v.setAttribute('src','/build/dos-app.wasm'));
+        await page.waitForFunction(()=>!!document.querySelector('#view').engine);
+      }
+      for (const [width,height] of [[756,413],[867,523],[317,197]]) {
+        const bad=await page.$eval('#view',async(view,{width,height,name})=>{
+          const {readGrid}=await import('/engine.mjs');
+          view.style.width=width+'px';view.style.height=height+'px';
+          const a=view.engine;a.pause();a.resize();a.wasm.mt_frame();
+          const g=readGrid(a.wasm);
+          for(let i=0;i<g.cols*g.rows;i++) {
+            const p=g.ptr+i*g.stride,s=p+g.style;
+            if(name==='dos-app') {g.bytes[p]=32;g.bytes[p+8]=1;g.bytes[p+9]=1;}
+            g.bytes[s+g.attrs]=0;
+            g.bytes.set([3,0,240,80,20,255],s);
+            g.bytes.set([3,0,180,190,40,255],s+g.colorSize);
+          }
+          a.paint(0);
+          const v=a.viewport,d=a.dpr,left=Math.round(v.offsetX*d),top=Math.round(v.offsetY*d);
+          const w=Math.round((v.offsetX+g.cols*a.cellWidth*v.scaleX)*d)-left;
+          const h=Math.round((v.offsetY+g.rows*a.cellHeight*v.scaleY)*d)-top;
+          const pixels=a.ctx.getImageData(left,top,w,h).data;
+          let bad=0;
+          for(let i=0;i<pixels.length;i+=4) {
+            const fg=pixels[i]===240 && pixels[i+1]===80 && pixels[i+2]===20;
+            const bg=pixels[i]===180 && pixels[i+1]===190 && pixels[i+2]===40;
+            if((!bg && !(name==='doom-fire' && fg)) || pixels[i+3]!==255) bad++;
+          }
+          return bad;
+        },{width,height,name});
+        assert.equal(bad,0,`${browserName} ${name} ${width}x${height} DPR ${dpr}: no blended seams`);
+      }
+    }
+    await page.close();
+  }
+  console.log(`PASS ${browserName}: fire and text backgrounds have zero seams at 3 viewports × 3 pixel densities`);
+} finally {await browser.close();}

@@ -290,11 +290,13 @@ export class MilkteaCanvas {
     // antialiasing seams. Keep text and pointer coordinates in logical units.
     const sx = dpr * v.scaleX, sy = dpr * v.scaleY;
     const ox = dpr * v.offsetX, oy = dpr * v.offsetY;
-    const snapX = x => (Math.round(x * sx + ox) - ox) / sx;
-    const snapY = y => (Math.round(y * sy + oy) - oy) / sy;
     const fillRect = (x, y, w, h) => {
-      const left = snapX(x), top = snapY(y);
-      ctx.fillRect(left, top, snapX(x + w) - left, snapY(y + h) - top);
+      const left = Math.round(x * sx + ox), top = Math.round(y * sy + oy);
+      // Draw directly in backing pixels. Inverting the transform and applying
+      // it again can leave near-integer edges that some browsers antialias.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillRect(left, top, Math.round((x + w) * sx + ox) - left, Math.round((y + h) * sy + oy) - top);
+      ctx.setTransform(sx, 0, 0, sy, ox, oy);
     };
     // Backgrounds first: a continuation cell must not erase a wide glyph.
     for (let i = 0; i < g.cols * g.rows; i++) {
@@ -311,8 +313,11 @@ export class MilkteaCanvas {
       const text = decoder.decode(g.bytes.subarray(p, p + len));
       const x = (i % g.cols) * cw, y = Math.floor(i / g.cols) * ch;
       ctx.save(); ctx.beginPath();
-      ctx.rect(snapX(x), snapY(y), snapX(x + cw * width) - snapX(x), snapY(y + ch) - snapY(y));
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const left = Math.round(x * sx + ox), top = Math.round(y * sy + oy);
+      ctx.rect(left, top, Math.round((x + cw * width) * sx + ox) - left, Math.round((y + ch) * sy + oy) - top);
       ctx.clip();
+      ctx.setTransform(sx, 0, 0, sy, ox, oy);
       ctx.globalAlpha = attrs & 2 ? .5 : 1;
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? g.colorSize : 0), attrs & 32 ? this.background : this.foreground);
       ctx.font = `${attrs & 4 ? 'italic ' : ''}${attrs & 1 ? 'bold ' : ''}${this.fontSize}px ${this.font}`;
