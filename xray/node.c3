@@ -269,7 +269,7 @@ fn Node* Node.height(&self, Constraint c) {
 
 // own_measure points a fit() constraint, which carries no measure of its own,
 // at this node, so it measures the node's content.
-fn Constraint Node.own_measure(&self, Constraint c, bool width) @local {
+fn Constraint Node.own_measure(&self, Constraint c, bool width) {
 	if (c.kind == ConstraintKind.CFIT && c.measure == null) {
 		c.measure = width ? &node_measure_w : &node_measure_h;
 		c.ctx = self;
