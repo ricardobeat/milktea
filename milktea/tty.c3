@@ -1,4 +1,4 @@
-module milktea;
+module milktea @feat(!MILKTEA_WEB);
 import std::atomic;
 
 faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;

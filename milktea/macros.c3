@@ -1,6 +1,7 @@
 module milktea;
 
 import std::io;
+import std::core::mem;
 
 // @program creates a Program from a model pointer, handling the
 // unsafe (Model) cast internally. This eliminates the most common
@@ -11,7 +12,15 @@ import std::io;
 //   Program p = milktea::@program(&c, { .alt_screen = true });
 //   if (catch err = p.run()) { ... }
 macro @program(#model, Options opts = {}) {
-	Program p = { .model = (Model)#model, .options = opts };
+	$if $feat(MILKTEA_WEB):
+		// Browser callbacks outlive main's stack frame.
+		var source = #model;
+		var owned = ($Typeof(source))mem::malloc($Typeof(*source)::size);
+		mem::copy(owned, source, $Typeof(*source)::size);
+		Program p = { .model = (Model)owned, .options = opts };
+	$else
+		Program p = { .model = (Model)#model, .options = opts };
+	$endif
 	return p;
 }
 
@@ -24,7 +33,7 @@ macro @program(#model, Options opts = {}) {
 //       io::printfn("Error: %s", err);
 //   }
 macro @run_program(#model, Options opts = {}) {
-	Program p = { .model = (Model)#model, .options = opts };
+	Program p = @program(#model, opts);
 	return p.run();
 }
 
@@ -37,7 +46,7 @@ macro @run_program(#model, Options opts = {}) {
 //       return milktea::@run(&c, { .alt_screen = true });
 //   }
 macro @run(#model, Options opts = {}) {
-	Program p = { .model = (Model)#model, .options = opts };
+	Program p = @program(#model, opts);
 	if (catch err = p.run()) {
 		io::eprintfn("Error: %s", err);
 		return 1;
@@ -56,7 +65,15 @@ macro @run(#model, Options opts = {}) {
 //   p.send({ .kind = MsgKind.QUIT });
 //   p.run();
 macro @test_program(#model, #output, #w, #h, Options opts = {}) {
-	Program p = { .model = (Model)#model, .options = opts };
+	$if $feat(MILKTEA_WEB):
+		// Browser callbacks outlive main's stack frame.
+		var source = #model;
+		var owned = ($Typeof(source))mem::malloc($Typeof(*source)::size);
+		mem::copy(owned, source, $Typeof(*source)::size);
+		Program p = { .model = (Model)owned, .options = opts };
+	$else
+		Program p = { .model = (Model)#model, .options = opts };
+	$endif
 	with_test_mode(&p, #output);
 	with_window_size(&p, #w, #h);
 	return p;

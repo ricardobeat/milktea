@@ -337,7 +337,7 @@ struct InputQueue @private {
 	sz dropped;
 }
 
-fn void? input_queue_init(InputQueue* q) @private {
+fn void? input_queue_init(InputQueue* q) @private @feat(!MILKTEA_WEB) {
 	q.head = 0;
 	q.tail = 0;
 	q.closed = false;
@@ -349,21 +349,21 @@ fn void? input_queue_init(InputQueue* q) @private {
 // It is safe to call while the reader is still running — it locks the mutex,
 // sets closed, and broadcasts so the reader wakes from its cond wait.
 // After this call, join the reader thread before calling input_queue_destroy.
-fn void input_queue_close(InputQueue* q) @private {
+fn void input_queue_close(InputQueue* q) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	q.closed = true;
 	q.cond.broadcast();
 	q.mu.unlock();
 }
 
-fn void input_queue_destroy(InputQueue* q) @private {
+fn void input_queue_destroy(InputQueue* q) @private @feat(!MILKTEA_WEB) {
 	// At this point the reader thread must have already been joined.
 	// Destroying the condvar and mutex while the reader is alive is UB.
 	q.cond.destroy();
 	q.mu.destroy();
 }
 
-fn void input_queue_push(InputQueue* q, char[] data) @private {
+fn void input_queue_push(InputQueue* q, char[] data) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	for (sz i = 0; i < data.len; i++) {
 		sz next = (q.head + 1) % INPUT_BUF_SIZE;
@@ -382,7 +382,7 @@ fn void input_queue_push(InputQueue* q, char[] data) @private {
 
 // input_queue_take_dropped reads and resets the dropped-byte counter under
 // the queue mutex. Returns 0 when nothing was dropped.
-fn sz input_queue_take_dropped(InputQueue* q) @private {
+fn sz input_queue_take_dropped(InputQueue* q) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	sz n = q.dropped;
 	q.dropped = 0;
@@ -390,7 +390,7 @@ fn sz input_queue_take_dropped(InputQueue* q) @private {
 	return n;
 }
 
-fn sz input_queue_drain(InputQueue* q, char[] out) @private {
+fn sz input_queue_drain(InputQueue* q, char[] out) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	defer q.mu.unlock();
 	sz count = 0;
@@ -404,7 +404,7 @@ fn sz input_queue_drain(InputQueue* q, char[] out) @private {
 
 // input_queue_wait blocks until data is available or timeout_ms elapses.
 // Called with the queue unlocked; returns with queue unlocked.
-fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private {
+fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	if (q.tail == q.head && !q.closed) {
 		(void)q.cond.wait_timeout(&q.mu, (time::Duration)((long)timeout_ms * time::MS));
@@ -412,7 +412,7 @@ fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private {
 	q.mu.unlock();
 }
 
-fn bool input_queue_is_closed(InputQueue* q) @private {
+fn bool input_queue_is_closed(InputQueue* q) @private @feat(!MILKTEA_WEB) {
 	q.mu.lock();
 	bool c = q.closed;
 	q.mu.unlock();
@@ -425,7 +425,7 @@ fn bool input_queue_is_closed(InputQueue* q) @private {
 // by stdout writes.
 // ============================================================
 
-fn int input_reader_fn(void* arg) @private {
+fn int input_reader_fn(void* arg) @private @feat(!MILKTEA_WEB) {
 	InputQueue* q = (InputQueue*)arg;
 	char[256] tmp;
 
@@ -710,7 +710,7 @@ fn void with_input(Program* self, char[] data) {
 // In test mode, the message is placed in a ring buffer consumed by run().
 // When the ring is full the message is dropped; enable Program.debug to
 // surface this in milktea-debug.log.
-fn void Program.send(Program* self, Msg msg) {
+fn void Program.send(Program* self, Msg msg) @feat(!MILKTEA_WEB) {
 	self.send_inflight.add(1);
 	if (!self.send_accepting.load()) {
 		// Not running yet, or already shutting down.
@@ -733,7 +733,7 @@ fn void Program.send(Program* self, Msg msg) {
 
 // send_recv dequeues a previously sent message. Returns true if a message
 // was available, false if the queue is empty.
-fn bool Program.send_recv(Program* self, Msg* out) {
+fn bool Program.send_recv(Program* self, Msg* out) @feat(!MILKTEA_WEB) {
 	self.send_mu.lock();
 	if (self.send_tail == self.send_head) {
 		self.send_mu.unlock();
@@ -750,7 +750,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // continuously returns a non-NONE Cmd will be truncated at that limit; the
 // truncation is surfaced via debug_warn() so it is visible in debug mode without
 // ever crashing or blocking the event loop.
-fn bool dispatch(Program* self, Model model, Msg m) @local {
+fn bool dispatch(Program* self, Model model, Msg m) @private {
 	if (m.kind == MsgKind.QUIT) return true;
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
@@ -880,7 +880,13 @@ fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) 
 	// deadline is monotonic, matching what the event loop compares against —
 	// mixing the two clocks in one field would make every deadline wrong by
 	// the offset between them.
-	sz deadline = time_ms() + snap_delay(wall_time_ms(), interval_ms);
+	sz delay;
+	$if $feat(MILKTEA_WEB):
+		delay = interval_ms - (sz)(web_wall_ms() % (double)interval_ms);
+	$else
+		delay = snap_delay(wall_time_ms(), interval_ms);
+	$endif
+	sz deadline = time_ms() + delay;
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		if (!g_program.timers[i].active) {
 			g_program.timers[i].active = true;
@@ -905,7 +911,7 @@ fn void cancel(void* owner) {
 }
 
 // run executes the event loop for the program.
-fn void? Program.run(Program* self) {
+fn void? Program.run(Program* self) @feat(!MILKTEA_WEB) {
 	// run() owns the alt screen: it enters when a view asks for it and exits on
 	// the way out, tracking that in in_alt_screen. Entering the alt screen
 	// manually beforehand desynchronizes that — in_alt_screen stays false, so
@@ -1618,7 +1624,7 @@ fn Msg repaint_msg() @local => {};
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
-fn void Program.render_current_view(Program* self) {
+fn void Program.render_current_view(Program* self) @feat(!MILKTEA_WEB) {
 	@pool() {
 		self.stamp_now();
 		// The alternate screen is the program's to fill; inline, the block is

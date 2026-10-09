@@ -31,3 +31,15 @@ gen-targets:
 # from Unicode data (edit scripts/gen_width.py first)
 gen-width:
     python3 scripts/gen_width.py
+
+# Compile portable examples to standalone WASM (or specify example names).
+web-build *examples:
+    python3 scripts/build_web.py {{examples}}
+
+# Serve the canvas example gallery at http://localhost:8000.
+web-serve port="8000":
+    python3 -m http.server {{port}} --bind 127.0.0.1 --directory web
+
+# Exercise WASM examples and the browser runtime ABI.
+web-test:
+    node --test web/test/*.test.mjs
