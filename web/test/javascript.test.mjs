@@ -44,3 +44,25 @@ test('JavaScript descriptors and commands preserve values for native bindings',(
     {type:'vstack',children:[{type:'hstack',children:[{type:'text',value:'a'}]},{type:'text',value:'b',onClick:'increment'}],gap:1});
   assert.deepEqual(tick(100),{type:'tick',ms:100});assert.deepEqual(quit(),{type:'quit'});
 });
+
+test('native tween requests repaint frames and reverses without a JS tick loop',async()=>{
+  let w, now=0, tween;
+  w=await instantiateMilktea(await readFile(new URL('../build/milktea.wasm',import.meta.url)),{
+    now:()=>now,callbacks:{
+      init:()=>{tween=w.mt_js_tween(0,100,0);w.mt_js_tween_update(tween,1);return false;},
+      update:()=>false,
+      view:()=>w.mt_js_container(2),
+      destroy:()=>w.mt_js_free(tween)
+    }
+  });
+  try {
+    w.mt_resize(20,10,10,20);w.mt_boot();assert.equal(w.mt_frame(),2);
+    now=40;assert.equal(w.mt_frame(),2,'native tween schedules repaint');
+    assert.equal(w.mt_js_tween_value(tween),.4);
+    w.mt_js_tween_update(tween,0);
+    assert.equal(w.mt_js_tween_value(tween),.4,'retargeting preserves current progress');
+    now=60;assert.equal(w.mt_frame(),2);assert.equal(w.mt_js_tween_value(tween),.2);
+    now=80;assert.equal(w.mt_frame(),2);assert.equal(w.mt_js_tween_value(tween),0);
+    assert.equal(w.mt_js_tween_moving(tween),0);assert.equal(w.mt_js_tween_alpha(tween),0);
+  } finally {w.mt_stop();}
+});

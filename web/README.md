@@ -98,7 +98,7 @@ positions finite beyond the freestanding library's small-angle paths.
 
 `just web-engine` compiles only `build/milktea.wasm`, with no example code.
 `just web-build` also builds this engine alongside the examples. The optimized
-engine is about 71 KB (33 KB with gzip). Serve it with `bindings.mjs`,
+engine is about 82 KB (37 KB with gzip). Serve it with `bindings.mjs`,
 `engine.mjs`, and `glyphs.mjs`. JavaScript owns your model; the WASM engine
 runs milktea dispatch, timers, xray layout, glaze styling and click handling.
 
@@ -134,11 +134,37 @@ modifiers), `paste` (`text`), `focus`, `blur`, and `tick`. A node with
 hit testing. `send` delivers the custom message as supplied.
 
 Views may return strings or descriptors from `text(value, options)`,
-`vstack(children, options)`, `hstack(children, options)`, or `stack(children, options)`.
+`vstack(children, options)`, `hstack(children, options)`, or `zstack(children, options)`.
+`stack`, `column`, and `row` remain aliases for saved programs.
 Node options include `width`, `height`, `fill`, `gap`, `padding`, `center` and
-`onClick`. Text's `style` supports `foreground`, `background` (`#rrggbb` or RGB
-integers), `bold`, `italic`, `underline`, `padding`, and `border` (`rounded`,
-`normal`, `double`). These bindings cover text and layout trees; native C3
+`onClick`. Dimensions accept numbers or constraints from `cells(n)`, `fill(weight)`,
+`percent(n)` and `fit()`. Use `justify` (`start`, `center`, `end`, `between`,
+`around`, `evenly`) and `align` (`stretch`, `start`, `center`, `end`) on containers.
+Layers support `at: [x, y]`, `offset: [dx, dy]`, `alpha: 0..255`, `animate: fps`,
+and `shadow: {x, y, opacity, blur, color, halfBlocks}`. Alpha blends surface
+colors while preserving the characters beneath; add a separate text layer
+to keep a translucent panel's label readable.
+
+Text's glaze `style` supports `foreground`, `background`, `backgroundGradient`,
+`borderForeground` and `cornerForeground` (`#rrggbb` or RGB integers), `bold`,
+`italic`, `underline`, `padding` (number or `[top, right, bottom, left]`),
+`align` (`left`, `center`, `right`), `verticalAlign` (`top`, `center`, `bottom`),
+and `border` (`rounded`, `normal`, `double`, `thick`). `borderAnimation` can be
+`pulse`, `rainbow`, or `race`, with `borderSpeed` in milliseconds per cycle;
+animated borders request their own repaint frames.
+
+Create native tweens in init with `context.tween(value, durationMs, easing)`.
+Curves include `linear`, `inQuad`, `outQuad`, `inOutQuad`, `inCubic`, `outCubic`,
+`inOutCubic`, and `outBack`. A tween exposes `value`, `target`, `moving`, `showing`,
+`alpha`, `update(target)`, `set(value)`, and `lerp(from, to)`. Updating a tween
+requests native repaint frames without a JS timer loop. Tweens belong to their
+mount and are released on stop. Apply a slide/fade with a node option:
+
+```js
+transition: {tween: model.open, fromY: -6, fromX: 0, fade: true}
+```
+
+These bindings cover text and layout trees; native C3
 examples remain the route to APIs such as boba widgets and custom cell grids.
 View nodes are rebuilt each frame; keep model state in JavaScript rather than
 retaining native node handles. Each mount has its own WASM memory and model.
@@ -155,7 +181,9 @@ editor's import map, and export your program as the default export.
 
 Edits run after a short debounce, or press Ctrl/⌘ Enter or Run. Each run
 mounts a fresh model in the same reusable engine. Presets demonstrate
-counter/click handling, native timers and text input. Syntax errors show
+an adaptive dashboard, native tween easing and reversal, a sliding/fading
+composited modal, glaze gradients and animated borders, plus counter/click
+handling, native timers and text input. Syntax errors show
 below the preview and retain the last running program. Reset restores the
 selected preset. Code is saved to localStorage in this browser.
 
@@ -163,6 +191,7 @@ The editor executes your JavaScript in a preview iframe; it does not compile
 C3 in the browser. A canvas preview must be clicked to focus keyboard input.
 Run `node web/test/editor-browser.mjs` for the live editor browser checks.
 Set `MILKTEA_TEST_BROWSER=webkit` to run those checks with WebKit.
+`node web/test/showcase-browser.mjs` exercises the layout, animation and style presets.
 
 ## Smaller builds
 
