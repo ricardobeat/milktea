@@ -94,6 +94,58 @@ Unknown WASM imports fail explicitly when the module loads. Sine and cosine
 use the browser math library, including the float variants, to keep particle
 positions finite beyond the freestanding library's small-angle paths.
 
+## JavaScript programs with a reusable WASM engine
+
+`just web-engine` compiles only `build/milktea.wasm`, with no example code.
+`just web-build` also builds this engine alongside the examples. The optimized
+engine is about 71 KB (33 KB with gzip). Serve it with `bindings.mjs`,
+`engine.mjs`, and `glyphs.mjs`. JavaScript owns your model; the WASM engine
+runs milktea dispatch, timers, xray layout, glaze styling and click handling.
+
+```html
+<canvas id="app" style="width:400px;height:240px"></canvas>
+<script type="module">
+  import {mount, text, column} from './bindings.mjs';
+  const app = await mount(document.querySelector('#app'), {
+    init: () => [{count: 0}],
+    update: (msg, model) => [{count: model.count +
+      (msg.type === 'key' && msg.key === 'ArrowUp' ? 1 : 0)}],
+    view: model => column([
+      text(`Count: ${model.count}`, {style: {foreground: '#e4b2d6', bold: true}}),
+      text('Press ↑')
+    ], {gap: 1, padding: 2})
+  });
+  // app.model reads current state; app.send(message) queues a custom message.
+  // app.engine exposes canvas controls; app.stop() releases the program.
+</script>
+```
+
+`init(context)` and `update(message, model, context)` return `[model, command]`;
+the command is optional, and may be an array of commands. Exported commands
+are `tick(ms)`, `send(message)`, and `quit()`. Timers are native one-shot
+milktea timers: return another `tick` from update to keep an animation running.
+`context` exposes `cols`, `rows`, `time` (frame milliseconds) and the helpers.
+`destroy(model)` is an optional cleanup callback. Callbacks are synchronous.
+
+Messages include `key` (`key`, `code`, `rune`, modifiers, `action`), `resize`
+(`cols`, `rows`), `mouse` (`button`, `action`, cell/pixel coordinates and
+modifiers), `paste` (`text`), `focus`, `blur`, and `tick`. A node with
+`onClick: 'increment'` delivers `{type: 'click', id: 'increment'}` through native
+hit testing. `send` delivers the custom message as supplied.
+
+Views may return strings or descriptors from `text(value, options)`,
+`column(children, options)`, `row(children, options)`, or `stack(children, options)`.
+Node options include `width`, `height`, `fill`, `gap`, `padding`, `center` and
+`onClick`. Text's `style` supports `foreground`, `background` (`#rrggbb` or RGB
+integers), `bold`, `italic`, `underline`, `padding`, and `border` (`rounded`,
+`normal`, `double`). These bindings cover text and layout trees; native C3
+examples remain the route to APIs such as boba widgets and custom cell grids.
+View nodes are rebuilt each frame; keep model state in JavaScript rather than
+retaining native node handles. Each mount has its own WASM memory and model.
+
+`mount` accepts the same viewport/text options as `MilkteaCanvas`, plus
+`wasmURL` to relocate the engine. Compiled WASM is cached across mounts.
+
 ## Smaller builds
 
 The build strips metadata and exports that the browser does not use. Install
