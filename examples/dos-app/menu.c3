@@ -182,7 +182,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
 	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
 
-	xray::Node* row = milktea::hstack().height(milktea::cells(1));
+	xray::Node* row = milktea::hstack().style(bar).height(milktea::cells(1));
 	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
 		String label = (i == self.selected ? active : bar).render(self.titles[i]);
@@ -191,33 +191,23 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 		title_node.on_click(&title_clicked, &self.title_slots[i]);
 		row.add(title_node);
 	}
-	// The rest of the row, so the bar's background runs to the right edge.
-	return row.add(milktea::text("", bar).fill(1));
+	return row;
 }
 
 // dropdown returns the open panel, or null when the menu is closed — so the
 // caller adds it unconditionally and an absent menu contributes nothing.
 //
-// The panel is one node: milktea::text() paints the bordered background
-// from an empty string, and the item rows are its children. Each row is its
-// own clickable node. A click on the border is a click outside every row,
-// so on_click_outside dismisses the menu.
+// The panel is a styled vstack holding one clickable node per item. A click
+// on the border is a click outside every row, so on_click_outside dismisses
+// the menu.
 fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 	if (!self.open) return null;
 
-	glaze::Style panel = {
-		.bg = th.bar, .fg = th.bar_text,
-		.border = glaze::NORMAL, .border_color = th.text,
-	};
-	// No pad_left/pad_right here: label and key are now separate leaf nodes
-	// (see item_row), each sized to exactly its own text width — style-level
-	// padding would make Style.render's content wider than that solved
-	// width and overflow into the neighboring column. The inset that used
-	// to come from this padding is now node-level padding on the row itself.
+	glaze::Style panel = { .bg = th.bar, .border = glaze::NORMAL, .border_color = th.text };
 	glaze::Style selected = { .bg = th.ink, .fg = th.accent, .bold = true };
 	glaze::Style item = { .bg = th.bar, .fg = th.bar_text };
 
-	xray::Node* panel_node = milktea::text("", panel)
+	xray::Node* panel_node = milktea::vstack().style(panel)
 		.width(milktea::cells(self.item_width + ITEM_PAD * 2 + 2))
 		.height(milktea::cells(MENU_ITEMS + 2))
 		.at(self.title_x[self.selected], below)
@@ -235,18 +225,11 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 }
 
 // item_row lays a label against its shortcut key, label left and key pushed
-// to the row's right edge — a real hstack with JUSTIFY_SPACE_BETWEEN, so the
-// gap between them grows or shrinks with the row's solved width instead of
-// a width computed ahead of layout (self.item_width - string_width(label))
-// that has to happen to match whatever the panel ends up being.
-//
-// The hstack itself paints nothing (a pure layout node has no content), so
-// it sits inside a background leaf sized to the same row — otherwise the
-// gap JUSTIFY_SPACE_BETWEEN opens up between label and key would show
-// whatever is behind the dropdown instead of the row's own highlight.
+// to the row's right edge with JUSTIFY_SPACE_BETWEEN, so the gap between them
+// follows the row's solved width. The row's style paints its highlight
+// across that gap.
 fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
-	xray::Node* bg = milktea::text("", base).height(milktea::cells(1));
-	xray::Node* row = xray::hstack()
+	xray::Node* row = xray::hstack().style(base).height(milktea::cells(1))
 		.with_justify(xray::JustifyContent.JUSTIFY_SPACE_BETWEEN)
 		.with_padding(0, ITEM_PAD, 0, ITEM_PAD);
 	// Both children need an explicit (shrink-to-content) width: hstack's
@@ -255,6 +238,5 @@ fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
 	// children already consume the whole row between them.
 	row.add(milktea::text(mi.label, base).width(milktea::cells(glaze::string_width(mi.label))));
 	row.add(milktea::text(mi.key, base).width(milktea::cells(glaze::string_width(mi.key))));
-	bg.add(row);
-	return bg;
+	return row;
 }

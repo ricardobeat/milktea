@@ -119,10 +119,10 @@ fn String Model.transcript_text(&self, Theme th, sz width) {
 	return out.str_view();
 }
 
-// sidebar_node is the request list: a background layer with the rows stacked
-// over it. Rows past the pane's height solve to zero and never paint.
+// sidebar_node is the request list. Rows past the pane's height solve to
+// zero and never paint.
 fn xray::Node* Model.sidebar_node(&self, Theme th, sz width) {
-	xray::Node* list = milktea::vstack()
+	xray::Node* list = milktea::vstack().style(th.sidebar).width(milktea::cells(width))
 		.add(milktea::text(" REQUESTS", th.sidebar_header).height(milktea::cells(1)))
 		.add(milktea::text("", th.sidebar).height(milktea::cells(1)));
 
@@ -134,13 +134,7 @@ fn xray::Node* Model.sidebar_node(&self, Theme th, sz width) {
 		list.add(milktea::text(string::tformat("  %-3d %s", code, status_label(code)), rs)
 			.height(milktea::cells(1)));
 	}
-	// Soak up the leftover height so the rows sit at the top.
-	list.add(milktea::text("", th.sidebar).fill(1));
-
-	return milktea::zstack()
-		.add(milktea::text("", th.sidebar))
-		.add(list)
-		.width(milktea::cells(width));
+	return list;
 }
 
 // dialog_node builds the centered modal. The box sizes itself to the wrapped

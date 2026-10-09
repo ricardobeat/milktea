@@ -96,31 +96,21 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		if (s.opacity > 0) self.render_shadow(r.x, r.y, r.w, r.h, s);
 	}
 
-	if (n.content != null && r.w > 0 && r.h > 0) {
+	if (n.has_box() && r.w > 0 && r.h > 0) {
+		self.paint_string(r, n.box.with_width(r.w).with_height(r.h).render(""), n.alpha_value, scratch);
+	}
+
+	Insets f = n.frame();
+	Rect inner = r.inset(f.left, f.top, f.right, f.bottom);
+	if (n.content != null && inner.w > 0 && inner.h > 0) {
 		if (&n.content.paint) {
-			n.content.paint(self, r);
+			n.content.paint(self, inner);
 		} else if (&n.content.render) {
-			String s = n.content.render(r);
-			if (s.len > 0) {
-				if (n.alpha_value < 255 && scratch != null) {
-					self.paint_blended(r, s, n.alpha_value, scratch);
-				} else if (r.x + r.w > 0 && r.y + r.h > 0) {
-					// Clipped to the rect: a string is not always the size it
-					// was asked to be, and one that is not would spill into
-					// its neighbours.
-					sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
-					sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
-					// Text has no background of its own unless it sets one,
-					// as in CSS: where it does not, what is painted beneath
-					// shows through around its glyphs.
-					Style see_through = default_style().set_bg(color_transparent());
-					self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
-				}
-			}
+			self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch);
 		}
 
 		if (&n.content.cursor) {
-			ContentCursor c = n.content.cursor(r);
+			ContentCursor c = n.content.cursor(inner);
 			if (c.has_cursor) res.cursor = c;
 		}
 	}
@@ -137,6 +127,25 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		is.opacity = scale_opacity(is.opacity, n.alpha_value);
 		if (is.opacity > 0) self.render_inner_shadow(r.x, r.y, r.w, r.h, is);
 	}
+}
+
+// paint_string paints a rendered string over r, blended when the node is
+// translucent.
+fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuffer** scratch) {
+	if (s.len == 0) return;
+	if (alpha < 255 && scratch != null) {
+		self.paint_blended(r, s, alpha, scratch);
+		return;
+	}
+	if (r.x + r.w <= 0 || r.y + r.h <= 0) return;
+	// Clipped to the rect: a string is not always the size it was asked to
+	// be, and one that is not would spill into its neighbours.
+	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
+	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
+	// Text has no background of its own unless it sets one, as in CSS: where
+	// it does not, what is painted beneath shows through around its glyphs.
+	Style see_through = default_style().set_bg(color_transparent());
+	self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
 }
 
 // scale_opacity dims an effect's opacity by a node's alpha, so shadows fade

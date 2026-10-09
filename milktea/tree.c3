@@ -62,15 +62,17 @@ const xray::AlignItems ALIGN_START  = xray::AlignItems.ALIGN_START;
 const xray::AlignItems ALIGN_CENTER = xray::AlignItems.ALIGN_CENTER;
 const xray::AlignItems ALIGN_END    = xray::AlignItems.ALIGN_END;
 
-// StyledText is the bridge between the tree and glaze: it holds a style and a
-// string, and renders them at whatever size the layout settled on. Sizing at
-// paint time rather than build time is what makes .fill(1) meaningful on a
-// bordered box — the border is drawn around the final rect, not around the
-// text's own width.
+// StyledText is the text inside a text() node. The node holds the style's
+// background, border and padding (see xray::Node.style); this holds the
+// rest, and renders the string at whatever size the layout leaves inside the
+// node's frame.
 struct StyledText (xray::Content) @private {
 	glaze::Style style;
 	String text;
 	bool plain;
+	// Size inside the frame that the style's width and height ask for, or -1
+	// when the text's own size decides.
+	sz fixed_w, fixed_h;
 }
 
 fn String StyledText.render(&self, xray::Rect r) @dynamic {
@@ -79,22 +81,21 @@ fn String StyledText.render(&self, xray::Rect r) @dynamic {
 }
 
 // measure and measure_width report what the text needs before layout has
-// picked a size: its own extent plus whatever the style frames it with. They
-// are consulted for a centered modal and under draw_inline, where nothing
-// else fixes that axis.
-//
+// picked a size, not counting the node's frame. They are consulted for a
+// centered modal and under draw_inline, where nothing else fixes that axis.
+// 
 // A style carrying an explicit size names the answer outright: render() sizes
 // the box to it, so measuring the text instead would hand the node a rect
 // smaller than what it paints.
 fn sz StyledText.measure(&self, sz width) @dynamic {
-	if (self.style.height > 0) return self.style.height;
+	if (self.fixed_h >= 0) return self.fixed_h;
 	sz lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
-	return lines + frame_height(self.style);
+	return lines;
 }
 
 fn sz StyledText.measure_width(&self, sz height) @dynamic {
-	if (self.style.width > 0) return self.style.width;
+	if (self.fixed_w >= 0) return self.fixed_w;
 	sz widest = 0;
 	usz start = 0;
 	for (usz i = 0; i <= self.text.len; i++) {
@@ -103,31 +104,45 @@ fn sz StyledText.measure_width(&self, sz height) @dynamic {
 		if (w > widest) widest = w;
 		start = i + 1;
 	}
-	return widest + frame_width(self.style);
+	return widest;
 }
 
-// text puts a string in the tree, styled by `style` (plain by default).
+// text puts a string in the tree, styled by `style` (plain by default). The
+// style's background, border and padding become the node's box, and the
+// string is painted inside them. A text node is a leaf: it cannot hold
+// children.
 //
 // Unstyled, the string is painted as it is, escapes and all, rather than
 // fitted to the rect: a screen built with glaze already has its own shape.
 fn Node* text(String s, glaze::Style style = {}) {
 	StyledText* st = mem::tnew(StyledText);
-	st.style = style;
 	st.text = s;
 	glaze::Style plain = {};
 	st.plain = mem::equals(&style, &plain, glaze::Style::size);
-	return xray::content_node(st);
+	st.fixed_w = -1;
+	st.fixed_h = -1;
+	if (style.width > 0) st.fixed_w = sz_max(style.width - frame_width(style), 0);
+	if (style.height > 0) st.fixed_h = sz_max(style.height - frame_height(style), 0);
+
+	glaze::Style ts = style;
+	ts.bg = {};
+	ts.bg_gradient = {};
+	ts.border = {};
+	ts.border_color = {};
+	ts.corner_color = {};
+	ts.border_bg = {};
+	ts.border_gradient = {};
+	ts.border_animation = glaze::BorderAnimation.NONE;
+	ts.pad_top = ts.pad_right = ts.pad_bottom = ts.pad_left = 0;
+	ts.width = ts.height = 0;
+	st.style = ts;
+
+	Node* n = xray::content_node(st).style(style);
+	n.leaf = true;
+	return n;
 }
 
-// border is one cell on each side where the style draws a border.
-fn xray::Insets StyledText.border(&self) @dynamic {
-	return {
-		.top    = self.style.border.top.len > 0 ? 1 : 0,
-		.right  = self.style.border.right.len > 0 ? 1 : 0,
-		.bottom = self.style.border.bottom.len > 0 ? 1 : 0,
-		.left   = self.style.border.left.len > 0 ? 1 : 0,
-	};
-}
+fn sz sz_max(sz a, sz b) @local => a > b ? a : b;
 
 // Grid is a cell grid owned by the caller, painted into the tree as it is.
 struct Grid (xray::Content) @private {

@@ -107,11 +107,8 @@ const sz PANEL_PAD_COLS = 2;
 // modal_panel is the box dialogs and the picker are built in: bordered,
 // centered and with a drop shadow.
 fn xray::Node* modal_panel(Theme* th, sz min_cols) {
-	glaze::Style frame = {
-		.bg = th.panel, .fg = th.text,
-		.border = glaze::DOUBLE, .border_color = th.accent,
-	};
-	return milktea::text("", frame)
+	glaze::Style frame = { .bg = th.panel, .border = glaze::DOUBLE, .border_color = th.accent };
+	return milktea::vstack().style(frame)
 		.min_width(min_cols)
 		.with_padding(PANEL_PAD_ROWS, PANEL_PAD_COLS, PANEL_PAD_ROWS, PANEL_PAD_COLS)
 		.with_gap(1)

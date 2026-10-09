@@ -1,5 +1,7 @@
 module xray;
 
+import glaze;
+
 // Natural sizing.
 // 
 // A node's natural size is what it wants when nothing constrains it: for a
@@ -43,19 +45,16 @@ fn sz Node.natural_height(&self, sz width) {
 	return constraint_natural(self.size_h, width, self.content_height(width));
 }
 
-// frame is the space between a node's edge and its children: the border
-// its content draws, plus the node's padding. A node without children
-// leaves the border out, since its content's measure already includes it.
+// frame is the space between a node's edge and what goes inside it: its
+// box's border and padding, plus the padding set with with_padding.
 fn Insets Node.frame(&self) {
-	Insets f = { self.pad_top, self.pad_right, self.pad_bottom, self.pad_left };
-	if (self.child_count > 0 && self.content != null && &self.content.border) {
-		Insets b = self.content.border();
-		f.top    += b.top;
-		f.right  += b.right;
-		f.bottom += b.bottom;
-		f.left   += b.left;
-	}
-	return f;
+	glaze::Style b = self.box;
+	return {
+		.top    = self.pad_top    + b.pad_top    + (b.border.top.len > 0 ? 1 : 0),
+		.right  = self.pad_right  + b.pad_right  + (b.border.right.len > 0 ? 1 : 0),
+		.bottom = self.pad_bottom + b.pad_bottom + (b.border.bottom.len > 0 ? 1 : 0),
+		.left   = self.pad_left   + b.pad_left   + (b.border.left.len > 0 ? 1 : 0),
+	};
 }
 
 // content_width measures what is inside this node, ignoring the node's own

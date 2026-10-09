@@ -233,6 +233,20 @@ call and conditional content is a plain `if`.
 Containers take `.with_gap(n)`, `.with_padding(top, right, bottom, left)`,
 `.with_justify(...)` and `.with_align(...)`.
 
+Any node takes `.style(s)`, which gives it a background, a border and padding
+from a glaze style. The background covers the whole node, and the children go
+inside the border and the padding:
+
+```c3
+glaze::Style panel = { .bg = glaze::color_hex("#1e1e2e"), .border = glaze::ROUNDED, .pad_left = 1 };
+milktea::vstack().style(panel)
+    .add(milktea::text("Title", title_s))
+    .add(milktea::text(self.body, body_s));
+```
+
+`text()` styles its own box the same way, and is a leaf: it cannot hold
+children.
+
 ### Sizing
 
 `.width()` and `.height()` are both optional on every node, and take:

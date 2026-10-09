@@ -338,6 +338,14 @@ fn Node* canvas(xray::ScreenBuffer* buf, ContentCursor cursor = {});
 fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {});
 ```
 
+`text()` is a leaf: its style's background, border and padding become the
+node's box, the rest styles the string, and adding a child to it is an
+error. To put a background or border behind other nodes, style a container:
+
+```c3
+milktea::vstack().style(panel_s).add(title).add(body)
+```
+
 `root()` is a zstack, so each child added to it sits over the ones before —
 that is how a modal works. `.add()` returns the same node, so chained and
 statement forms are the same call and conditional content is a plain `if`.
@@ -533,7 +541,7 @@ Node* n = xray::vstack();   // or hstack(), zstack(), root(), content_node(c)
 n.add(child); n.add_content(c);
 n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight); n.fit();
 n.with_justify(j); n.with_align(a); n.with_gap(g);
-n.with_padding(top, right, bottom, left);
+n.with_padding(top, right, bottom, left); n.style(glaze_style);
 n.place(j, a); n.at(x, y); n.center(); n.offset(dx, dy);
 n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.animate(fps = 60);
 n.on_click(handler, ctx); n.on_click_outside(handler, ctx);
@@ -555,14 +563,15 @@ interface Content {
     fn sz measure(sz width)        @optional;
     fn sz measure_width(sz height) @optional;
     fn ContentCursor cursor(Rect r)  @optional;
-    fn Insets border()               @optional;
 }
 ```
 
-`border` is how many cells of border the content draws on each side. A node
-lays out its children inside that border and then inside its own padding.
-`milktea::text` reports the border of its glaze style, so a bordered
-`text("", style)` can hold other nodes.
+`style` gives a node a box from a glaze style: `bg`, `bg_gradient`, the
+border and its colors, and `pad_*`. The box is painted across the node's
+whole rect, behind its border, padding, content and children. Content and
+children go inside the border and the padding, and the style's padding adds
+to `with_padding`. The rect a content's `render`, `paint` and `cursor`
+receive is that inner rect.
 
 `cursor` lets content report where the caret belongs so the terminal cursor
 follows the layout instead of a hand-counted row; build the return value with

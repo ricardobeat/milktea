@@ -1,6 +1,7 @@
 module xray;
 
 import std::core::mem;
+import glaze;
 
 // Content is anything that can fill a solved rect with text.
 // 
@@ -22,19 +23,16 @@ import std::core::mem;
 // that matter.
 // 
 // cursor reports where the terminal cursor belongs, in screen coordinates,
-// given the node's solved rect. Content that does not own a cursor leaves it
-// unimplemented. Content that owns one only when focused should return
-// has_cursor = false when it is not, rather than relying on paint order.
-//
-// border is the number of cells the content draws around each side of its
-// rect. A node's children are laid out inside it.
+// given the rect the content was painted in. Content that does not own a
+// cursor leaves it unimplemented. Content that owns one only when focused
+// should return has_cursor = false when it is not, rather than relying on
+// paint order.
 interface Content {
 	fn String render(Rect r) @optional;
 	fn void paint(ScreenBuffer* dst, Rect r) @optional;
 	fn sz measure(sz width) @optional;
 	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;
-	fn Insets border() @optional;
 }
 
 // Insets holds a size in cells for each side of a rect.
@@ -143,9 +141,11 @@ enum NodeDirection : char @private {
 
 const sz MAX_NODE_CHILDREN @private = 32;
 
-// Node is one box in a layout tree. It is either a container (children, a
-// direction) or a leaf (content), never usefully both — a node with content
-// and children paints its content first and its children on top.
+// Node is one box in a layout tree. It can have a box style (see style()),
+// content, and children. The box is painted across the node's whole rect, and
+// the content and the children go inside its border and padding. A node with
+// both content and children paints the content first and the children on
+// top of it.
 // 
 // Nodes are temp-allocated: a tree lives for one frame and is rebuilt by the
 // next view() call. Do not store a Node* across frames.
@@ -167,7 +167,15 @@ struct Node {
 
 	sz pad_top, pad_right, pad_bottom, pad_left;
 
+	// The node's background, border and box padding, set by style(). Only
+	// those fields of the glaze style are kept.
+	glaze::Style box;
+
 	Content content;
+
+	// A leaf cannot hold children: add() on it is an error. text() makes
+	// leaves, because a child would be laid out over the text.
+	bool leaf;
 
 	// Effects applied when this node paints. shadow lands under the content,
 	// inner_shadow over it, and alpha blends the content's colors into
@@ -245,7 +253,12 @@ fn Node* content_node(Content c) {
 // 
 // A null child is ignored, which lets content that is sometimes hidden return
 // null from its node() and be added unconditionally.
+// 
+// Adding a child to a leaf, such as a text node, is a programming error. Put
+// the text and the child in a vstack instead, and style the vstack if it
+// should have a background or border.
 fn Node* Node.add(&self, Node* child) {
+	assert(child == null || !self.leaf, "a leaf node, such as text(), cannot hold children");
 	if (child != null && self.child_count < MAX_NODE_CHILDREN) {
 		self.children[self.child_count++] = child;
 	}
@@ -338,6 +351,41 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 	self.pad_bottom = bottom;
 	self.pad_left = left;
 	return self;
+}
+
+// style gives this node a background, a border and padding, taken from a
+// glaze style: bg, bg_gradient, border, border_color, border_gradient,
+// corner_color, border_bg, border_animation, anim_speed_ms and pad_*. The
+// other fields are ignored, so text colour and attributes are set on the text
+// itself, and the node is sized with width() and height().
+// 
+// Content and children go inside the border and then inside the padding. The
+// style's padding adds to whatever with_padding sets.
+fn Node* Node.style(&self, glaze::Style s) {
+	self.box = {
+		.bg = s.bg,
+		.bg_gradient = s.bg_gradient,
+		.border = s.border,
+		.border_color = s.border_color,
+		.corner_color = s.corner_color,
+		.border_bg = s.border_bg,
+		.border_gradient = s.border_gradient,
+		.border_animation = s.border_animation,
+		.anim_speed_ms = s.anim_speed_ms,
+		.pad_top = s.pad_top,
+		.pad_right = s.pad_right,
+		.pad_bottom = s.pad_bottom,
+		.pad_left = s.pad_left,
+	};
+	return self;
+}
+
+// has_box reports whether the node's box paints anything: a background or a
+// border. Box padding alone takes space but leaves it unpainted.
+fn bool Node.has_box(&self) {
+	glaze::Border b = self.box.border;
+	return self.box.bg.kind != ColorKind.NONE || self.box.bg_gradient.kind != ColorKind.NONE
+		|| b.top.len > 0 || b.bottom.len > 0 || b.left.len > 0 || b.right.len > 0;
 }
 
 // place centres or aligns this node inside its parent's rect on both axes at

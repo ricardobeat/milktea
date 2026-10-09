@@ -100,7 +100,7 @@ fn void test_text_with_a_background_paints_it() @test {
 fn void test_children_are_laid_out_inside_a_border() @test {
 	glaze::Style boxed = { .border = glaze::DOUBLE };
 	milktea::Node* child = milktea::text("x");
-	milktea::Node* box = milktea::text("", boxed).with_padding(1, 2, 1, 2).add(child);
+	milktea::Node* box = milktea::vstack().style(boxed).with_padding(1, 2, 1, 2).add(child);
 	milktea::Node* root = milktea::root().add(box.center());
 	root.solve(xray::new_rect(0, 0, 20, 10));
 
@@ -109,4 +109,39 @@ fn void test_children_are_laid_out_inside_a_border() @test {
 	assert(box.computed_rect.h == 1 + 2 * 2);
 	assert(child.computed_rect.x == box.computed_rect.x + 3);
 	assert(child.computed_rect.y == box.computed_rect.y + 2);
+}
+
+fn void test_a_styled_row_paints_its_background_between_children() @test {
+	glaze::Style bar = { .bg = glaze::color_hex("#204060"), .border = glaze::NORMAL };
+	milktea::Node* row = milktea::hstack().style(bar)
+		.with_justify(milktea::BETWEEN)
+		.add(milktea::text("a").width(milktea::cells(1)))
+		.add(milktea::text("b").width(milktea::cells(1)));
+	xray::ScreenBuffer* sb = painted(milktea::root().add(row), 8, 3);
+	defer free_buffer(sb);
+
+	assert((String)sb.cell_at(0, 0).content[:3] == "┌");
+	assert(sb.cell_at(1, 1).content[0] == 'a');
+	assert(sb.cell_at(6, 1).content[0] == 'b');
+	xray::Cell* gap = sb.cell_at(3, 1);
+	assert(gap.style.bg.r == 0x20 && gap.style.bg.g == 0x40 && gap.style.bg.b == 0x60, "the box shows between the children");
+}
+
+fn void test_style_padding_adds_to_node_padding() @test {
+	glaze::Style padded = { .pad_left = 2 };
+	milktea::Node* child = milktea::text("x");
+	milktea::Node* box = milktea::zstack().style(padded).with_padding(0, 0, 0, 1).add(child);
+	milktea::root().add(box).solve(xray::new_rect(0, 0, 10, 2));
+
+	assert(child.computed_rect.x == 3);
+}
+
+fn void test_text_padding_moves_the_text_inside_its_background() @test {
+	glaze::Style s = { .bg = glaze::color_hex("#102030") };
+	milktea::Node* t = milktea::text("x", s).with_padding(0, 0, 0, 2);
+	xray::ScreenBuffer* sb = painted(milktea::root().add(t), 6, 1);
+	defer free_buffer(sb);
+
+	assert(sb.cell_at(2, 0).content[0] == 'x');
+	assert(sb.cell_at(0, 0).style.bg.r == 0x10, "the background covers the padding");
 }
