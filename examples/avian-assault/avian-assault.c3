@@ -1280,6 +1280,7 @@ fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 
 	return backdrop(xray::color_rgba(28, 14, 16, 215))
 		.center()
+		.shadow(xray::shadow(1, 1, 160))
 		.add(milktea::vstack()
 			.with_align(milktea::ALIGN_CENTER)
 			.add(logo(AVIAN[..], c1, c2))
