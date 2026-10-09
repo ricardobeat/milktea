@@ -191,7 +191,8 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 		title_node.on_click(&title_clicked, &self.title_slots[i]);
 		row.add(title_node);
 	}
-	return row;
+	// The rest of the row, so the bar's background runs to the right edge.
+	return row.add(milktea::text("", bar).fill(1));
 }
 
 // dropdown returns the open panel, or null when the menu is closed — so the
