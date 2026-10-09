@@ -43,6 +43,11 @@ struct Model {
 	tgp::Session gfx;
 	tgp::Glyph[CORNER_COUNT * BOX_COUNT] corners;
 	tgp::Glyph[EDGE_COUNT] edges;
+	// The ─ cell beside each of the bordered box's corners, which a wide arc
+	// runs into.
+	tgp::Glyph[CORNER_COUNT] shoulders;
+	// The ─ cells of its top and bottom rows.
+	tgp::Glyph[2] border_rows;
 	sz[BOX_COUNT] radius;
 	sz selected;
 	bool tgp_ok;
@@ -106,12 +111,31 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 			uint line = parse_rgb(BOX_DEFS[b].line);
 			for (sz c = 0; c < CORNER_COUNT; c++) {
 				char[] frames = mem::new_array(char, RADII * CORNER_BYTES);
-				render_corner_set(frames, b, c, bg, line);
+				char[] shoulder = b == 1 ? mem::new_array(char, RADII * CORNER_BYTES) : {};
+				render_corner_set(frames, shoulder, b, c, bg, line);
 				self.corners[b * CORNER_COUNT + c] = self.gfx.register({
 					.frames = frames,
 					.count = RADII, .width = GX, .height = GY,
 					.fps = 0, .fallback = corner_fallback(b, c),
 				})!!;
+				if (b == 1) {
+					self.shoulders[c] = self.gfx.register({
+						.frames = shoulder,
+						.count = RADII, .width = GX, .height = GY,
+						.fps = 0, .fallback = "─",
+					})!!;
+				}
+			}
+			if (b == 1) {
+				for (sz r = 0; r < 2; r++) {
+					char[] frame = mem::new_array(char, CORNER_BYTES);
+					render_border_row(frame, r == 1, bg, line);
+					self.border_rows[r] = self.gfx.register({
+						.frames = frame,
+						.count = 1, .width = GX, .height = GY,
+						.fps = 0, .fallback = "─",
+					})!!;
+				}
 			}
 		}
 		// The div box's outline edges.
@@ -203,6 +227,23 @@ fn String corner_cell(Model* m, sz b, sz c, glaze::Style fallback_st) {
 	return tgp::placeholder_string(m.corners[b * CORNER_COUNT + c].base_id + (uint)rad);
 }
 
+// shoulder_cell returns the ─ cell beside one of the bordered box's corners,
+// at that box's radius.
+fn String shoulder_cell(Model* m, sz c, glaze::Style fallback_st) {
+	if (!m.tgp_ok) return fallback_st.render("─");
+	sz rad = m.radius[1];
+	if (rad < 0) rad = 0;
+	if (rad >= RADII) rad = RADII - 1;
+	return tgp::placeholder_string(m.shoulders[c].base_id + (uint)rad);
+}
+
+// border_row returns n ─ cells of the bordered box's top (0) or bottom (1)
+// row.
+fn String border_row(Model* m, sz r, sz n, glaze::Style fallback_st) {
+	if (!m.tgp_ok) return fallback_st.render(repeat_str("─", n));
+	return tgp::placeholder_run(m.border_rows[r].base_id, n);
+}
+
 // edge_cell returns one div-outline edge cell (0=top 1=right 2=bottom 3=left).
 fn String edge_cell(Model* m, sz e, glaze::Style fallback_st) {
 	if (!m.tgp_ok) return fallback_st.render(edge_fallback(e));
@@ -241,7 +282,6 @@ fn void append_box(DString* out, Model* m, sz b) {
 	sz w = (sz)d.sample.len + 2;
 	if (w < INNER_W) w = INNER_W;
 	String fill = repeat_str(" ", w);
-	String rule = repeat_str("─", w);
 
 	String radius_txt = string::tformat("radius: %dpx", radius_px(m.radius[b]));
 	if (!m.tgp_ok) radius_txt = string::tformat("%s (text fallback)", radius_txt);
@@ -269,9 +309,13 @@ fn void append_box(DString* out, Model* m, sz b) {
 		out.append_string(corner_cell(m, b, 3, bg_st));
 		out.append_char('\n');
 	} else if (b == 1) {
-		// Single-line ─ │ border with rounded corners.
+		// Single-line ─ │ border with rounded corners. Each corner's arc runs
+		// on into the ─ beside it, its shoulder, and the top and bottom rows
+		// are images too, so the background can stop short of the cell edge.
 		out.append_string(corner_cell(m, b, 0, line_st));
-		out.append_string(line_st.render(rule));
+		out.append_string(shoulder_cell(m, 0, line_st));
+		out.append_string(border_row(m, 0, w - 2, line_st));
+		out.append_string(shoulder_cell(m, 1, line_st));
 		out.append_string(corner_cell(m, b, 1, line_st));
 		out.append_char('\n');
 		for (sz r = 0; r < 3; r++) {
@@ -281,7 +325,9 @@ fn void append_box(DString* out, Model* m, sz b) {
 			out.append_char('\n');
 		}
 		out.append_string(corner_cell(m, b, 2, line_st));
-		out.append_string(line_st.render(rule));
+		out.append_string(shoulder_cell(m, 2, line_st));
+		out.append_string(border_row(m, 1, w - 2, line_st));
+		out.append_string(shoulder_cell(m, 3, line_st));
 		out.append_string(corner_cell(m, b, 3, line_st));
 		out.append_char('\n');
 	} else {

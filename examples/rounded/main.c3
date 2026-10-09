@@ -6,5 +6,7 @@ import milktea;
 // the example's module without colliding with other examples' main().
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	// tgp only sends images on the alternate screen, where switching screens
+	// cannot drop them; without it the corners never arrive.
+	return milktea::@run(&m, { .alt_screen = true });
 }
