@@ -19,7 +19,7 @@ pre:empty {display:none} #status {color:#aaa} footer {padding:9px 18px;color:#aa
 @media(max-width:760px) {main {grid-template-columns:1fr;grid-template-rows:1fr 1fr} section+section {border-left:0;border-top:1px solid #383240}}
 </style>
 <header><strong>milktea / live JavaScript</strong><a href="./index.html">Examples</a><a href="./inline.html">Embeds</a>
-<label>Preset <select id="preset"><option value="counter">Counter + clicks</option><option value="clock">Animation + timers</option><option value="input">Text input</option></select></label>
+<label>Preset <select id="preset"></select></label>
 <button id="run">Run · Ctrl/⌘ Enter</button><label><input type="checkbox" id="auto" checked> Live updates</label><button id="reset">Reset preset</button><span id="status">Loading engine…</span></header>
 <main><section><div class="label">JavaScript module · export default { init, update, view }</div><textarea id="code" aria-label="JavaScript program" spellcheck="false"></textarea></section>
 <section><div class="label">Live canvas · click to focus keyboard input</div><iframe title="Live milktea preview" src="./editor-runner.html" sandbox="allow-scripts allow-same-origin" allow="fullscreen"></iframe><pre id="output" aria-live="polite"></pre></section></main>

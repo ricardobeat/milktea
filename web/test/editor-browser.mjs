@@ -9,6 +9,8 @@ try {
   await page.goto(`${origin}/editor.html`);
   const preview=page.frames().find(f=>f.url().endsWith('editor-runner.html'));
   await preview.waitForFunction(()=>window.app?.engine.wasm.mt_width()>0);
+  await page.selectOption('#preset','counter');
+  await preview.waitForFunction(()=>window.app?.model.count===0 && window.app.engine.wasm.mt_width()>0);
   const grid=()=>preview.evaluate(async()=>{
     const {gridText}=await import('/engine.mjs');return gridText(window.app.engine.wasm);
   });
