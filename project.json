@@ -3,7 +3,7 @@
   "warnings": ["no-unused-parameter", "no-unused-import"],
   "macos-min-version": "27.0",
   "linked-libraries": ["z"],
-  "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "tgp/**", "xray/**", "src/**", "test/**", "examples/rounded/rounded.c3", "examples/rounded/gfx.c3", "examples/nineslice/nineslice.c3", "examples/nineslice/slice.c3"],
+  "sources": ["milktea/**", "glaze/**", "dye/**", "boba/**", "tgp/**", "xray/**", "src/**", "test/**", "examples/nineslice/nineslice.c3", "examples/nineslice/slice.c3"],
   "targets": {
     "milktea": {
       "type": "static-lib",
@@ -386,13 +386,6 @@
     "examples/nineslice": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/nineslice/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "examples/rounded": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "tgp/**", "examples/rounded/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true

@@ -68,7 +68,6 @@ OVERRIDES = {
     "avian-assault": {"extra_dirs": ["xray"]},
     "clock": {"extra_dirs": ["xray"]},
     "spinners": {"extra_dirs": ["tgp"]},
-    "rounded": {"extra_dirs": ["tgp"]},
     "nineslice": {"extra_dirs": ["tgp"]},
     "squiggle": {"extra_dirs": ["tgp"]},
     "flappybird": {"extra_dirs": ["xray"]},
