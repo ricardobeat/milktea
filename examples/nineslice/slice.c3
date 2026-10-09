@@ -3,10 +3,9 @@ module nineslice;
 // Nine-slice rounded boxes: rasterize the WHOLE box once into an RGBA surface,
 // then cut it on the cell grid and transmit only the distinct tiles.
 //
-// The rounded/ example draws each corner cell separately, so every glyph has
-// to reconstruct where the box edge is from its own cell-local frame -- which
-// is why it carries two different arc-center conventions and a per-cell
-// opacity override to keep neighbouring cells flush. Here the corner arc is
+// Drawing each corner cell separately means every glyph has to reconstruct
+// where the box edge is from its own cell-local frame, with a different
+// arc-centre convention per border style and seams kept flush by hand. Here the corner arc is
 // one continuous curve in surface space that happens to get cut into cells,
 // so seams are structural rather than maintained by hand, and the radius is
 // bounded by the BOX rather than by a single cell.
@@ -32,8 +31,8 @@ import std::math;
 import std::core::mem;
 
 const sz GX = 16; // cell width in px
-const sz GY = 34; // cell height in px -- matches rounded/, see its note on
-                   // terminals rendering cells slightly taller than 2:1.
+const sz GY = 34; // cell height in px -- some terminals render cells
+                   // slightly taller than 2:1.
 const sz TILE_BYTES = (sz)(GX * GY * 4);
 
 // Radius index -> pixels. With a whole-box surface the arc may span more than
@@ -105,6 +104,13 @@ struct BoxStyle {
 	// read as dark notches on a light screen. Painting the backdrop into the
 	// surface makes every tile opaque and matching.
 	uint backdrop;
+	// Leave the backdrop out and fill at fill_alpha (0-255) rather than
+	// solid, so the box tints whatever the terminal draws beneath it. Meant
+	// for tiles placed under the text layer, which the terminal blends over
+	// each cell's own background -- outside the corner arc that background
+	// shows through untouched.
+	bool see_through;
+	char fill_alpha;
 	// Drop shadow, in px. Offset down/right by shadow_dy/dx, softened over
 	// shadow_blur px. The shadow is the same distance field shifted, so it
 	// follows the rounded corner exactly.
@@ -120,7 +126,7 @@ fn float fabsf_(float x) => x < 0.0f ? -x : x;
 // sd_round_rect is the signed distance from (px, py) to the boundary of a
 // rounded rectangle spanning (0,0)-(w,h) with corner radius r. Negative
 // inside, positive outside. Both the fill and the stroke fall out of this one
-// value, which is what collapses rounded/'s three rasterizers into one.
+// value, so plain fills, borders and outlines need no rasterizer each.
 fn float sd_round_rect(float px, float py, float w, float h, float r) {
 	// Fold into the first quadrant: distance to the rounded corner is the
 	// distance to the arc centre minus the radius, and the straight edges
@@ -199,9 +205,12 @@ fn void render_surface(char[] surf, sz cols, sz rows, sz r, BoxStyle st, sz pad_
 	float kr = (float)((st.backdrop >> 16) & 0xff) / 255.0f;
 	float kg = (float)((st.backdrop >> 8) & 0xff) / 255.0f;
 	float kb = (float)(st.backdrop & 0xff) / 255.0f;
-	for (sz y = 0; y < h; y++) {
-		for (sz x = 0; x < w; x++) put(buf, w, x, y, kr, kg, kb, 1.0f);
+	if (!st.see_through) {
+		for (sz y = 0; y < h; y++) {
+			for (sz x = 0; x < w; x++) put(buf, w, x, y, kr, kg, kb, 1.0f);
+		}
 	}
+	float fill_a = st.see_through ? (float)((sz)st.fill_alpha & 0xff) / 255.0f : 1.0f;
 
 	for (sz y = 0; y < h; y++) {
 		for (sz x = 0; x < w; x++) {
@@ -221,7 +230,7 @@ fn void render_surface(char[] surf, sz cols, sz rows, sz r, BoxStyle st, sz pad_
 			}
 
 			// Fill: inside the rounded rect, antialiased across the boundary.
-			float bg_a = st.shadow_only ? 0.0f : fclamp(0.5f - d, 0.0f, 1.0f);
+			float bg_a = st.shadow_only ? 0.0f : fclamp(0.5f - d, 0.0f, 1.0f) * fill_a;
 			if (bg_a > 0) {
 				float t = st.grad ? fclamp(fy / fh, 0.0f, 1.0f) : 0.0f;
 				put(buf, w, x, y,

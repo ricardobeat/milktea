@@ -70,7 +70,18 @@ OVERRIDES = {
     "spinners": {"extra_dirs": ["tgp"]},
     "nineslice": {"extra_dirs": ["tgp"]},
     "squiggle": {"extra_dirs": ["tgp"]},
-    "flappybird": {"extra_dirs": ["xray"]},
+    # The dialogs' rounded outlines are cut by nineslice's slicer.
+    "flappybird": {
+        "sources": [
+            "milktea/**",
+            "glaze/**",
+            "dye/**",
+            "xray/**",
+            "tgp/**",
+            "examples/nineslice/slice.c3",
+            "examples/flappybird/**",
+        ],
+    },
     "nanobots": {"extra_dirs": ["xray"]},
     "paint": {"extra_dirs": ["xray"]},
     "spotlight": {"extra_dirs": ["xray"]},

@@ -371,7 +371,7 @@
     },
     "examples/flappybird": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/flappybird/**"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "tgp/**", "examples/nineslice/slice.c3", "examples/flappybird/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true

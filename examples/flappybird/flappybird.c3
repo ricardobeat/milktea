@@ -8,6 +8,8 @@ import std::math;
 import std::core::string;
 import std::core::dstring;
 import std::core::mem;
+import tgp;
+import nineslice;
 
 extern fn int rand();
 extern fn void srand(uint seed);
@@ -97,6 +99,12 @@ struct FlappyModel {
 	// Graphics buffer
 	xray::PixelBuffer* vbuf;
 	ScreenBuffer* screen;
+
+	// Kitty graphics, for the dialogs' rounded outlines. Without it they
+	// keep their box-drawing borders.
+	bool gfx_ok;
+	tgp::Session gfx;
+	Outline[OUTLINE_COUNT] outlines;
 }
 
 // ── Random Helpers ────────────────────────────────────────────────────────────
@@ -224,6 +232,9 @@ fn milktea::Cmd FlappyModel.init(FlappyModel* self) @dynamic {
 	self.score = 0;
 	self.high_score = 0;
 	self.ticks = 0;
+
+	self.gfx_ok = milktea::kitty_graphics_supported();
+	if (self.gfx_ok) self.gfx = tgp::new_session();
 
 	return milktea::tick(FRAME_MS);
 }
@@ -513,10 +524,11 @@ fn void FlappyModel.draw_background(&self) {
 
 		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), bldg_c);
 
-		// Windows
+		// Windows. Which ones are lit depends on where they sit in their
+		// building, not on screen, so they stay lit as the skyline scrolls.
 		for (sz wy = by + 2; wy < ground_y - 2; wy += 4) {
 			for (sz wx = bx + 2; wx < bx + bw - 2; wx += 3) {
-				if ((b + wx + wy) % 5 != 0) {
+				if ((b + (wx - bx) + (wy - by)) % 5 != 0) {
 					self.vbuf.set_pixel(wx, wy, win_c);
 				}
 			}
@@ -791,6 +803,7 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	// 3. Paint the dialog for this state over the game. It goes into the
 	// game's own cells rather than a layer above them, so its backdrop can
 	// dim the pixels it covers.
+	foreach (&o : self.outlines) o.used = false;
 	milktea::Node* dialog;
 	switch (self.state) {
 		case INTRO:     dialog = self.intro_dialog();
@@ -804,41 +817,165 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 		ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
 		self.screen.paint(ui);
 	}
+	// A dialog that closed takes its outline with it.
+	if (self.gfx_ok) {
+		foreach (&o : self.outlines) {
+			if (!o.used) o.hide();
+		}
+		self.gfx.sync();
+	}
 
 	return milktea::canvas(self.screen);
+}
+
+// ── Rounded outlines ──────────────────────────────────────────────────────────
+
+// With kitty graphics, a dialog's border is a heavy rounded outline. nineslice's
+// slicer draws a three-cell-square box and cuts it into the eight cells
+// around its middle: the corners are placed as they are, and the edges are
+// stretched along the dialog's sides. The images sit under the text layer,
+// so the terminal blends their tint over each border cell's background, and
+// beyond the rounded corners that background shows through untouched.
+
+const sz OUTLINE_MENU = 0;
+const sz OUTLINE_GAME_OVER = 1;
+const sz OUTLINE_HELP = 2;
+const sz OUTLINE_COUNT = 3;
+
+const sz OUTLINE_RADIUS = 12; // px, within one cell
+// nineslice's heavy outline: a 4px line, 3px in from the dialog's edge.
+const float OUTLINE_W = 4.0f;
+const float OUTLINE_INSET = 3.0f;
+const sz OUTLINE_TILES = 8;
+// Each tile's cell in the sliced box: the corners, then the edges, ordered
+// top-left, top, top-right, left, right, bottom-left, bottom, bottom-right.
+const sz[OUTLINE_TILES] TILE_COL = { 0, 1, 2, 0, 2, 0, 1, 2 };
+const sz[OUTLINE_TILES] TILE_ROW = { 0, 0, 0, 1, 1, 2, 2, 2 };
+
+struct Outline {
+	tgp::Session* gfx;
+	bool made;
+	bool placed;
+	bool used; // painted this frame
+	tgp::Glyph[OUTLINE_TILES] tiles;
+	tgp::InstId[OUTLINE_TILES] ids;
+}
+
+fn uint rgb_of(xray::Color c) => ((uint)c.r << 16) | ((uint)c.g << 8) | (uint)c.b;
+
+// outline returns the outline for a dialog's slot, drawing its images the
+// first time, or null without kitty graphics.
+fn Outline* FlappyModel.outline(&self, sz slot, xray::Color tint, xray::Color line) {
+	if (!self.gfx_ok) return null;
+	Outline* o = &self.outlines[slot];
+	if (o.made) return o;
+
+	nineslice::BoxStyle st = {
+		.bg = rgb_of(tint),
+		.line = rgb_of(line),
+		.line_w = OUTLINE_W,
+		.inset = OUTLINE_INSET,
+		.stroke = nineslice::STROKE_INSET,
+		.see_through = true,
+		.fill_alpha = tint.a,
+	};
+	char[] surf = mem::new_array(char, 3 * nineslice::GX * 3 * nineslice::GY * 4);
+	defer mem::free(surf);
+	nineslice::render_surface(surf, 3, 3, OUTLINE_RADIUS, st);
+
+	o.gfx = &self.gfx;
+	for (sz i = 0; i < OUTLINE_TILES; i++) {
+		// The session keeps the frames until it has sent them.
+		char[] tile = mem::new_array(char, nineslice::TILE_BYTES);
+		nineslice::blit_tile(tile, surf, 3, TILE_COL[i], TILE_ROW[i]);
+		o.tiles[i] = self.gfx.register({
+			.frames = tile,
+			.count = 1, .width = nineslice::GX, .height = nineslice::GY,
+			.fallback = " ",
+		})!!;
+	}
+	o.made = true;
+	return o;
+}
+
+// show places the outline around r, or moves it there. Every tile is
+// stretched to its cells, so the terminal's cell size does not matter.
+fn void Outline.show(&self, xray::Rect r) {
+	self.used = true;
+	sz right = r.x + r.w - 1;
+	sz bottom = r.y + r.h - 1;
+	sz[OUTLINE_TILES] col = { r.x, r.x + 1, right, r.x, right, r.x, r.x + 1, right };
+	sz[OUTLINE_TILES] row = { r.y, r.y, r.y, r.y + 1, r.y + 1, bottom, bottom, bottom };
+	sz[OUTLINE_TILES] cols = { 1, r.w - 2, 1, 1, 1, 1, r.w - 2, 1 };
+	sz[OUTLINE_TILES] rows = { 1, 1, 1, r.h - 2, r.h - 2, 1, 1, 1 };
+	for (sz i = 0; i < OUTLINE_TILES; i++) {
+		if (!self.placed) {
+			self.ids[i] = self.tiles[i].place(col[i], row[i], tgp::Z_UNDER_TEXT, cols[i], rows[i]);
+		} else {
+			self.gfx.move(self.ids[i], col[i], row[i]);
+			self.gfx.resize(self.ids[i], cols[i], rows[i]);
+		}
+	}
+	self.placed = true;
+}
+
+fn void Outline.hide(&self) {
+	if (!self.placed) return;
+	foreach (id : self.ids) self.gfx.remove(id);
+	self.placed = false;
 }
 
 // ── Dialogs ───────────────────────────────────────────────────────────────────
 
 // Panel is a dialog's backdrop. It dims the game behind the dialog without
 // hiding it — the half blocks keep their glyphs and both their colors are
-// tinted — and frames it with a gradient border unless it is bare.
+// tinted — and frames it with a gradient border unless it is bare. With an
+// outline, the frame is a heavy rounded line instead.
 struct Panel (xray::Content) {
 	xray::Color tint;
 	xray::Color edge_from;
 	xray::Color edge_to;
 	bool bare;
+	Outline* outline;
 }
 
 fn void Panel.paint(&self, ScreenBuffer* dst, xray::Rect r) @dynamic {
+	bool rounded = self.outline != null && r.w >= 3 && r.h >= 3;
 	for (sz y = r.y; y < r.y + r.h; y++) {
 		for (sz x = r.x; x < r.x + r.w; x++) {
 			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
 			xray::Cell* c = &dst.cells[y * dst.width + x];
+			bool edge = x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1;
+			if (rounded && edge) {
+				// The outline's image tints this cell, blending over its
+				// background, and hides any text in it. So the half block
+				// becomes a plain cell of its two colors' average.
+				xray::Color top = c.style.fg;
+				top.a = 128;
+				xray::Style st = xray::default_style().set_bg(top.blend_over(c.style.bg));
+				*c = xray::new_cell(" ", 1, st);
+				continue;
+			}
 			c.style.fg = self.tint.blend_over(c.style.fg);
 			c.style.bg = self.tint.blend_over(c.style.bg);
 		}
 	}
-	// The border sets no background of its own, so it sits on the tint too.
-	if (!self.bare) dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
+	if (rounded) {
+		self.outline.show(r);
+	} else if (!self.bare) {
+		// The border sets no background of its own, so it sits on the tint too.
+		dst.draw_gradient_border(r, xray::ROUNDED, self.edge_from, self.edge_to);
+	}
 }
 
 // panel is a dialog box centred on screen, as wide as width or, at 0, as its
 // widest line. Its first line sits under the top border, and the rest stack
-// below it with a blank row between each.
-fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
+// below it with a blank row between each. Each dialog has its own outline
+// slot, since the outline's colors are baked into its images.
+fn milktea::Node* FlappyModel.panel(&self, sz slot, sz width, xray::Color tint,
+		xray::Color edge_from, xray::Color edge_to) {
 	Panel* p = mem::tnew(Panel);
-	*p = { tint, edge_from, edge_to, false };
+	*p = { tint, edge_from, edge_to, false, self.outline(slot, tint, edge_from) };
 	milktea::Node* n = milktea::component(p);
 	if (width > 0) n.width(milktea::cells(width));
 	return n
@@ -934,7 +1071,7 @@ fn milktea::Node* FlappyModel.menu_dialog(&self) {
 		items.add(milktea::text(string::tformat(sel ? "▶ %s ◀" : "  %s  ", opt), s));
 	}
 
-	return panel(44, xray::color_rgba(10, 14, 28, 178),
+	return self.panel(OUTLINE_MENU, 44, xray::color_rgba(10, 14, 28, 178),
 			xray::color_rgb(255, 200, 50), xray::color_rgb(255, 90, 30))
 		.offset(0, -1)
 		.add(milktea::text(glaze::gradient_text(" ★ FLAPPY BIRD ★ ",
@@ -963,7 +1100,7 @@ fn milktea::Node* FlappyModel.game_over_dialog(&self) {
 		.add(line(string::tformat("Best:  %d", self.high_score), xray::color_rgb(255, 215, 0), bold: true))
 		.add(line(string::tformat("Medal: %s", medal), medal_c, bold: true));
 
-	return panel(40, xray::color_rgba(20, 10, 15, 178),
+	return self.panel(OUTLINE_GAME_OVER, 40, xray::color_rgba(20, 10, 15, 178),
 			xray::color_rgb(255, 60, 60), xray::color_rgb(255, 140, 40))
 		.offset(0, -1)
 		.add(line("💀 GAME OVER 💀", xray::color_rgb(255, 70, 70), bold: true))
@@ -980,7 +1117,7 @@ const String[5] HOW_TO_PLAY = {
 };
 
 fn milktea::Node* FlappyModel.help_dialog(&self) {
-	return panel(0, xray::color_rgba(12, 16, 28, 178),
+	return self.panel(OUTLINE_HELP, 0, xray::color_rgba(12, 16, 28, 178),
 			xray::color_rgb(80, 200, 255), xray::color_rgb(140, 100, 255))
 		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
 			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
