@@ -567,3 +567,18 @@ milktea is built on the [Elm Architecture](https://guide.elm-lang.org/architectu
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Browser renderer
+
+Compile the portable examples to WebAssembly and try them in a canvas gallery:
+
+```sh
+just web-build
+just web-serve
+```
+
+Open <http://localhost:8000/?example=counter>. The browser uses the same
+model/update/view API and xray cell grid, with keyboard, mouse, resize, and
+paste support. Try <http://localhost:8000/inline.html> for resizable inline
+embeds with lazy loading and fullscreen controls. See [web/README.md](web/README.md) for embedding, build details,
+and the current platform limits.

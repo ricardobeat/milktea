@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>milktea · inline embeds</title>
+<script type="module" src="./embed.mjs"></script>
+<style>
+  :root { color-scheme: dark; background: #15151d; color: #dfdce5; font: 16px/1.6 system-ui, sans-serif; }
+  body { max-width: 1040px; margin: 40px auto; padding: 0 24px 80px; }
+  h1, h2, p { max-width: 760px; } h1 { font-size: 32px; line-height: 1.2; } h2 { font-size: 20px; }
+  a { color: #e4b2d6; } code { color: #d9c2e5; font-size: 13px; } pre { overflow-x: auto; padding: 16px; background: #20202b; border-radius: 10px; line-height: 1.6; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 24px; }
+  article { min-width: 0; } article p { font-size: 14px; color: #b4aebb; }
+  milktea-view { border: 1px solid #383240; border-radius: 10px; overflow: hidden; width: 100%; }
+  .playground { max-width: 100%; height: 260px; margin: 16px 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 13px; }
+  label { display: flex; align-items: center; gap: 8px; } label output { min-width: 45px; font-variant-numeric: tabular-nums; }
+  select { font: inherit; color: inherit; background: #252330; padding: 5px; }
+  input[type=range] { width: 110px; accent-color: #d6a3cb; }
+  .below { margin-top: 60vh; } footer { margin-top: 36px; color: #a59aae; font-size: 14px; }
+</style>
+<a href="./">← Example gallery</a>
+<h1>milktea, anywhere on the page</h1>
+<p>Each example is an inline element. They load when you scroll them into view and pause offscreen. Click to use the keyboard; the corner button enters real fullscreen and keeps the same running example.</p>
+<div class="cards">
+  <article><h2>A full animation in a small box</h2>
+    <milktea-view id="bots" src="./build/nanobots.wasm" cols="80" rows="24" style="height:240px" label="Nanobots animation"></milktea-view>
+    <p>A fixed 80 × 24 grid fits into the box. Fullscreen enlarges the same grid without restarting the cycle.</p>
+  </article>
+  <article><h2>Drawing at a different scale</h2>
+    <milktea-view id="painting" src="./build/paint.wasm" cols="64" rows="20" style="height:240px" label="Paint canvas"></milktea-view>
+    <p>Mouse positions stay accurate as the canvas scales. Focus before using the scroll wheel.</p>
+  </article>
+</div>
+<h2>Try your own viewport</h2>
+<div class="controls">
+  <label>Example <select id="example"><option>counter</option><option>inputbox</option><option>mouse</option><option>doom-fire</option><option>nanobots</option><option>dos-app</option></select></label>
+  <label>Width <input id="width" type="range" min="240" max="1000" value="600"><output>600 px</output></label>
+  <label>Height <input id="height" type="range" min="120" max="500" value="260"><output>260 px</output></label>
+  <label>Font <input id="font-size" type="range" min="8" max="26" value="16"><output>16 px</output></label>
+  <label>Zoom <input id="scale" type="range" min="0.25" max="2" step="0.05" value="1"><output>1×</output></label>
+  <label><input id="fixed" type="checkbox" checked> Fixed 80 × 24 grid</label>
+</div>
+<milktea-view id="playground" class="playground" src="./build/counter.wasm" cols="80" rows="24" style="width:600px" label="Embedding playground"></milktea-view>
+<p>With a fixed grid, the whole example scales to fit. Turn that off to let font size and zoom determine how many cells fit in the viewport.</p>
+<pre><code>&lt;script type="module" src="/milktea/embed.mjs"&gt;&lt;/script&gt;
+&lt;milktea-view src="/milktea/build/nanobots.wasm"
+  cols="80" rows="24" style="width:400px;height:240px"&gt;
+&lt;/milktea-view&gt;</code></pre>
+<section class="below">
+  <h2>This example waits for you</h2>
+  <p>Doom fire’s WASM is requested only when this embed enters the viewport. Another instance of the same example reuses the compiled module and runs with its own state.</p>
+  <milktea-view id="lazy-fire" src="./build/doom-fire.wasm" cols="80" rows="24" style="max-width:640px;height:260px" label="Doom fire animation"></milktea-view>
+</section>
+<footer>Change CSS width and height freely. Set <code>loading="eager"</code> to start loading immediately, or <code>expandable="false"</code> to hide the fullscreen button.</footer>
+<script type="module">
+  const app = document.querySelector('#playground');
+  document.querySelector('#example').addEventListener('change', e => app.setAttribute('src', `./build/${e.target.value}.wasm`));
+  for (const id of ['width', 'height', 'font-size', 'scale']) {
+    document.getElementById(id).addEventListener('input', event => {
+      const value = event.target.value;
+      event.target.nextElementSibling.value = value + (id === 'scale' ? '×' : ' px');
+      if (id === 'width' || id === 'height') app.style[id] = `${value}px`;
+      else app.setAttribute(id, value);
+    });
+  }
+  document.querySelector('#fixed').addEventListener('change', e => {
+    if (e.target.checked) { app.setAttribute('cols', '80'); app.setAttribute('rows', '24'); }
+    else { app.removeAttribute('cols'); app.removeAttribute('rows'); }
+  });
+</script>
+</html>
