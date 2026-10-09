@@ -163,6 +163,17 @@ glaze::style()
     .border_bg(glaze::color_hex("#1e1e2e"))
 ```
 
+`border_gradient` runs the border from `border_color` on its top row to the
+gradient color on its bottom row:
+
+```c3
+glaze::Style s = {
+    .border = glaze::ROUNDED,
+    .border_color = glaze::color_hex("#ffc832"),
+    .border_gradient = glaze::color_hex("#ff5a1e"),
+};
+```
+
 ### Joining strings
 
 Glaze knows how to stack strings that might already contain ANSI codes:
