@@ -582,3 +582,7 @@ model/update/view API and xray cell grid, with keyboard, mouse, resize, and
 paste support. Try <http://localhost:8000/inline.html> for resizable inline
 embeds with lazy loading and fullscreen controls. See [web/README.md](web/README.md) for embedding, build details,
 and the current platform limits.
+
+For JavaScript model/update/view programs, run `just web-engine` and open
+<http://localhost:8000/editor.html> for a live editor using the reusable
+milktea WASM engine. The same bindings can be imported into your own page.

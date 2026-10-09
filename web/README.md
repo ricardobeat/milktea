@@ -146,6 +146,24 @@ retaining native node handles. Each mount has its own WASM memory and model.
 `mount` accepts the same viewport/text options as `MilkteaCanvas`, plus
 `wasmURL` to relocate the engine. Compiled WASM is cached across mounts.
 
+### Live editor
+
+After `just web-engine` and `just web-serve`, open
+<http://localhost:8000/editor.html>. Edit the JavaScript module on the left;
+the preview runs on the right. Import helpers from `'milktea'` using the
+editor's import map, and export your program as the default export.
+
+Edits run after a short debounce, or press Ctrl/⌘ Enter or Run. Each run
+mounts a fresh model in the same reusable engine. Presets demonstrate
+counter/click handling, native timers and text input. Syntax errors show
+below the preview and retain the last running program. Reset restores the
+selected preset. Code is saved to localStorage in this browser.
+
+The editor executes your JavaScript in a preview iframe; it does not compile
+C3 in the browser. A canvas preview must be clicked to focus keyboard input.
+Run `node web/test/editor-browser.mjs` for the live editor browser checks.
+Set `MILKTEA_TEST_BROWSER=webkit` to run those checks with WebKit.
+
 ## Smaller builds
 
 The build strips metadata and exports that the browser does not use. Install
