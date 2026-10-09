@@ -144,18 +144,9 @@ fn void picker_backdrop_dismissed(void* ctx, sz col, sz row) @local {
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
-	glaze::Style panel = {
-		.bg = th.panel, .fg = th.text,
-		.border = glaze::DOUBLE, .border_color = th.accent,
-		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-	};
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	xray::Node* panel_node = milktea::text("", panel)
-		.min_width(self.min_cols)
-		.with_gap(1)
-		.center()
-		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+	xray::Node* panel_node = modal_panel(th, self.min_cols);
 	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
 
 	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));

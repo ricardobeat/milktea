@@ -100,6 +100,31 @@ fn void backdrop_dismissed(void* ctx, sz col, sz row) @local {
 	d.pending = Pressed.DISMISSED;
 }
 
+// Space between a modal panel's border and its content: a row above and
+// below, two columns at each side.
+const sz PANEL_PAD_ROWS = 1;
+const sz PANEL_PAD_COLS = 2;
+
+// modal_panel is the framed box a dialog or picker is built in, centered
+// with a drop shadow. Its style draws the border, but layout cannot see
+// inside a style, so the node is padded to keep its children within the
+// border and the space around it -- without that they would start on the
+// top border and end on the bottom one.
+fn xray::Node* modal_panel(Theme* th, sz min_cols) {
+	glaze::Style frame = {
+		.bg = th.panel, .fg = th.text,
+		.border = glaze::DOUBLE, .border_color = th.accent,
+	};
+	sz v = PANEL_PAD_ROWS + 1;
+	sz h = PANEL_PAD_COLS + 1;
+	return milktea::text("", frame)
+		.min_width(min_cols)
+		.with_padding(v, h, v, h)
+		.with_gap(1)
+		.center()
+		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+}
+
 // node returns the dialog, or null when it is closed, so the caller can add
 // it unconditionally.
 //
@@ -111,18 +136,9 @@ fn void backdrop_dismissed(void* ctx, sz col, sz row) @local {
 fn xray::Node* Dialog.node(&self, Theme* th) {
 	if (!self.open) return null;
 
-	glaze::Style panel = {
-		.bg = th.panel, .fg = th.text,
-		.border = glaze::DOUBLE, .border_color = th.accent,
-		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-	};
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
-	xray::Node* panel_node = milktea::text("", panel)
-		.min_width(self.min_cols)
-		.with_gap(1)
-		.center()
-		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+	xray::Node* panel_node = modal_panel(th, self.min_cols);
 	panel_node.on_click_outside(&backdrop_dismissed, self);
 
 	// Body text has no bg of its own — without one it paints on the
