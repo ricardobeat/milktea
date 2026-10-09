@@ -359,6 +359,8 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 // other fields are ignored, so text colour and attributes are set on the text
 // itself, and the node is sized with width() and height().
 // 
+// A translucent bg tints what is beneath the node and keeps its glyphs.
+// 
 // Content and children go inside the border and then inside the padding. The
 // style's padding adds to whatever with_padding sets.
 fn Node* Node.style(&self, glaze::Style s) {

@@ -1,5 +1,7 @@
 module xray;
 
+import glaze;
+
 // PaintResult is what a tree walk reports back to the caller beyond the
 // pixels themselves.
 struct PaintResult {
@@ -97,7 +99,12 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	}
 
 	if (n.has_box() && r.w > 0 && r.h > 0) {
-		self.paint_string(r, n.box.with_width(r.w).with_height(r.h).render(""), n.alpha_value, scratch);
+		Color bg = n.box.bg;
+		if (bg.kind == ColorKind.TRUECOLOR && bg.effective_alpha() < 255) {
+			self.paint_translucent_box(r, n.box, n.alpha_value, scratch);
+		} else {
+			self.paint_string(r, n.box.with_width(r.w).with_height(r.h).render(""), n.alpha_value, scratch);
+		}
 	}
 
 	Insets f = n.frame();
@@ -127,6 +134,87 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		is.opacity = scale_opacity(is.opacity, n.alpha_value);
 		if (is.opacity > 0) self.render_inner_shadow(r.x, r.y, r.w, r.h, is);
 	}
+}
+
+// paint_translucent_box paints a box whose background lets what is beneath
+// show through. The background is blended over both colors of every cell in
+// r and the glyphs stay, so a half block keeps its shape under the tint. A
+// translucent background is flat: bg_gradient does not apply.
+// 
+// The border is drawn over the tint at the node's alpha. A border_bg puts a
+// background of its own under the border cells in place of the tint, and a
+// TRANSPARENT one leaves them as they were.
+fn void ScreenBuffer.paint_translucent_box(&self, Rect r, glaze::Style box, char alpha, ScreenBuffer** scratch) {
+	glaze::Border b = box.border;
+	bool bordered = b.top.len > 0 || b.bottom.len > 0 || b.left.len > 0 || b.right.len > 0;
+	// The cells inside the border, relative to r.
+	sz top = b.top.len > 0 ? 1 : 0;
+	sz left = b.left.len > 0 ? 1 : 0;
+	sz bottom = r.h - (b.bottom.len > 0 ? 1 : 0);
+	sz right = r.w - (b.right.len > 0 ? 1 : 0);
+
+	Color tint = box.bg;
+	tint.a = scale_alpha(tint, alpha);
+	Color edge_bg = box.border_bg;
+	if (edge_bg.kind == ColorKind.NONE) edge_bg = tint;
+	if (edge_bg.kind == ColorKind.TRUECOLOR) edge_bg.a = scale_alpha(edge_bg, alpha);
+
+	for (sz y = 0; y < r.h; y++) {
+		sz dy = r.y + y;
+		if (dy < 0 || dy >= self.height) continue;
+		for (sz x = 0; x < r.w; x++) {
+			sz dx = r.x + x;
+			if (dx < 0 || dx >= self.width) continue;
+			bool inside = y >= top && y < bottom && x >= left && x < right;
+			Color c = inside ? tint : edge_bg;
+			if (c.kind != ColorKind.TRUECOLOR) continue;
+			Cell* cell = &self.cells[dy * self.width + dx];
+			cell.style.bg = c.blend_over(cell.style.bg);
+			if (cell.style.fg.kind == ColorKind.TRUECOLOR) cell.style.fg = c.blend_over(cell.style.fg);
+		}
+		self.dirty_lines[dy] = true;
+	}
+
+	if (!bordered) return;
+	// The border's own background was painted above, so the glyphs go on
+	// without one and keep it.
+	glaze::Style edge = { .border = b, .border_color = box.border_color, .border_gradient = box.border_gradient,
+		.corner_color = box.corner_color, .border_animation = box.border_animation, .anim_speed_ms = box.anim_speed_ms };
+	String s = edge.with_width(r.w).with_height(r.h).render("");
+	if (alpha < 255 && scratch != null) {
+		self.paint_blended(r, s, alpha, scratch);
+		return;
+	}
+	ScreenBuffer* own = null;
+	defer if (own != null) {
+		own.destroy();
+		mem::free(own);
+	}
+	if (scratch == null) scratch = &own;
+	ScreenBuffer* tmp = *scratch;
+	if (tmp == null) {
+		tmp = new_screen_buffer(r.w, r.h);
+		*scratch = tmp;
+	} else if (tmp.width < r.w || tmp.height < r.h) {
+		tmp.resize(tmp.width > r.w ? tmp.width : r.w, tmp.height > r.h ? tmp.height : r.h);
+	}
+	tmp.clear();
+	tmp.render_ansi_string(0, 0, s, default_style());
+	for (sz y = 0; y < r.h; y++) {
+		for (sz x = 0; x < r.w; x++) {
+			if (y >= top && y < bottom && x >= left && x < right) continue;
+			Cell c = tmp.cells[y * tmp.width + x];
+			if (c.style.bg.kind == ColorKind.NONE) c.style.bg = color_transparent();
+			self.set_cell(r.x + x, r.y + y, c);
+		}
+	}
+}
+
+// scale_alpha is c's alpha dimmed by a node's alpha. It never reaches 0,
+// which a Color reads as opaque.
+fn char scale_alpha(Color c, char alpha) @local {
+	char a = (char)(((sz)c.effective_alpha() * (sz)alpha + 127) / 255);
+	return a == 0 ? 1 : a;
 }
 
 // paint_string paints a rendered string over r, blended when the node is

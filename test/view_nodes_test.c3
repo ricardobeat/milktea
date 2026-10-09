@@ -145,3 +145,40 @@ fn void test_text_padding_moves_the_text_inside_its_background() @test {
 	assert(sb.cell_at(2, 0).content[0] == 'x');
 	assert(sb.cell_at(0, 0).style.bg.r == 0x10, "the background covers the padding");
 }
+
+fn void test_a_translucent_box_tints_what_is_beneath() @test {
+	xray::ScreenBuffer* frame = xray::new_screen_buffer(6, 3);
+	defer free_buffer(frame);
+	xray::Style under = xray::default_style().set_fg(xray::color_rgb(200, 200, 200)).set_bg(xray::color_rgb(100, 100, 100));
+	for (sz y = 0; y < 3; y++) frame.set_string(0, y, "▀▀▀▀▀▀", under);
+
+	glaze::Style tint = { .bg = xray::color_rgba(0, 0, 0, 128), .border = glaze::NORMAL };
+	milktea::Node* box = milktea::vstack().style(tint);
+	xray::ScreenBuffer* sb = painted(milktea::root().add(milktea::canvas(frame)).add(box), 6, 3);
+	defer free_buffer(sb);
+
+	xray::Cell* inside = sb.cell_at(2, 1);
+	assert((String)inside.content[:3] == "▀", "the glyph beneath stays");
+	assert(inside.style.bg.r / 10 == 4 && inside.style.fg.r / 10 == 9, "both colors are tinted, bg=%d fg=%d", inside.style.bg.r, inside.style.fg.r);
+	xray::Cell* corner = sb.cell_at(0, 0);
+	assert((String)corner.content[:3] == "┌");
+	assert(corner.style.bg.r / 10 == 4, "the border sits on the tint, bg=%d", corner.style.bg.r);
+}
+
+fn void test_a_transparent_border_bg_keeps_the_tint_off_the_border() @test {
+	xray::ScreenBuffer* frame = xray::new_screen_buffer(6, 3);
+	defer free_buffer(frame);
+	xray::Style under = xray::default_style().set_bg(xray::color_rgb(100, 100, 100));
+	for (sz y = 0; y < 3; y++) frame.set_string(0, y, "      ", under);
+
+	glaze::Style tint = {
+		.bg = xray::color_rgba(0, 0, 0, 128),
+		.border = glaze::HIDDEN,
+		.border_bg = xray::color_transparent(),
+	};
+	xray::ScreenBuffer* sb = painted(milktea::root().add(milktea::canvas(frame)).add(milktea::vstack().style(tint)), 6, 3);
+	defer free_buffer(sb);
+
+	assert(sb.cell_at(0, 0).style.bg.r == 100, "the border cell is untouched, bg=%d", sb.cell_at(0, 0).style.bg.r);
+	assert(sb.cell_at(2, 1).style.bg.r / 10 == 4, "inside is tinted, bg=%d", sb.cell_at(2, 1).style.bg.r);
+}

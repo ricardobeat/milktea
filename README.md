@@ -244,6 +244,9 @@ milktea::vstack().style(panel)
     .add(milktea::text(self.body, body_s));
 ```
 
+A translucent background, such as `glaze::color_rgba(10, 14, 28, 178)`,
+tints whatever is painted beneath the node and keeps its glyphs.
+
 `text()` styles its own box the same way, and is a leaf: it cannot hold
 children.
 
