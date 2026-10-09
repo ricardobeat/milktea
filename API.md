@@ -555,8 +555,14 @@ interface Content {
     fn sz measure(sz width)        @optional;
     fn sz measure_width(sz height) @optional;
     fn ContentCursor cursor(Rect r)  @optional;
+    fn Insets border()               @optional;
 }
 ```
+
+`border` is how many cells of border the content draws on each side. A node
+lays out its children inside that border and then inside its own padding.
+`milktea::text` reports the border of its glaze style, so a bordered
+`text("", style)` can hold other nodes.
 
 `cursor` lets content report where the caret belongs so the terminal cursor
 follows the layout instead of a hand-counted row; build the return value with

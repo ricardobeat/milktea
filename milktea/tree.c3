@@ -119,6 +119,16 @@ fn Node* text(String s, glaze::Style style = {}) {
 	return xray::content_node(st);
 }
 
+// border is one cell on each side where the style draws a border.
+fn xray::Insets StyledText.border(&self) @dynamic {
+	return {
+		.top    = self.style.border.top.len > 0 ? 1 : 0,
+		.right  = self.style.border.right.len > 0 ? 1 : 0,
+		.bottom = self.style.border.bottom.len > 0 ? 1 : 0,
+		.left   = self.style.border.left.len > 0 ? 1 : 0,
+	};
+}
+
 // Grid is a cell grid owned by the caller, painted into the tree as it is.
 struct Grid (xray::Content) @private {
 	xray::Cell[] cells;

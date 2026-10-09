@@ -96,3 +96,17 @@ fn void test_text_with_a_background_paints_it() @test {
 
 	assert(sb.cell_at(1, 0).style.bg.eq(xray::color_rgb(200, 0, 0)));
 }
+
+fn void test_children_are_laid_out_inside_a_border() @test {
+	glaze::Style boxed = { .border = glaze::DOUBLE };
+	milktea::Node* child = milktea::text("x");
+	milktea::Node* box = milktea::text("", boxed).with_padding(1, 2, 1, 2).add(child);
+	milktea::Node* root = milktea::root().add(box.center());
+	root.solve(xray::new_rect(0, 0, 20, 10));
+
+	// One cell of border and the padding on each side.
+	assert(box.computed_rect.w == 1 + 2 * 3);
+	assert(box.computed_rect.h == 1 + 2 * 2);
+	assert(child.computed_rect.x == box.computed_rect.x + 3);
+	assert(child.computed_rect.y == box.computed_rect.y + 2);
+}

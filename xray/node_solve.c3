@@ -43,11 +43,27 @@ fn sz Node.natural_height(&self, sz width) {
 	return constraint_natural(self.size_h, width, self.content_height(width));
 }
 
+// frame is the space between a node's edge and its children: the border
+// its content draws, plus the node's padding. A node without children
+// leaves the border out, since its content's measure already includes it.
+fn Insets Node.frame(&self) {
+	Insets f = { self.pad_top, self.pad_right, self.pad_bottom, self.pad_left };
+	if (self.child_count > 0 && self.content != null && &self.content.border) {
+		Insets b = self.content.border();
+		f.top    += b.top;
+		f.right  += b.right;
+		f.bottom += b.bottom;
+		f.left   += b.left;
+	}
+	return f;
+}
+
 // content_width measures what is inside this node, ignoring the node's own
 // width constraint.
 fn sz Node.content_width(&self, sz height) {
-	sz pad_x   = self.pad_left + self.pad_right;
-	sz inner_h = height - self.pad_top - self.pad_bottom;
+	Insets f = self.frame();
+	sz pad_x   = f.left + f.right;
+	sz inner_h = height - f.top - f.bottom;
 	if (inner_h < 0) inner_h = 0;
 
 	if (self.child_count == 0) {
@@ -78,8 +94,9 @@ fn sz Node.content_width(&self, sz height) {
 // content_height measures what is inside this node, ignoring the node's own
 // height constraint.
 fn sz Node.content_height(&self, sz width) {
-	sz pad_y   = self.pad_top + self.pad_bottom;
-	sz inner_w = width - self.pad_left - self.pad_right;
+	Insets f = self.frame();
+	sz pad_y   = f.top + f.bottom;
+	sz inner_w = width - f.left - f.right;
 	if (inner_w < 0) inner_w = 0;
 
 	if (self.child_count == 0) {
@@ -123,7 +140,8 @@ fn void Node.solve(&self, Rect area) {
 
 	if (self.child_count == 0) return;
 
-	Rect inner = area.inset(self.pad_left, self.pad_top, self.pad_right, self.pad_bottom);
+	Insets f = self.frame();
+	Rect inner = area.inset(f.left, f.top, f.right, f.bottom);
 
 	// A stack gives each child the full inner rect, subject to that child's
 	// own constraints and its own justify/align — which is how a centered

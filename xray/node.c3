@@ -25,12 +25,21 @@ import std::core::mem;
 // given the node's solved rect. Content that does not own a cursor leaves it
 // unimplemented. Content that owns one only when focused should return
 // has_cursor = false when it is not, rather than relying on paint order.
+//
+// border is the number of cells the content draws around each side of its
+// rect. A node's children are laid out inside it.
 interface Content {
 	fn String render(Rect r) @optional;
 	fn void paint(ScreenBuffer* dst, Rect r) @optional;
 	fn sz measure(sz width) @optional;
 	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;
+	fn Insets border() @optional;
+}
+
+// Insets holds a size in cells for each side of a rect.
+struct Insets {
+	sz top, right, bottom, left;
 }
 
 // DrawCursorFn paints the cursor itself instead of leaving it to the
