@@ -1,0 +1,1376 @@
+<pre class="ink"><span class="ink-s2">module</span> avian_assault;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::math;
+<span class="ink-s2">import</span> std::core::string;
+<span class="ink-s2">import</span> std::core::dstring;
+<span class="ink-s2">import</span> std::core::mem;
+
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">rand</span>();
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">srand</span>(<span class="ink-s3">uint</span> seed);
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">c3_time_ms_long</span>();
+
+<span class="ink-s0">// ── Game Constants ─────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">FRAME_MS</span> <span class="ink-s2">=</span> 25; <span class="ink-s0">// 40 FPS</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_BLOCKS</span> <span class="ink-s2">=</span> 32;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_PIGS</span> <span class="ink-s2">=</span> 8;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_PARTICLES</span> <span class="ink-s2">=</span> 160;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_TRAIL</span> <span class="ink-s2">=</span> 40;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_LEVELS</span> <span class="ink-s2">=</span> 3;
+
+<span class="ink-s2">enum</span> <span class="ink-s3">GameState</span> : <span class="ink-s3">char</span> {
+	<span class="ink-s6">INTRO</span>,      <span class="ink-s0">// Animated splash screen</span>
+	<span class="ink-s6">MENU</span>,       <span class="ink-s0">// Main menu</span>
+	<span class="ink-s6">AIMING</span>,     <span class="ink-s0">// Slingshot ready / dragging</span>
+	<span class="ink-s6">FLYING</span>,     <span class="ink-s0">// Bird in flight</span>
+	<span class="ink-s6">SETTLING</span>,   <span class="ink-s0">// Post-launch physics settling</span>
+	<span class="ink-s6">LEVEL_WON</span>,  <span class="ink-s0">// Level clear dialog &amp; stars</span>
+	<span class="ink-s6">LEVEL_LOST</span>, <span class="ink-s0">// Out of birds dialog</span>
+	<span class="ink-s6">HELP</span>,       <span class="ink-s0">// Help &amp; Controls overlay</span>
+}
+
+<span class="ink-s2">enum</span> <span class="ink-s3">BirdType</span> : <span class="ink-s3">char</span> {
+	<span class="ink-s6">RED</span>,    <span class="ink-s0">// Classic direct impact</span>
+	<span class="ink-s6">CHUCK</span>,  <span class="ink-s0">// Yellow triangle - speed boost on click/space</span>
+	<span class="ink-s6">BOMB</span>,   <span class="ink-s0">// Black round - explosive on click or impact</span>
+}
+
+<span class="ink-s2">enum</span> <span class="ink-s3">BlockMaterial</span> : <span class="ink-s3">char</span> {
+	<span class="ink-s6">WOOD</span>,
+	<span class="ink-s6">ICE</span>,
+	<span class="ink-s6">STONE</span>,
+	<span class="ink-s6">TNT</span>,
+}
+
+<span class="ink-s0">// ── Entities &amp; Physics ─────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">struct</span> <span class="ink-s3">TrailPoint</span> {
+	<span class="ink-s3">float</span> x;
+	<span class="ink-s3">float</span> y;
+	<span class="ink-s3">sz</span> life;
+	<span class="ink-s3">bool</span> active;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Particle</span> {
+	<span class="ink-s3">float</span> x;
+	<span class="ink-s3">float</span> y;
+	<span class="ink-s3">float</span> vx;
+	<span class="ink-s3">float</span> vy;
+	<span class="ink-s3">sz</span> life;
+	<span class="ink-s3">sz</span> max_life;
+	xray::<span class="ink-s3">Color</span> color;
+	<span class="ink-s3">bool</span> active;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Block</span> {
+	<span class="ink-s3">float</span> x;
+	<span class="ink-s3">float</span> y;
+	<span class="ink-s3">float</span> vx;
+	<span class="ink-s3">float</span> vy;
+	<span class="ink-s3">float</span> w;
+	<span class="ink-s3">float</span> h;
+	<span class="ink-s3">float</span> hp;
+	<span class="ink-s3">float</span> max_hp;
+	<span class="ink-s3">BlockMaterial</span> mat;
+	<span class="ink-s3">bool</span> alive;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Pig</span> {
+	<span class="ink-s3">float</span> x;
+	<span class="ink-s3">float</span> y;
+	<span class="ink-s3">float</span> vx;
+	<span class="ink-s3">float</span> vy;
+	<span class="ink-s3">float</span> radius;
+	<span class="ink-s3">float</span> hp;
+	<span class="ink-s3">float</span> max_hp;
+	<span class="ink-s3">sz</span> blink_timer;
+	<span class="ink-s3">bool</span> alive;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">ActiveBird</span> {
+	<span class="ink-s3">float</span> x;
+	<span class="ink-s3">float</span> y;
+	<span class="ink-s3">float</span> vx;
+	<span class="ink-s3">float</span> vy;
+	<span class="ink-s3">float</span> radius;
+	<span class="ink-s3">BirdType</span> type;
+	<span class="ink-s3">bool</span> launched;
+	<span class="ink-s3">bool</span> used_ability;
+	<span class="ink-s3">sz</span> flight_ticks;
+	<span class="ink-s3">bool</span> alive;
+}
+
+
+
+<span class="ink-s0">// ── Model ─────────────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">struct</span> <span class="ink-s3">AvianAssaultModel</span> {
+	<span class="ink-s3">sz</span> term_w;
+	<span class="ink-s3">sz</span> term_h;
+	<span class="ink-s3">sz</span> ticks;
+
+	<span class="ink-s3">GameState</span> state;
+	<span class="ink-s3">sz</span> current_level;
+	<span class="ink-s3">sz</span> menu_selected; <span class="ink-s0">// 0: Play, 1: Level Select, 2: Help, 3: Quit</span>
+
+	<span class="ink-s0">// Slingshot Base Position (in pixel coords)</span>
+	<span class="ink-s3">float</span> sling_x;
+	<span class="ink-s3">float</span> sling_y;
+
+	<span class="ink-s0">// Mouse dragging for sling</span>
+	<span class="ink-s3">bool</span> is_dragging;
+	<span class="ink-s3">float</span> drag_x;
+	<span class="ink-s3">float</span> drag_y;
+
+	<span class="ink-s0">// Keyboard aiming angle &amp; power</span>
+	<span class="ink-s3">float</span> key_angle; <span class="ink-s0">// in degrees</span>
+	<span class="ink-s3">float</span> key_power; <span class="ink-s0">// 0.0 - 1.0</span>
+
+	<span class="ink-s0">// Birds inventory</span>
+	<span class="ink-s3">ActiveBird</span> bird;
+	<span class="ink-s3">BirdType</span>[3] birds_queue;
+	<span class="ink-s3">sz</span> birds_left;
+
+	<span class="ink-s0">// Entities</span>
+	<span class="ink-s3">Block</span>[<span class="ink-s6">MAX_BLOCKS</span>] blocks;
+	<span class="ink-s3">Pig</span>[<span class="ink-s6">MAX_PIGS</span>] pigs;
+	<span class="ink-s3">Particle</span>[<span class="ink-s6">MAX_PARTICLES</span>] particles;
+	<span class="ink-s3">TrailPoint</span>[<span class="ink-s6">MAX_TRAIL</span>] trail;
+
+	<span class="ink-s3">sz</span> score;
+	<span class="ink-s3">sz</span> high_score;
+	<span class="ink-s3">sz</span> settle_timer;
+	<span class="ink-s3">sz</span> flash_timer;
+
+	xray::<span class="ink-s3">PixelBuffer</span><span class="ink-s2">*</span> vbuf;
+	<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> screen;
+}
+
+<span class="ink-s0">// ── Random Helpers ────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">float</span> <span class="ink-s4">rnd_float</span>(<span class="ink-s3">float</span> min, <span class="ink-s3">float</span> max) {
+	<span class="ink-s3">float</span> r <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(<span class="ink-s4">rand</span>() <span class="ink-s2">%</span> 10000) <span class="ink-s2">/</span> 10000.0f;
+	<span class="ink-s2">return</span> min <span class="ink-s2">+</span> r <span class="ink-s2">*</span> (max <span class="ink-s2">-</span> min);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">sz</span> <span class="ink-s4">rnd_int</span>(<span class="ink-s3">sz</span> min, <span class="ink-s3">sz</span> max) {
+	<span class="ink-s2">if</span> (max <span class="ink-s2">&lt;=</span> min) <span class="ink-s2">return</span> min;
+	<span class="ink-s2">return</span> min <span class="ink-s2">+</span> (<span class="ink-s4">rand</span>() <span class="ink-s2">%</span> (max <span class="ink-s2">-</span> min <span class="ink-s2">+</span> 1));
+}
+
+<span class="ink-s0">// ── Particle &amp; Trail Helpers ──────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">spawn_particle</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> x, <span class="ink-s3">float</span> y, <span class="ink-s3">float</span> vx, <span class="ink-s3">float</span> vy, <span class="ink-s3">sz</span> life, xray::<span class="ink-s3">Color</span> c) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PARTICLES</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>active) {
+			self<span class="ink-s2">.</span>particles[i] <span class="ink-s2">=</span> (<span class="ink-s3">Particle</span>){
+				<span class="ink-s2">.</span>x <span class="ink-s2">=</span> x,
+				<span class="ink-s2">.</span>y <span class="ink-s2">=</span> y,
+				<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> vx,
+				<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> vy,
+				<span class="ink-s2">.</span>life <span class="ink-s2">=</span> life,
+				<span class="ink-s2">.</span>max_life <span class="ink-s2">=</span> life,
+				<span class="ink-s2">.</span>color <span class="ink-s2">=</span> c,
+				<span class="ink-s2">.</span>active <span class="ink-s2">=</span> true,
+			};
+			<span class="ink-s2">return</span>;
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">spawn_explosion</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> cx, <span class="ink-s3">float</span> cy, <span class="ink-s3">sz</span> count, xray::<span class="ink-s3">Color</span> c1, xray::<span class="ink-s3">Color</span> c2) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> count; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">float</span> ang <span class="ink-s2">=</span> <span class="ink-s4">rnd_float</span>(0.0f, 6.28318f);
+		<span class="ink-s3">float</span> spd <span class="ink-s2">=</span> <span class="ink-s4">rnd_float</span>(1.5f, 6.5f);
+		<span class="ink-s3">float</span> vx <span class="ink-s2">=</span> math::<span class="ink-s4">cos</span>(ang) <span class="ink-s2">*</span> spd;
+		<span class="ink-s3">float</span> vy <span class="ink-s2">=</span> math::<span class="ink-s4">sin</span>(ang) <span class="ink-s2">*</span> spd <span class="ink-s2">-</span> 1.2f;
+		xray::<span class="ink-s3">Color</span> col <span class="ink-s2">=</span> (i <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0) <span class="ink-s2">?</span> c1 <span class="ink-s2">:</span> c2;
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_particle</span>(cx, cy, vx, vy, <span class="ink-s4">rnd_int</span>(15, 30), col);
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">add_trail</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> x, <span class="ink-s3">float</span> y) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_TRAIL</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>active) {
+			self<span class="ink-s2">.</span>trail[i] <span class="ink-s2">=</span> (<span class="ink-s3">TrailPoint</span>){ <span class="ink-s2">.</span>x <span class="ink-s2">=</span> x, <span class="ink-s2">.</span>y <span class="ink-s2">=</span> y, <span class="ink-s2">.</span>life <span class="ink-s2">=</span> 60, <span class="ink-s2">.</span>active <span class="ink-s2">=</span> true };
+			<span class="ink-s2">return</span>;
+		}
+	}
+	<span class="ink-s0">// Recycle oldest</span>
+	self<span class="ink-s2">.</span>trail[0] <span class="ink-s2">=</span> (<span class="ink-s3">TrailPoint</span>){ <span class="ink-s2">.</span>x <span class="ink-s2">=</span> x, <span class="ink-s2">.</span>y <span class="ink-s2">=</span> y, <span class="ink-s2">.</span>life <span class="ink-s2">=</span> 60, <span class="ink-s2">.</span>active <span class="ink-s2">=</span> true };
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">update_particles</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PARTICLES</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>active) <span class="ink-s2">continue</span>;
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>vx;
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>vy;
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> 0.22f; <span class="ink-s0">// gravity</span>
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>life<span class="ink-s2">--</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>life <span class="ink-s2">&lt;=</span> 0) {
+			self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> false;
+		}
+	}
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_TRAIL</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>active) <span class="ink-s2">continue</span>;
+		self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>life<span class="ink-s2">--</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>life <span class="ink-s2">&lt;=</span> 0) {
+			self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> false;
+		}
+	}
+}
+
+<span class="ink-s0">// ── Level Construction ────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">load_level</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">sz</span> lvl) {
+	self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> lvl;
+	self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>;
+	self<span class="ink-s2">.</span>birds_left <span class="ink-s2">=</span> 3;
+	self<span class="ink-s2">.</span>settle_timer <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>flash_timer <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">=</span> false;
+
+	<span class="ink-s0">// Reset particles &amp; trail</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PARTICLES</span>; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> false;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_TRAIL</span>; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> false;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+
+	<span class="ink-s3">sz</span> ground_y <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 10;
+	self<span class="ink-s2">.</span>sling_x <span class="ink-s2">=</span> 24.0f;
+	self<span class="ink-s2">.</span>sling_y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 18);
+	self<span class="ink-s2">.</span>drag_x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_x;
+	self<span class="ink-s2">.</span>drag_y <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_y;
+	self<span class="ink-s2">.</span>key_angle <span class="ink-s2">=</span> 45.0f;
+	self<span class="ink-s2">.</span>key_power <span class="ink-s2">=</span> 0.65f;
+
+	<span class="ink-s0">// Bird lineup</span>
+	<span class="ink-s2">if</span> (lvl <span class="ink-s2">==</span> 0) {
+		self<span class="ink-s2">.</span>birds_queue[0] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">RED</span>;
+		self<span class="ink-s2">.</span>birds_queue[1] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">RED</span>;
+		self<span class="ink-s2">.</span>birds_queue[2] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>;
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (lvl <span class="ink-s2">==</span> 1) {
+		self<span class="ink-s2">.</span>birds_queue[0] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>;
+		self<span class="ink-s2">.</span>birds_queue[1] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">RED</span>;
+		self<span class="ink-s2">.</span>birds_queue[2] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>;
+	} <span class="ink-s2">else</span> {
+		self<span class="ink-s2">.</span>birds_queue[0] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>;
+		self<span class="ink-s2">.</span>birds_queue[1] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>;
+		self<span class="ink-s2">.</span>birds_queue[2] <span class="ink-s2">=</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">RED</span>;
+	}
+	self<span class="ink-s2">.</span><span class="ink-s4">prepare_next_bird</span>();
+
+	<span class="ink-s3">sz</span> target_x <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>width <span class="ink-s2">-</span> 45;
+	<span class="ink-s2">if</span> (target_x <span class="ink-s2">&lt;</span> 65) target_x <span class="ink-s2">=</span> 65;
+
+	<span class="ink-s0">// Construct structures</span>
+	<span class="ink-s2">if</span> (lvl <span class="ink-s2">==</span> 0) {
+		<span class="ink-s0">// Castle 1: Classic wood two-pillar + crossbeam + roof</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)target_x, (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 18), 4.0f, 18.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 25.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 18), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 18), 4.0f, 18.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 25.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">-</span> 2), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 22), 26.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 20.0f);
+
+		<span class="ink-s0">// Second tier</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 3), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 36), 4.0f, 14.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 15), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 36), 4.0f, 14.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 1), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 40), 20.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 20.0f);
+
+		<span class="ink-s0">// Pigs</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 9), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 6), 4.0f, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 9), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 28), 3.5f, 12.0f);
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (lvl <span class="ink-s2">==</span> 1) {
+		<span class="ink-s0">// Castle 2: Stone towers &amp; TNT in the center!</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)target_x, (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 24), 5.0f, 24.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 45.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 22), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 24), 5.0f, 24.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 45.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 8), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 10), 10.0f, 10.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span>, 5.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">-</span> 2), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 28), 31.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 20.0f);
+
+		<span class="ink-s0">// Top tower</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 11), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 44), 5.0f, 16.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 20.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 6), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 48), 15.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>, 15.0f);
+
+		<span class="ink-s0">// Pigs</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 13), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 22), 4.0f, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 13), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 54), 4.0f, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 32), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 6), 3.5f, 10.0f);
+	} <span class="ink-s2">else</span> {
+		<span class="ink-s0">// Castle 3: Fortress with Triple Tier &amp; Dual TNT</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)target_x, (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 28), 5.0f, 28.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 50.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 14), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 28), 5.0f, 28.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 50.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 28), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 28), 5.0f, 28.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 50.0f);
+
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 5), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 10), 9.0f, 10.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span>, 5.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 19), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 10), 9.0f, 10.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span>, 5.0f);
+
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">-</span> 3), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 32), 39.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>, 40.0f);
+
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 6), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 50), 4.0f, 18.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 22), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 50), 4.0f, 18.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>, 15.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 4), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 54), 24.0f, 4.0f, <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">WOOD</span>, 20.0f);
+
+		<span class="ink-s0">// King Pig + Guards</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 14), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 40), 5.5f, 30.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 7), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 22), 3.5f, 12.0f);
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>((<span class="ink-s3">float</span>)(target_x <span class="ink-s2">+</span> 21), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 22), 3.5f, 12.0f);
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">spawn_block</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> x, <span class="ink-s3">float</span> y, <span class="ink-s3">float</span> w, <span class="ink-s3">float</span> h, <span class="ink-s3">BlockMaterial</span> mat, <span class="ink-s3">float</span> hp) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive) {
+			self<span class="ink-s2">.</span>blocks[i] <span class="ink-s2">=</span> (<span class="ink-s3">Block</span>){
+				<span class="ink-s2">.</span>x <span class="ink-s2">=</span> x,
+				<span class="ink-s2">.</span>y <span class="ink-s2">=</span> y,
+				<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0.0f,
+				<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f,
+				<span class="ink-s2">.</span>w <span class="ink-s2">=</span> w,
+				<span class="ink-s2">.</span>h <span class="ink-s2">=</span> h,
+				<span class="ink-s2">.</span>hp <span class="ink-s2">=</span> hp,
+				<span class="ink-s2">.</span>max_hp <span class="ink-s2">=</span> hp,
+				<span class="ink-s2">.</span>mat <span class="ink-s2">=</span> mat,
+				<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> true,
+			};
+			<span class="ink-s2">return</span>;
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">spawn_pig</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> x, <span class="ink-s3">float</span> y, <span class="ink-s3">float</span> radius, <span class="ink-s3">float</span> hp) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive) {
+			self<span class="ink-s2">.</span>pigs[i] <span class="ink-s2">=</span> (<span class="ink-s3">Pig</span>){
+				<span class="ink-s2">.</span>x <span class="ink-s2">=</span> x,
+				<span class="ink-s2">.</span>y <span class="ink-s2">=</span> y,
+				<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0.0f,
+				<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f,
+				<span class="ink-s2">.</span>radius <span class="ink-s2">=</span> radius,
+				<span class="ink-s2">.</span>hp <span class="ink-s2">=</span> hp,
+				<span class="ink-s2">.</span>max_hp <span class="ink-s2">=</span> hp,
+				<span class="ink-s2">.</span>blink_timer <span class="ink-s2">=</span> <span class="ink-s4">rnd_int</span>(20, 60),
+				<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> true,
+			};
+			<span class="ink-s2">return</span>;
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">prepare_next_bird</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>birds_left <span class="ink-s2">&lt;=</span> 0) <span class="ink-s2">return</span>;
+	<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> 3 <span class="ink-s2">-</span> self<span class="ink-s2">.</span>birds_left;
+	<span class="ink-s3">BirdType</span> type <span class="ink-s2">=</span> self<span class="ink-s2">.</span>birds_queue[idx];
+
+	<span class="ink-s3">float</span> rad <span class="ink-s2">=</span> 3.5f;
+	<span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>) rad <span class="ink-s2">=</span> 4.5f;
+	<span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>) rad <span class="ink-s2">=</span> 3.2f;
+
+	self<span class="ink-s2">.</span>bird <span class="ink-s2">=</span> (<span class="ink-s3">ActiveBird</span>){
+		<span class="ink-s2">.</span>x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_x,
+		<span class="ink-s2">.</span>y <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_y,
+		<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0.0f,
+		<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f,
+		<span class="ink-s2">.</span>radius <span class="ink-s2">=</span> rad,
+		<span class="ink-s2">.</span>type <span class="ink-s2">=</span> type,
+		<span class="ink-s2">.</span>launched <span class="ink-s2">=</span> false,
+		<span class="ink-s2">.</span>used_ability <span class="ink-s2">=</span> false,
+		<span class="ink-s2">.</span>flight_ticks <span class="ink-s2">=</span> 0,
+		<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> true,
+	};
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">launch_bird</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> vx, <span class="ink-s3">float</span> vy) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">!=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>) <span class="ink-s2">return</span>;
+	self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> vx;
+	self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> vy;
+	self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>launched <span class="ink-s2">=</span> true;
+	self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span>;
+	self<span class="ink-s2">.</span>birds_left<span class="ink-s2">--</span>;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">activate_ability</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">!=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span> <span class="ink-s2">||</span> <span class="ink-s2">!</span>self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive <span class="ink-s2">||</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>used_ability) <span class="ink-s2">return</span>;
+	self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>used_ability <span class="ink-s2">=</span> true;
+
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>) {
+		<span class="ink-s0">// Speed turbo boost!</span>
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 2.4f;
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> 0.6f;
+		self<span class="ink-s2">.</span><span class="ink-s4">spawn_explosion</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y, 16, xray::<span class="ink-s4">color_rgb</span>(255, 255, 100), xray::<span class="ink-s4">color_rgb</span>(255, 180, 40));
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>) {
+		<span class="ink-s0">// Instant explosion!</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">trigger_bomb_explosion</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y);
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">trigger_bomb_explosion</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> cx, <span class="ink-s3">float</span> cy) {
+	self<span class="ink-s2">.</span>flash_timer <span class="ink-s2">=</span> 5;
+	self<span class="ink-s2">.</span><span class="ink-s4">spawn_explosion</span>(cx, cy, 45, xray::<span class="ink-s4">color_rgb</span>(255, 80, 20), xray::<span class="ink-s4">color_rgb</span>(255, 240, 50));
+
+	<span class="ink-s3">float</span> blast_rad <span class="ink-s2">=</span> 32.0f;
+	<span class="ink-s0">// Damage &amp; blow blocks away</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">float</span> bx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>x <span class="ink-s2">+</span> self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f;
+		<span class="ink-s3">float</span> by <span class="ink-s2">=</span> self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>y <span class="ink-s2">+</span> self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>h <span class="ink-s2">/</span> 2.0f;
+		<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> bx <span class="ink-s2">-</span> cx;
+		<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> by <span class="ink-s2">-</span> cy;
+		<span class="ink-s3">float</span> dist <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy);
+		<span class="ink-s2">if</span> (dist <span class="ink-s2">&lt;</span> blast_rad) {
+			<span class="ink-s3">float</span> force <span class="ink-s2">=</span> (1.0f <span class="ink-s2">-</span> dist <span class="ink-s2">/</span> blast_rad) <span class="ink-s2">*</span> 8.0f;
+			self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> (dx <span class="ink-s2">/</span> (dist <span class="ink-s2">+</span> 0.1f)) <span class="ink-s2">*</span> force;
+			self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> (dy <span class="ink-s2">/</span> (dist <span class="ink-s2">+</span> 0.1f)) <span class="ink-s2">*</span> force <span class="ink-s2">-</span> 2.0f;
+			self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>hp <span class="ink-s2">-=</span> (1.0f <span class="ink-s2">-</span> dist <span class="ink-s2">/</span> blast_rad) <span class="ink-s2">*</span> 60.0f;
+		}
+	}
+	<span class="ink-s0">// Damage &amp; blow pigs away</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>x <span class="ink-s2">-</span> cx;
+		<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>y <span class="ink-s2">-</span> cy;
+		<span class="ink-s3">float</span> dist <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy);
+		<span class="ink-s2">if</span> (dist <span class="ink-s2">&lt;</span> blast_rad) {
+			<span class="ink-s3">float</span> force <span class="ink-s2">=</span> (1.0f <span class="ink-s2">-</span> dist <span class="ink-s2">/</span> blast_rad) <span class="ink-s2">*</span> 9.0f;
+			self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> (dx <span class="ink-s2">/</span> (dist <span class="ink-s2">+</span> 0.1f)) <span class="ink-s2">*</span> force;
+			self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> (dy <span class="ink-s2">/</span> (dist <span class="ink-s2">+</span> 0.1f)) <span class="ink-s2">*</span> force <span class="ink-s2">-</span> 3.0f;
+			self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>hp <span class="ink-s2">-=</span> 50.0f;
+		}
+	}
+}
+
+<span class="ink-s0">// ── Physics Simulation ────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">update_physics</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">sz</span> ground_y <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 10;
+	<span class="ink-s3">float</span> gravity <span class="ink-s2">=</span> 0.32f;
+
+	<span class="ink-s0">// 1. Update Bird</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span> <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive) {
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>flight_ticks<span class="ink-s2">++</span>;
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> gravity;
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx;
+		self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy;
+
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>flight_ticks <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0) {
+			self<span class="ink-s2">.</span><span class="ink-s4">add_trail</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y);
+		}
+
+		<span class="ink-s0">// Floor collision</span>
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;=</span> (<span class="ink-s3">float</span>)ground_y) {
+			self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)ground_y <span class="ink-s2">-</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius;
+			self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> <span class="ink-s2">-</span>self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.4f;
+			self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.75f;
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span> <span class="ink-s2">&amp;&amp;</span> <span class="ink-s2">!</span>self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>used_ability) {
+				self<span class="ink-s2">.</span><span class="ink-s4">trigger_bomb_explosion</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y);
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+			}
+		}
+
+		<span class="ink-s0">// Bird collision against blocks</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+			<span class="ink-s3">Block</span><span class="ink-s2">*</span> b <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>blocks[i];
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;=</span> b<span class="ink-s2">.</span>x <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x <span class="ink-s2">-</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius <span class="ink-s2">&lt;=</span> b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w <span class="ink-s2">&amp;&amp;</span>
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;=</span> b<span class="ink-s2">.</span>y <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">-</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius <span class="ink-s2">&lt;=</span> b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h) {
+
+				<span class="ink-s3">float</span> impact <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy);
+				b<span class="ink-s2">.</span>hp <span class="ink-s2">-=</span> impact <span class="ink-s2">*</span> 6.0f;
+				b<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> 0.6f;
+				b<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.6f;
+
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.5f;
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> 0.5f;
+
+				<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">trigger_bomb_explosion</span>(b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f, b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h <span class="ink-s2">/</span> 2.0f);
+					b<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+				}
+
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">trigger_bomb_explosion</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y);
+					self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+					<span class="ink-s2">break</span>;
+				}
+			}
+		}
+
+		<span class="ink-s0">// Bird collision against pigs</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+			<span class="ink-s3">Pig</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>pigs[i];
+			<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> p<span class="ink-s2">.</span>x <span class="ink-s2">-</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x;
+			<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> p<span class="ink-s2">.</span>y <span class="ink-s2">-</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y;
+			<span class="ink-s3">float</span> dist <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy);
+			<span class="ink-s2">if</span> (dist <span class="ink-s2">&lt;</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>radius) {
+				<span class="ink-s3">float</span> impact <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">+</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy);
+				p<span class="ink-s2">.</span>hp <span class="ink-s2">-=</span> impact <span class="ink-s2">*</span> 10.0f;
+				p<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> 0.8f;
+				p<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.8f;
+
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.5f;
+				self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> 0.5f;
+			}
+		}
+
+		<span class="ink-s0">// Bird stopped or out of bounds</span>
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x <span class="ink-s2">&gt;</span> (<span class="ink-s3">float</span>)((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>width <span class="ink-s2">+</span> 10) <span class="ink-s2">||</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x <span class="ink-s2">&lt;</span> <span class="ink-s2">-</span>20.0f <span class="ink-s2">||</span>
+			(math::<span class="ink-s4">abs</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vx) <span class="ink-s2">&lt;</span> 0.15f <span class="ink-s2">&amp;&amp;</span> math::<span class="ink-s4">abs</span>(self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>vy) <span class="ink-s2">&lt;</span> 0.2f <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y <span class="ink-s2">&gt;=</span> (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 6))) {
+			self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">SETTLING</span>;
+			self<span class="ink-s2">.</span>settle_timer <span class="ink-s2">=</span> 40;
+		}
+	}
+
+	<span class="ink-s0">// 2. Update Blocks (Movement, Gravity &amp; Stacking Collisions)</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">Block</span><span class="ink-s2">*</span> b <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>blocks[i];
+
+		<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>hp <span class="ink-s2">&lt;=</span> 0.0f) {
+			b<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+			self<span class="ink-s2">.</span>score <span class="ink-s2">+=</span> 50;
+			xray::<span class="ink-s3">Color</span> col <span class="ink-s2">=</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>) <span class="ink-s2">?</span> xray::<span class="ink-s4">color_rgb</span>(180, 230, 255) <span class="ink-s2">:</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span> <span class="ink-s2">?</span> xray::<span class="ink-s4">color_rgb</span>(170, 170, 170) <span class="ink-s2">:</span> xray::<span class="ink-s4">color_rgb</span>(190, 120, 60));
+			self<span class="ink-s2">.</span><span class="ink-s4">spawn_explosion</span>(b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f, b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h <span class="ink-s2">/</span> 2.0f, 12, col, xray::<span class="ink-s4">color_rgb</span>(255, 255, 255));
+			<span class="ink-s2">continue</span>;
+		}
+
+		b<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> gravity <span class="ink-s2">*</span> 0.85f;
+		b<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> b<span class="ink-s2">.</span>vx;
+		b<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> b<span class="ink-s2">.</span>vy;
+		b<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.92f;
+		b<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> 0.95f;
+
+		<span class="ink-s0">// Floor collision</span>
+		<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h <span class="ink-s2">&gt;=</span> (<span class="ink-s3">float</span>)ground_y) {
+			b<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)ground_y <span class="ink-s2">-</span> b<span class="ink-s2">.</span>h;
+			<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>vy <span class="ink-s2">&gt;</span> 0.0f) b<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> <span class="ink-s2">-</span>b<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.15f;
+			b<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.75f;
+		}
+
+		<span class="ink-s0">// Block-on-Block collision &amp; stacking</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> j <span class="ink-s2">=</span> 0; j <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; j<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (i <span class="ink-s2">==</span> j <span class="ink-s2">||</span> <span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[j]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+			<span class="ink-s3">Block</span><span class="ink-s2">*</span> other <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>blocks[j];
+
+			<span class="ink-s0">// Check overlap</span>
+			<span class="ink-s3">float</span> overlap_x <span class="ink-s2">=</span> math::<span class="ink-s4">min</span>(b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w, other<span class="ink-s2">.</span>x <span class="ink-s2">+</span> other<span class="ink-s2">.</span>w) <span class="ink-s2">-</span> math::<span class="ink-s4">max</span>(b<span class="ink-s2">.</span>x, other<span class="ink-s2">.</span>x);
+			<span class="ink-s3">float</span> overlap_y <span class="ink-s2">=</span> math::<span class="ink-s4">min</span>(b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h, other<span class="ink-s2">.</span>y <span class="ink-s2">+</span> other<span class="ink-s2">.</span>h) <span class="ink-s2">-</span> math::<span class="ink-s4">max</span>(b<span class="ink-s2">.</span>y, other<span class="ink-s2">.</span>y);
+
+			<span class="ink-s2">if</span> (overlap_x <span class="ink-s2">&gt;</span> 0.5f <span class="ink-s2">&amp;&amp;</span> overlap_y <span class="ink-s2">&gt;</span> 0.5f) {
+				<span class="ink-s0">// Resolve along shallowest penetration axis</span>
+				<span class="ink-s2">if</span> (overlap_y <span class="ink-s2">&lt;</span> overlap_x) {
+					<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>y <span class="ink-s2">+</span> b<span class="ink-s2">.</span>h <span class="ink-s2">/</span> 2.0f <span class="ink-s2">&lt;</span> other<span class="ink-s2">.</span>y <span class="ink-s2">+</span> other<span class="ink-s2">.</span>h <span class="ink-s2">/</span> 2.0f) {
+						<span class="ink-s0">// b is on top of other (resting/stacking)</span>
+						b<span class="ink-s2">.</span>y <span class="ink-s2">-=</span> overlap_y;
+						<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>vy <span class="ink-s2">&gt;</span> 0.0f) b<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f;
+						b<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.82f;
+					} <span class="ink-s2">else</span> {
+						<span class="ink-s0">// b is below other</span>
+						b<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> overlap_y;
+						<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>vy <span class="ink-s2">&lt;</span> 0.0f) b<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f;
+					}
+				} <span class="ink-s2">else</span> {
+					<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f <span class="ink-s2">&lt;</span> other<span class="ink-s2">.</span>x <span class="ink-s2">+</span> other<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f) {
+						b<span class="ink-s2">.</span>x <span class="ink-s2">-=</span> overlap_x;
+						b<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> <span class="ink-s2">-</span>0.2f;
+					} <span class="ink-s2">else</span> {
+						b<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> overlap_x;
+						b<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> <span class="ink-s2">-</span>0.2f;
+					}
+				}
+			}
+		}
+	}
+
+	<span class="ink-s0">// 3. Update Pigs (Movement, Gravity &amp; Stacking on Blocks/Floor)</span>
+	<span class="ink-s3">sz</span> alive_pigs <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">Pig</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>pigs[i];
+		alive_pigs<span class="ink-s2">++</span>;
+
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>hp <span class="ink-s2">&lt;=</span> 0.0f) {
+			p<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+			self<span class="ink-s2">.</span>score <span class="ink-s2">+=</span> 200;
+			self<span class="ink-s2">.</span><span class="ink-s4">spawn_explosion</span>(p<span class="ink-s2">.</span>x, p<span class="ink-s2">.</span>y, 20, xray::<span class="ink-s4">color_rgb</span>(120, 230, 60), xray::<span class="ink-s4">color_rgb</span>(255, 240, 100));
+			<span class="ink-s2">continue</span>;
+		}
+
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> gravity;
+		p<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vx;
+		p<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vy;
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.92f;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> 0.95f;
+
+		<span class="ink-s0">// Floor collision</span>
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>y <span class="ink-s2">+</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;=</span> (<span class="ink-s3">float</span>)ground_y) {
+			p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)ground_y <span class="ink-s2">-</span> p<span class="ink-s2">.</span>radius;
+			<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vy <span class="ink-s2">&gt;</span> 0.0f) p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> <span class="ink-s2">-</span>p<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.2f;
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.8f;
+		}
+
+		<span class="ink-s0">// Pig resting/stacking on blocks</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> j <span class="ink-s2">=</span> 0; j <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; j<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[j]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+			<span class="ink-s3">Block</span><span class="ink-s2">*</span> b <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>blocks[j];
+
+			<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>x <span class="ink-s2">+</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;</span> b<span class="ink-s2">.</span>x <span class="ink-s2">&amp;&amp;</span> p<span class="ink-s2">.</span>x <span class="ink-s2">-</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">&lt;</span> b<span class="ink-s2">.</span>x <span class="ink-s2">+</span> b<span class="ink-s2">.</span>w) {
+				<span class="ink-s0">// Resting on top of block</span>
+				<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>y <span class="ink-s2">+</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">&gt;=</span> b<span class="ink-s2">.</span>y <span class="ink-s2">&amp;&amp;</span> p<span class="ink-s2">.</span>y <span class="ink-s2">-</span> p<span class="ink-s2">.</span>radius <span class="ink-s2">&lt;</span> b<span class="ink-s2">.</span>y) {
+					p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> b<span class="ink-s2">.</span>y <span class="ink-s2">-</span> p<span class="ink-s2">.</span>radius;
+					<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vy <span class="ink-s2">&gt;</span> 0.0f) p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0.0f;
+					p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> 0.82f;
+				}
+			}
+		}
+	}
+
+	<span class="ink-s0">// 4. State Transitions (Settling -&gt; Next bird or Won/Lost)</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">SETTLING</span>) {
+		self<span class="ink-s2">.</span>settle_timer<span class="ink-s2">--</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>settle_timer <span class="ink-s2">&lt;=</span> 0) {
+			<span class="ink-s2">if</span> (alive_pigs <span class="ink-s2">==</span> 0) {
+				self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">LEVEL_WON</span>;
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>score <span class="ink-s2">&gt;</span> self<span class="ink-s2">.</span>high_score) self<span class="ink-s2">.</span>high_score <span class="ink-s2">=</span> self<span class="ink-s2">.</span>score;
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>birds_left <span class="ink-s2">&lt;=</span> 0) {
+				self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">LEVEL_LOST</span>;
+			} <span class="ink-s2">else</span> {
+				self<span class="ink-s2">.</span><span class="ink-s4">prepare_next_bird</span>();
+				self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>;
+			}
+		}
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (alive_pigs <span class="ink-s2">==</span> 0 <span class="ink-s2">&amp;&amp;</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>)) {
+		self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">LEVEL_WON</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>score <span class="ink-s2">&gt;</span> self<span class="ink-s2">.</span>high_score) self<span class="ink-s2">.</span>high_score <span class="ink-s2">=</span> self<span class="ink-s2">.</span>score;
+	}
+}
+
+<span class="ink-s0">// ── Tea Model Callbacks ───────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">ulong</span> seed <span class="ink-s2">=</span> (<span class="ink-s3">ulong</span>)<span class="ink-s4">c3_time_ms_long</span>();
+	<span class="ink-s4">srand</span>((<span class="ink-s3">uint</span>)seed);
+
+	self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">INTRO</span>;
+	self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>score <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>high_score <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>ticks <span class="ink-s2">=</span> 0;
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(<span class="ink-s6">FRAME_MS</span>);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+		self<span class="ink-s2">.</span>term_w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
+		self<span class="ink-s2">.</span>term_h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>vbuf <span class="ink-s2">!=</span> <span class="ink-s6">null</span>) { self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">destroy</span>(); mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>vbuf); }
+		self<span class="ink-s2">.</span>vbuf <span class="ink-s2">=</span> xray::<span class="ink-s4">new_pixel_buffer</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>term_w, (<span class="ink-s3">sz</span>)(self<span class="ink-s2">.</span>term_h <span class="ink-s2">*</span> 2));
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">clear</span>(xray::<span class="ink-s4">color_rgb</span>(20, 24, 40));
+
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>screen <span class="ink-s2">==</span> <span class="ink-s6">null</span>) {
+			self<span class="ink-s2">.</span>screen <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>(self<span class="ink-s2">.</span>term_w, self<span class="ink-s2">.</span>term_h);
+		} <span class="ink-s2">else</span> {
+			self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span><span class="ink-s4">resize</span>(self<span class="ink-s2">.</span>term_w, self<span class="ink-s2">.</span>term_h);
+		}
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		self<span class="ink-s2">.</span>ticks<span class="ink-s2">++</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>flash_timer <span class="ink-s2">&gt;</span> 0) self<span class="ink-s2">.</span>flash_timer<span class="ink-s2">--</span>;
+		self<span class="ink-s2">.</span><span class="ink-s4">update_particles</span>();
+
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">INTRO</span> <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>ticks <span class="ink-s2">&gt;</span> 80) {
+			self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+		}
+
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">SETTLING</span>) {
+			self<span class="ink-s2">.</span><span class="ink-s4">update_physics</span>();
+		}
+
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(<span class="ink-s6">FRAME_MS</span>);
+	}
+
+	<span class="ink-s0">// ── Mouse Drag &amp; Slingshot Interaction ────────────────────────────────────</span>
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE</span>) {
+		milktea::<span class="ink-s3">MouseMsg</span> m <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>mouse;
+		<span class="ink-s3">float</span> mx <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)m<span class="ink-s2">.</span>col;
+		<span class="ink-s3">float</span> my <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(m<span class="ink-s2">.</span>row <span class="ink-s2">*</span> 2); <span class="ink-s0">// terminal cell row -&gt; pixel row</span>
+
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>) {
+			<span class="ink-s2">if</span> (m<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_PRESS</span>) {
+				<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> mx <span class="ink-s2">-</span> self<span class="ink-s2">.</span>sling_x;
+				<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> my <span class="ink-s2">-</span> self<span class="ink-s2">.</span>sling_y;
+				<span class="ink-s2">if</span> (math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy) <span class="ink-s2">&lt;</span> 22.0f) {
+					self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">=</span> true;
+					self<span class="ink-s2">.</span>drag_x <span class="ink-s2">=</span> mx;
+					self<span class="ink-s2">.</span>drag_y <span class="ink-s2">=</span> my;
+				}
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (m<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MOTION</span> <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>is_dragging) {
+				<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> mx <span class="ink-s2">-</span> self<span class="ink-s2">.</span>sling_x;
+				<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> my <span class="ink-s2">-</span> self<span class="ink-s2">.</span>sling_y;
+				<span class="ink-s3">float</span> dist <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy);
+				<span class="ink-s3">float</span> max_drag <span class="ink-s2">=</span> 24.0f;
+				<span class="ink-s2">if</span> (dist <span class="ink-s2">&gt;</span> max_drag) {
+					self<span class="ink-s2">.</span>drag_x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_x <span class="ink-s2">+</span> (dx <span class="ink-s2">/</span> dist) <span class="ink-s2">*</span> max_drag;
+					self<span class="ink-s2">.</span>drag_y <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_y <span class="ink-s2">+</span> (dy <span class="ink-s2">/</span> dist) <span class="ink-s2">*</span> max_drag;
+				} <span class="ink-s2">else</span> {
+					self<span class="ink-s2">.</span>drag_x <span class="ink-s2">=</span> mx;
+					self<span class="ink-s2">.</span>drag_y <span class="ink-s2">=</span> my;
+				}
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (m<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_RELEASE</span> <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>is_dragging) {
+				self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">=</span> false;
+				<span class="ink-s3">float</span> pull_x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_x <span class="ink-s2">-</span> self<span class="ink-s2">.</span>drag_x;
+				<span class="ink-s3">float</span> pull_y <span class="ink-s2">=</span> self<span class="ink-s2">.</span>sling_y <span class="ink-s2">-</span> self<span class="ink-s2">.</span>drag_y;
+				<span class="ink-s3">float</span> pull_len <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(pull_x <span class="ink-s2">*</span> pull_x <span class="ink-s2">+</span> pull_y <span class="ink-s2">*</span> pull_y);
+				<span class="ink-s2">if</span> (pull_len <span class="ink-s2">&gt;</span> 3.0f) {
+					<span class="ink-s3">float</span> launch_spd <span class="ink-s2">=</span> 0.28f;
+					self<span class="ink-s2">.</span><span class="ink-s4">launch_bird</span>(pull_x <span class="ink-s2">*</span> launch_spd, pull_y <span class="ink-s2">*</span> launch_spd);
+				}
+			}
+		} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">FLYING</span> <span class="ink-s2">&amp;&amp;</span> m<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_PRESS</span>) {
+			self<span class="ink-s2">.</span><span class="ink-s4">activate_ability</span>();
+		}
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+
+	<span class="ink-s0">// ── Keyboard Controls ─────────────────────────────────────────────────────</span>
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) {
+		milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+		<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>) <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+
+		<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>state) {
+			<span class="ink-s2">case</span> <span class="ink-s6">INTRO</span>:
+				self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+
+			<span class="ink-s2">case</span> <span class="ink-s6">MENU</span>:
+				<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">UP</span>:
+						self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">+</span> 3) <span class="ink-s2">%</span> 4;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">DOWN</span>:
+						self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> 4;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span>:
+						<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>menu_selected) {
+							<span class="ink-s2">case</span> 0: self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(0);
+							<span class="ink-s2">case</span> 1: self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>;
+							<span class="ink-s2">case</span> 2: self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">HELP</span>;
+							<span class="ink-s2">case</span> 3: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+						}
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ') self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(self<span class="ink-s2">.</span>current_level);
+						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'l' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'L') {
+							self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>;
+						}
+						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'h' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'H' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> '?') {
+							self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">HELP</span>;
+						}
+					<span class="ink-s2">default</span>:
+				}
+
+			<span class="ink-s2">case</span> <span class="ink-s6">AIMING</span>:
+				<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>:
+						self<span class="ink-s2">.</span>key_angle <span class="ink-s2">+=</span> 2.5f;
+						<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>key_angle <span class="ink-s2">&gt;</span> 85.0f) self<span class="ink-s2">.</span>key_angle <span class="ink-s2">=</span> 85.0f;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RIGHT</span>:
+						self<span class="ink-s2">.</span>key_angle <span class="ink-s2">-=</span> 2.5f;
+						<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>key_angle <span class="ink-s2">&lt;</span> 5.0f) self<span class="ink-s2">.</span>key_angle <span class="ink-s2">=</span> 5.0f;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">UP</span>:
+						self<span class="ink-s2">.</span>key_power <span class="ink-s2">+=</span> 0.05f;
+						<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>key_power <span class="ink-s2">&gt;</span> 1.0f) self<span class="ink-s2">.</span>key_power <span class="ink-s2">=</span> 1.0f;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">DOWN</span>:
+						self<span class="ink-s2">.</span>key_power <span class="ink-s2">-=</span> 0.05f;
+						<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>key_power <span class="ink-s2">&lt;</span> 0.2f) self<span class="ink-s2">.</span>key_power <span class="ink-s2">=</span> 0.2f;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span>:
+						<span class="ink-s3">float</span> rad <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_angle <span class="ink-s2">*</span> (3.14159265f <span class="ink-s2">/</span> 180.0f);
+						<span class="ink-s3">float</span> spd <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_power <span class="ink-s2">*</span> 6.5f;
+						self<span class="ink-s2">.</span><span class="ink-s4">launch_bird</span>(math::<span class="ink-s4">cos</span>(rad) <span class="ink-s2">*</span> spd, <span class="ink-s2">-</span>math::<span class="ink-s4">sin</span>(rad) <span class="ink-s2">*</span> spd);
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>:
+						self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ') {
+							<span class="ink-s3">float</span> rad2 <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_angle <span class="ink-s2">*</span> (3.14159265f <span class="ink-s2">/</span> 180.0f);
+							<span class="ink-s3">float</span> spd2 <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_power <span class="ink-s2">*</span> 6.5f;
+							self<span class="ink-s2">.</span><span class="ink-s4">launch_bird</span>(math::<span class="ink-s4">cos</span>(rad2) <span class="ink-s2">*</span> spd2, <span class="ink-s2">-</span>math::<span class="ink-s4">sin</span>(rad2) <span class="ink-s2">*</span> spd2);
+						} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'R') {
+							self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(self<span class="ink-s2">.</span>current_level);
+						} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') {
+							self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+						}
+					<span class="ink-s2">default</span>:
+				}
+
+			<span class="ink-s2">case</span> <span class="ink-s6">FLYING</span>:
+				<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ')) {
+					self<span class="ink-s2">.</span><span class="ink-s4">activate_ability</span>();
+				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q'))) {
+					self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+				}
+
+			<span class="ink-s2">case</span> <span class="ink-s6">SETTLING</span>:
+				<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>) self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+
+			<span class="ink-s2">case</span> <span class="ink-s6">LEVEL_WON</span>:
+				<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'n' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'N'))) {
+					<span class="ink-s3">sz</span> next_lvl <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>;
+					self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(next_lvl);
+				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'm' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q'))) {
+					self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+				}
+				<span class="ink-s2">break</span>;
+
+			<span class="ink-s2">case</span> <span class="ink-s6">LEVEL_LOST</span>:
+				<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'R'))) {
+					self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(self<span class="ink-s2">.</span>current_level);
+				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'm' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q'))) {
+					self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+				}
+				<span class="ink-s2">break</span>;
+
+			<span class="ink-s2">case</span> <span class="ink-s6">HELP</span>:
+				<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span> <span class="ink-s2">||</span> k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span> <span class="ink-s2">||</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'h'))) {
+					self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+				}
+				<span class="ink-s2">break</span>;
+		}
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s0">// ── Rendering: Background, Entities, Slingshot &amp; UI ───────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">draw_background</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">sz</span> pw <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>width;
+	<span class="ink-s3">sz</span> ph <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height;
+	<span class="ink-s3">sz</span> ground_y <span class="ink-s2">=</span> ph <span class="ink-s2">-</span> 10;
+
+	<span class="ink-s0">// Sky gradient</span>
+	xray::<span class="ink-s3">Color</span> sky_top <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(45, 95, 185);
+	xray::<span class="ink-s3">Color</span> sky_bot <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(160, 220, 250);
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> 0; y <span class="ink-s2">&lt;</span> ground_y; y<span class="ink-s2">++</span>) {
+		<span class="ink-s3">float</span> t <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)y <span class="ink-s2">/</span> (<span class="ink-s3">float</span>)ground_y;
+		<span class="ink-s3">sz</span> r <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)((<span class="ink-s3">float</span>)sky_top<span class="ink-s2">.</span>r <span class="ink-s2">*</span> (1.0f <span class="ink-s2">-</span> t) <span class="ink-s2">+</span> (<span class="ink-s3">float</span>)sky_bot<span class="ink-s2">.</span>r <span class="ink-s2">*</span> t);
+		<span class="ink-s3">sz</span> g <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)((<span class="ink-s3">float</span>)sky_top<span class="ink-s2">.</span>g <span class="ink-s2">*</span> (1.0f <span class="ink-s2">-</span> t) <span class="ink-s2">+</span> (<span class="ink-s3">float</span>)sky_bot<span class="ink-s2">.</span>g <span class="ink-s2">*</span> t);
+		<span class="ink-s3">sz</span> b <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)((<span class="ink-s3">float</span>)sky_top<span class="ink-s2">.</span>b <span class="ink-s2">*</span> (1.0f <span class="ink-s2">-</span> t) <span class="ink-s2">+</span> (<span class="ink-s3">float</span>)sky_bot<span class="ink-s2">.</span>b <span class="ink-s2">*</span> t);
+		xray::<span class="ink-s3">Color</span> sky_line <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>((<span class="ink-s3">char</span>)r, (<span class="ink-s3">char</span>)g, (<span class="ink-s3">char</span>)b);
+
+		<span class="ink-s3">sz</span> row_off <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)y <span class="ink-s2">*</span> (<span class="ink-s3">sz</span>)pw;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> pw; x<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>pixels[row_off <span class="ink-s2">+</span> (<span class="ink-s3">sz</span>)x] <span class="ink-s2">=</span> sky_line;
+		}
+	}
+
+	<span class="ink-s0">// Distant Mountains</span>
+	xray::<span class="ink-s3">Color</span> mtn_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(110, 150, 180);
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> pw; x<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> my <span class="ink-s2">=</span> ground_y <span class="ink-s2">-</span> 12 <span class="ink-s2">-</span> (<span class="ink-s3">sz</span>)(math::<span class="ink-s4">sin</span>((<span class="ink-s3">float</span>)x <span class="ink-s2">*</span> 0.03f) <span class="ink-s2">*</span> 8.0f <span class="ink-s2">+</span> math::<span class="ink-s4">cos</span>((<span class="ink-s3">float</span>)x <span class="ink-s2">*</span> 0.07f) <span class="ink-s2">*</span> 4.0f);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> my; y <span class="ink-s2">&lt;</span> ground_y; y<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(x, y, mtn_c);
+		}
+	}
+
+	<span class="ink-s0">// Rolling Hills</span>
+	xray::<span class="ink-s3">Color</span> hill_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(85, 175, 75);
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> pw; x<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> hy <span class="ink-s2">=</span> ground_y <span class="ink-s2">-</span> 6 <span class="ink-s2">-</span> (<span class="ink-s3">sz</span>)(math::<span class="ink-s4">sin</span>((<span class="ink-s3">float</span>)x <span class="ink-s2">*</span> 0.05f) <span class="ink-s2">*</span> 4.0f);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> hy; y <span class="ink-s2">&lt;</span> ground_y; y<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(x, y, hill_c);
+		}
+	}
+
+	<span class="ink-s0">// Ground / Dirt &amp; Grass</span>
+	xray::<span class="ink-s3">Color</span> grass_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(120, 205, 55);
+	xray::<span class="ink-s3">Color</span> dirt_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(160, 100, 50);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(0, ground_y, pw, 3), grass_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(0, ground_y <span class="ink-s2">+</span> 3, pw, ph <span class="ink-s2">-</span> (ground_y <span class="ink-s2">+</span> 3)), dirt_c);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">draw_slingshot</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">sz</span> ground_y <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 10;
+	<span class="ink-s3">sz</span> sx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>sling_x;
+	<span class="ink-s3">sz</span> sy <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>sling_y;
+
+	xray::<span class="ink-s3">Color</span> wood_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(120, 70, 30);
+	xray::<span class="ink-s3">Color</span> wood_dark <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(75, 40, 15);
+	xray::<span class="ink-s3">Color</span> rubber_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(50, 30, 20);
+
+	<span class="ink-s0">// Main post</span>
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(sx <span class="ink-s2">-</span> 2, sy, 4, ground_y <span class="ink-s2">-</span> sy), wood_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(sx <span class="ink-s2">-</span> 2, sy, wood_dark);
+
+	<span class="ink-s0">// Y-fork branches</span>
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(sx <span class="ink-s2">-</span> 7, sy <span class="ink-s2">-</span> 8, 3, 9), wood_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(sx <span class="ink-s2">+</span> 4, sy <span class="ink-s2">-</span> 8, 3, 9), wood_c);
+
+	<span class="ink-s0">// Rubber bands</span>
+	<span class="ink-s3">float</span> bird_x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">?</span> self<span class="ink-s2">.</span>drag_x <span class="ink-s2">:</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span> <span class="ink-s2">?</span> self<span class="ink-s2">.</span>sling_x <span class="ink-s2">:</span> self<span class="ink-s2">.</span>sling_x);
+	<span class="ink-s3">float</span> bird_y <span class="ink-s2">=</span> self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">?</span> self<span class="ink-s2">.</span>drag_y <span class="ink-s2">:</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span> <span class="ink-s2">?</span> self<span class="ink-s2">.</span>sling_y <span class="ink-s2">:</span> self<span class="ink-s2">.</span>sling_y);
+
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span>) {
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">draw_line</span>(sx <span class="ink-s2">-</span> 6, sy <span class="ink-s2">-</span> 7, (<span class="ink-s3">sz</span>)bird_x, (<span class="ink-s3">sz</span>)bird_y, rubber_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">draw_line</span>(sx <span class="ink-s2">+</span> 5, sy <span class="ink-s2">-</span> 7, (<span class="ink-s3">sz</span>)bird_x, (<span class="ink-s3">sz</span>)bird_y, rubber_c);
+
+		<span class="ink-s0">// Trajectory trajectory guide dots</span>
+		<span class="ink-s3">float</span> p_vx, p_vy;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>is_dragging) {
+			p_vx <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>sling_x <span class="ink-s2">-</span> self<span class="ink-s2">.</span>drag_x) <span class="ink-s2">*</span> 0.28f;
+			p_vy <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>sling_y <span class="ink-s2">-</span> self<span class="ink-s2">.</span>drag_y) <span class="ink-s2">*</span> 0.28f;
+		} <span class="ink-s2">else</span> {
+			<span class="ink-s3">float</span> r <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_angle <span class="ink-s2">*</span> (3.14159265f <span class="ink-s2">/</span> 180.0f);
+			<span class="ink-s3">float</span> s <span class="ink-s2">=</span> self<span class="ink-s2">.</span>key_power <span class="ink-s2">*</span> 6.5f;
+			p_vx <span class="ink-s2">=</span> math::<span class="ink-s4">cos</span>(r) <span class="ink-s2">*</span> s;
+			p_vy <span class="ink-s2">=</span> <span class="ink-s2">-</span>math::<span class="ink-s4">sin</span>(r) <span class="ink-s2">*</span> s;
+		}
+
+		<span class="ink-s3">float</span> sim_x <span class="ink-s2">=</span> bird_x;
+		<span class="ink-s3">float</span> sim_y <span class="ink-s2">=</span> bird_y;
+		xray::<span class="ink-s3">Color</span> dot_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgba</span>(255, 255, 255, 180);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> t <span class="ink-s2">=</span> 0; t <span class="ink-s2">&lt;</span> 16; t<span class="ink-s2">++</span>) {
+			sim_x <span class="ink-s2">+=</span> p_vx <span class="ink-s2">*</span> 2.0f;
+			sim_y <span class="ink-s2">+=</span> p_vy <span class="ink-s2">*</span> 2.0f;
+			p_vy <span class="ink-s2">+=</span> 0.32f <span class="ink-s2">*</span> 2.0f;
+			<span class="ink-s2">if</span> (sim_y <span class="ink-s2">&gt;=</span> (<span class="ink-s3">float</span>)ground_y) <span class="ink-s2">break</span>;
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">blend_pixel</span>((<span class="ink-s3">sz</span>)sim_x, (<span class="ink-s3">sz</span>)sim_y, dot_c);
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">draw_bird_sprite</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">float</span> bx, <span class="ink-s3">float</span> by, <span class="ink-s3">BirdType</span> type) {
+	<span class="ink-s3">sz</span> cx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)bx;
+	<span class="ink-s3">sz</span> cy <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)by;
+
+	xray::<span class="ink-s3">Color</span> body_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(230, 40, 30);
+	<span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>) body_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 215, 0);
+	<span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">BOMB</span>) body_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(35, 35, 40);
+
+	xray::<span class="ink-s3">Color</span> beak_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 140, 0);
+	xray::<span class="ink-s3">Color</span> eye_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 255, 255);
+	xray::<span class="ink-s3">Color</span> pupil_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(0, 0, 0);
+	xray::<span class="ink-s3">Color</span> brow_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(20, 20, 20);
+
+	<span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">RED</span>) {
+		<span class="ink-s0">// 7x7 round body</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dy <span class="ink-s2">=</span> <span class="ink-s2">-</span>3; dy <span class="ink-s2">&lt;=</span> 3; dy<span class="ink-s2">++</span>) {
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dx <span class="ink-s2">=</span> <span class="ink-s2">-</span>3; dx <span class="ink-s2">&lt;=</span> 3; dx<span class="ink-s2">++</span>) {
+				<span class="ink-s2">if</span> (dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy <span class="ink-s2">&lt;=</span> 10) {
+					self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> dx, cy <span class="ink-s2">+</span> dy, body_c);
+				}
+			}
+		}
+		<span class="ink-s0">// Eyebrows &amp; Eyes</span>
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx, cy <span class="ink-s2">-</span> 2, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy <span class="ink-s2">-</span> 1, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy <span class="ink-s2">-</span> 1, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy, eye_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy, pupil_c);
+		<span class="ink-s0">// Beak</span>
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 3, cy <span class="ink-s2">+</span> 1, beak_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 4, cy <span class="ink-s2">+</span> 1, beak_c);
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (type <span class="ink-s2">==</span> <span class="ink-s3">BirdType</span><span class="ink-s2">.</span><span class="ink-s6">CHUCK</span>) {
+		<span class="ink-s0">// Triangle body pointing right</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dx <span class="ink-s2">=</span> <span class="ink-s2">-</span>3; dx <span class="ink-s2">&lt;=</span> 4; dx<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> h <span class="ink-s2">=</span> (4 <span class="ink-s2">-</span> dx) <span class="ink-s2">/</span> 2 <span class="ink-s2">+</span> 1;
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dy <span class="ink-s2">=</span> <span class="ink-s2">-</span>h; dy <span class="ink-s2">&lt;=</span> h; dy<span class="ink-s2">++</span>) {
+				self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> dx, cy <span class="ink-s2">+</span> dy, body_c);
+			}
+		}
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy <span class="ink-s2">-</span> 1, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy, eye_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy, pupil_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 4, cy <span class="ink-s2">+</span> 1, beak_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 5, cy <span class="ink-s2">+</span> 1, beak_c);
+	} <span class="ink-s2">else</span> {
+		<span class="ink-s0">// Bomb (Larger round body with fuse)</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dy <span class="ink-s2">=</span> <span class="ink-s2">-</span>4; dy <span class="ink-s2">&lt;=</span> 4; dy<span class="ink-s2">++</span>) {
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dx <span class="ink-s2">=</span> <span class="ink-s2">-</span>4; dx <span class="ink-s2">&lt;=</span> 4; dx<span class="ink-s2">++</span>) {
+				<span class="ink-s2">if</span> (dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy <span class="ink-s2">&lt;=</span> 17) {
+					self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> dx, cy <span class="ink-s2">+</span> dy, body_c);
+				}
+			}
+		}
+		<span class="ink-s0">// Fuse top</span>
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx, cy <span class="ink-s2">-</span> 5, xray::<span class="ink-s4">color_rgb</span>(255, 200, 50));
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx, cy <span class="ink-s2">-</span> 6, xray::<span class="ink-s4">color_rgb</span>(255, 60, 20));
+		<span class="ink-s0">// Angry Eyes</span>
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy <span class="ink-s2">-</span> 1, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy <span class="ink-s2">-</span> 1, brow_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy, eye_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 3, cy, pupil_c);
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 4, cy <span class="ink-s2">+</span> 1, beak_c);
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">draw_pig_sprite</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">Pig</span><span class="ink-s2">*</span> p) {
+	<span class="ink-s3">sz</span> cx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>x;
+	<span class="ink-s3">sz</span> cy <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>y;
+	<span class="ink-s3">sz</span> r <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>radius;
+
+	xray::<span class="ink-s3">Color</span> skin_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(115, 215, 55);
+	xray::<span class="ink-s3">Color</span> snout_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(85, 175, 35);
+	xray::<span class="ink-s3">Color</span> eye_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 255, 255);
+	xray::<span class="ink-s3">Color</span> pupil_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(0, 0, 0);
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dy <span class="ink-s2">=</span> <span class="ink-s2">-</span>r; dy <span class="ink-s2">&lt;=</span> r; dy<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> dx <span class="ink-s2">=</span> <span class="ink-s2">-</span>r; dx <span class="ink-s2">&lt;=</span> r; dx<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy <span class="ink-s2">&lt;=</span> r <span class="ink-s2">*</span> r) {
+				self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> dx, cy <span class="ink-s2">+</span> dy, skin_c);
+			}
+		}
+	}
+
+	<span class="ink-s0">// Snout</span>
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(cx <span class="ink-s2">-</span> 2, cy, 4, 3), snout_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">-</span> 1, cy <span class="ink-s2">+</span> 1, pupil_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 1, cy <span class="ink-s2">+</span> 1, pupil_c);
+
+	<span class="ink-s0">// Eyes</span>
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">-</span> 2, cy <span class="ink-s2">-</span> 2, eye_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">-</span> 2, cy <span class="ink-s2">-</span> 1, eye_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">-</span> 2, cy <span class="ink-s2">-</span> 1, pupil_c);
+
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy <span class="ink-s2">-</span> 2, eye_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy <span class="ink-s2">-</span> 1, eye_c);
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(cx <span class="ink-s2">+</span> 2, cy <span class="ink-s2">-</span> 1, pupil_c);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">draw_blocks</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_BLOCKS</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>blocks[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">Block</span><span class="ink-s2">*</span> b <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>blocks[i];
+		<span class="ink-s3">sz</span> bx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)b<span class="ink-s2">.</span>x;
+		<span class="ink-s3">sz</span> by <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)b<span class="ink-s2">.</span>y;
+		<span class="ink-s3">sz</span> bw <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)b<span class="ink-s2">.</span>w;
+		<span class="ink-s3">sz</span> bh <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)b<span class="ink-s2">.</span>h;
+
+		xray::<span class="ink-s3">Color</span> col <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(180, 110, 50);
+		xray::<span class="ink-s3">Color</span> border_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(120, 70, 30);
+
+		<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">ICE</span>) {
+			col <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(160, 225, 255);
+			border_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(100, 180, 230);
+		} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">STONE</span>) {
+			col <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(150, 150, 155);
+			border_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(90, 90, 95);
+		} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span>) {
+			col <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(220, 45, 35);
+			border_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(130, 20, 15);
+		}
+
+		self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(bx, by, bw, bh), col);
+
+		<span class="ink-s0">// Dark border</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> bw; x<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> x, by, border_c);
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> x, by <span class="ink-s2">+</span> bh <span class="ink-s2">-</span> 1, border_c);
+		}
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> 0; y <span class="ink-s2">&lt;</span> bh; y<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx, by <span class="ink-s2">+</span> y, border_c);
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> bw <span class="ink-s2">-</span> 1, by <span class="ink-s2">+</span> y, border_c);
+		}
+
+		<span class="ink-s0">// TNT label</span>
+		<span class="ink-s2">if</span> (b<span class="ink-s2">.</span>mat <span class="ink-s2">==</span> <span class="ink-s3">BlockMaterial</span><span class="ink-s2">.</span><span class="ink-s6">TNT</span> <span class="ink-s2">&amp;&amp;</span> bw <span class="ink-s2">&gt;=</span> 8 <span class="ink-s2">&amp;&amp;</span> bh <span class="ink-s2">&gt;=</span> 8) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">fill_rect</span>(xray::<span class="ink-s4">new_rect</span>(bx <span class="ink-s2">+</span> 1, by <span class="ink-s2">+</span> bh <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> 1, bw <span class="ink-s2">-</span> 2, 3), xray::<span class="ink-s4">color_rgb</span>(255, 255, 255));
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> bw <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> 2, by <span class="ink-s2">+</span> bh <span class="ink-s2">/</span> 2, xray::<span class="ink-s4">color_rgb</span>(0, 0, 0));
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> bw <span class="ink-s2">/</span> 2, by <span class="ink-s2">+</span> bh <span class="ink-s2">/</span> 2, xray::<span class="ink-s4">color_rgb</span>(0, 0, 0));
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>(bx <span class="ink-s2">+</span> bw <span class="ink-s2">/</span> 2 <span class="ink-s2">+</span> 2, by <span class="ink-s2">+</span> bh <span class="ink-s2">/</span> 2, xray::<span class="ink-s4">color_rgb</span>(0, 0, 0));
+		}
+	}
+}
+
+<span class="ink-s0">// ── Screen Conversion &amp; Overlay Painting ──────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>screen <span class="ink-s2">==</span> <span class="ink-s6">null</span>) <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;&quot;</span>);
+
+	<span class="ink-s0">// 1. Draw procedural world into pixel buffer</span>
+	self<span class="ink-s2">.</span><span class="ink-s4">draw_background</span>();
+
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">!=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">INTRO</span>) {
+		<span class="ink-s0">// Draw Trail</span>
+		xray::<span class="ink-s3">Color</span> trail_c <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgba</span>(255, 255, 255, 140);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_TRAIL</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>active) {
+				self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">blend_pixel</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>x, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>trail[i]<span class="ink-s2">.</span>y, trail_c);
+			}
+		}
+
+		<span class="ink-s0">// Draw Blocks &amp; Pigs</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">draw_blocks</span>();
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PIGS</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>pigs[i]<span class="ink-s2">.</span>alive) self<span class="ink-s2">.</span><span class="ink-s4">draw_pig_sprite</span>(<span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>pigs[i]);
+		}
+
+		<span class="ink-s0">// Draw Slingshot</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">draw_slingshot</span>();
+
+		<span class="ink-s0">// Draw active bird</span>
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>alive) {
+			<span class="ink-s3">float</span> bx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">?</span> self<span class="ink-s2">.</span>drag_x <span class="ink-s2">:</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span> <span class="ink-s2">?</span> self<span class="ink-s2">.</span>sling_x <span class="ink-s2">:</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>x);
+			<span class="ink-s3">float</span> by <span class="ink-s2">=</span> self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">?</span> self<span class="ink-s2">.</span>drag_y <span class="ink-s2">:</span> (self<span class="ink-s2">.</span>state <span class="ink-s2">==</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">AIMING</span> <span class="ink-s2">?</span> self<span class="ink-s2">.</span>sling_y <span class="ink-s2">:</span> self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>y);
+			self<span class="ink-s2">.</span><span class="ink-s4">draw_bird_sprite</span>(bx, by, self<span class="ink-s2">.</span>bird<span class="ink-s2">.</span>type);
+		}
+
+		<span class="ink-s0">// Draw Birds queue on ground</span>
+		<span class="ink-s3">sz</span> ground_y <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 10;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> b <span class="ink-s2">=</span> 0; b <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>birds_left <span class="ink-s2">-</span> 1; b<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> 3 <span class="ink-s2">-</span> (self<span class="ink-s2">.</span>birds_left <span class="ink-s2">-</span> 1 <span class="ink-s2">-</span> b);
+			<span class="ink-s2">if</span> (idx <span class="ink-s2">&gt;=</span> 0 <span class="ink-s2">&amp;&amp;</span> idx <span class="ink-s2">&lt;</span> 3) {
+				self<span class="ink-s2">.</span><span class="ink-s4">draw_bird_sprite</span>(self<span class="ink-s2">.</span>sling_x <span class="ink-s2">-</span> 12.0f <span class="ink-s2">-</span> (<span class="ink-s3">float</span>)(b <span class="ink-s2">*</span> 9), (<span class="ink-s3">float</span>)(ground_y <span class="ink-s2">-</span> 4), self<span class="ink-s2">.</span>birds_queue[idx]);
+			}
+		}
+
+		<span class="ink-s0">// Draw particles</span>
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_PARTICLES</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>active) {
+				self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">set_pixel</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>x, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>y, self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>color);
+			}
+		}
+	}
+
+	<span class="ink-s0">// Flash effect</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>flash_timer <span class="ink-s2">&gt;</span> 0) {
+		xray::<span class="ink-s3">Color</span> fl <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgba</span>(255, 255, 255, 180);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>width <span class="ink-s2">*</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>height; i<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>pixels[i] <span class="ink-s2">=</span> fl<span class="ink-s2">.</span><span class="ink-s4">blend_over</span>(self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span>pixels[i]);
+		}
+	}
+
+	<span class="ink-s0">// 2. Convert the pixels to cells, two pixel rows to each, then paint the</span>
+	<span class="ink-s0">// HUD and this state's dialog over them. They go into the game's own cells</span>
+	<span class="ink-s0">// rather than a layer above them, so a dialog's backdrop can dim the</span>
+	<span class="ink-s0">// pixels it covers.</span>
+	self<span class="ink-s2">.</span>vbuf<span class="ink-s2">.</span><span class="ink-s4">to_half_blocks</span>(self<span class="ink-s2">.</span>screen);
+
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> ui <span class="ink-s2">=</span> milktea::<span class="ink-s4">root</span>();
+	<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>state) {
+		<span class="ink-s2">case</span> <span class="ink-s6">AIMING</span>:
+		<span class="ink-s2">case</span> <span class="ink-s6">FLYING</span>:
+		<span class="ink-s2">case</span> <span class="ink-s6">SETTLING</span>:   ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">hud</span>());
+		<span class="ink-s2">case</span> <span class="ink-s6">INTRO</span>:      ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">intro_dialog</span>());
+		<span class="ink-s2">case</span> <span class="ink-s6">MENU</span>:       ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_dialog</span>());
+		<span class="ink-s2">case</span> <span class="ink-s6">LEVEL_WON</span>:  ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">won_dialog</span>());
+		<span class="ink-s2">case</span> <span class="ink-s6">LEVEL_LOST</span>: ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">lost_dialog</span>());
+		<span class="ink-s2">case</span> <span class="ink-s6">HELP</span>:       ui<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">help_dialog</span>());
+		<span class="ink-s2">default</span>:
+	}
+	ui<span class="ink-s2">.</span><span class="ink-s4">solve</span>(xray::<span class="ink-s4">new_rect</span>(0, 0, self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span>width, self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span>height));
+	self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span><span class="ink-s4">paint</span>(ui);
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(self<span class="ink-s2">.</span>screen);
+}
+
+<span class="ink-s0">// ── HUD &amp; Dialogs ─────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s0">// hud is what shows during play: the score in the top left, and the keys</span>
+<span class="ink-s0">// along the bottom, where they have the screen's whole width.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">hud</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">zstack</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;LEVEL %d  |  SCORE: %d  |  HIGH: %d  |  BIRDS: %d&quot;</span>,
+			self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1, self<span class="ink-s2">.</span>score, self<span class="ink-s2">.</span>high_score, self<span class="ink-s2">.</span>birds_left),
+			xray::<span class="ink-s4">color_rgb</span>(255, 255, 255), bold: true)
+			<span class="ink-s2">.</span><span class="ink-s4">at</span>(2, 1))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[DRAG/ARROWS] Aim  |  [SPACE/CLICK] Boost  |  [R] Reset  |  [ESC] Menu&quot;</span>,
+			xray::<span class="ink-s4">color_rgb</span>(230, 240, 255))
+			<span class="ink-s2">.</span><span class="ink-s4">place</span>(milktea::<span class="ink-s6">CENTER</span>, milktea::<span class="ink-s6">ALIGN_END</span>));
+}
+
+<span class="ink-s0">// Panel is a dialog's backdrop. It dims the game behind the dialog without</span>
+<span class="ink-s0">// hiding it — the half blocks keep their glyphs and both their colors are</span>
+<span class="ink-s0">// tinted — and frames it with a gradient border unless it is bare.</span>
+<span class="ink-s2">struct</span> <span class="ink-s3">Panel</span> (xray::<span class="ink-s3">Content</span>) {
+	xray::<span class="ink-s3">Color</span> tint;
+	xray::<span class="ink-s3">Color</span> edge_from;
+	xray::<span class="ink-s3">Color</span> edge_to;
+	<span class="ink-s3">bool</span> bare;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Panel</span><span class="ink-s2">.</span><span class="ink-s4">paint</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> dst, xray::<span class="ink-s3">Rect</span> r) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> r<span class="ink-s2">.</span>y; y <span class="ink-s2">&lt;</span> r<span class="ink-s2">.</span>y <span class="ink-s2">+</span> r<span class="ink-s2">.</span>h; y<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> r<span class="ink-s2">.</span>x; x <span class="ink-s2">&lt;</span> r<span class="ink-s2">.</span>x <span class="ink-s2">+</span> r<span class="ink-s2">.</span>w; x<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (x <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> y <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> x <span class="ink-s2">&gt;=</span> dst<span class="ink-s2">.</span>width <span class="ink-s2">||</span> y <span class="ink-s2">&gt;=</span> dst<span class="ink-s2">.</span>height) <span class="ink-s2">continue</span>;
+			xray::<span class="ink-s3">Cell</span><span class="ink-s2">*</span> c <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>dst<span class="ink-s2">.</span>cells[y <span class="ink-s2">*</span> dst<span class="ink-s2">.</span>width <span class="ink-s2">+</span> x];
+			c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg <span class="ink-s2">=</span> self<span class="ink-s2">.</span>tint<span class="ink-s2">.</span><span class="ink-s4">blend_over</span>(c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg);
+			c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>bg <span class="ink-s2">=</span> self<span class="ink-s2">.</span>tint<span class="ink-s2">.</span><span class="ink-s4">blend_over</span>(c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>bg);
+		}
+	}
+	<span class="ink-s0">// The border sets no background of its own, so it sits on the tint too.</span>
+	<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>bare) dst<span class="ink-s2">.</span><span class="ink-s4">draw_gradient_border</span>(r, xray::<span class="ink-s6">ROUNDED</span>, self<span class="ink-s2">.</span>edge_from, self<span class="ink-s2">.</span>edge_to);
+}
+
+<span class="ink-s0">// panel is a dialog box centred on screen, as wide as width or, at 0, as its</span>
+<span class="ink-s0">// widest line. Its first line sits under the top border, and the rest stack</span>
+<span class="ink-s0">// below it with a blank row between each.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s4">panel</span>(<span class="ink-s3">sz</span> width, xray::<span class="ink-s3">Color</span> tint, xray::<span class="ink-s3">Color</span> edge_from, xray::<span class="ink-s3">Color</span> edge_to) {
+	<span class="ink-s3">Panel</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> mem::<span class="ink-s4">tnew</span>(<span class="ink-s3">Panel</span>);
+	<span class="ink-s2">*</span>p <span class="ink-s2">=</span> { tint, edge_from, edge_to, false };
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> n <span class="ink-s2">=</span> milktea::<span class="ink-s4">component</span>(p);
+	<span class="ink-s2">if</span> (width <span class="ink-s2">&gt;</span> 0) n<span class="ink-s2">.</span><span class="ink-s4">width</span>(milktea::<span class="ink-s4">cells</span>(width));
+	<span class="ink-s2">return</span> n
+		<span class="ink-s0">// The border takes the outer row and column on each side.</span>
+		<span class="ink-s2">.</span><span class="ink-s4">with_padding</span>(1, 3, 1, 3)
+		<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)
+		<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">center</span>();
+}
+
+<span class="ink-s0">// backdrop dims the game behind its lines, with no border.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s4">backdrop</span>(xray::<span class="ink-s3">Color</span> tint) {
+	<span class="ink-s3">Panel</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> mem::<span class="ink-s4">tnew</span>(<span class="ink-s3">Panel</span>);
+	<span class="ink-s2">*</span>p <span class="ink-s2">=</span> { <span class="ink-s2">.</span>tint <span class="ink-s2">=</span> tint, <span class="ink-s2">.</span>bare <span class="ink-s2">=</span> true };
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">component</span>(p)
+		<span class="ink-s2">.</span><span class="ink-s4">with_padding</span>(1, 4, 1, 4)
+		<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)
+		<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s4">line</span>(<span class="ink-s3">String</span> s, xray::<span class="ink-s3">Color</span> fg, <span class="ink-s3">bool</span> bold <span class="ink-s2">=</span> false) {
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(s, glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(fg)<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(bold));
+}
+
+<span class="ink-s0">// lines stacks strings one under the other, a blank row between each.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s4">lines</span>(<span class="ink-s3">String</span>[] items, xray::<span class="ink-s3">Color</span> fg) {
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> col <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1);
+	<span class="ink-s2">foreach</span> (s : items) col<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(s, fg));
+	<span class="ink-s2">return</span> col;
+}
+
+<span class="ink-s0">// logo stacks the rows of a block-letter word, each shaded from one color to</span>
+<span class="ink-s0">// the other.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s4">logo</span>(<span class="ink-s3">String</span>[] rows, xray::<span class="ink-s3">Color</span> from, xray::<span class="ink-s3">Color</span> to) {
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> col <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>();
+	<span class="ink-s2">foreach</span> (r : rows) col<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">gradient_text</span>(r, from, to, true)));
+	<span class="ink-s2">return</span> col;
+}
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[6] <span class="ink-s6">AVIAN</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;  █████╗ ██╗   ██╗██╗ █████╗ ███╗   ██╗&quot;</span>,
+	<span class="ink-s9">&quot; ██╔══██╗██║   ██║██║██╔══██╗████╗  ██║&quot;</span>,
+	<span class="ink-s9">&quot; ███████║██║   ██║██║███████║██╔██╗ ██║&quot;</span>,
+	<span class="ink-s9">&quot; ██╔══██║╚██╗ ██╔╝██║██╔══██║██║╚██╗██║&quot;</span>,
+	<span class="ink-s9">&quot; ██║  ██║ ╚████╔╝ ██║██║  ██║██║ ╚████║&quot;</span>,
+	<span class="ink-s9">&quot; ╚═╝  ╚═╝  ╚═══╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[6] <span class="ink-s6">ASSAULT</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; █████╗ ███████╗███████╗█████╗ ██╗   ██╗██╗  ████████╗&quot;</span>,
+	<span class="ink-s9">&quot;██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██║  ╚══██╔══╝&quot;</span>,
+	<span class="ink-s9">&quot;███████║███████╗███████╗███████║██║   ██║██║     ██║   &quot;</span>,
+	<span class="ink-s9">&quot;██╔══██║╚════██║╚════██║██╔══██║██║   ██║██║     ██║   &quot;</span>,
+	<span class="ink-s9">&quot;██║  ██║███████║███████║██║  ██║╚██████╔╝███████╗██║   &quot;</span>,
+	<span class="ink-s9">&quot;╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   &quot;</span>,
+};
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">intro_dialog</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">float</span> pulse <span class="ink-s2">=</span> (math::<span class="ink-s4">sin</span>((<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>ticks <span class="ink-s2">*</span> 0.15f) <span class="ink-s2">+</span> 1.0f) <span class="ink-s2">*</span> 0.5f;
+	xray::<span class="ink-s3">Color</span> c1 <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, (<span class="ink-s3">char</span>)(60 <span class="ink-s2">+</span> pulse <span class="ink-s2">*</span> 60), 30);
+	xray::<span class="ink-s3">Color</span> c2 <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 220, 50);
+
+	<span class="ink-s0">// The prompt blinks without moving what is below it: at alpha 0 it keeps</span>
+	<span class="ink-s0">// its place in the layout and paints nothing.</span>
+	<span class="ink-s3">bool</span> blink_on <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>ticks <span class="ink-s2">/</span> 10) <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0;
+
+	<span class="ink-s2">return</span> <span class="ink-s4">backdrop</span>(xray::<span class="ink-s4">color_rgba</span>(28, 14, 16, 215))
+		<span class="ink-s2">.</span><span class="ink-s4">center</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">shadow</span>(xray::<span class="ink-s4">shadow</span>(1, 1, 160))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">vstack</span>()
+			<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>)
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">AVIAN</span>[<span class="ink-s2">..</span>], c1, c2))
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">ASSAULT</span>[<span class="ink-s2">..</span>], c2, c1)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;░▒▓ RETRO PHYSICS ARCADE ▓▒░&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 240, 200), bold: true))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;Press any key to enter...&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 230, 100))
+			<span class="ink-s2">.</span><span class="ink-s4">alpha</span>(blink_on <span class="ink-s2">?</span> 255 <span class="ink-s2">:</span> 0));
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">menu_dialog</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">String</span>[4] options <span class="ink-s2">=</span> {
+		<span class="ink-s9">&quot;Play Game&quot;</span>,
+		string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Select Level: [Level %d]&quot;</span>, self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1),
+		<span class="ink-s9">&quot;How to Play&quot;</span>,
+		<span class="ink-s9">&quot;Exit&quot;</span>,
+	};
+
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> items <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>);
+	<span class="ink-s2">foreach</span> (i, opt : options) {
+		<span class="ink-s3">bool</span> sel <span class="ink-s2">=</span> i <span class="ink-s2">==</span> self<span class="ink-s2">.</span>menu_selected;
+		glaze::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> sel
+			<span class="ink-s2">?</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(xray::<span class="ink-s4">color_rgb</span>(255, 245, 120))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)
+				<span class="ink-s2">.</span><span class="ink-s4">background</span>(xray::<span class="ink-s4">color_rgba</span>(110, 30, 25, 210))
+			<span class="ink-s2">:</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(xray::<span class="ink-s4">color_rgb</span>(240, 210, 205));
+		items<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(string::<span class="ink-s4">tformat</span>(sel <span class="ink-s2">?</span> <span class="ink-s9">&quot;▶ %s ◀&quot;</span> <span class="ink-s2">:</span> <span class="ink-s9">&quot;  %s  &quot;</span>, opt), s));
+	}
+
+	<span class="ink-s0">// A fiery red-to-orange border over a dark crimson backdrop.</span>
+	<span class="ink-s2">return</span> <span class="ink-s4">panel</span>(46, xray::<span class="ink-s4">color_rgba</span>(28, 14, 16, 178),
+			xray::<span class="ink-s4">color_rgb</span>(255, 60, 40), xray::<span class="ink-s4">color_rgb</span>(255, 140, 20))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">gradient_text</span>(<span class="ink-s9">&quot; ★ AVIAN ASSAULT ★ &quot;</span>,
+			xray::<span class="ink-s4">color_rgb</span>(255, 220, 80), xray::<span class="ink-s4">color_rgb</span>(255, 75, 45), true)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(items)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;🏆 High Score: %d&quot;</span>, self<span class="ink-s2">.</span>high_score), xray::<span class="ink-s4">color_rgb</span>(255, 185, 40), bold: true));
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">won_dialog</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s0">// Three stars, one lost for each bird used past the first.</span>
+	<span class="ink-s3">String</span> stars <span class="ink-s2">=</span> <span class="ink-s9">&quot;⭐⭐⭐&quot;</span>;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>birds_left <span class="ink-s2">==</span> 1) stars <span class="ink-s2">=</span> <span class="ink-s9">&quot;⭐⭐&quot;</span>;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>birds_left <span class="ink-s2">==</span> 0) stars <span class="ink-s2">=</span> <span class="ink-s9">&quot;⭐&quot;</span>;
+
+	<span class="ink-s0">// The stats are one left-aligned block, centred as a whole.</span>
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> stats <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Score: %d&quot;</span>, self<span class="ink-s2">.</span>score), xray::<span class="ink-s4">color_rgb</span>(255, 255, 255), bold: true))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Best:  %d&quot;</span>, self<span class="ink-s2">.</span>high_score), xray::<span class="ink-s4">color_rgb</span>(255, 215, 0), bold: true));
+
+	<span class="ink-s2">return</span> <span class="ink-s4">panel</span>(42, xray::<span class="ink-s4">color_rgba</span>(10, 25, 15, 178),
+			xray::<span class="ink-s4">color_rgb</span>(100, 255, 100), xray::<span class="ink-s4">color_rgb</span>(255, 215, 0))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">gradient_text</span>(<span class="ink-s9">&quot; ★ LEVEL CLEARED! ★ &quot;</span>,
+			xray::<span class="ink-s4">color_rgb</span>(120, 255, 120), xray::<span class="ink-s4">color_rgb</span>(255, 230, 80), true)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(stars))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(stats)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[SPACE] Next Level  |  [M] Menu&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(220, 240, 255)));
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">lost_dialog</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">return</span> <span class="ink-s4">panel</span>(40, xray::<span class="ink-s4">color_rgba</span>(25, 10, 15, 178),
+			xray::<span class="ink-s4">color_rgb</span>(255, 60, 60), xray::<span class="ink-s4">color_rgb</span>(255, 140, 40))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot; 💀 LEVEL FAILED 💀 &quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 70, 70), bold: true))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;You ran out of birds!&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(240, 200, 200)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[SPACE] Retry  |  [M] Menu&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(220, 240, 255)));
+}
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[5] <span class="ink-s6">HOW_TO_PLAY</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;• Drag slingshot with Mouse or use Arrows&quot;</span>,
+	<span class="ink-s9">&quot;• Press [SPACE] / [ENTER] to launch bird&quot;</span>,
+	<span class="ink-s9">&quot;• Mid-flight [SPACE] / [CLICK] triggers abilities:&quot;</span>,
+	<span class="ink-s9">&quot;  - ⚡ Yellow Chuck: Speed turbo dive&quot;</span>,
+	<span class="ink-s9">&quot;  - 💣 Black Bomb: Explosive blast wave&quot;</span>,
+};
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">help_dialog</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s2">return</span> <span class="ink-s4">panel</span>(0, xray::<span class="ink-s4">color_rgba</span>(12, 16, 28, 178),
+			xray::<span class="ink-s4">color_rgb</span>(80, 200, 255), xray::<span class="ink-s4">color_rgb</span>(140, 100, 255))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">gradient_text</span>(<span class="ink-s9">&quot; HOW TO PLAY &quot;</span>,
+			xray::<span class="ink-s4">color_rgb</span>(100, 220, 255), xray::<span class="ink-s4">color_rgb</span>(200, 150, 255), true)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">lines</span>(<span class="ink-s6">HOW_TO_PLAY</span>[<span class="ink-s2">..</span>], xray::<span class="ink-s4">color_rgb</span>(220, 230, 245)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[Press SPACE or ESC to Return]&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 215, 100)));
+}
+
+<span class="ink-s0">// ── Main Entry Point ──────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> m <span class="ink-s2">=</span> mem::<span class="ink-s4">new</span>(<span class="ink-s3">AvianAssaultModel</span>);
+	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true, <span class="ink-s2">.</span>mouse_mode <span class="ink-s2">=</span> milktea::<span class="ink-s3">MouseMode</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MODE_CELL_MOTION</span>, <span class="ink-s2">.</span>mouse_cursor <span class="ink-s2">=</span> <span class="ink-s9">&quot;crosshair&quot;</span> })) {
+		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
+		<span class="ink-s2">return</span> 1;
+	}
+	io::<span class="ink-s4">printn</span>(<span class="ink-s9">&quot;Thanks for playing Avian Assault!&quot;</span>);
+	<span class="ink-s2">return</span> 0;
+}
+</pre>

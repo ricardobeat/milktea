@@ -261,3 +261,12 @@ and 0 after quit. Events and model callbacks use scoped temporary allocations;
 the painted grid survives in the program's persistent ScreenBuffer. `tick`
 and `every` retain their one-shot semantics. Wall-aligned timers use the full
 JavaScript wall clock, avoiding wasm32 integer overflow for epoch milliseconds.
+
+Showcase demos start in Preview. Code tabs load highlighted C3 source on demand.
+Regenerate those panels after editing an example:
+
+```sh
+python3 scripts/highlight_web_examples.py
+```
+
+If inkfmt needs its grammar directory, set `INKFMT_DIR` to that directory.

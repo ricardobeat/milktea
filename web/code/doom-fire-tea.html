@@ -1,0 +1,351 @@
+<pre class="ink"><span class="ink-s2">module</span> doom_fire;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::string;
+
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">rand</span>();
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">srand</span>(<span class="ink-s3">uint</span> seed);
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">c3_time_ms_long</span>();
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_W</span> <span class="ink-s2">=</span> 400;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_H</span> <span class="ink-s2">=</span> 400;
+
+<span class="ink-s0">// Canonical DOOM fire palette: 37 RGB colors (from DoomFirePSX)</span>
+<span class="ink-s0">// Index 0 = coldest (near-black), index 36 = hottest (white)</span>
+<span class="ink-s2">struct</span> <span class="ink-s3">FireColor</span> {
+	<span class="ink-s3">char</span> r;
+	<span class="ink-s3">char</span> g;
+	<span class="ink-s3">char</span> b;
+}
+<span class="ink-s3">FireColor</span>[37] fire_palette <span class="ink-s2">=</span> {
+	{ 7, 7, 7 }, <span class="ink-s0">// 0: near-black</span>
+	{ 31, 7, 7 }, <span class="ink-s0">// 1: very dark red</span>
+	{ 47, 15, 7 }, <span class="ink-s0">// 2: dark red</span>
+	{ 71, 15, 7 }, <span class="ink-s0">// 3: dark red</span>
+	{ 87, 23, 7 }, <span class="ink-s0">// 4: dark red-orange</span>
+	{ 103, 31, 7 }, <span class="ink-s0">// 5: dark red-orange</span>
+	{ 119, 31, 7 }, <span class="ink-s0">// 6: red-orange</span>
+	{ 143, 39, 7 }, <span class="ink-s0">// 7: red-orange</span>
+	{ 159, 47, 7 }, <span class="ink-s0">// 8: orange-red</span>
+	{ 175, 63, 7 }, <span class="ink-s0">// 9: orange-red</span>
+	{ 191, 71, 7 }, <span class="ink-s0">// 10: orange</span>
+	{ 199, 71, 7 }, <span class="ink-s0">// 11: orange</span>
+	{ 223, 79, 7 }, <span class="ink-s0">// 12: bright orange</span>
+	{ 223, 87, 7 }, <span class="ink-s0">// 13: bright orange</span>
+	{ 223, 87, 7 }, <span class="ink-s0">// 14: bright orange</span>
+	{ 215, 95, 7 }, <span class="ink-s0">// 15: orange-yellow</span>
+	{ 215, 95, 7 }, <span class="ink-s0">// 16: orange-yellow</span>
+	{ 215, 103, 15 }, <span class="ink-s0">// 17: yellow-orange</span>
+	{ 207, 111, 15 }, <span class="ink-s0">// 18: yellow-orange</span>
+	{ 207, 119, 15 }, <span class="ink-s0">// 19: yellow-orange</span>
+	{ 207, 127, 15 }, <span class="ink-s0">// 20: yellow</span>
+	{ 207, 135, 23 }, <span class="ink-s0">// 21: yellow</span>
+	{ 199, 135, 23 }, <span class="ink-s0">// 22: yellow</span>
+	{ 199, 143, 23 }, <span class="ink-s0">// 23: golden yellow</span>
+	{ 199, 151, 31 }, <span class="ink-s0">// 24: golden yellow</span>
+	{ 191, 159, 31 }, <span class="ink-s0">// 25: golden yellow</span>
+	{ 191, 159, 31 }, <span class="ink-s0">// 26: golden yellow</span>
+	{ 191, 167, 39 }, <span class="ink-s0">// 27: light golden</span>
+	{ 191, 167, 39 }, <span class="ink-s0">// 28: light golden</span>
+	{ 191, 175, 47 }, <span class="ink-s0">// 29: light golden</span>
+	{ 183, 175, 47 }, <span class="ink-s0">// 30: light golden</span>
+	{ 183, 183, 47 }, <span class="ink-s0">// 31: light yellow</span>
+	{ 183, 183, 55 }, <span class="ink-s0">// 32: light yellow</span>
+	{ 207, 207, 111 }, <span class="ink-s0">// 33: pale yellow</span>
+	{ 223, 223, 159 }, <span class="ink-s0">// 34: very pale yellow</span>
+	{ 239, 239, 199 }, <span class="ink-s0">// 35: near-white</span>
+	{ 255, 255, 255 }, <span class="ink-s0">// 36: white (hottest)</span>
+	};
+
+<span class="ink-s0">// Pre-built ▀ cell for each palette index — avoids per-frame cell construction.</span>
+<span class="ink-s0">// Each entry: content = &quot;▀&quot; (U+2580), style.fg = palette color (for top pixel).</span>
+xray::<span class="ink-s3">Cell</span>[37] fire_cells;
+
+<span class="ink-s0">// ============================================================</span>
+<span class="ink-s0">// TEA watermark — DOS Rebel font, gray top / red→amber bottom</span>
+<span class="ink-s0">// ============================================================</span>
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MASK_W</span> <span class="ink-s2">=</span> 37;
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MASK_H</span> <span class="ink-s2">=</span> 8;
+
+<span class="ink-s0">// Encoded mask: 0=empty, 1=█ full block (U+2588), 2=░ light shade (U+2591)</span>
+<span class="ink-s3">char</span>[<span class="ink-s6">MASK_W</span>][<span class="ink-s6">MASK_H</span>] tea_mask_data <span class="ink-s2">=</span> {
+	{ 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0 },
+	{ 2, 1, 2, 2, 2, 1, 1, 1, 2, 2, 2, 1, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 1, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 0 },
+	{ 2, 0, 0, 0, 2, 1, 1, 1, 0, 0, 2, 0, 0, 2, 1, 1, 1, 0, 0, 1, 0, 2, 0, 0, 2, 1, 1, 1, 0, 0, 0, 0, 2, 1, 1, 1, 0 },
+	{ 0, 0, 0, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 },
+	{ 0, 0, 0, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 1, 1, 1, 2, 2, 1, 0, 0, 0, 0, 2, 1, 1, 1, 2, 2, 2, 2, 2, 1, 1, 1, 0 },
+	{ 0, 0, 0, 0, 2, 1, 1, 1, 0, 0, 0, 0, 0, 2, 1, 1, 1, 0, 2, 0, 0, 0, 1, 0, 2, 1, 1, 1, 0, 0, 0, 0, 2, 1, 1, 1, 0 },
+	{ 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1 },
+	{ 0, 0, 0, 2, 2, 2, 2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 2, 0 },
+};
+
+<span class="ink-s0">// Pre-built cells for each mask position</span>
+xray::<span class="ink-s3">Cell</span>[<span class="ink-s6">MASK_H</span> <span class="ink-s2">*</span> <span class="ink-s6">MASK_W</span>] tea_mask_cells;
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">FIRE_MAX</span> <span class="ink-s2">=</span> 37;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">FireModel</span> {
+	<span class="ink-s3">sz</span><span class="ink-s2">*</span> fire;
+	<span class="ink-s3">sz</span> width;
+	<span class="ink-s3">sz</span> height;
+	<span class="ink-s3">long</span> startTime;
+	<span class="ink-s0">// Pre-allocated cell grid for direct rendering</span>
+	xray::<span class="ink-s3">Cell</span>[] view_cells;
+	<span class="ink-s3">sz</span> view_cols;
+	<span class="ink-s3">sz</span> view_rows;
+	<span class="ink-s0">// Per-row decay, split into a whole part and a probability of one more.</span>
+	<span class="ink-s0">// Calculated from the terminal height so the fire always reaches over the</span>
+	<span class="ink-s0">// watermark; see set_fire_decay.</span>
+	<span class="ink-s3">sz</span> decay_whole;
+	<span class="ink-s3">float</span> decay_frac;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">init_fire_cells</span>() {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">FIRE_MAX</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">FireColor</span> c   <span class="ink-s2">=</span> fire_palette[i];
+		xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(c<span class="ink-s2">.</span>r, c<span class="ink-s2">.</span>g, c<span class="ink-s2">.</span>b));
+		fire_cells[i] <span class="ink-s2">=</span> xray::<span class="ink-s4">new_cell</span>(<span class="ink-s9">&quot;\xe2\x96\x80&quot;</span>, 1, s);
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">init_tea_mask</span>() {
+	<span class="ink-s0">// Gray upper half, red-to-amber gradient lower half</span>
+	xray::<span class="ink-s3">Color</span>[8] fg <span class="ink-s2">=</span> {
+		xray::<span class="ink-s4">color_rgb</span>(160, 160, 160),
+		xray::<span class="ink-s4">color_rgb</span>(160, 160, 160),
+		xray::<span class="ink-s4">color_rgb</span>(160, 160, 160),
+		xray::<span class="ink-s4">color_rgb</span>(160, 160, 160),
+		xray::<span class="ink-s4">color_rgb</span>(200, 30, 0),
+		xray::<span class="ink-s4">color_rgb</span>(220, 90, 0),
+		xray::<span class="ink-s4">color_rgb</span>(240, 150, 0),
+		xray::<span class="ink-s4">color_rgb</span>(255, 200, 0),
+	};
+	xray::<span class="ink-s3">Color</span> bg <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(0, 0, 0);
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> 0; row <span class="ink-s2">&lt;</span> <span class="ink-s6">MASK_H</span>; row<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0; col <span class="ink-s2">&lt;</span> <span class="ink-s6">MASK_W</span>; col<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> idx  <span class="ink-s2">=</span> row <span class="ink-s2">*</span> <span class="ink-s6">MASK_W</span> <span class="ink-s2">+</span> col;
+			<span class="ink-s3">char</span> val <span class="ink-s2">=</span> tea_mask_data[row][col];
+			<span class="ink-s2">if</span> (val <span class="ink-s2">==</span> 0) {
+				tea_mask_cells[idx] <span class="ink-s2">=</span> xray::<span class="ink-s4">empty_cell</span>();
+			} <span class="ink-s2">else</span> {
+				xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(fg[row])<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(bg);
+				<span class="ink-s2">if</span> (val <span class="ink-s2">==</span> 1) {
+					tea_mask_cells[idx] <span class="ink-s2">=</span> xray::<span class="ink-s4">new_cell</span>(<span class="ink-s9">&quot;\xe2\x96\x88&quot;</span>, 1, s);
+				} <span class="ink-s2">else</span> {
+					tea_mask_cells[idx] <span class="ink-s2">=</span> xray::<span class="ink-s4">new_cell</span>(<span class="ink-s9">&quot;\xe2\x96\x91&quot;</span>, 1, s);
+				}
+			}
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">FireModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">FireModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">ulong</span> seed <span class="ink-s2">=</span> (<span class="ink-s3">ulong</span>)<span class="ink-s4">c3_time_ms_long</span>();
+	<span class="ink-s4">srand</span>((<span class="ink-s3">uint</span>)seed);
+	self<span class="ink-s2">.</span>startTime <span class="ink-s2">=</span> <span class="ink-s4">c3_time_ms_long</span>();
+	self<span class="ink-s2">.</span>width <span class="ink-s2">=</span> 80;
+	self<span class="ink-s2">.</span>height <span class="ink-s2">=</span> 48;
+	self<span class="ink-s2">.</span>fire <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(<span class="ink-s3">sz</span>, <span class="ink-s6">MAX_W</span> <span class="ink-s2">*</span> <span class="ink-s6">MAX_H</span>);
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_W</span> <span class="ink-s2">*</span> <span class="ink-s6">MAX_H</span>; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>fire[i] <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>width; x<span class="ink-s2">++</span>) {
+		self<span class="ink-s2">.</span>fire[(self<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 1) <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> x] <span class="ink-s2">=</span> 36;
+	}
+	self<span class="ink-s2">.</span><span class="ink-s4">set_fire_decay</span>();
+	self<span class="ink-s2">.</span>view_cols <span class="ink-s2">=</span> self<span class="ink-s2">.</span>width;
+	self<span class="ink-s2">.</span>view_rows <span class="ink-s2">=</span> self<span class="ink-s2">.</span>height <span class="ink-s2">/</span> 2;
+	self<span class="ink-s2">.</span>view_cells <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(xray::<span class="ink-s3">Cell</span>, (<span class="ink-s3">sz</span>)(self<span class="ink-s2">.</span>view_cols <span class="ink-s2">*</span> self<span class="ink-s2">.</span>view_rows));
+
+	<span class="ink-s4">init_fire_cells</span>();
+	<span class="ink-s4">init_tea_mask</span>();
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>();
+}
+
+<span class="ink-s0">// MASK_AIM is where the fire is aimed, in pixel rows below the top of the</span>
+<span class="ink-s0">// watermark. The blend only shows where flame and glyph share a cell, so the</span>
+<span class="ink-s0">// fire has to reach into the text -- but aiming over the top of it drowns the</span>
+<span class="ink-s0">// letters, and the tips overshoot this by a few rows anyway, so the aim sits</span>
+<span class="ink-s0">// inside the text and lets the flicker do the rest.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MASK_AIM</span> <span class="ink-s2">=</span> 5;
+
+<span class="ink-s0">// mask_row returns the watermark's top row, in view rows. The view and the</span>
+<span class="ink-s0">// fire both need it -- one to paint the glyphs, the other to know what it has</span>
+<span class="ink-s0">// to cover -- so it is derived in one place from the view height.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">sz</span> <span class="ink-s4">mask_row</span>(<span class="ink-s3">sz</span> view_rows) {
+	<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> (view_rows <span class="ink-s2">-</span> <span class="ink-s6">MASK_H</span>) <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> 1;
+	<span class="ink-s2">if</span> (y <span class="ink-s2">&lt;</span> 0) y <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">return</span> y;
+}
+
+<span class="ink-s0">// set_fire_decay picks the per-row decay so the flame tops out in the same</span>
+<span class="ink-s0">// place relative to the watermark whatever the terminal height.</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">// A pixel starts at 36 and loses `decay` per row, so it climbs about</span>
+<span class="ink-s0">// 36/decay rows: aiming at a row means solving for the decay rather than</span>
+<span class="ink-s0">// guessing it, which is what the old height-derived ratio did -- it left the</span>
+<span class="ink-s0">// fire covering the text in a short terminal and falling short of it in a tall</span>
+<span class="ink-s0">// one. The fractional part is applied as a probability, because a decay</span>
+<span class="ink-s0">// rounded to a whole number can only hit a few reachable heights.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">FireModel</span><span class="ink-s2">.</span><span class="ink-s4">set_fire_decay</span>(<span class="ink-s3">FireModel</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s3">sz</span> text_top <span class="ink-s2">=</span> <span class="ink-s4">mask_row</span>(self<span class="ink-s2">.</span>height <span class="ink-s2">/</span> 2) <span class="ink-s2">*</span> 2;
+	<span class="ink-s3">sz</span> target   <span class="ink-s2">=</span> text_top <span class="ink-s2">+</span> <span class="ink-s6">MASK_AIM</span>;
+	<span class="ink-s2">if</span> (target <span class="ink-s2">&lt;</span> 0) target <span class="ink-s2">=</span> 0;
+	<span class="ink-s3">sz</span> band <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 1) <span class="ink-s2">-</span> target;
+	<span class="ink-s2">if</span> (band <span class="ink-s2">&lt;</span> 1) band <span class="ink-s2">=</span> 1;
+	<span class="ink-s3">float</span> per        <span class="ink-s2">=</span> 36.0f <span class="ink-s2">/</span> (<span class="ink-s3">float</span>)band;
+	self<span class="ink-s2">.</span>decay_whole <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)per;
+	self<span class="ink-s2">.</span>decay_frac  <span class="ink-s2">=</span> per <span class="ink-s2">-</span> (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>decay_whole;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">spread_pixel</span>(<span class="ink-s3">FireModel</span><span class="ink-s2">*</span> m, <span class="ink-s3">sz</span> idx) {
+	<span class="ink-s2">if</span> (idx <span class="ink-s2">&lt;</span> m<span class="ink-s2">.</span>width) <span class="ink-s2">return</span>;
+	<span class="ink-s3">sz</span> pixel <span class="ink-s2">=</span> m<span class="ink-s2">.</span>fire[idx];
+	<span class="ink-s2">if</span> (pixel <span class="ink-s2">==</span> 0) {
+		m<span class="ink-s2">.</span>fire[idx <span class="ink-s2">-</span> m<span class="ink-s2">.</span>width] <span class="ink-s2">=</span> 0;
+		<span class="ink-s2">return</span>;
+	}
+	<span class="ink-s3">sz</span> rnd     <span class="ink-s2">=</span> <span class="ink-s4">rand</span>() <span class="ink-s2">%</span> 5;
+	<span class="ink-s3">sz</span> dst     <span class="ink-s2">=</span> idx <span class="ink-s2">-</span> rnd <span class="ink-s2">+</span> 1;
+	<span class="ink-s3">sz</span> buf_len <span class="ink-s2">=</span> m<span class="ink-s2">.</span>width <span class="ink-s2">*</span> m<span class="ink-s2">.</span>height;
+	<span class="ink-s2">if</span> (dst <span class="ink-s2">-</span> m<span class="ink-s2">.</span>width <span class="ink-s2">&gt;=</span> 0 <span class="ink-s2">&amp;&amp;</span> dst <span class="ink-s2">-</span> m<span class="ink-s2">.</span>width <span class="ink-s2">&lt;</span> buf_len) {
+		<span class="ink-s3">sz</span> decay <span class="ink-s2">=</span> m<span class="ink-s2">.</span>decay_whole;
+		<span class="ink-s2">if</span> (m<span class="ink-s2">.</span>decay_frac <span class="ink-s2">&gt;</span> 0 <span class="ink-s2">&amp;&amp;</span> (<span class="ink-s3">float</span>)(<span class="ink-s4">rand</span>() <span class="ink-s2">%</span> 1000) <span class="ink-s2">/</span> 1000.0f <span class="ink-s2">&lt;</span> m<span class="ink-s2">.</span>decay_frac) decay<span class="ink-s2">++</span>;
+		<span class="ink-s3">sz</span> new_val <span class="ink-s2">=</span> pixel <span class="ink-s2">-</span> decay;
+		<span class="ink-s2">if</span> (new_val <span class="ink-s2">&lt;</span> 0) new_val <span class="ink-s2">=</span> 0;
+		m<span class="ink-s2">.</span>fire[dst <span class="ink-s2">-</span> m<span class="ink-s2">.</span>width] <span class="ink-s2">=</span> new_val;
+	}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">FireModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">FireModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+		<span class="ink-s3">sz</span> new_w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
+		<span class="ink-s3">sz</span> new_h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height <span class="ink-s2">*</span> 2;
+		<span class="ink-s2">if</span> (new_w <span class="ink-s2">&gt;</span> <span class="ink-s6">MAX_W</span>) new_w <span class="ink-s2">=</span> <span class="ink-s6">MAX_W</span>;
+		<span class="ink-s2">if</span> (new_h <span class="ink-s2">&gt;</span> <span class="ink-s6">MAX_H</span>) new_h <span class="ink-s2">=</span> <span class="ink-s6">MAX_H</span>;
+		self<span class="ink-s2">.</span>width <span class="ink-s2">=</span> new_w;
+		self<span class="ink-s2">.</span>height <span class="ink-s2">=</span> new_h;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>width <span class="ink-s2">*</span> self<span class="ink-s2">.</span>height; i<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>fire[i] <span class="ink-s2">=</span> 0;
+		}
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>width; x<span class="ink-s2">++</span>) {
+			self<span class="ink-s2">.</span>fire[(self<span class="ink-s2">.</span>height <span class="ink-s2">-</span> 1) <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> x] <span class="ink-s2">=</span> 36;
+		}
+		<span class="ink-s0">// Reallocate view cell grid</span>
+		self<span class="ink-s2">.</span><span class="ink-s4">set_fire_decay</span>();
+		mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>view_cells<span class="ink-s2">.</span>ptr);
+		self<span class="ink-s2">.</span>view_cols <span class="ink-s2">=</span> self<span class="ink-s2">.</span>width;
+		self<span class="ink-s2">.</span>view_rows <span class="ink-s2">=</span> self<span class="ink-s2">.</span>height <span class="ink-s2">/</span> 2;
+		self<span class="ink-s2">.</span>view_cells <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(xray::<span class="ink-s3">Cell</span>, (<span class="ink-s3">sz</span>)(self<span class="ink-s2">.</span>view_cols <span class="ink-s2">*</span> self<span class="ink-s2">.</span>view_rows));
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>width; x<span class="ink-s2">++</span>) {
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> 0; y <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>height; y<span class="ink-s2">++</span>) {
+				<span class="ink-s4">spread_pixel</span>(self, y <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> x);
+			}
+		}
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>();
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>:
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>:
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">FireModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">FireModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>width <span class="ink-s2">==</span> 0) <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;Initializing...&quot;</span>);
+
+	<span class="ink-s0">// Build cell grid directly — no string, no ANSI, no parsing.</span>
+	<span class="ink-s0">// xray's diff engine handles minimal output.</span>
+	<span class="ink-s3">sz</span> view_w <span class="ink-s2">=</span> self<span class="ink-s2">.</span>view_cols;
+	<span class="ink-s3">sz</span> view_h <span class="ink-s2">=</span> self<span class="ink-s2">.</span>view_rows;
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> vy <span class="ink-s2">=</span> 0; vy <span class="ink-s2">&lt;</span> view_h; vy<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> fire_y     <span class="ink-s2">=</span> vy <span class="ink-s2">*</span> 2;
+		<span class="ink-s3">sz</span> row_offset <span class="ink-s2">=</span> vy <span class="ink-s2">*</span> view_w;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> vx <span class="ink-s2">=</span> 0; vx <span class="ink-s2">&lt;</span> view_w; vx<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> top_val <span class="ink-s2">=</span> self<span class="ink-s2">.</span>fire[fire_y <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> vx];
+			<span class="ink-s3">sz</span> bot_val <span class="ink-s2">=</span> self<span class="ink-s2">.</span>fire[(fire_y <span class="ink-s2">+</span> 1) <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> vx];
+
+			<span class="ink-s0">// Start with the pre-built cell for the top pixel's fg color.</span>
+			<span class="ink-s0">// Set the bg to the bottom pixel's color.</span>
+			xray::<span class="ink-s3">Cell</span> c        <span class="ink-s2">=</span> fire_cells[top_val];
+			<span class="ink-s3">FireColor</span> bot_color <span class="ink-s2">=</span> fire_palette[bot_val];
+			c<span class="ink-s2">.</span>style <span class="ink-s2">=</span> c<span class="ink-s2">.</span>style<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_rgb</span>(bot_color<span class="ink-s2">.</span>r, bot_color<span class="ink-s2">.</span>g, bot_color<span class="ink-s2">.</span>b));
+			self<span class="ink-s2">.</span>view_cells[row_offset <span class="ink-s2">+</span> vx] <span class="ink-s2">=</span> c;
+		}
+	}
+
+	<span class="ink-s0">// Overlay TEA watermark where fire is cold</span>
+	<span class="ink-s3">sz</span> mask_x <span class="ink-s2">=</span> (view_w <span class="ink-s2">-</span> <span class="ink-s6">MASK_W</span>) <span class="ink-s2">/</span> 2;
+	<span class="ink-s3">sz</span> mask_y <span class="ink-s2">=</span> <span class="ink-s4">mask_row</span>(view_h);
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> my <span class="ink-s2">=</span> 0; my <span class="ink-s2">&lt;</span> <span class="ink-s6">MASK_H</span>; my<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> vy <span class="ink-s2">=</span> mask_y <span class="ink-s2">+</span> my;
+		<span class="ink-s2">if</span> (vy <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> vy <span class="ink-s2">&gt;=</span> view_h) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">sz</span> fire_y_top <span class="ink-s2">=</span> vy <span class="ink-s2">*</span> 2;
+		<span class="ink-s3">sz</span> fire_y_bot <span class="ink-s2">=</span> fire_y_top <span class="ink-s2">+</span> 1;
+		<span class="ink-s2">if</span> (fire_y_bot <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>height) <span class="ink-s2">continue</span>;
+
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> mx <span class="ink-s2">=</span> 0; mx <span class="ink-s2">&lt;</span> <span class="ink-s6">MASK_W</span>; mx<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> vx <span class="ink-s2">=</span> mask_x <span class="ink-s2">+</span> mx;
+			<span class="ink-s2">if</span> (vx <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> vx <span class="ink-s2">&gt;=</span> view_w) <span class="ink-s2">continue</span>;
+
+			xray::<span class="ink-s3">Cell</span> mc <span class="ink-s2">=</span> tea_mask_cells[my <span class="ink-s2">*</span> <span class="ink-s6">MASK_W</span> <span class="ink-s2">+</span> mx];
+			<span class="ink-s2">if</span> (mc<span class="ink-s2">.</span>content_len <span class="ink-s2">&gt;</span> 0 <span class="ink-s2">&amp;&amp;</span> mc<span class="ink-s2">.</span>content[0] <span class="ink-s2">!=</span> ' ') {
+				<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> vy <span class="ink-s2">*</span> view_w <span class="ink-s2">+</span> vx;
+				<span class="ink-s3">bool</span> cold <span class="ink-s2">=</span> self<span class="ink-s2">.</span>fire[fire_y_top <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> vx] <span class="ink-s2">==</span> 0
+					<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>fire[fire_y_bot <span class="ink-s2">*</span> self<span class="ink-s2">.</span>width <span class="ink-s2">+</span> vx] <span class="ink-s2">==</span> 0;
+				<span class="ink-s2">if</span> (cold) {
+					self<span class="ink-s2">.</span>view_cells[idx] <span class="ink-s2">=</span> mc;
+				} <span class="ink-s2">else</span> {
+					xray::<span class="ink-s3">Cell</span> c   <span class="ink-s2">=</span> self<span class="ink-s2">.</span>view_cells[idx];
+					<span class="ink-s3">char</span> mr        <span class="ink-s2">=</span> mc<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg<span class="ink-s2">.</span>r <span class="ink-s2">&gt;&gt;</span> 2;
+					<span class="ink-s3">char</span> mg        <span class="ink-s2">=</span> mc<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg<span class="ink-s2">.</span>g <span class="ink-s2">&gt;&gt;</span> 2;
+					<span class="ink-s3">char</span> mb        <span class="ink-s2">=</span> mc<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg<span class="ink-s2">.</span>b <span class="ink-s2">&gt;&gt;</span> 2;
+					xray::<span class="ink-s3">Color</span> cf <span class="ink-s2">=</span> c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>fg;
+					xray::<span class="ink-s3">Color</span> cb <span class="ink-s2">=</span> c<span class="ink-s2">.</span>style<span class="ink-s2">.</span>bg;
+					<span class="ink-s3">char</span> fr        <span class="ink-s2">=</span> cf<span class="ink-s2">.</span>r <span class="ink-s2">+</span> mr;
+					<span class="ink-s2">if</span> (fr <span class="ink-s2">&lt;</span> cf<span class="ink-s2">.</span>r) fr <span class="ink-s2">=</span> 255;
+					<span class="ink-s3">char</span> fg <span class="ink-s2">=</span> cf<span class="ink-s2">.</span>g <span class="ink-s2">+</span> mg;
+					<span class="ink-s2">if</span> (fg <span class="ink-s2">&lt;</span> cf<span class="ink-s2">.</span>g) fg <span class="ink-s2">=</span> 255;
+					<span class="ink-s3">char</span> fb <span class="ink-s2">=</span> cf<span class="ink-s2">.</span>b <span class="ink-s2">+</span> mb;
+					<span class="ink-s2">if</span> (fb <span class="ink-s2">&lt;</span> cf<span class="ink-s2">.</span>b) fb <span class="ink-s2">=</span> 255;
+					<span class="ink-s3">char</span> br <span class="ink-s2">=</span> cb<span class="ink-s2">.</span>r <span class="ink-s2">+</span> mr;
+					<span class="ink-s2">if</span> (br <span class="ink-s2">&lt;</span> cb<span class="ink-s2">.</span>r) br <span class="ink-s2">=</span> 255;
+					<span class="ink-s3">char</span> bg <span class="ink-s2">=</span> cb<span class="ink-s2">.</span>g <span class="ink-s2">+</span> mg;
+					<span class="ink-s2">if</span> (bg <span class="ink-s2">&lt;</span> cb<span class="ink-s2">.</span>g) bg <span class="ink-s2">=</span> 255;
+					<span class="ink-s3">char</span> bb <span class="ink-s2">=</span> cb<span class="ink-s2">.</span>b <span class="ink-s2">+</span> mb;
+					<span class="ink-s2">if</span> (bb <span class="ink-s2">&lt;</span> cb<span class="ink-s2">.</span>b) bb <span class="ink-s2">=</span> 255;
+					c<span class="ink-s2">.</span>style <span class="ink-s2">=</span> c<span class="ink-s2">.</span>style<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(fr, fg, fb))<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_rgb</span>(br, bg, bb));
+					self<span class="ink-s2">.</span>view_cells[idx] <span class="ink-s2">=</span> c;
+				}
+			}
+		}
+	}
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">grid</span>(self<span class="ink-s2">.</span>view_cells, view_w, view_h);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">FireModel</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true })) {
+		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
+		<span class="ink-s2">return</span> 1;
+	}
+	io::<span class="ink-s4">printn</span>(<span class="ink-s9">&quot;Bye!&quot;</span>);
+	<span class="ink-s2">return</span> 0;
+}</pre>

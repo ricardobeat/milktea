@@ -72,3 +72,11 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .counter-panel .demo-surface {height:100%;border:0;border-radius:0}
 .counter-panel milktea-view {height:100%;aspect-ratio:auto}
 .counter-panel .restart {right:8px}
+
+.demo-browser {min-width:0}
+.demo-browser .code-heading {padding:8px 12px}
+.demo-browser .code-heading>span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.demo-browser .demo-surface {border:0;border-radius:0}
+.demo-code {height:240px;overflow:auto}
+.demo-code[hidden],.demo-preview[hidden] {display:none}
+.demo-code pre {margin:0;min-height:100%;font-size:12px;tab-size:4}

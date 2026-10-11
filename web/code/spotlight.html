@@ -1,0 +1,239 @@
+<pre class="ink"><span class="ink-s0">// spotlight — a field of dots that swells toward the mouse.</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">// Every dot measures its distance to a soft light that chases the cursor.</span>
+<span class="ink-s0">// Near the light a dot grows (· ∙ • ●) and warms in colour; far away it rests</span>
+<span class="ink-s0">// as a dim speck. Two kinds of easing shape the motion:</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">//   in space — the falloff from the light's centre to its edge runs through</span>
+<span class="ink-s0">//              an ease curve, so the pool has a bright core and a soft rim;</span>
+<span class="ink-s0">//   in time  — the light rides a spring after the cursor, and holding a</span>
+<span class="ink-s0">//              button blooms its radius outward for as long as it stays down.</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">// update() says where things should go and view() only reads where they are.</span>
+<span class="ink-s0">// The springs keep frames coming until they settle, and a held button keeps</span>
+<span class="ink-s0">// its own timer, since a bloom has no end. A resting spotlight costs nothing.</span>
+<span class="ink-s2">module</span> spotlight;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> dye;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::math;
+
+<span class="ink-s0">// ── Tuning ───────────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DOT_SPACING_X</span> <span class="ink-s2">=</span> 4; <span class="ink-s0">// columns between dots</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DOT_SPACING_Y</span> <span class="ink-s2">=</span> 2; <span class="ink-s0">// rows between dots — half of X, since cells are tall</span>
+
+<span class="ink-s2">const</span> <span class="ink-s3">double</span> <span class="ink-s6">CELL_ASPECT</span> <span class="ink-s2">=</span> 2.0; <span class="ink-s0">// a cell is about twice as tall as it is wide</span>
+
+<span class="ink-s2">const</span> <span class="ink-s3">double</span> <span class="ink-s6">RADIUS</span>      <span class="ink-s2">=</span> 34.0; <span class="ink-s0">// light radius at rest, in columns</span>
+<span class="ink-s2">const</span> <span class="ink-s3">double</span> <span class="ink-s6">BLOOM_SPEED</span> <span class="ink-s2">=</span> 30.0; <span class="ink-s0">// columns per second the radius grows while held</span>
+<span class="ink-s2">const</span> <span class="ink-s3">double</span> <span class="ink-s6">BLOOM_RAMP</span>  <span class="ink-s2">=</span> 0.6;  <span class="ink-s0">// seconds for the bloom to reach full speed</span>
+
+<span class="ink-s0">// The light trails the cursor without overshooting it; the radius springs</span>
+<span class="ink-s0">// back from a bloom with a little bounce, dipping just under its resting size.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">SpringParams</span> <span class="ink-s4">follow_feel</span>() <span class="ink-s2">=&gt;</span> milktea::<span class="ink-s4">spring_feel</span>(500);
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">SpringParams</span> <span class="ink-s4">radius_feel</span>() <span class="ink-s2">=&gt;</span> milktea::<span class="ink-s4">spring_feel</span>(650, 0.2);
+
+<span class="ink-s0">// Dots from smallest to largest; the light picks one by intensity.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s2">*</span>] <span class="ink-s6">DOTS</span> <span class="ink-s2">=</span> { <span class="ink-s9">&quot;·&quot;</span>, <span class="ink-s9">&quot;∙&quot;</span>, <span class="ink-s9">&quot;•&quot;</span>, <span class="ink-s9">&quot;●&quot;</span> };
+
+<span class="ink-s0">// The colour ramp a dot walks as it lights up: night → tide → glow.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">COLOR_REST</span> <span class="ink-s2">=</span> <span class="ink-s9">&quot;#2a2f3a&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">COLOR_MID</span>  <span class="ink-s2">=</span> <span class="ink-s9">&quot;#4f7cac&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">COLOR_HOT</span>  <span class="ink-s2">=</span> <span class="ink-s9">&quot;#ffe6a7&quot;</span>;
+
+<span class="ink-s0">// ── Model ────────────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Model</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas;
+	<span class="ink-s3">sz</span> width;
+	<span class="ink-s3">sz</span> height;
+
+	milktea::<span class="ink-s3">Spring</span> light_x;
+	milktea::<span class="ink-s3">Spring</span> light_y;
+	milktea::<span class="ink-s3">Spring</span> radius; <span class="ink-s0">// the resting radius; a bloom adds on top of it</span>
+
+	<span class="ink-s3">bool</span> holding;  <span class="ink-s0">// a mouse button is down, so the bloom keeps growing</span>
+	<span class="ink-s3">sz</span> pressed_at; <span class="ink-s0">// when it went down</span>
+
+	<span class="ink-s3">bool</span> seen_mouse; <span class="ink-s0">// the light has been aimed by the cursor at least once</span>
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>(1, 1);
+	self<span class="ink-s2">.</span>radius <span class="ink-s2">=</span> milktea::<span class="ink-s4">spring</span>(<span class="ink-s6">RADIUS</span>, <span class="ink-s4">radius_feel</span>());
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">switch</span> (msg<span class="ink-s2">.</span>kind) {
+		<span class="ink-s2">case</span> <span class="ink-s6">WINDOW_SIZE</span>:
+			self<span class="ink-s2">.</span><span class="ink-s4">resize</span>(msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width, msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height);
+		<span class="ink-s2">case</span> <span class="ink-s6">MOUSE</span>:
+			<span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">follow</span>(msg<span class="ink-s2">.</span>mouse);
+		<span class="ink-s2">case</span> <span class="ink-s6">TICK</span>:
+			<span class="ink-s0">// The bloom's frame: the only timer this program runs.</span>
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>holding) <span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(milktea::<span class="ink-s6">FRAME_MS</span>);
+		<span class="ink-s2">case</span> <span class="ink-s6">KEY</span>:
+			<span class="ink-s2">if</span> (<span class="ink-s4">is_quit</span>(msg<span class="ink-s2">.</span>key)) <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">resize</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">sz</span> w, <span class="ink-s3">sz</span> h) {
+	self<span class="ink-s2">.</span>width  <span class="ink-s2">=</span> w;
+	self<span class="ink-s2">.</span>height <span class="ink-s2">=</span> h;
+	self<span class="ink-s2">.</span>canvas<span class="ink-s2">.</span><span class="ink-s4">resize</span>(w, h);
+	<span class="ink-s0">// Until the cursor shows up, rest the light in the middle of the screen.</span>
+	<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>seen_mouse) {
+		self<span class="ink-s2">.</span>light_x <span class="ink-s2">=</span> milktea::<span class="ink-s4">spring</span>(w <span class="ink-s2">/</span> 2.0, <span class="ink-s4">follow_feel</span>());
+		self<span class="ink-s2">.</span>light_y <span class="ink-s2">=</span> milktea::<span class="ink-s4">spring</span>(h <span class="ink-s2">/</span> 2.0, <span class="ink-s4">follow_feel</span>());
+	}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">follow</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">MouseMsg</span> m) {
+	self<span class="ink-s2">.</span>seen_mouse <span class="ink-s2">=</span> true;
+	self<span class="ink-s2">.</span>light_x<span class="ink-s2">.</span><span class="ink-s4">update</span>(m<span class="ink-s2">.</span>col);
+	self<span class="ink-s2">.</span>light_y<span class="ink-s2">.</span><span class="ink-s4">update</span>(m<span class="ink-s2">.</span>row);
+
+	<span class="ink-s2">if</span> (<span class="ink-s4">is_wheel</span>(m<span class="ink-s2">.</span>button)) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	<span class="ink-s2">switch</span> (m<span class="ink-s2">.</span>action) {
+		<span class="ink-s2">case</span> <span class="ink-s6">MOUSE_PRESS</span>:
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>holding) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			self<span class="ink-s2">.</span>holding    <span class="ink-s2">=</span> true;
+			self<span class="ink-s2">.</span>pressed_at <span class="ink-s2">=</span> milktea::<span class="ink-s4">frame_ms</span>();
+			<span class="ink-s0">// A bloom grows for as long as the button stays down, with nothing</span>
+			<span class="ink-s0">// to say when it ends, so it runs a frame timer until the release.</span>
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(milktea::<span class="ink-s6">FRAME_MS</span>);
+		<span class="ink-s2">case</span> <span class="ink-s6">MOUSE_RELEASE</span>:
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>holding) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			<span class="ink-s0">// Hand the bloom back to the spring as it stands — its size and the</span>
+			<span class="ink-s0">// speed it was growing at — so the light carries on outward for a</span>
+			<span class="ink-s0">// moment before it is reeled back in.</span>
+			<span class="ink-s3">double</span> held <span class="ink-s2">=</span> self<span class="ink-s2">.</span><span class="ink-s4">held</span>();
+			self<span class="ink-s2">.</span>radius<span class="ink-s2">.</span><span class="ink-s4">set</span>(self<span class="ink-s2">.</span>radius<span class="ink-s2">.</span><span class="ink-s4">value</span>() <span class="ink-s2">+</span> <span class="ink-s4">bloom</span>(held), self<span class="ink-s2">.</span>radius<span class="ink-s2">.</span><span class="ink-s4">velocity</span>() <span class="ink-s2">+</span> <span class="ink-s4">bloom_speed</span>(held));
+			self<span class="ink-s2">.</span>holding <span class="ink-s2">=</span> false;
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s0">// Seconds the button has been down.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">held</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s2">=&gt;</span> (<span class="ink-s3">double</span>)(milktea::<span class="ink-s4">frame_ms</span>() <span class="ink-s2">-</span> self<span class="ink-s2">.</span>pressed_at) <span class="ink-s2">/</span> 1000.0;
+
+<span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">light_radius</span>(<span class="ink-s2">&amp;</span>self) {
+	<span class="ink-s3">double</span> r <span class="ink-s2">=</span> self<span class="ink-s2">.</span>radius<span class="ink-s2">.</span><span class="ink-s4">value</span>();
+	<span class="ink-s2">return</span> self<span class="ink-s2">.</span>holding <span class="ink-s2">?</span> r <span class="ink-s2">+</span> <span class="ink-s4">bloom</span>(self<span class="ink-s2">.</span><span class="ink-s4">held</span>()) <span class="ink-s2">:</span> r;
+}
+
+<span class="ink-s0">// How far the bloom has spread after `held` seconds. The growth eases in over</span>
+<span class="ink-s0">// BLOOM_RAMP and then carries on at BLOOM_SPEED — there is no ceiling. A cubic</span>
+<span class="ink-s0">// ease-in covering a third of the full-speed distance meets the straight line</span>
+<span class="ink-s0">// at exactly that speed, so the hand-off has no kink.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s4">bloom</span>(<span class="ink-s3">double</span> held) {
+	<span class="ink-s3">double</span> ramp <span class="ink-s2">=</span> <span class="ink-s6">BLOOM_SPEED</span> <span class="ink-s2">*</span> <span class="ink-s6">BLOOM_RAMP</span> <span class="ink-s2">/</span> 3.0;
+	<span class="ink-s2">if</span> (held <span class="ink-s2">&lt;</span> <span class="ink-s6">BLOOM_RAMP</span>) <span class="ink-s2">return</span> ramp <span class="ink-s2">*</span> milktea::<span class="ink-s4">ease</span>(<span class="ink-s6">EASE_IN_CUBIC</span>, held <span class="ink-s2">/</span> <span class="ink-s6">BLOOM_RAMP</span>);
+	<span class="ink-s2">return</span> ramp <span class="ink-s2">+</span> <span class="ink-s6">BLOOM_SPEED</span> <span class="ink-s2">*</span> (held <span class="ink-s2">-</span> <span class="ink-s6">BLOOM_RAMP</span>);
+}
+
+<span class="ink-s0">// How fast the bloom is spreading after `held` seconds: bloom's slope.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s4">bloom_speed</span>(<span class="ink-s3">double</span> held) {
+	<span class="ink-s2">if</span> (held <span class="ink-s2">&gt;=</span> <span class="ink-s6">BLOOM_RAMP</span>) <span class="ink-s2">return</span> <span class="ink-s6">BLOOM_SPEED</span>;
+	<span class="ink-s3">double</span> u <span class="ink-s2">=</span> held <span class="ink-s2">/</span> <span class="ink-s6">BLOOM_RAMP</span>;
+	<span class="ink-s2">return</span> <span class="ink-s6">BLOOM_SPEED</span> <span class="ink-s2">*</span> u <span class="ink-s2">*</span> u;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s4">is_wheel</span>(milktea::<span class="ink-s3">MouseButton</span> b) <span class="ink-s2">=&gt;</span> b <span class="ink-s2">==</span> <span class="ink-s6">MOUSE_WHEEL_UP</span> <span class="ink-s2">||</span> b <span class="ink-s2">==</span> <span class="ink-s6">MOUSE_WHEEL_DOWN</span>;
+
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s4">is_quit</span>(milktea::<span class="ink-s3">KeyMsg</span> k) {
+	<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> <span class="ink-s6">CTRL_C</span> <span class="ink-s2">||</span> k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> <span class="ink-s6">ESC</span>) <span class="ink-s2">return</span> true;
+	<span class="ink-s2">return</span> k<span class="ink-s2">.</span>code <span class="ink-s2">==</span> <span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q';
+}
+
+<span class="ink-s0">// ── View ─────────────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas <span class="ink-s2">=</span> self<span class="ink-s2">.</span>canvas;
+	canvas<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+
+	<span class="ink-s0">// The dot field takes the screen; a status row underneath holds the hint.</span>
+	xray::<span class="ink-s3">Rect</span>[2] zones;
+	xray::<span class="ink-s4">layout_v</span>(xray::<span class="ink-s4">new_rect</span>(0, 0, self<span class="ink-s2">.</span>width, self<span class="ink-s2">.</span>height), { xray::<span class="ink-s4">fill</span>(1), xray::<span class="ink-s4">cells</span>(1) }, zones[<span class="ink-s2">..</span>]);
+
+	self<span class="ink-s2">.</span><span class="ink-s4">draw_field</span>(canvas, zones[0]);
+	<span class="ink-s4">draw_hint</span>(canvas, zones[1]);
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(canvas);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">draw_field</span>(<span class="ink-s2">&amp;</span>self, xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas, xray::<span class="ink-s3">Rect</span> area) {
+	<span class="ink-s3">double</span> lx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>light_x<span class="ink-s2">.</span><span class="ink-s4">value</span>();
+	<span class="ink-s3">double</span> ly <span class="ink-s2">=</span> self<span class="ink-s2">.</span>light_y<span class="ink-s2">.</span><span class="ink-s4">value</span>();
+	<span class="ink-s3">double</span> radius <span class="ink-s2">=</span> self<span class="ink-s2">.</span><span class="ink-s4">light_radius</span>();
+
+	<span class="ink-s0">// Centre the lattice so the margins match on every side.</span>
+	<span class="ink-s3">sz</span> x0 <span class="ink-s2">=</span> area<span class="ink-s2">.</span>x <span class="ink-s2">+</span> (area<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">DOT_SPACING_X</span> <span class="ink-s2">/</span> 2;
+	<span class="ink-s3">sz</span> y0 <span class="ink-s2">=</span> area<span class="ink-s2">.</span>y <span class="ink-s2">+</span> (area<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">DOT_SPACING_Y</span> <span class="ink-s2">/</span> 2;
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> y0; row <span class="ink-s2">&lt;</span> area<span class="ink-s2">.</span><span class="ink-s4">bottom</span>(); row <span class="ink-s2">+=</span> <span class="ink-s6">DOT_SPACING_Y</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> x0; col <span class="ink-s2">&lt;</span> area<span class="ink-s2">.</span><span class="ink-s4">right</span>(); col <span class="ink-s2">+=</span> <span class="ink-s6">DOT_SPACING_X</span>) {
+			<span class="ink-s3">double</span> dx <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)col <span class="ink-s2">-</span> lx;
+			<span class="ink-s3">double</span> dy <span class="ink-s2">=</span> ((<span class="ink-s3">double</span>)row <span class="ink-s2">-</span> ly) <span class="ink-s2">*</span> <span class="ink-s6">CELL_ASPECT</span>;
+			<span class="ink-s3">double</span> glow <span class="ink-s2">=</span> <span class="ink-s4">intensity</span>(math::<span class="ink-s4">sqrt</span>(dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy), radius);
+			<span class="ink-s4">draw_dot</span>(canvas, col, row, glow);
+		}
+	}
+}
+
+<span class="ink-s0">// How brightly a dot `dist` columns from the light shines: 1 at the centre,</span>
+<span class="ink-s0">// 0 at the rim and beyond. The ease turns a linear ramp into a pool with a</span>
+<span class="ink-s0">// broad bright core and a soft shoulder.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s4">intensity</span>(<span class="ink-s3">double</span> dist, <span class="ink-s3">double</span> radius) {
+	<span class="ink-s2">if</span> (radius <span class="ink-s2">&lt;=</span> 0.0) <span class="ink-s2">return</span> 0.0;
+	<span class="ink-s3">double</span> t <span class="ink-s2">=</span> 1.0 <span class="ink-s2">-</span> dist <span class="ink-s2">/</span> radius;
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">ease</span>(<span class="ink-s6">EASE_IN_OUT_CUBIC</span>, t);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">draw_dot</span>(xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas, <span class="ink-s3">sz</span> col, <span class="ink-s3">sz</span> row, <span class="ink-s3">double</span> glow) {
+	<span class="ink-s3">sz</span> size <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)(glow <span class="ink-s2">*</span> (<span class="ink-s3">double</span>)(<span class="ink-s6">DOTS</span><span class="ink-s2">.</span>len <span class="ink-s2">-</span> 1) <span class="ink-s2">+</span> 0.5);
+	xray::<span class="ink-s3">Style</span> style <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(<span class="ink-s4">dot_color</span>(glow));
+	canvas<span class="ink-s2">.</span><span class="ink-s4">set_string</span>(col, row, <span class="ink-s6">DOTS</span>[size], style);
+}
+
+<span class="ink-s0">// Walk the three-stop ramp: the lower half of the glow cools from rest into</span>
+<span class="ink-s0">// the tide colour, the upper half heats it up to the glow.</span>
+<span class="ink-s2">fn</span> dye::<span class="ink-s3">Color</span> <span class="ink-s4">dot_color</span>(<span class="ink-s3">double</span> glow) {
+	dye::<span class="ink-s3">Color</span> rest <span class="ink-s2">=</span> dye::<span class="ink-s4">color_hex</span>(<span class="ink-s6">COLOR_REST</span>);
+	dye::<span class="ink-s3">Color</span> mid  <span class="ink-s2">=</span> dye::<span class="ink-s4">color_hex</span>(<span class="ink-s6">COLOR_MID</span>);
+	dye::<span class="ink-s3">Color</span> hot  <span class="ink-s2">=</span> dye::<span class="ink-s4">color_hex</span>(<span class="ink-s6">COLOR_HOT</span>);
+	<span class="ink-s2">if</span> (glow <span class="ink-s2">&lt;</span> 0.5) <span class="ink-s2">return</span> dye::<span class="ink-s4">blend_luv</span>(rest, mid, glow <span class="ink-s2">*</span> 2.0);
+	<span class="ink-s2">return</span> dye::<span class="ink-s4">blend_luv</span>(mid, hot, glow <span class="ink-s2">*</span> 2.0 <span class="ink-s2">-</span> 1.0);
+}
+
+<span class="ink-s0">// Centre the hint in its row: a column sized to the text, with equal fills</span>
+<span class="ink-s0">// either side taking up the slack.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">draw_hint</span>(xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas, xray::<span class="ink-s3">Rect</span> row) {
+	<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">HINT</span> <span class="ink-s2">=</span> <span class="ink-s9">&quot;move the mouse · hold to bloom · q to quit&quot;</span>;
+	xray::<span class="ink-s3">Rect</span>[3] cols;
+	xray::<span class="ink-s4">layout_h</span>(row, { xray::<span class="ink-s4">fill</span>(1), xray::<span class="ink-s4">cells</span>(glaze::<span class="ink-s4">string_width</span>(<span class="ink-s6">HINT</span>)), xray::<span class="ink-s4">fill</span>(1) }, cols[<span class="ink-s2">..</span>]);
+	xray::<span class="ink-s3">Style</span> style <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(dye::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#5c6370&quot;</span>));
+	canvas<span class="ink-s2">.</span><span class="ink-s4">draw_string_in_rect</span>(cols[1], <span class="ink-s6">HINT</span>, style);
+}
+
+<span class="ink-s0">// ── Main ─────────────────────────────────────────────────────────────────────</span>
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">Model</span> model;
+	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(<span class="ink-s2">&amp;</span>model, {
+		<span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true,
+		<span class="ink-s2">.</span>mouse_mode <span class="ink-s2">=</span> milktea::<span class="ink-s3">MouseMode</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MODE_ALL_MOTION</span>,
+	})) {
+		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
+		<span class="ink-s2">return</span> 1;
+	}
+	<span class="ink-s2">return</span> 0;
+}
+</pre>

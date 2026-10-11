@@ -1,0 +1,84 @@
+<pre class="ink"><span class="ink-s0">// inputbox — text input and submission history.</span>
+<span class="ink-s0">// </span>
+<span class="ink-s0">// Keys: any printable char → append, backspace → delete, q alone → quit, enter → submit</span>
+<span class="ink-s2">module</span> inputbox;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::dstring;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Model</span> {
+	<span class="ink-s3">DString</span> input;
+	<span class="ink-s3">DString</span> output;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s0">// Model state survives the runtime's temporary allocation pools.</span>
+	self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">init</span>(mem);
+	self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">init</span>(mem);
+	self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;Type something below.\n&quot;</span>);
+	self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;Enter to submit.&quot;</span>);
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>:
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>:
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span>:
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">len</span>() <span class="ink-s2">&gt;</span> 0) {
+				self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">append_char</span>('\n');
+				self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;&gt;&gt; &quot;</span>);
+				self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+				self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+			}
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">BACKSPACE</span>:
+			<span class="ink-s3">sz</span> l <span class="ink-s2">=</span> self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">len</span>();
+			<span class="ink-s2">if</span> (l <span class="ink-s2">&gt;</span> 0) self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">chop</span>(l <span class="ink-s2">-</span> 1);
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">len</span>() <span class="ink-s2">==</span> 0) <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+			<span class="ink-s0">// rune is a codepoint — encode as UTF-8 before appending</span>
+			<span class="ink-s3">char</span>[4] enc;
+			<span class="ink-s3">sz</span> n <span class="ink-s2">=</span> milktea::<span class="ink-s4">utf8_encode</span>(k<span class="ink-s2">.</span>rune, enc[<span class="ink-s2">..</span>]);
+			self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">append_string</span>((<span class="ink-s3">String</span>)enc[:n]);
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">String</span> input <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;&gt; %s█&quot;</span>, self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> hint  <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;input len: %d chars&quot;</span>, self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">len</span>());
+
+	glaze::<span class="ink-s3">Style</span> output_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#aaaaaa&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 0, 0, 1);
+	glaze::<span class="ink-s3">Style</span> input_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ffff00&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 1, 0, 1);
+	glaze::<span class="ink-s3">Style</span> hint_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#777777&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 1, 0, 1);
+
+	glaze::<span class="ink-s3">Style</span> title_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00ffcc&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">vstack</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;Input test&quot;</span>, title_style)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">str_view</span>(), output_style)<span class="ink-s2">.</span><span class="ink-s4">fill</span>(1))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(input, input_style)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(3)))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(hint, hint_style)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1)))
+		<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)
+		<span class="ink-s2">.</span><span class="ink-s4">with_padding</span>(1, 2, 1, 2);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">on_destroy</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>input<span class="ink-s2">.</span><span class="ink-s4">free</span>();
+	self<span class="ink-s2">.</span>output<span class="ink-s2">.</span><span class="ink-s4">free</span>();
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">Model</span> m <span class="ink-s2">=</span> { };
+	milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true });
+	<span class="ink-s2">return</span> 0;
+}
+</pre>

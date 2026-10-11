@@ -1,0 +1,73 @@
+<pre class="ink"><span class="ink-s2">module</span> timer;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> boba;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::string;
+<span class="ink-s2">import</span> std::core::dstring;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">TimerModel</span> {
+	boba::<span class="ink-s3">Timer</span> timer;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">TimerModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">TimerModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>timer <span class="ink-s2">=</span> boba::<span class="ink-s4">new_timer</span>(60);
+	<span class="ink-s2">return</span> self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">init_cmd</span>();
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">TimerModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">TimerModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">update</span>(msg);
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>:
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ') self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">toggle</span>();
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r') {
+				self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">reset</span>();
+				<span class="ink-s2">return</span> self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">init_cmd</span>();
+			}
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">TimerModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">TimerModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	glaze::<span class="ink-s3">Style</span> box_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ff00ff&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(2, 4, 2, 4)
+		<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
+
+	glaze::<span class="ink-s3">Style</span> subtle <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#666666&quot;</span>));
+
+	<span class="ink-s3">sz</span> minutes <span class="ink-s2">=</span> self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">remaining</span>() <span class="ink-s2">/</span> 60;
+	<span class="ink-s3">sz</span> secs <span class="ink-s2">=</span> self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span><span class="ink-s4">remaining</span>() <span class="ink-s2">%</span> 60;
+	<span class="ink-s3">String</span> time_str <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%02d:%02d&quot;</span>, minutes, secs);
+	<span class="ink-s3">String</span> status <span class="ink-s2">=</span> <span class="ink-s9">&quot;SPACE to pause&quot;</span>;
+	glaze::<span class="ink-s3">Style</span> status_style <span class="ink-s2">=</span> subtle;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span>done) {
+		status <span class="ink-s2">=</span> <span class="ink-s9">&quot;Time's up!&quot;</span>;
+		status_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00ff00&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>timer<span class="ink-s2">.</span>running) {
+		status <span class="ink-s2">=</span> <span class="ink-s9">&quot;PAUSED · SPACE to resume&quot;</span>;
+		status_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ffff00&quot;</span>));
+	}
+
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> content <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(time_str, box_style)<span class="ink-s2">.</span><span class="ink-s4">fit</span>())
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(status, status_style)<span class="ink-s2">.</span><span class="ink-s4">fit</span>())
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;r to reset  |  q to quit&quot;</span>, subtle)<span class="ink-s2">.</span><span class="ink-s4">fit</span>());
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">root</span>()<span class="ink-s2">.</span><span class="ink-s4">add</span>(content<span class="ink-s2">.</span><span class="ink-s4">center</span>());
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">TimerModel</span> m <span class="ink-s2">=</span> { };
+	milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true });
+	<span class="ink-s2">return</span> 0;
+}</pre>

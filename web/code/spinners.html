@@ -1,0 +1,200 @@
+<pre class="ink"><span class="ink-s2">module</span> spinners;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> tgp;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::mem;
+<span class="ink-s2">import</span> std::core::string;
+<span class="ink-s2">import</span> std::core::dstring;
+
+<span class="ink-s2">const</span> <span class="ink-s3">int</span> <span class="ink-s6">MSG_SPIN</span> <span class="ink-s2">=</span> 1;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">SpinnersModel</span> {
+	tgp::<span class="ink-s3">Session</span> gfx;
+	tgp::<span class="ink-s3">Glyph</span> ring;
+	tgp::<span class="ink-s3">Glyph</span> ball;
+	tgp::<span class="ink-s3">Glyph</span> orbit;
+	tgp::<span class="ink-s3">Glyph</span> cube;
+	<span class="ink-s3">sz</span> frame;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">SpinnersModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">SpinnersModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s0">$if</span> <span class="ink-s2">!</span><span class="ink-s0">$feat</span>(<span class="ink-s6">MILKTEA_WEB</span>):
+		self<span class="ink-s2">.</span>gfx <span class="ink-s2">=</span> tgp::<span class="ink-s4">new_session</span>();
+		<span class="ink-s0">// Registration is lazy: frames are transmitted on the first tick after</span>
+		<span class="ink-s0">// the alt screen is active, so ordering against 1049h is handled for us.</span>
+		self<span class="ink-s2">.</span>ring <span class="ink-s2">=</span> self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">register</span>(
+			{
+				<span class="ink-s2">.</span>draw <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>gen_ring,
+				<span class="ink-s2">.</span>count <span class="ink-s2">=</span> <span class="ink-s6">RING_FRAMES</span>,
+				<span class="ink-s2">.</span>width <span class="ink-s2">=</span> <span class="ink-s6">GFX_W</span>,
+				<span class="ink-s2">.</span>height <span class="ink-s2">=</span> <span class="ink-s6">GFX_H</span>,
+				<span class="ink-s2">.</span>fps <span class="ink-s2">=</span> 12,
+				<span class="ink-s2">.</span>fallback <span class="ink-s2">=</span> <span class="ink-s9">&quot;◍&quot;</span>,
+			}
+		)<span class="ink-s2">!!</span>;
+		self<span class="ink-s2">.</span>ball <span class="ink-s2">=</span> self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">register</span>(
+			{
+				<span class="ink-s2">.</span>draw <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>gen_ball,
+				<span class="ink-s2">.</span>count <span class="ink-s2">=</span> <span class="ink-s6">GFX_FRAMES</span>,
+				<span class="ink-s2">.</span>width <span class="ink-s2">=</span> <span class="ink-s6">GFX_W</span>,
+				<span class="ink-s2">.</span>height <span class="ink-s2">=</span> <span class="ink-s6">GFX_H</span>,
+				<span class="ink-s2">.</span>fps <span class="ink-s2">=</span> 12,
+				<span class="ink-s2">.</span>fallback <span class="ink-s2">=</span> <span class="ink-s9">&quot;●&quot;</span>,
+			}
+		)<span class="ink-s2">!!</span>;
+		self<span class="ink-s2">.</span>orbit <span class="ink-s2">=</span> self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">register</span>(
+			{
+				<span class="ink-s2">.</span>draw <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>gen_orbit,
+				<span class="ink-s2">.</span>count <span class="ink-s2">=</span> <span class="ink-s6">GFX_FRAMES</span>,
+				<span class="ink-s2">.</span>width <span class="ink-s2">=</span> <span class="ink-s6">GFX_W</span>,
+				<span class="ink-s2">.</span>height <span class="ink-s2">=</span> <span class="ink-s6">GFX_H</span>,
+				<span class="ink-s2">.</span>fps <span class="ink-s2">=</span> 12,
+				<span class="ink-s2">.</span>fallback <span class="ink-s2">=</span> <span class="ink-s9">&quot;◎&quot;</span>,
+			}
+		)<span class="ink-s2">!!</span>;
+		self<span class="ink-s2">.</span>cube <span class="ink-s2">=</span> self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">register</span>(
+			{
+				<span class="ink-s2">.</span>draw <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>gen_cube,
+				<span class="ink-s2">.</span>count <span class="ink-s2">=</span> <span class="ink-s6">CUBE_FRAMES</span>,
+				<span class="ink-s2">.</span>width <span class="ink-s2">=</span> <span class="ink-s6">GFX_W</span>,
+				<span class="ink-s2">.</span>height <span class="ink-s2">=</span> <span class="ink-s6">GFX_H</span>,
+				<span class="ink-s2">.</span>fps <span class="ink-s2">=</span> 12,
+				<span class="ink-s2">.</span>fallback <span class="ink-s2">=</span> <span class="ink-s9">&quot;◆&quot;</span>,
+			}
+		)<span class="ink-s2">!!</span>;
+	<span class="ink-s0">$endif</span>
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(80, <span class="ink-s2">&amp;</span>on_spin);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Msg</span> <span class="ink-s4">on_spin</span>() {
+	<span class="ink-s2">return</span> { <span class="ink-s2">.</span>kind <span class="ink-s2">=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">USER</span>, <span class="ink-s2">.</span>tag <span class="ink-s2">=</span> <span class="ink-s6">MSG_SPIN</span> };
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">SpinnersModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">SpinnersModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">USER</span> <span class="ink-s2">&amp;&amp;</span> msg<span class="ink-s2">.</span>tag <span class="ink-s2">==</span> <span class="ink-s6">MSG_SPIN</span>) {
+		self<span class="ink-s2">.</span>frame<span class="ink-s2">++</span>;
+		<span class="ink-s0">// Advances the animation clock, transmits pending glyphs once the</span>
+		<span class="ink-s0">// alt screen is up, and reconciles placements.</span>
+		<span class="ink-s0">$if</span> <span class="ink-s2">!</span><span class="ink-s0">$feat</span>(<span class="ink-s6">MILKTEA_WEB</span>):
+			self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">tick</span>();
+		<span class="ink-s0">$endif</span>
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(80, <span class="ink-s2">&amp;</span>on_spin);
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>:
+			<span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>:
+			<span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">SpinnersModel</span><span class="ink-s2">.</span><span class="ink-s4">quit</span>(<span class="ink-s3">SpinnersModel</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s0">$if</span> <span class="ink-s2">!</span><span class="ink-s0">$feat</span>(<span class="ink-s6">MILKTEA_WEB</span>):
+		self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
+	<span class="ink-s0">$endif</span>
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">SpinnersModel</span><span class="ink-s2">.</span><span class="ink-s4">on_destroy</span>(<span class="ink-s3">SpinnersModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s0">$if</span> <span class="ink-s2">!</span><span class="ink-s0">$feat</span>(<span class="ink-s6">MILKTEA_WEB</span>):
+		self<span class="ink-s2">.</span>gfx<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
+	<span class="ink-s0">$endif</span>
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">SpinnerDef</span> {
+	<span class="ink-s3">String</span> name;
+	<span class="ink-s3">String</span>[8] frames;
+	<span class="ink-s3">sz</span> count;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">SpinnersModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">SpinnersModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">SpinnerDef</span>[6] spinners;
+	spinners[0] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Dots&quot;</span>, <span class="ink-s2">.</span>frames <span class="ink-s2">=</span> { <span class="ink-s9">&quot;⠋&quot;</span>, <span class="ink-s9">&quot;⠙&quot;</span>, <span class="ink-s9">&quot;⠹&quot;</span>, <span class="ink-s9">&quot;⠸&quot;</span>, <span class="ink-s9">&quot;⠼&quot;</span>, <span class="ink-s9">&quot;⠴&quot;</span>, <span class="ink-s9">&quot;⠦&quot;</span>, <span class="ink-s9">&quot;⠧&quot;</span> }, <span class="ink-s2">.</span>count <span class="ink-s2">=</span> 8 };
+	spinners[1] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Lines&quot;</span>, <span class="ink-s2">.</span>frames <span class="ink-s2">=</span> { <span class="ink-s9">&quot;-&quot;</span>, <span class="ink-s9">&quot;\\&quot;</span>, <span class="ink-s9">&quot;|&quot;</span>, <span class="ink-s9">&quot;/&quot;</span>, <span class="ink-s9">&quot;-&quot;</span>, <span class="ink-s9">&quot;\\&quot;</span>, <span class="ink-s9">&quot;|&quot;</span>, <span class="ink-s9">&quot;/&quot;</span> }, <span class="ink-s2">.</span>count <span class="ink-s2">=</span> 4 };
+	spinners[2] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Arrow&quot;</span>, <span class="ink-s2">.</span>frames <span class="ink-s2">=</span> { <span class="ink-s9">&quot;←&quot;</span>, <span class="ink-s9">&quot;↖&quot;</span>, <span class="ink-s9">&quot;↑&quot;</span>, <span class="ink-s9">&quot;↗&quot;</span>, <span class="ink-s9">&quot;→&quot;</span>, <span class="ink-s9">&quot;↘&quot;</span>, <span class="ink-s9">&quot;↓&quot;</span>, <span class="ink-s9">&quot;↙&quot;</span> }, <span class="ink-s2">.</span>count <span class="ink-s2">=</span> 8 };
+	spinners[3] <span class="ink-s2">=</span> {
+		<span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Blocks&quot;</span>,
+		<span class="ink-s2">.</span>frames <span class="ink-s2">=</span> { <span class="ink-s9">&quot;▏&quot;</span>, <span class="ink-s9">&quot;▎&quot;</span>, <span class="ink-s9">&quot;▍&quot;</span>, <span class="ink-s9">&quot;▌&quot;</span>, <span class="ink-s9">&quot;▋&quot;</span>, <span class="ink-s9">&quot;▊&quot;</span>, <span class="ink-s9">&quot;▉&quot;</span>, <span class="ink-s9">&quot;█&quot;</span> },
+		<span class="ink-s2">.</span>count <span class="ink-s2">=</span> 8
+	};
+	spinners[4] <span class="ink-s2">=</span> {
+		<span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Moon&quot;</span>,
+		<span class="ink-s2">.</span>frames <span class="ink-s2">=</span> { <span class="ink-s9">&quot;🌑&quot;</span>, <span class="ink-s9">&quot;🌒&quot;</span>, <span class="ink-s9">&quot;🌓&quot;</span>, <span class="ink-s9">&quot;🌔&quot;</span>, <span class="ink-s9">&quot;🌕&quot;</span>, <span class="ink-s9">&quot;🌖&quot;</span>, <span class="ink-s9">&quot;🌗&quot;</span>, <span class="ink-s9">&quot;🌘&quot;</span> },
+		<span class="ink-s2">.</span>count <span class="ink-s2">=</span> 8
+	};
+	spinners[5] <span class="ink-s2">=</span> {
+		<span class="ink-s2">.</span>name <span class="ink-s2">=</span> <span class="ink-s9">&quot;Pulse&quot;</span>,
+		<span class="ink-s2">.</span>frames <span class="ink-s2">=</span> {
+			<span class="ink-s9">&quot;∙∙∙&quot;</span>,
+			<span class="ink-s9">&quot;●∙∙&quot;</span>,
+			<span class="ink-s9">&quot;∙●∙&quot;</span>,
+			<span class="ink-s9">&quot;∙∙●&quot;</span>,
+			<span class="ink-s9">&quot;∙∙∙&quot;</span>,
+			<span class="ink-s9">&quot;∙∙∙&quot;</span>,
+			<span class="ink-s9">&quot;∙∙∙&quot;</span>,
+			<span class="ink-s9">&quot;∙∙∙&quot;</span>
+		},
+		<span class="ink-s2">.</span>count <span class="ink-s2">=</span> 5
+	};
+
+	glaze::<span class="ink-s3">Style</span> title <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+	glaze::<span class="ink-s3">Style</span> label <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#888888&quot;</span>));
+	glaze::<span class="ink-s3">Style</span> active <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ff00ff&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+	glaze::<span class="ink-s3">Style</span> border <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
+
+	<span class="ink-s0">// Every slot has the same width, and each glyph gets four cells.</span>
+	<span class="ink-s0">// Animated frames and differently sized labels cannot shift the columns.</span>
+	<span class="ink-s3">sz</span> columns <span class="ink-s2">=</span> <span class="ink-s4">min</span>(3, <span class="ink-s4">max</span>(1, (milktea::<span class="ink-s4">screen_width</span>() <span class="ink-s2">-</span> 4) <span class="ink-s2">/</span> 14));
+	<span class="ink-s3">sz</span> rows <span class="ink-s2">=</span> (6 <span class="ink-s2">+</span> columns <span class="ink-s2">-</span> 1) <span class="ink-s2">/</span> columns;
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> gallery <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)<span class="ink-s2">.</span><span class="ink-s4">with_padding</span>(2, 2, 1, 2)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;Spinner Gallery&quot;</span>, title)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1)));
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> start <span class="ink-s2">=</span> 0; start <span class="ink-s2">&lt;</span> 6; start <span class="ink-s2">+=</span> columns) {
+		milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> row <span class="ink-s2">=</span> milktea::<span class="ink-s4">hstack</span>()<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1));
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> start; i <span class="ink-s2">&lt;</span> <span class="ink-s4">min</span>(start <span class="ink-s2">+</span> columns, 6); i<span class="ink-s2">++</span>) {
+			<span class="ink-s3">String</span> spin <span class="ink-s2">=</span> spinners[i]<span class="ink-s2">.</span>frames[self<span class="ink-s2">.</span>frame <span class="ink-s2">%</span> spinners[i]<span class="ink-s2">.</span>count];
+			row<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">hstack</span>()<span class="ink-s2">.</span><span class="ink-s4">width</span>(milktea::<span class="ink-s4">cells</span>(14))
+				<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(spin, active)<span class="ink-s2">.</span><span class="ink-s4">width</span>(milktea::<span class="ink-s4">cells</span>(4)))
+				<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(spinners[i]<span class="ink-s2">.</span>name, label)<span class="ink-s2">.</span><span class="ink-s4">fill</span>(1)));
+		}
+		gallery<span class="ink-s2">.</span><span class="ink-s4">add</span>(row);
+	}
+	<span class="ink-s3">sz</span> extra_rows <span class="ink-s2">=</span> 0;
+	<span class="ink-s0">$if</span> <span class="ink-s2">!</span><span class="ink-s0">$feat</span>(<span class="ink-s6">MILKTEA_WEB</span>):
+		<span class="ink-s2">if</span> (milktea::<span class="ink-s4">kitty_graphics_supported</span>()) {
+			<span class="ink-s3">String</span>[4] gfx_views <span class="ink-s2">=</span> {
+				string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%s Ring&quot;</span>, self<span class="ink-s2">.</span>ring<span class="ink-s2">.</span><span class="ink-s4">render</span>()),
+				string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%s Goop Ball&quot;</span>, self<span class="ink-s2">.</span>ball<span class="ink-s2">.</span><span class="ink-s4">render</span>()),
+				string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%s Orbit&quot;</span>, self<span class="ink-s2">.</span>orbit<span class="ink-s2">.</span><span class="ink-s4">render</span>()),
+				string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%s Cube&quot;</span>, self<span class="ink-s2">.</span>cube<span class="ink-s2">.</span><span class="ink-s4">render</span>())
+			};
+			gallery<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;kitty graphics protocol:&quot;</span>, label)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1)));
+			gallery<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">join_horizontal_arr</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">TOP</span>, gfx_views[<span class="ink-s2">..</span>], 3)));
+			extra_rows <span class="ink-s2">=</span> 4;
+		}
+	<span class="ink-s0">$endif</span>
+
+	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> panel <span class="ink-s2">=</span> milktea::<span class="ink-s4">zstack</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">width</span>(milktea::<span class="ink-s4">cells</span>(columns <span class="ink-s2">*</span> 14 <span class="ink-s2">+</span> 4))
+		<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(rows <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> 5 <span class="ink-s2">+</span> extra_rows))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;&quot;</span>, border))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(gallery);
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_padding</span>(0, 0, 1, 0)
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">root</span>()<span class="ink-s2">.</span><span class="ink-s4">add</span>(panel<span class="ink-s2">.</span><span class="ink-s4">center</span>())<span class="ink-s2">.</span><span class="ink-s4">fill</span>(1))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">hstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_justify</span>(milktea::<span class="ink-s6">CENTER</span>)<span class="ink-s2">.</span><span class="ink-s4">height</span>(milktea::<span class="ink-s4">cells</span>(1))
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(<span class="ink-s9">&quot;Press q or ESC to quit&quot;</span>, label)<span class="ink-s2">.</span><span class="ink-s4">fit</span>()));
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">SpinnersModel</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true });
+}</pre>
