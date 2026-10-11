@@ -577,7 +577,9 @@ just web-build
 just web-serve
 ```
 
-Open <http://localhost:8000/?example=counter>. The browser uses the same
+Open <http://localhost:8000/> for the library showcase, or
+<http://localhost:8000/gallery.html?example=counter> for the complete gallery.
+The browser uses the same
 model/update/view API and xray cell grid, with keyboard, mouse, resize, and
 paste support. Try <http://localhost:8000/inline.html> for resizable inline
 embeds with lazy loading and fullscreen controls. See [web/README.md](web/README.md) for embedding, build details,

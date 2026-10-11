@@ -1,17 +1,24 @@
 # milktea in the browser
 
-Build and open the example gallery:
+Build and open the library showcase:
 
 ```sh
 just web-build
 just web-serve
-# http://localhost:8000/?example=counter
+# http://localhost:8000/
 ```
 
 Requires C3 0.8.4 (tested) with its WASM linker and Python 3. No Emscripten,
 Node packages, or bundler are needed to build or serve. Node is needed for
 `just web-test`. Build one example with `just web-build paint`; the gallery
 keeps all previously built examples in its dropdown.
+
+The homepage introduces the C3 model/update/view loop, then walks through
+inputbox, spinners, timer, splash, Doom fire, Doom fire tea, spotlight and
+Avian Assault. The native C3 intro is highlighted to static HTML with
+`inkfmt --lang c3 --html`; `intro.c3` holds the source excerpt. Demos load on
+visibility, pause offscreen and have restart/fullscreen controls. The complete
+gallery is at `gallery.html`, and old `/?example=…` links redirect there.
 
 The renderer uses the same model/update/view API, glaze styles, xray layout,
 cell grid, click targets, animation clock, and timer functions as the terminal.
@@ -24,7 +31,7 @@ Mouse modes, pixel coordinates, key release/repeat reporting, and CSS pointer
 shapes honor the program's settings. Tree click handlers also work without
 raw mouse reporting.
 
-`web/build/examples.json` lists the 42 portable examples and explains which
+`web/build/examples.json` lists the 43 portable examples and explains which
 examples need native services or kitty graphics. The component viewer's
 filesystem tab sees an empty directory. Kitty images, native file access,
 QuickJS, HTTP services, and native image/video loaders are not implemented.
@@ -49,6 +56,7 @@ WASM downloads and compilation start when the embed enters the viewport.
 Embeds with the same URL share the download and compiled module; each gets
 independent memory and model state. Offscreen embeds pause rendering, and
 removing an embed stops its program. Set `loading="eager"` to load immediately.
+Call `element.restart()` to start a fresh instance using the cached module.
 
 The bottom-right button enters real browser fullscreen. It fits the current
 grid to the screen, preserving the running program. Press Escape or click the
@@ -218,7 +226,7 @@ python3 scripts/build_web.py --wasm-opt /path/to/wasm-opt
 # Or: WASM_OPT=/path/to/wasm-opt just web-build
 ```
 
-With Binaryen 132, the 42 examples total 3.04 MB, down from 3.93 MB (22.7%).
+With Binaryen 132, the original 42 examples total 3.04 MB, down from 3.93 MB (22.7%).
 Counter is 70 KB and nanobots is 96 KB. The build also writes deterministic
 `.wasm.gz` files and records raw/compressed sizes in `build/examples.json`.
 Configure your production server to serve those precompressed files with
@@ -233,6 +241,8 @@ scaled mouse input, pixel density, resizing, fullscreen, and cleanup. With
 Playwright and its Chromium browser installed, start `just web-serve`, then
 run `node web/test/browser.mjs`. `MILKTEA_TEST_URL` overrides the server URL;
 `PLAYWRIGHT_PACKAGE` can point at an external package.json containing Playwright.
+`node web/test/site-browser.mjs` checks the showcase's lazy loading, interactive
+controls, demo order, mobile layout and gallery redirects in Chromium or WebKit.
 
 ## Model lifetime
 

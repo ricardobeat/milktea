@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>milktea · canvas examples</title>
+<style>
+  :root { color-scheme: dark; font: 14px ui-monospace, monospace; background: #111318; color: #ddd; }
+  body { margin: 0; display: flex; flex-direction: column; height: 100dvh; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; flex-wrap: wrap; }
+  strong { color: #e4b2d6; } select, button { font: inherit; padding: 6px 10px; background: #232631; color: #eee; border: 1px solid #454958; border-radius: 4px; }
+  #status { color: #aaa; } canvas { display: block; width: 100%; flex: 1; min-height: 0; outline: none; }
+  canvas:focus { box-shadow: inset 0 0 0 1px #65516d; }
+  footer { padding: 8px 16px; color: #999; font-size: 12px; }
+</style>
+<header><a href="./" style="color:#e4b2d6">milktea / home</a><a href="./inline.html" style="color:#e4b2d6">Inline embeds</a><a href="./editor.html" style="color:#e4b2d6">Live JS editor</a><label>Example <select id="examples"></select></label><button id="restart">Restart</button><span id="status">Loading…</span></header>
+<canvas aria-label="Interactive milktea example. Click to focus, then use keyboard or mouse."></canvas>
+<footer>Click the canvas to focus · keyboard, drag, wheel & paste · q quits most examples</footer>
+<script type="module">
+  import {MilkteaCanvas, instantiateMilktea} from './engine.mjs';
+  const select = document.querySelector('select'), canvas = document.querySelector('canvas'), status = document.querySelector('#status');
+  let engine, generation = 0;
+  const showError = error => { status.textContent = error.message; console.error(error); };
+  async function load() {
+    const current = ++generation;
+    engine?.stop(); engine = null;
+    const name = select.value;
+    status.textContent = 'Loading…';
+    history.replaceState(null, '', `?example=${encodeURIComponent(name)}`);
+    try {
+      const response = await fetch(`./build/${encodeURIComponent(name)}.wasm`);
+      if (!response.ok) throw new Error(`HTTP ${response.status} loading ${name}`);
+      const wasm = await instantiateMilktea(await response.arrayBuffer());
+      if (current !== generation) return;
+      engine = new MilkteaCanvas(canvas, wasm, {onQuit: () => { status.textContent = 'Stopped · press Restart to play again'; }, onError: showError});
+      status.textContent = 'Ready'; canvas.focus();
+    } catch (error) { if (current === generation) showError(error); }
+  }
+  try {
+    const response = await fetch('./build/examples.json');
+    if (!response.ok) throw new Error('Run just web-build to compile the examples first.');
+    const {examples} = await response.json();
+    for (const name of examples) select.add(new Option(name, name));
+    const requested = new URLSearchParams(location.search).get('example') || 'counter';
+    if (examples.includes(requested)) select.value = requested;
+    select.addEventListener('change', load);
+    document.querySelector('#restart').addEventListener('click', load);
+    await load();
+  } catch (error) { showError(error); }
+</script>
+</html>

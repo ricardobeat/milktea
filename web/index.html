@@ -1,50 +1,133 @@
 <!doctype html>
 <html lang="en">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>milktea · canvas examples</title>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A small C3 library for lively terminal interfaces. Explore live milktea demos, from input boxes and timers to compositing, springs and games.">
+  <meta name="theme-color" content="#f5f2eb">
+  <title>milktea — a small loop, a lot of character</title>
+  <link rel="stylesheet" href="./site.css">
+  <script type="module" src="./site.mjs"></script>
+  <script>
+    // Keep old gallery links working after making the showcase the homepage.
+    if (new URLSearchParams(location.search).has('example')) location.replace('./gallery.html' + location.search);
+  </script>
+</head>
+<body>
+<a class="skip-link" href="#demos">Skip to demos</a>
+<header class="site-header wrap">
+  <a class="wordmark" href="./" aria-label="milktea home"><span class="mark" aria-hidden="true">m<span>·</span></span>milktea</a>
+  <nav aria-label="Main navigation"><a href="#demos">Demos</a><a href="./editor.html">Live editor</a><a href="https://github.com/ricardobeat/milktea">GitHub <span aria-hidden="true">↗</span></a></nav>
+</header>
+<main class="wrap">
+  <section class="hero" aria-labelledby="title">
+    <p class="eyebrow"><span class="dot"></span> A terminal UI library for C3</p>
+    <h1 id="title">A small loop.<br>A lot of <em>character.</em></h1>
+    <p class="lead">Start with a little state. Add a message and a view.<br class="desktop-break"> Make anything from a text box to a tiny world.</p>
+    <div class="hero-links"><a class="button" href="#demos">See it in action <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/ricardobeat/milktea#readme">Read the docs <span aria-hidden="true">↗</span></a></div>
+    <span class="hero-note" aria-hidden="true">made of cells<br>full of possibilities <span>✳</span></span>
+  </section>
+
+  <section class="intro" aria-labelledby="intro-title">
+    <div class="intro-copy">
+      <p class="eyebrow">The whole idea</p>
+      <h2 id="intro-title">State in.<br> Characters out.</h2>
+      <p>Milktea follows the Elm architecture. Your program owns its state; the library handles the loop, input and rendering.</p>
+      <ol class="steps">
+        <li><span class="step-number">01</span><div><strong>Model</strong><p>The data your app needs.</p></div></li>
+        <li><span class="step-number">02</span><div><strong>Update</strong><p>A message comes in. State changes.</p></div></li>
+        <li><span class="step-number">03</span><div><strong>View</strong><p>Return text, a layout tree, or a cell grid.</p></div></li>
+      </ol>
+      <p class="fine-print">Glaze adds color and borders. Xray handles layout and layers. The same C3 programs run here through WebAssembly.</p>
+    </div>
+    <div class="code-window">
+      <div class="code-heading"><span><i></i><i></i><i></i></span><span>a counter’s update & view</span><span class="code-lang">C3</span></div>
+      <!-- INTRO START: generated from intro.c3 with inkfmt --lang c3 --html -->
 <style>
-  :root { color-scheme: dark; font: 14px ui-monospace, monospace; background: #111318; color: #ddd; }
-  body { margin: 0; display: flex; flex-direction: column; height: 100dvh; }
-  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; flex-wrap: wrap; }
-  strong { color: #e4b2d6; } select, button { font: inherit; padding: 6px 10px; background: #232631; color: #eee; border: 1px solid #454958; border-radius: 4px; }
-  #status { color: #aaa; } canvas { display: block; width: 100%; flex: 1; min-height: 0; outline: none; }
-  canvas:focus { box-shadow: inset 0 0 0 1px #65516d; }
-  footer { padding: 8px 16px; color: #999; font-size: 12px; }
+.ink{background:#272822;color:#f8f8f2;}
+.ink .ink-s0{color:#75715e;}
+.ink .ink-s1{color:#75715e;font-style:italic;}
+.ink .ink-s2{color:#f92672;font-weight:bold;}
+.ink .ink-s3{color:#66d9ef;font-weight:bold;}
+.ink .ink-s4{color:#a6e22e;}
+.ink .ink-s5{color:#a6e22e;font-weight:bold;}
+.ink .ink-s6{color:#66d9ef;}
+.ink .ink-s7{color:#f92672;}
+.ink .ink-s8{color:#ae81ff;}
+.ink .ink-s9{color:#e6db74;}
+.ink .ink-s10{color:#ae81ff;font-weight:bold;}
+.ink .ink-s11{background:#3e3d32;}
+.ink .ink-s12{font-style:italic;}
+.ink .ink-s13{font-weight:bold;}
+.ink .ink-s14{text-decoration:underline;}
 </style>
-<header><strong>milktea / web</strong><a href="./inline.html" style="color:#e4b2d6">Inline embeds</a><a href="./editor.html" style="color:#e4b2d6">Live JS editor</a><label>Example <select id="examples"></select></label><button id="restart">Restart</button><span id="status">Loading…</span></header>
-<canvas aria-label="Interactive milktea example. Click to focus, then use keyboard or mouse."></canvas>
-<footer>Click the canvas to focus · keyboard, drag, wheel & paste · q quits most examples</footer>
-<script type="module">
-  import {MilkteaCanvas, instantiateMilktea} from './engine.mjs';
-  const select = document.querySelector('select'), canvas = document.querySelector('canvas'), status = document.querySelector('#status');
-  let engine, generation = 0;
-  const showError = error => { status.textContent = error.message; console.error(error); };
-  async function load() {
-    const current = ++generation;
-    engine?.stop(); engine = null;
-    const name = select.value;
-    status.textContent = 'Loading…';
-    history.replaceState(null, '', `?example=${encodeURIComponent(name)}`);
-    try {
-      const response = await fetch(`./build/${encodeURIComponent(name)}.wasm`);
-      if (!response.ok) throw new Error(`HTTP ${response.status} loading ${name}`);
-      const wasm = await instantiateMilktea(await response.arrayBuffer());
-      if (current !== generation) return;
-      engine = new MilkteaCanvas(canvas, wasm, {onQuit: () => { status.textContent = 'Stopped · press Restart to play again'; }, onError: showError});
-      status.textContent = 'Ready'; canvas.focus();
-    } catch (error) { if (current === generation) showError(error); }
-  }
-  try {
-    const response = await fetch('./build/examples.json');
-    if (!response.ok) throw new Error('Run just web-build to compile the examples first.');
-    const {examples} = await response.json();
-    for (const name of examples) select.add(new Option(name, name));
-    const requested = new URLSearchParams(location.search).get('example') || 'counter';
-    if (examples.includes(requested)) select.value = requested;
-    select.addEventListener('change', load);
-    document.querySelector('#restart').addEventListener('click', load);
-    await load();
-  } catch (error) { showError(error); }
-</script>
+<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> { <span class="ink-s3">sz</span> count; }
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+  <span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span> <span class="ink-s2">&amp;&amp;</span>
+      msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">UP</span>) self<span class="ink-s2">.</span>count<span class="ink-s2">++</span>;
+  <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+  <span class="ink-s3">String</span> label <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Count: %d&quot;</span>, self<span class="ink-s2">.</span>count);
+  <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(label, glaze::<span class="ink-s4">style</span>()
+    <span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#a8d5ba&quot;</span>))
+    <span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
+    <span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 2, 1, 2));
+}
+</pre>
+      <!-- INTRO END -->
+      <div class="code-footer"><span>↑ to increment. Render the new state.</span><a href="./editor.html">Try the JavaScript bindings <span aria-hidden="true">↗</span></a></div>
+    </div>
+  </section>
+
+  <section id="demos" class="demos" aria-labelledby="demos-title">
+    <div class="section-heading"><div><p class="eyebrow">Small beginnings</p><h2 id="demos-title">Try a few things.</h2></div><p>These are running programs.<br>Click to focus. Expand to get a closer look.</p></div>
+    <div class="simple-demos">
+      <article class="demo demo-simple" id="inputbox">
+        <div class="demo-copy"><span class="demo-number">01 / INPUT</span><h3>A place to start.</h3><p>A text box, a little state, and a view that updates as you type.</p><div class="controls-note"><kbd>Enter</kbd> to submit</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/inputbox">View source ↗</a></div>
+        <div class="demo-surface"><milktea-view src="./build/inputbox.wasm" cols="64" rows="12" label="Input box: click and type, Enter submits"></milktea-view><button class="restart" type="button" aria-label="Restart input box" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      </article>
+      <article class="demo demo-simple" id="spinners">
+        <div class="demo-copy"><span class="demo-number">02 / MOTION</span><h3>A little patience.</h3><p>Dots, lines, arrows, blocks, moons and pulses. A timer gives a few characters a life of their own.</p><div class="controls-note">Six ways to say “one moment”</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spinners">View source ↗</a></div>
+        <div class="demo-surface"><milktea-view src="./build/spinners.wasm" cols="64" rows="12" label="Six animated text spinners"></milktea-view><button class="restart" type="button" aria-label="Restart spinners" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      </article>
+      <article class="demo demo-simple" id="timer">
+        <div class="demo-copy"><span class="demo-number">03 / TIME</span><h3>Take a minute.</h3><p>One stateful timer. Start, pause, resume, reset. The runtime keeps the messages coming.</p><div class="controls-note"><kbd>Space</kbd> pause <span>·</span> <kbd>R</kbd> reset</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/timer">View source ↗</a></div>
+        <div class="demo-surface"><milktea-view src="./build/timer.wasm" cols="32" rows="12" label="Countdown timer: Space pauses, R resets"></milktea-view><button class="restart" type="button" aria-label="Restart timer" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      </article>
+    </div>
+
+    <div class="section-heading chapter"><div><p class="eyebrow">Same cells, more possibilities</p><h2>Now give it some life.</h2></div><p>Color, animation, layers.<br>Still the same model, update and view.</p></div>
+    <article class="demo demo-wide" id="splash">
+      <div class="demo-title"><div><span class="demo-number">04 / COLOR</span><h3>Make an entrance.</h3></div><p>A splash screen drawn in a cell grid.<br>Color does most of the talking.</p></div>
+      <div class="demo-surface"><milktea-view src="./build/splash.wasm" cols="100" rows="20" label="Animated colorful splash screen"></milktea-view><button class="restart" type="button" aria-label="Restart splash" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      <div class="demo-foot"><span>Animation · color · cell drawing</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/splash">View source ↗</a></div>
+    </article>
+    <div class="fire-pair">
+      <article class="demo" id="doom-fire"><div class="demo-title"><div><span class="demo-number">05 / PIXELS</span><h3>A familiar flame.</h3></div></div>
+        <div class="demo-surface"><milktea-view src="./build/doom-fire.wasm" cols="80" rows="24" label="Doom fire animation"></milktea-view><button class="restart" type="button" aria-label="Restart Doom fire" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <p>The classic Doom fire, built from half-block cells and a small palette.</p><div class="demo-foot"><span>Canvas · timers</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/doom-fire">Source ↗</a></div>
+      </article>
+      <article class="demo" id="doom-fire-tea"><div class="demo-title"><div><span class="demo-number">06 / COMPOSITING</span><h3>Tea, extra hot.</h3></div></div>
+        <div class="demo-surface"><milktea-view src="./build/doom-fire-overlay.wasm" cols="80" rows="24" label="Doom fire composited with a tea cup mask"></milktea-view><button class="restart" type="button" aria-label="Restart Doom fire tea" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <p>The same fire, with a tea cup layered over it. Transparent cells let the flame shine through.</p><div class="demo-foot"><span>Layers · transparency</span><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
+      </article>
+    </div>
+    <article class="demo demo-wide" id="spotlight">
+      <div class="demo-title"><div><span class="demo-number">07 / INTERACTION</span><h3>Follow the light.</h3></div><p>Move your mouse. Hold it down.<br>Springs make the spotlight follow and bloom.</p></div>
+      <div class="demo-surface"><milktea-view src="./build/spotlight.wasm" cols="100" rows="24" label="Interactive spotlight: move the pointer and hold to bloom"></milktea-view><button class="restart" type="button" aria-label="Restart spotlight" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      <div class="demo-foot"><span>Mouse input · springs · easing</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spotlight">View source ↗</a></div>
+    </article>
+    <article class="demo demo-wide" id="avian-assault">
+      <div class="demo-title"><div><span class="demo-number">08 / PLAY</span><h3>And then, a whole game.</h3></div><p>Avian Assault brings it all together:<br>physics, menus, animation and a little chaos.</p></div>
+      <div class="demo-surface"><milktea-view src="./build/avian-assault.wasm" cols="80" rows="24" label="Avian Assault game: focus and press Enter to start"></milktea-view><button class="restart" type="button" aria-label="Restart Avian Assault" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      <div class="demo-foot"><span><kbd>Enter</kbd> start <span>·</span> drag / arrows to aim <span>·</span> <kbd>Space</kbd> launch</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/avian-assault">View source ↗</a></div>
+    </article>
+  </section>
+  <section class="your-turn" aria-labelledby="your-turn-title"><span class="end-mark" aria-hidden="true">✳</span><div><p class="eyebrow">Your turn</p><h2 id="your-turn-title">What will you make?</h2><p>Change some code. Try a different style. See what happens.</p></div><div class="end-links"><a class="button" href="./editor.html">Open the live editor <span aria-hidden="true">↗</span></a><a class="text-link" href="./gallery.html">Explore every example →</a></div></section>
+</main>
+<footer class="site-footer wrap"><a class="wordmark" href="./">milktea</a><span>C3 · terminal interfaces · MIT licensed</span><a href="https://github.com/ricardobeat/milktea">Source on GitHub ↗</a></footer>
+</body>
 </html>
