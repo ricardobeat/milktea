@@ -171,9 +171,11 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 		);
 	}
 	$if $feat(MILKTEA_WEB):
-		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[:3], 3));
-		content.append_string("\n\n");
-		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[3:3], 3));
+		sz columns = milktea::screen_width() < 52 ? 2 : 3;
+		for (sz start = 0; start < 6; start += columns) {
+			if (start > 0) content.append_string(columns == 2 ? "\n" : "\n\n");
+			content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[start:columns], 3));
+		}
 	$else
 		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[..], 3));
 	$endif
@@ -198,7 +200,7 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 	content.append_char('\n');
 	content.append_string(label.render("Press q or ESC to quit"));
 
-	return milktea::text(box_style.render(content.str_view()));
+	return milktea::root().add(milktea::text(box_style.render(content.str_view())).center());
 }
 
 fn int main() {

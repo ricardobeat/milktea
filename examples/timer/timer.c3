@@ -64,7 +64,7 @@ fn milktea::Node* TimerModel.view(TimerModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(subtle.render("r to reset  |  q to quit"));
-	return milktea::text(out.str_view());
+	return milktea::root().add(milktea::text(out.str_view()).center());
 }
 
 fn int main() {

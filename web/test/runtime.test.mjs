@@ -131,3 +131,34 @@ test('browser key translation handles Unicode and modifiers', () => {
   assert.equal(translateKey({key: 'Dead'}), null);
   assert.equal(translateKey({key: 'x', isComposing: true}), null);
 });
+
+function contentBounds(w) {
+  const g=readGrid(w),decode=new TextDecoder();
+  let left=g.cols,top=g.rows,right=-1,bottom=-1;
+  for(let i=0;i<g.cols*g.rows;i++) {
+    const p=g.ptr+i*g.stride,len=g.bytes[p+8];
+    if(!len || !decode.decode(g.bytes.subarray(p,p+len)).trim()) continue;
+    const x=i%g.cols,y=Math.floor(i/g.cols);
+    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+  }
+  return {left,top,right,bottom,cols:g.cols,rows:g.rows};
+}
+test('spinners and timer center their content; spinners fit a narrow viewport',async()=>{
+  for(const [name,cols,rows] of [['spinners',80,24],['spinners',37,14],['timer',80,24]]) {
+    const {wasm:w}=await start(name,cols,rows);
+    try {
+      w.mt_frame();const b=contentBounds(w);
+      assert.ok(Math.abs(b.left+b.right-(cols-1))<=2,`${name} centered horizontally`);
+      assert.ok(Math.abs(b.top+b.bottom-(rows-1))<=2,`${name} centered vertically`);
+      if(name==='spinners') for(const label of ['Dots','Lines','Arrow','Blocks','Moon','Pulse']) assert.ok(gridText(w).includes(label),label);
+    } finally {w.mt_stop();}
+  }
+});
+test('inputbox removes the test title and pads its initial content',async()=>{
+  const {wasm:w}=await start('inputbox',80,24);
+  try {
+    w.mt_frame();const b=contentBounds(w);
+    assert.doesNotMatch(gridText(w),/INPUTBOX TEST/);
+    assert.ok(b.left>=2 && b.top>=2,'placeholder has horizontal and vertical padding');
+  } finally {w.mt_stop();}
+});
