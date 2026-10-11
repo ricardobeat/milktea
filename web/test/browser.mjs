@@ -110,6 +110,13 @@ try {
     const {gridText} = await import('/engine.mjs');
     return gridText(document.querySelector('#view').engine.wasm).includes('Counter: 1');
   });
+  await sizing.$eval('#view', v => {window.previousEngine=v.engine;v.restart();});
+  await sizing.waitForFunction(async () => {
+    const {gridText}=await import('/engine.mjs');
+    const app=document.querySelector('#view').engine;
+    return app && app!==window.previousEngine && gridText(app.wasm).includes('Counter: 0');
+  });
+  assert.equal(await sizing.evaluate(()=>window.previousEngine.stopped),true);
   await sizing.$eval('#view', view => {window.removedEngine=view.engine;view.remove();});
   assert.equal(await sizing.evaluate(() => window.removedEngine.stopped), true);
   await sizing.close();

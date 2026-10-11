@@ -49,6 +49,12 @@ export class MilkteaView extends HTMLElement {
   }
   get expanded() { return this.ownerDocument.fullscreenElement === this; }
   get engine() { return this.app ?? null; }
+  restart() {
+    this.release();
+    if (this.isConnected && (this.visible || this.expanded || this.getAttribute('loading') === 'eager')) {
+      void this.ensureLoaded();
+    }
+  }
   connectedCallback() {
     this.ownerDocument.addEventListener('fullscreenchange', this.fullscreenChanged);
     this.visible = false;
