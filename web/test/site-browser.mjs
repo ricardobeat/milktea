@@ -16,13 +16,16 @@ try {
   assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'true');
   await page.locator('#counter-preview-tab').click();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
-  await page.locator('#counter-preview milktea-view').locator('canvas').focus();
+  await page.waitForFunction(()=>{const v=document.querySelector('#counter-preview milktea-view');return v.shadowRoot.activeElement===v.canvas;});
   await page.keyboard.press('ArrowUp');
   await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#counter-preview milktea-view').engine.wasm).includes('Counter: 1');});
   await page.locator('#counter-code-tab').click();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine.paused);
   await page.locator('#counter-code-tab').press('ArrowRight');
   assert.equal(await page.locator('#counter-preview-tab').getAttribute('aria-selected'),'true');
+  await page.locator('#counter-code-tab').click();
+  await page.locator('#counter-preview-tab').click();
+  assert.equal(await page.locator('#counter-preview milktea-view').evaluate(v=>v.shadowRoot.activeElement===v.canvas),true,'preview focuses an already loaded counter');
   await page.locator('#counter-code-tab').click();
   console.log('PASS native counter preview, keyboard tabs and hidden-panel pause');
   await page.screenshot({path:`/private/tmp/milktea-site-${browserName}.png`});

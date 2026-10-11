@@ -12,6 +12,14 @@ for (const surface of document.querySelectorAll('.demo-surface')) {
 }
 
 const tabs = [...document.querySelectorAll('.counter-tabs [role="tab"]')];
+const counterView = document.querySelector('#counter-preview milktea-view');
+function focusCounter() {
+  if (counterView.engine && !document.getElementById('counter-preview').hidden &&
+      document.activeElement === document.getElementById('counter-preview-tab')) {
+    counterView.canvas.focus({preventScroll: true});
+  }
+}
+counterView.addEventListener('ready', focusCounter);
 function selectCounterTab(tab) {
   for (const item of tabs) {
     const selected = item === tab;
@@ -21,7 +29,10 @@ function selectCounterTab(tab) {
   }
 }
 for (const [index, tab] of tabs.entries()) {
-  tab.addEventListener('click', () => selectCounterTab(tab));
+  tab.addEventListener('click', () => {
+    selectCounterTab(tab);
+    focusCounter();
+  });
   tab.addEventListener('keydown', event => {
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
       : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
