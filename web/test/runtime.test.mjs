@@ -188,12 +188,24 @@ test('inputbox spaces its title, indents instructions and pads the bottom', asyn
     assert.ok(lines.at(-1).every(c=>!c.trim()));
   } finally {w.mt_stop();}
 });
-test('timer centers its content', async()=>{
+test('timer centers each component with blank rows between them', async()=>{
   const {wasm:w}=await start('timer',80,24);
   try {
-    w.mt_frame();const b=contentBounds(w);
-    assert.ok(Math.abs(b.left+b.right-79)<=2);
-    assert.ok(Math.abs(b.top+b.bottom-23)<=2);
+    w.mt_frame();
+    for (const paused of [false,true]) {
+      if (paused) {w.mt_key(1,32,0,0);w.mt_frame();}
+      const lines=gridLines(w);
+      for (const text of ['01:00',paused?'PAUSED · SPACE to resume':'SPACE to pause','r to reset  |  q to quit']) {
+        const {x}=locate(lines,text);
+        assert.ok(Math.abs(x*2+text.length-80)<=1,`${text} centered`);
+      }
+      const status=locate(lines,paused?'PAUSED · SPACE to resume':'SPACE to pause');
+      const reset=locate(lines,'r to reset  |  q to quit');
+      assert.equal(reset.y,status.y+2);
+      assert.ok(lines[status.y-1].every(c=>!c.trim()));
+      const b=contentBounds(w);
+      assert.ok(Math.abs(b.top+b.bottom-23)<=2);
+    }
   } finally {w.mt_stop();}
 });
 test('doom fire keeps headroom at small and large viewport sizes', async () => {
