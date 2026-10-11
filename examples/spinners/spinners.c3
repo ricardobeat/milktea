@@ -20,29 +20,51 @@ struct SpinnersModel {
 }
 
 fn milktea::Cmd SpinnersModel.init(SpinnersModel* self) @dynamic {
-	self.gfx = tgp::new_session();
-	// Registration is lazy: frames are transmitted on the first tick after
-	// the alt screen is active, so ordering against 1049h is handled for us.
-	self.ring = self.gfx.register({
-		.draw = &gen_ring,
-		.count = RING_FRAMES, .width = GFX_W, .height = GFX_H,
-		.fps = 12, .fallback = "◍",
-	})!!;
-	self.ball = self.gfx.register({
-		.draw = &gen_ball,
-		.count = GFX_FRAMES, .width = GFX_W, .height = GFX_H,
-		.fps = 12, .fallback = "●",
-	})!!;
-	self.orbit = self.gfx.register({
-		.draw = &gen_orbit,
-		.count = GFX_FRAMES, .width = GFX_W, .height = GFX_H,
-		.fps = 12, .fallback = "◎",
-	})!!;
-	self.cube = self.gfx.register({
-		.draw = &gen_cube,
-		.count = CUBE_FRAMES, .width = GFX_W, .height = GFX_H,
-		.fps = 12, .fallback = "◆",
-	})!!;
+	$if !$feat(MILKTEA_WEB):
+		self.gfx = tgp::new_session();
+		// Registration is lazy: frames are transmitted on the first tick after
+		// the alt screen is active, so ordering against 1049h is handled for us.
+		self.ring = self.gfx.register(
+			{
+				.draw = &gen_ring,
+				.count = RING_FRAMES,
+				.width = GFX_W,
+				.height = GFX_H,
+				.fps = 12,
+				.fallback = "◍",
+			}
+		)!!;
+		self.ball = self.gfx.register(
+			{
+				.draw = &gen_ball,
+				.count = GFX_FRAMES,
+				.width = GFX_W,
+				.height = GFX_H,
+				.fps = 12,
+				.fallback = "●",
+			}
+		)!!;
+		self.orbit = self.gfx.register(
+			{
+				.draw = &gen_orbit,
+				.count = GFX_FRAMES,
+				.width = GFX_W,
+				.height = GFX_H,
+				.fps = 12,
+				.fallback = "◎",
+			}
+		)!!;
+		self.cube = self.gfx.register(
+			{
+				.draw = &gen_cube,
+				.count = CUBE_FRAMES,
+				.width = GFX_W,
+				.height = GFX_H,
+				.fps = 12,
+				.fallback = "◆",
+			}
+		)!!;
+	$endif
 	return milktea::tick(80, &on_spin);
 }
 
@@ -55,7 +77,9 @@ fn milktea::Cmd SpinnersModel.update(SpinnersModel* self, milktea::Msg msg) @dyn
 		self.frame++;
 		// Advances the animation clock, transmits pending glyphs once the
 		// alt screen is up, and reconciles placements.
-		self.gfx.tick();
+		$if !$feat(MILKTEA_WEB):
+			self.gfx.tick();
+		$endif
 		return milktea::tick(80, &on_spin);
 	}
 
@@ -75,12 +99,16 @@ fn milktea::Cmd SpinnersModel.update(SpinnersModel* self, milktea::Msg msg) @dyn
 }
 
 fn milktea::Cmd SpinnersModel.quit(SpinnersModel* self) {
-	self.gfx.destroy();
+	$if !$feat(MILKTEA_WEB):
+		self.gfx.destroy();
+	$endif
 	return milktea::quit();
 }
 
 fn void SpinnersModel.on_destroy(SpinnersModel* self) @dynamic {
-	self.gfx.destroy();
+	$if !$feat(MILKTEA_WEB):
+		self.gfx.destroy();
+	$endif
 }
 
 struct SpinnerDef {
@@ -119,8 +147,7 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 		.count = 5
 	};
 
-	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
-		.padding(0, 0, 1, 0);
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true).padding(0, 0, 1, 0);
 
 	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
 
@@ -134,7 +161,7 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 
 	String[6] spin_views;
 	for (sz i = 0; i < 6; i++) {
-		sz idx     = self.frame % spinners[i].count;
+		sz idx      = self.frame % spinners[i].count;
 		String spin = spinners[i].frames[idx];
 		String name = spinners[i].name;
 		spin_views[i] = string::tformat(
@@ -143,22 +170,30 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 			label.render(string::tformat("  %s", name))
 		);
 	}
-	content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[..], 3));
+	$if $feat(MILKTEA_WEB):
+		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[:3], 3));
+		content.append_string("\n\n");
+		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[3:3], 3));
+	$else
+		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[..], 3));
+	$endif
 
 	content.append_char('\n');
-	if (milktea::kitty_graphics_supported()) {
-		content.append_string(label.render("kitty graphics protocol:"));
-		content.append_char('\n');
-		String[4] gfx_views = {
-			string::tformat("  %s%s", self.ring.render(), label.render("  Ring")),
-			string::tformat("  %s%s", self.ball.render(), label.render("  Goop Ball")),
-			string::tformat("  %s%s", self.orbit.render(), label.render("  Orbit")),
-			string::tformat("  %s%s", self.cube.render(), label.render("  Cube"))
-		};
-		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, gfx_views[..], 3));
-	} else {
-		content.append_string(label.render("(graphics spinners fall back to text: ◍ ● ◎ ◆)"));
-	}
+	$if !$feat(MILKTEA_WEB):
+		if (milktea::kitty_graphics_supported()) {
+			content.append_string(label.render("kitty graphics protocol:"));
+			content.append_char('\n');
+			String[4] gfx_views = {
+				string::tformat("  %s%s", self.ring.render(), label.render("  Ring")),
+				string::tformat("  %s%s", self.ball.render(), label.render("  Goop Ball")),
+				string::tformat("  %s%s", self.orbit.render(), label.render("  Orbit")),
+				string::tformat("  %s%s", self.cube.render(), label.render("  Cube"))
+			};
+			content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, gfx_views[..], 3));
+		} else {
+			content.append_string(label.render("(graphics spinners fall back to text: ◍ ● ◎ ◆)"));
+		}
+	$endif
 
 	content.append_char('\n');
 	content.append_string(label.render("Press q or ESC to quit"));

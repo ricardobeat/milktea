@@ -16,7 +16,7 @@ UNSUPPORTED = {
     'ai-harness': 'native HTTP/curl', 'file-picker': 'host filesystem',
     'taro': 'QuickJS and native HTTP', 'minecraft': 'QuickJS/native services',
     'wolf3d': 'QuickJS/native services', 'wolf3d-server': 'native server/SQLite',
-    'spinners': 'kitty graphics', 'nineslice': 'kitty graphics', 'squiggle': 'kitty graphics',
+    'nineslice': 'kitty graphics', 'squiggle': 'kitty graphics',
     'oiia-player': 'native image/video loading', 'glb-viewer': 'native asset loading',
     'doom-fire-donut': 'native asset loading',
 }

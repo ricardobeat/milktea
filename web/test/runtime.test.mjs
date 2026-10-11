@@ -36,6 +36,16 @@ test('counter: arrow keys and quit', async () => {
     w.mt_key(1, 113, 0, 0); assert.equal(w.mt_frame(), 0);
   } finally { w.mt_stop(); }
 });
+test('spinners: all six text variants render and keep animating in the browser',async()=>{
+  const {wasm:w,advance}=await start('spinners',64,12);
+  try {
+    w.mt_frame();
+    const initial=gridText(w);
+    for(const name of ['Dots','Lines','Arrow','Blocks','Moon','Pulse']) assert.ok(initial.includes(name),name);
+    advance(80);
+    assert.notEqual(gridText(w),initial);
+  } finally {w.mt_stop();}
+});
 test('random: seeded output avoids short cycles in modulo-four values', () => {
   for (const seed of [0, 1, 1700000000000 >>> 0]) {
     const random = createRandom(seed), again = createRandom(seed);
