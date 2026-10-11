@@ -143,17 +143,6 @@ function contentBounds(w) {
   }
   return {left,top,right,bottom,cols:g.cols,rows:g.rows};
 }
-test('spinners and timer center their content; spinners fit a narrow viewport',async()=>{
-  for(const [name,cols,rows] of [['spinners',80,24],['spinners',37,14],['timer',80,24]]) {
-    const {wasm:w}=await start(name,cols,rows);
-    try {
-      w.mt_frame();const b=contentBounds(w);
-      assert.ok(Math.abs(b.left+b.right-(cols-1))<=2,`${name} centered horizontally`);
-      assert.ok(Math.abs(b.top+b.bottom-(rows-1))<=2,`${name} centered vertically`);
-      if(name==='spinners') for(const label of ['Dots','Lines','Arrow','Blocks','Moon','Pulse']) assert.ok(gridText(w).includes(label),label);
-    } finally {w.mt_stop();}
-  }
-});
 function gridLines(w) {
   const g=readGrid(w), decode=new TextDecoder();
   return Array.from({length:g.rows}, (_,y)=>Array.from({length:g.cols}, (_,x)=>{
@@ -169,6 +158,24 @@ function locate(lines, text) {
   }
   assert.fail(`Missing text: ${text}`);
 }
+test('spinners align columns and pin the centered footer above bottom padding', async()=>{
+  for (const [cols,rows,columns] of [[80,24,3],[37,14,2]]) {
+    const {wasm:w,advance}=await start('spinners',cols,rows);
+    try {
+      w.mt_frame();
+      for (let frame=0; frame<8; frame++) {
+        const lines=gridLines(w);
+        const labels=['Dots','Lines','Arrow','Blocks','Moon','Pulse'].map(name=>locate(lines,name));
+        for (let i=columns; i<labels.length; i++) assert.equal(labels[i].x,labels[i%columns].x);
+        const footer=locate(lines,'Press q or ESC to quit');
+        assert.equal(footer.y,rows-2);
+        assert.ok(Math.abs(footer.x*2+'Press q or ESC to quit'.length-cols)<=1);
+        assert.ok(lines.at(-1).every(c=>!c.trim()));
+        advance(80);
+      }
+    } finally {w.mt_stop();}
+  }
+});
 test('inputbox spaces its title, indents instructions and pads the bottom', async()=>{
   const {wasm:w}=await start('inputbox',80,24);
   try {
@@ -179,6 +186,14 @@ test('inputbox spaces its title, indents instructions and pads the bottom', asyn
     assert.equal(prompt.x,title.x+1);
     assert.equal(submit.x,prompt.x);
     assert.ok(lines.at(-1).every(c=>!c.trim()));
+  } finally {w.mt_stop();}
+});
+test('timer centers its content', async()=>{
+  const {wasm:w}=await start('timer',80,24);
+  try {
+    w.mt_frame();const b=contentBounds(w);
+    assert.ok(Math.abs(b.left+b.right-79)<=2);
+    assert.ok(Math.abs(b.top+b.bottom-23)<=2);
   } finally {w.mt_stop();}
 });
 test('doom fire keeps headroom at small and large viewport sizes', async () => {

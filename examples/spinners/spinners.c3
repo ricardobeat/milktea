@@ -147,60 +147,51 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 		.count = 5
 	};
 
-	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true).padding(0, 0, 1, 0);
-
+	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style label = glaze::style().foreground(glaze::color_hex("#888888"));
-
 	glaze::Style active = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
+	glaze::Style border = glaze::style().with_border(glaze::ROUNDED);
 
-	glaze::Style box_style = glaze::style().with_border(glaze::ROUNDED).padding(1, 2, 1, 2);
-
-	DString content = dstring::temp();
-	content.append_string(title.render("Spinner Gallery"));
-	content.append_char('\n');
-
-	String[6] spin_views;
-	for (sz i = 0; i < 6; i++) {
-		sz idx      = self.frame % spinners[i].count;
-		String spin = spinners[i].frames[idx];
-		String name = spinners[i].name;
-		spin_views[i] = string::tformat(
-			"%s%s",
-			active.render(string::tformat("  %s", spin)),
-			label.render(string::tformat("  %s", name))
-		);
-	}
-	$if $feat(MILKTEA_WEB):
-		sz columns = milktea::screen_width() < 52 ? 2 : 3;
-		for (sz start = 0; start < 6; start += columns) {
-			if (start > 0) content.append_string(columns == 2 ? "\n" : "\n\n");
-			content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[start:columns], 3));
+	// Every slot has the same width, and each glyph gets four cells.
+	// Animated frames and differently sized labels cannot shift the columns.
+	sz columns = min(3, max(1, (milktea::screen_width() - 4) / 14));
+	sz rows = (6 + columns - 1) / columns;
+	milktea::Node* gallery = milktea::vstack().with_gap(1).with_padding(2, 2, 1, 2)
+		.add(milktea::text("Spinner Gallery", title).height(milktea::cells(1)));
+	for (sz start = 0; start < 6; start += columns) {
+		milktea::Node* row = milktea::hstack().height(milktea::cells(1));
+		for (sz i = start; i < min(start + columns, 6); i++) {
+			String spin = spinners[i].frames[self.frame % spinners[i].count];
+			row.add(milktea::hstack().width(milktea::cells(14))
+				.add(milktea::text(spin, active).width(milktea::cells(4)))
+				.add(milktea::text(spinners[i].name, label).fill(1)));
 		}
-	$else
-		content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, spin_views[..], 3));
-	$endif
-
-	content.append_char('\n');
+		gallery.add(row);
+	}
+	sz extra_rows = 0;
 	$if !$feat(MILKTEA_WEB):
 		if (milktea::kitty_graphics_supported()) {
-			content.append_string(label.render("kitty graphics protocol:"));
-			content.append_char('\n');
 			String[4] gfx_views = {
-				string::tformat("  %s%s", self.ring.render(), label.render("  Ring")),
-				string::tformat("  %s%s", self.ball.render(), label.render("  Goop Ball")),
-				string::tformat("  %s%s", self.orbit.render(), label.render("  Orbit")),
-				string::tformat("  %s%s", self.cube.render(), label.render("  Cube"))
+				string::tformat("%s Ring", self.ring.render()),
+				string::tformat("%s Goop Ball", self.ball.render()),
+				string::tformat("%s Orbit", self.orbit.render()),
+				string::tformat("%s Cube", self.cube.render())
 			};
-			content.append_string(glaze::join_horizontal_arr(glaze::Position.TOP, gfx_views[..], 3));
-		} else {
-			content.append_string(label.render("(graphics spinners fall back to text: ◍ ● ◎ ◆)"));
+			gallery.add(milktea::text("kitty graphics protocol:", label).height(milktea::cells(1)));
+			gallery.add(milktea::text(glaze::join_horizontal_arr(glaze::Position.TOP, gfx_views[..], 3)));
+			extra_rows = 4;
 		}
 	$endif
 
-	content.append_char('\n');
-	content.append_string(label.render("Press q or ESC to quit"));
-
-	return milktea::root().add(milktea::text(box_style.render(content.str_view())).center());
+	milktea::Node* panel = milktea::zstack()
+		.width(milktea::cells(columns * 14 + 4))
+		.height(milktea::cells(rows * 2 + 5 + extra_rows))
+		.add(milktea::text("", border))
+		.add(gallery);
+	return milktea::vstack().with_padding(0, 0, 1, 0)
+		.add(milktea::root().add(panel.center()).fill(1))
+		.add(milktea::hstack().with_justify(milktea::CENTER).height(milktea::cells(1))
+			.add(milktea::text("Press q or ESC to quit", label).fit()));
 }
 
 fn int main() {
