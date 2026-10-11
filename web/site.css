@@ -64,3 +64,11 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 @media(prefers-reduced-motion:reduce) { html {scroll-behavior:auto} }
 @media(max-width:450px) { .site-header {flex-wrap:wrap;row-gap:18px}nav {width:100%;justify-content:space-between}nav a {white-space:nowrap}.hero-links {gap:16px;flex-wrap:wrap}.hero-links .button {font-size:12px;gap:12px;padding:12px 14px;white-space:nowrap}.hero-links .text-link {font-size:12px;white-space:nowrap} }
 .features {max-width:720px;font-size:16px;margin-top:12px}
+.counter-tabs {display:flex;gap:4px;margin-left:auto}
+.counter-tabs button {padding:5px 10px;border:1px solid transparent;border-radius:4px;background:transparent;color:#91a094;font:inherit;cursor:pointer}
+.counter-tabs button[aria-selected=true] {background:#344038;border-color:#526156;color:#e0e9df}
+.counter-panel {height:410px;overflow:auto}
+.counter-panel[hidden] {display:none}
+.counter-panel .demo-surface {height:100%;border:0;border-radius:0}
+.counter-panel milktea-view {height:100%;aspect-ratio:auto}
+.counter-panel .restart {right:8px}

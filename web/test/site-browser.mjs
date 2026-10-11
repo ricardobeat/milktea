@@ -10,9 +10,21 @@ try {
   const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin);
-  assert.deepEqual(await page.locator('milktea-view').evaluateAll(views=>views.map(v=>v.getAttribute('src'))),
+  assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>v.getAttribute('src'))),
     ['inputbox','spinners','timer','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`./build/${n}.wasm`));
   assert.equal(await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>r.name.endsWith('.wasm')).length),0,'demos stay unloaded before entering view');
+  assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'true');
+  await page.locator('#counter-preview-tab').click();
+  await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
+  await page.locator('#counter-preview milktea-view').locator('canvas').focus();
+  await page.keyboard.press('ArrowUp');
+  await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#counter-preview milktea-view').engine.wasm).includes('Counter: 1');});
+  await page.locator('#counter-code-tab').click();
+  await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine.paused);
+  await page.locator('#counter-code-tab').press('ArrowRight');
+  assert.equal(await page.locator('#counter-preview-tab').getAttribute('aria-selected'),'true');
+  await page.locator('#counter-code-tab').click();
+  console.log('PASS native counter preview, keyboard tabs and hidden-panel pause');
   await page.screenshot({path:`/private/tmp/milktea-site-${browserName}.png`});
   const input=page.locator('#inputbox milktea-view');
   await input.scrollIntoViewIfNeeded();
@@ -34,6 +46,10 @@ try {
       await view.locator('canvas').focus();await page.keyboard.press('Space');
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#timer milktea-view').engine.wasm).includes('PAUSED');});
     }
+    if (id==='doom-fire') {
+      assert.deepEqual(await view.evaluate(v=>[v.engine.wasm.mt_width(),v.engine.wasm.mt_height()]),[100,30]);
+      await page.screenshot({path:`/private/tmp/milktea-fire-${browserName}.png`});
+    }
     if (id==='avian-assault') {
       assert.equal(await view.evaluate(v=>Math.abs(v.canvas.getBoundingClientRect().height-v.getBoundingClientRect().height)<1),true,'canvas stays inside the game viewport');
       assert.equal(await view.evaluate(v=>v.engine.viewport.scaleX===v.engine.viewport.scaleY && v.engine.cellHeight===v.engine.cellWidth*2),true,'half-block pixels remain square');
@@ -41,6 +57,7 @@ try {
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
     }
   }
+  await page.screenshot({path:`/private/tmp/milktea-avian-${browserName}.png`});
   assert.equal(await input.evaluate(v=>v.engine.paused),true);
   console.log('PASS all eight embeds, timer controls, game launch and offscreen pause');
   await page.locator('#spotlight').scrollIntoViewIfNeeded();

@@ -30,14 +30,17 @@ fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::Node* Counter.view(Counter* self) @dynamic {
-	glaze::Style box = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
+	glaze::Style box = glaze::style()
+		.foreground(glaze::color_hex("#00d7ff"))
+		.with_bold(true)
 		.padding(1, 3, 1, 3)
 		.with_border(glaze::ROUNDED);
 
 	String label   = string::tformat("Counter: %d", self.value);
 	String hint    = "\nUse ↑↓ to change, q to quit";
 	String content = string::tformat("%s%s", label, hint);
-	return milktea::text(box.render(content));
+	return milktea::root()
+		.add(milktea::text(box.render(content)).center());
 }
 
 fn int main() {

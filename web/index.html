@@ -42,7 +42,11 @@
       <p class="fine-print">Glaze provides styling. Xray provides layout and compositing. These demos run through WebAssembly.</p>
     </div>
     <div class="code-window">
-      <div class="code-heading"><span><i></i><i></i><i></i></span><span>a counter’s update & view</span><span class="code-lang">C3</span></div>
+      <div class="code-heading"><span>Counter · C3</span><div class="counter-tabs" role="tablist" aria-label="Counter example">
+        <button id="counter-code-tab" type="button" role="tab" aria-selected="true" aria-controls="counter-code" tabindex="0">Code</button>
+        <button id="counter-preview-tab" type="button" role="tab" aria-selected="false" aria-controls="counter-preview" tabindex="-1">Preview</button>
+      </div></div>
+      <div id="counter-code" class="counter-panel" role="tabpanel" aria-labelledby="counter-code-tab" tabindex="0">
       <!-- INTRO START: generated from intro.c3 with inkfmt --lang c3 --html -->
 <style>
 .ink{background:#272822;color:#f8f8f2;}
@@ -62,24 +66,34 @@
 .ink .ink-s13{font-weight:bold;}
 .ink .ink-s14{text-decoration:underline;}
 </style>
-<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> { <span class="ink-s3">sz</span> count; }
+<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> { <span class="ink-s3">sz</span> value; }
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
   <span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span> <span class="ink-s2">&amp;&amp;</span>
-      msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">UP</span>) self<span class="ink-s2">.</span>count<span class="ink-s2">++</span>;
+      msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">UP</span>) self<span class="ink-s2">.</span>value<span class="ink-s2">++</span>;
   <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
 }
 
-<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
-  <span class="ink-s3">String</span> label <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Count: %d&quot;</span>, self<span class="ink-s2">.</span>count);
-  <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(label, glaze::<span class="ink-s4">style</span>()
-    <span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#a8d5ba&quot;</span>))
-    <span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
-    <span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 2, 1, 2));
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">Counter</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	glaze::<span class="ink-s3">Style</span> box <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 3, 1, 3)
+		<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
+
+	<span class="ink-s3">String</span> label   <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Counter: %d&quot;</span>, self<span class="ink-s2">.</span>value);
+	<span class="ink-s3">String</span> hint    <span class="ink-s2">=</span> <span class="ink-s9">&quot;\nUse ↑↓ to change, q to quit&quot;</span>;
+	<span class="ink-s3">String</span> content <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;%s%s&quot;</span>, label, hint);
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">root</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(box<span class="ink-s2">.</span><span class="ink-s4">render</span>(content))<span class="ink-s2">.</span><span class="ink-s4">center</span>());
 }
 </pre>
-      <!-- INTRO END -->
-      <div class="code-footer"><span>↑ increments the counter.</span><a href="./editor.html">Try the JavaScript bindings <span aria-hidden="true">↗</span></a></div>
+<!-- INTRO END -->
+      </div>
+      <div id="counter-preview" class="counter-panel" role="tabpanel" aria-labelledby="counter-preview-tab" hidden>
+        <div class="demo-surface"><milktea-view src="./build/counter.wasm" font-size="12" expandable="false" label="Counter: Arrow Up increases, Arrow Down decreases"></milktea-view><button class="restart" type="button" aria-label="Restart counter" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      </div>
+      <div class="code-footer"><span>↑↓ changes the counter.</span><a href="./editor.html">Try the JavaScript bindings <span aria-hidden="true">↗</span></a></div>
     </div>
   </section>
 
