@@ -11,6 +11,31 @@ for (const surface of document.querySelectorAll('.demo-surface')) {
   view.addEventListener('error', () => {button.disabled = false;});
 }
 
+// Give readers a moment at either end before wheel scrolling reaches the page.
+for (const pane of document.querySelectorAll('#counter-code, .demo-code')) {
+  let heldEdge = null, releaseAt = 0;
+  pane.addEventListener('wheel', event => {
+    if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    const max = pane.scrollHeight - pane.clientHeight;
+    if (max <= 0) return;
+    const delta = event.deltaY * (event.deltaMode === 1 ? 24 : event.deltaMode === 2 ? pane.clientHeight : 1);
+    const edge = delta > 0 ? 'bottom' : 'top';
+    const remaining = delta > 0 ? max - pane.scrollTop : pane.scrollTop;
+    if (remaining > Math.abs(delta) + 1) {heldEdge = null; return;}
+    if (heldEdge !== edge) {
+      heldEdge = edge;
+      releaseAt = performance.now() + 2000;
+    }
+    if (performance.now() < releaseAt) {
+      event.preventDefault();
+      pane.scrollTop = delta > 0 ? max : 0;
+    }
+  }, {passive: false});
+  pane.addEventListener('scroll', () => {
+    if (pane.scrollTop > 1 && pane.scrollTop < pane.scrollHeight - pane.clientHeight - 1) heldEdge = null;
+  });
+}
+
 // Each demo owns its tab state and fetches source only when Code is opened.
 for (const window of document.querySelectorAll('.code-window')) {
   const tabs = [...window.querySelectorAll('[role="tab"]')];

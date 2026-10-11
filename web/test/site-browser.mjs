@@ -58,6 +58,27 @@ try {
     assert.match(await page.locator(`#${id}-code`).textContent(),/milktea::/);
     const code=await page.locator(`#${id} .demo-browser`).boundingBox();
     assert.ok(Math.abs(initial.height-code.height)<2,`${id} tab switch retains height`);
+    if (id==='inputbox') {
+      const pane=page.locator('#inputbox-code');
+      await pane.evaluate(p=>{p.scrollTop=p.scrollHeight;});
+      await pane.hover();
+      const top=await page.evaluate(()=>scrollY);
+      await page.mouse.wheel(0,160);
+      await page.waitForTimeout(150);
+      assert.equal(await page.evaluate(()=>scrollY),top,'code bottom holds page scroll');
+      await page.mouse.wheel(0,160);
+      await page.waitForTimeout(2100);
+      assert.equal(await page.evaluate(()=>scrollY),top,'continued wheel input does not scroll during the hold');
+      await page.mouse.wheel(0,160);
+      await page.waitForFunction(top=>scrollY>top,top);
+      await pane.scrollIntoViewIfNeeded();
+      await pane.evaluate(p=>{p.scrollTop=0;});
+      await pane.hover();
+      const atTop=await page.evaluate(()=>scrollY);
+      await page.mouse.wheel(0,-160);
+      await page.waitForTimeout(150);
+      assert.equal(await page.evaluate(()=>scrollY),atTop,'code top also holds page scroll');
+    }
     await page.locator(`#${id}-preview-tab`).click();
     assert.equal(await view.evaluate(v=>v.engine===window.tabbedEngine && v.shadowRoot.activeElement===v.canvas),true,`${id} preview keeps state and focuses canvas`);
     await page.waitForFunction(id=>!document.querySelector(`#${id} milktea-view`).engine.paused,id);
