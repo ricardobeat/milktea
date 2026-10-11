@@ -69,6 +69,8 @@ struct FireModel {
 	sz* fire;
 	sz width;
 	sz height;
+	sz decay_whole;
+	float decay_frac;
 	long startTime;
 	// Pre-allocated cell grid for direct rendering
 	xray::Cell[] view_cells;
@@ -84,12 +86,22 @@ fn void init_fire_cells() {
 	}
 }
 
+// Keep the flame tips below the top third, regardless of viewport height.
+// Fractional cooling preserves the flicker without requiring a taller grid.
+fn void FireModel.set_decay(FireModel* self) {
+	sz flame_height = max(1, self.height * 2 / 3);
+	float decay = 36.0f / (float)flame_height;
+	self.decay_whole = (sz)decay;
+	self.decay_frac = decay - (float)self.decay_whole;
+}
+
 fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	ulong seed = (ulong)c3_time_ms_long();
 	srand((uint)seed);
 	self.startTime = c3_time_ms_long();
 	self.width = 80;
 	self.height = 48;
+	self.set_decay();
 	self.fire = mem::new_array(sz, MAX_W * MAX_H);
 	for (sz i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
 	for (sz x = 0; x < self.width; x++) {
@@ -116,7 +128,8 @@ fn void spread_pixel(FireModel* m, sz idx) {
 	sz dst     = idx - rnd + 1;
 	sz buf_len = m.width * m.height;
 	if (dst - m.width >= 0 && dst - m.width < buf_len) {
-		sz decay   = rnd & 1;
+		sz decay = m.decay_whole;
+		if ((float)(rand() % 1000) / 1000.0f < m.decay_frac) decay++;
 		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.width] = new_val;
@@ -131,6 +144,7 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		if (new_h > MAX_H) new_h = MAX_H;
 		self.width = new_w;
 		self.height = new_h;
+		self.set_decay();
 		for (sz i = 0; i < self.width * self.height; i++) {
 			self.fire[i] = 0;
 		}

@@ -162,3 +162,19 @@ test('inputbox removes the test title and pads its initial content',async()=>{
     assert.ok(b.left>=2 && b.top>=2,'placeholder has horizontal and vertical padding');
   } finally {w.mt_stop();}
 });
+test('doom fire keeps headroom at small and large viewport sizes', async () => {
+  for (const [cols, rows] of [[80,24], [100,30], [160,48]]) {
+    const {wasm:w, advance} = await start('doom-fire', cols, rows);
+    try {
+      w.mt_frame();
+      for (let i=0; i<180; i++) advance(16);
+      const g=readGrid(w);
+      let cold=0;
+      for (let x=0; x<g.cols; x++) {
+        const s=g.ptr+x*g.stride+g.style;
+        if (g.bytes[s+2]===7 && g.bytes[s+3]===7 && g.bytes[s+4]===7) cold++;
+      }
+      assert.ok(cold>g.cols*.95, `${cold}/${g.cols} cold cells at top`);
+    } finally {w.mt_stop();}
+  }
+});
