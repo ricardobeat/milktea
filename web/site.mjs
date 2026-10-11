@@ -1,5 +1,13 @@
 import './embed.mjs';
 
+// Canvas does not repaint automatically when a web font finishes loading.
+Promise.all([document.fonts.load('12px "Geist Mono"'), document.fonts.load('bold 12px "Geist Mono"')])
+  .then(() => {
+    for (const view of document.querySelectorAll('milktea-view')) {
+      if (view.engine) view.engine.repaint = true;
+    }
+  });
+
 for (const surface of document.querySelectorAll('.demo-surface')) {
   const view = surface.querySelector('milktea-view');
   const button = surface.querySelector('.restart');
