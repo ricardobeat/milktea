@@ -10,9 +10,9 @@ try {
   const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin);
-  assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>v.getAttribute('src'))),
-    ['inputbox','spinners','timer','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`./build/${n}.wasm`));
-  assert.equal(await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>r.name.endsWith('.wasm')).length),0,'demos stay unloaded before entering view');
+  assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
+    ['inputbox','spinners','timer','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`/build/${n}.wasm`));
+  assert.equal(await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname.endsWith('.wasm')).length),0,'demos stay unloaded before entering view');
   assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'true');
   await page.locator('#counter-preview-tab').click();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
@@ -32,6 +32,7 @@ try {
   const input=page.locator('#inputbox milktea-view');
   await input.scrollIntoViewIfNeeded();
   await page.waitForFunction(()=>!!document.querySelector('#inputbox milktea-view').engine);
+  assert.match(await input.evaluate(async v=>{const {gridText}=await import('/engine.mjs');return gridText(v.engine.wasm);}),/Input test/);
   await input.locator('canvas').click();await page.keyboard.type('hello milktea');await page.keyboard.press('Enter');
   await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#inputbox milktea-view').engine.wasm).includes('>> hello milktea');});
   await input.evaluate(v=>{window.oldInput=v.engine;});

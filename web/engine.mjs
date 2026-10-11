@@ -7,7 +7,7 @@ export async function loadMilkteaModule(url) {
   const key = new URL(url, globalThis.document?.baseURI ?? import.meta.url).href;
   if (!modules.has(key)) {
     const pending = (async () => {
-      const response = await fetch(key);
+      const response = await fetch(key, {cache: 'no-cache'});
       if (!response.ok) throw new Error(`Could not load ${key}: HTTP ${response.status}`);
       return WebAssembly.compile(await response.arrayBuffer());
     })();
