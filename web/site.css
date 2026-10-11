@@ -52,7 +52,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .restart { position:absolute; bottom:8px; right:45px; display:grid; place-items:center; width:28px; height:28px; padding:0; font-size:18px; line-height:1; color:#bbbfc4; background:#171c21d9; border:1px solid #ffffff25; border-radius:5px; cursor:pointer; }
 .restart:hover { color:white; background:#353047; }.restart:disabled { opacity:.4; cursor:wait; }
 .chapter { margin-top:74px; }.demo-title { display:flex; align-items:center; justify-content:space-between; gap:30px; padding:18px 0 12px; }.demo-title>p { margin:12px 0; }.demo-title h3 { margin-bottom:4px; }.demo-wide { margin-top:18px; }.demo-wide milktea-view { aspect-ratio:25 / 12; }
-#splash milktea-view { aspect-ratio:5 / 2; }#avian-assault milktea-view { aspect-ratio:5 / 3; max-height:560px; }
+#splash milktea-view { aspect-ratio:5 / 2; }#avian-assault milktea-view { aspect-ratio:5 / 3; }
 .demo-foot { display:flex; gap:15px; align-items:center; justify-content:space-between; padding:12px 0 20px; font-size:11px; color:#858b7e; }
 .fire-pair { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin:22px 0; }.fire-pair .demo>p { margin:16px 0 0; max-width:430px; }.fire-pair .demo-foot { padding-top:8px; }
 #spotlight { margin-top:30px; }#avian-assault { margin-top:30px; }

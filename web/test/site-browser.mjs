@@ -35,6 +35,8 @@ try {
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#timer milktea-view').engine.wasm).includes('PAUSED');});
     }
     if (id==='avian-assault') {
+      assert.equal(await view.evaluate(v=>Math.abs(v.canvas.getBoundingClientRect().height-v.getBoundingClientRect().height)<1),true,'canvas stays inside the game viewport');
+      assert.equal(await view.evaluate(v=>v.engine.viewport.scaleX===v.engine.viewport.scaleY && v.engine.cellHeight===v.engine.cellWidth*2),true,'half-block pixels remain square');
       await view.locator('canvas').focus();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
     }
