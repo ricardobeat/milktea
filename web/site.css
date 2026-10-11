@@ -80,3 +80,5 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .demo-code {height:240px;overflow:auto}
 .demo-code[hidden],.demo-preview[hidden] {display:none}
 .demo-code pre {margin:0;min-height:100%;font-size:12px;tab-size:4}
+
+.wasm-note {margin:0 0 24px;padding:16px 20px;border:1px solid #e5cd88;border-radius:6px;background:#f8e8b5;color:#65512b;font-size:14px;line-height:1.65}
