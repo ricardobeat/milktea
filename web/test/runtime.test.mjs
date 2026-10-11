@@ -154,12 +154,31 @@ test('spinners and timer center their content; spinners fit a narrow viewport',a
     } finally {w.mt_stop();}
   }
 });
-test('inputbox removes the test title and pads its initial content',async()=>{
+function gridLines(w) {
+  const g=readGrid(w), decode=new TextDecoder();
+  return Array.from({length:g.rows}, (_,y)=>Array.from({length:g.cols}, (_,x)=>{
+    const p=g.ptr+(y*g.cols+x)*g.stride;
+    return decode.decode(g.bytes.subarray(p,p+g.bytes[p+8])) || ' ';
+  }));
+}
+function locate(lines, text) {
+  for (let y=0; y<lines.length; y++) {
+    for (let x=0; x<lines[y].length; x++) {
+      if (lines[y].slice(x,x+text.length).join('')===text) return {x,y};
+    }
+  }
+  assert.fail(`Missing text: ${text}`);
+}
+test('inputbox spaces its title, indents instructions and pads the bottom', async()=>{
   const {wasm:w}=await start('inputbox',80,24);
   try {
-    w.mt_frame();const b=contentBounds(w);
-    assert.doesNotMatch(gridText(w),/INPUTBOX TEST/);
-    assert.ok(b.left>=2 && b.top>=2,'placeholder has horizontal and vertical padding');
+    w.mt_frame();const lines=gridLines(w);
+    const title=locate(lines,'Input test'), prompt=locate(lines,'Type something below.');
+    const submit=locate(lines,'Enter to submit.');
+    assert.equal(prompt.y,title.y+2);
+    assert.equal(prompt.x,title.x+1);
+    assert.equal(submit.x,prompt.x);
+    assert.ok(lines.at(-1).every(c=>!c.trim()));
   } finally {w.mt_stop();}
 });
 test('doom fire keeps headroom at small and large viewport sizes', async () => {

@@ -55,12 +55,16 @@ fn milktea::Node* Model.view(&self) @dynamic {
 	String input = string::tformat("> %s█", self.input.str_view());
 	String hint  = string::tformat("input len: %d chars", self.input.len());
 
-	glaze::Style output_style = glaze::style().foreground(glaze::color_hex("#aaaaaa")).padding(1, 1, 0, 1);
+	glaze::Style output_style = glaze::style().foreground(glaze::color_hex("#aaaaaa")).padding(0, 0, 0, 1);
 	glaze::Style input_style = glaze::style().foreground(glaze::color_hex("#ffff00")).with_border(glaze::ROUNDED)
 		.padding(0, 1, 0, 1);
 	glaze::Style hint_style = glaze::style().foreground(glaze::color_hex("#777777")).padding(0, 1, 0, 1);
 
-	return milktea::vstack().add(milktea::text(self.output.str_view(), output_style).fill(1))
+	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00ffcc")).with_bold(true);
+
+	return milktea::vstack()
+		.add(milktea::text("Input test", title_style).height(milktea::cells(1)))
+		.add(milktea::text(self.output.str_view(), output_style).fill(1))
 		.add(milktea::text(input, input_style).height(milktea::cells(3)))
 		.add(milktea::text(hint, hint_style).height(milktea::cells(1)))
 		.with_gap(1)
