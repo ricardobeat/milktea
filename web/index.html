@@ -88,22 +88,22 @@
     <div class="simple-demos">
       <article class="demo demo-simple" id="inputbox">
         <div class="demo-copy"><h3>Input box</h3><p>Text input with a submit history.</p><div class="controls-note"><kbd>Enter</kbd> to submit</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/inputbox">View source ↗</a></div>
-        <div class="demo-surface"><milktea-view src="./build/inputbox.wasm" cols="64" rows="12" label="Input box: click and type, Enter submits"></milktea-view><button class="restart" type="button" aria-label="Restart input box" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <div class="demo-surface"><milktea-view src="./build/inputbox.wasm" font-size="12" label="Input box: click and type, Enter submits"></milktea-view><button class="restart" type="button" aria-label="Restart input box" title="Restart"><span aria-hidden="true">↻</span></button></div>
       </article>
       <article class="demo demo-simple" id="spinners">
         <div class="demo-copy"><h3>Spinners</h3><p>Six text spinners updated by a timer.</p><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spinners">View source ↗</a></div>
-        <div class="demo-surface"><milktea-view src="./build/spinners.wasm" cols="64" rows="12" label="Six animated text spinners"></milktea-view><button class="restart" type="button" aria-label="Restart spinners" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <div class="demo-surface"><milktea-view src="./build/spinners.wasm" font-size="12" label="Six animated text spinners"></milktea-view><button class="restart" type="button" aria-label="Restart spinners" title="Restart"><span aria-hidden="true">↻</span></button></div>
       </article>
       <article class="demo demo-simple" id="timer">
         <div class="demo-copy"><h3>Timer</h3><p>A 60-second countdown with pause and reset.</p><div class="controls-note"><kbd>Space</kbd> pause <span>·</span> <kbd>R</kbd> reset</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/timer">View source ↗</a></div>
-        <div class="demo-surface"><milktea-view src="./build/timer.wasm" cols="32" rows="12" label="Countdown timer: Space pauses, R resets"></milktea-view><button class="restart" type="button" aria-label="Restart timer" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <div class="demo-surface"><milktea-view src="./build/timer.wasm" font-size="12" label="Countdown timer: Space pauses, R resets"></milktea-view><button class="restart" type="button" aria-label="Restart timer" title="Restart"><span aria-hidden="true">↻</span></button></div>
       </article>
     </div>
 
     <div class="section-heading chapter"><div><h2>Animation and compositing</h2></div></div>
     <article class="demo demo-wide" id="splash">
       <div class="demo-title"><div><h3>Splash</h3></div><p>Animated colors in a cell grid.</p></div>
-      <div class="demo-surface"><milktea-view src="./build/splash.wasm" cols="100" rows="20" label="Animated colorful splash screen"></milktea-view><button class="restart" type="button" aria-label="Restart splash" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      <div class="demo-surface"><milktea-view src="./build/splash.wasm" cols="140" rows="28" label="Animated colorful splash screen"></milktea-view><button class="restart" type="button" aria-label="Restart splash" title="Restart"><span aria-hidden="true">↻</span></button></div>
       <div class="demo-foot"><span>Animation · color · cell drawing</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/splash">View source ↗</a></div>
     </article>
     <div class="fire-pair">
@@ -112,13 +112,13 @@
         <p>Doom fire rendered with half-block cells.</p><div class="demo-foot"><span>Canvas · timers</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/doom-fire">Source ↗</a></div>
       </article>
       <article class="demo" id="doom-fire-tea"><div class="demo-title"><div><h3>Doom fire tea</h3></div></div>
-        <div class="demo-surface"><milktea-view src="./build/doom-fire-overlay.wasm" cols="80" rows="24" label="Doom fire composited with a tea cup mask"></milktea-view><button class="restart" type="button" aria-label="Restart Doom fire tea" title="Restart"><span aria-hidden="true">↻</span></button></div>
-        <p>A tea cup mask composited over the fire using transparent cells.</p><div class="demo-foot"><span>Layers · transparency</span><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
+        <div class="demo-surface"><milktea-view src="./build/doom-fire-overlay.wasm" cols="120" rows="36" label="Doom fire composited with a TEA text mask"></milktea-view><button class="restart" type="button" aria-label="Restart Doom fire tea" title="Restart"><span aria-hidden="true">↻</span></button></div>
+        <p>A TEA text mask composited over the fire using transparent cells.</p><div class="demo-foot"><span>Layers · transparency</span><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
       </article>
     </div>
     <article class="demo demo-wide" id="spotlight">
       <div class="demo-title"><div><h3>Spotlight</h3></div><p>Move the pointer to move the light.<br>Hold the mouse button to increase its radius.</p></div>
-      <div class="demo-surface"><milktea-view src="./build/spotlight.wasm" cols="100" rows="24" label="Interactive spotlight: move the pointer and hold to bloom"></milktea-view><button class="restart" type="button" aria-label="Restart spotlight" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      <div class="demo-surface"><milktea-view src="./build/spotlight.wasm" cols="160" rows="38" label="Interactive spotlight: move the pointer and hold to bloom"></milktea-view><button class="restart" type="button" aria-label="Restart spotlight" title="Restart"><span aria-hidden="true">↻</span></button></div>
       <div class="demo-foot"><span>Mouse input · springs · easing</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spotlight">View source ↗</a></div>
     </article>
     <article class="demo demo-wide" id="avian-assault">
