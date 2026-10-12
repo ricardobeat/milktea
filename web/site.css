@@ -60,7 +60,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 #splash milktea-view { aspect-ratio:5 / 2; }#avian-assault milktea-view { aspect-ratio:5 / 3; }
 .demo-foot { display:flex; gap:15px; align-items:center; justify-content:space-between; padding:12px 0 20px; font-size:11px; color:#858b7e; }
 .fire-pair { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin:22px 0; }.fire-pair .demo>p { margin:16px 0 0; max-width:430px; }.fire-pair .demo-foot { padding-top:8px; }
-#spotlight { margin-top:30px; }#avian-assault { margin-top:30px; }
+#avian-assault { margin-top:30px; }
 .your-turn { display:flex; align-items:center; gap:30px; border-top:1px solid var(--line); margin-top:68px; padding:55px 0; }.your-turn h2 { font-size:36px; }.your-turn p:not(.eyebrow) { color:var(--muted); font-size:14px; margin:12px 0 0; }.your-turn .eyebrow { margin-bottom:10px; }.end-mark { color:#a5b5a2; font:70px/1 var(--font-sans); }.end-links { margin-left:auto; display:flex; flex-direction:column; align-items:flex-start; gap:16px; }
 .site-footer { padding-block:28px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:24px; color:#818778; font-size:11px; }.site-footer .wordmark { font-size:18px; color:var(--ink); }
 .skip-link { position:fixed; top:-100px; left:20px; padding:10px 16px; background:white; z-index:10; }.skip-link:focus { top:12px; }
@@ -84,7 +84,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .demo-browser .demo-surface {border:0;border-radius:0}
 .demo-code {height:240px;overflow:auto}
 .demo-code[hidden],.demo-preview[hidden] {display:none}
-.demo-code pre {margin:0;min-height:100%;font-size:12px;tab-size:4}
+.demo-code pre {margin:0;min-height:100%;min-width:100%;width:max-content;overflow:visible;font-size:12px;tab-size:4}
 
 .wasm-note {margin:0 0 24px;padding:16px 20px;border:1px solid #e5cd88;border-radius:6px;background:#f8e8b5;color:#65512b;font-size:14px;line-height:1.65}
 
@@ -159,3 +159,11 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .steps li:last-child {border-bottom:0;padding-bottom:0}
 .demo-title {align-items:baseline}
 .demo-title>p {max-width:440px}
+
+/* Live examples share the paired graphics layout. */
+.simple-demos {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 32px;margin-top:12px}
+.demo-simple {display:block;margin-bottom:0}
+.demo-simple>p {margin:16px 0 0;max-width:430px}
+.demo-simple .demo-foot {padding-top:8px}
+.demo-simple milktea-view {height:auto;aspect-ratio:5 / 3}
+@media(max-width:650px) {.simple-demos {grid-template-columns:1fr;gap:20px}}

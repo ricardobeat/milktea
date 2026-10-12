@@ -13,7 +13,7 @@ try {
   assert.equal(await page.locator('#demos-title').textContent(),'Live examples');
   assert.match(await page.locator('.wasm-note').textContent(),/real milktea binary.*no terminal emulator involved/);
   assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
-    ['inputbox','spinners','tabs','clock','nanobots','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`/build/${n}.wasm`));
+    ['inputbox','spinners','tabs','clock','spotlight','nanobots','splash','doom-fire','doom-fire-overlay','avian-assault'].map(n=>`/build/${n}.wasm`));
   assert.equal(await page.locator('#demos milktea-view').evaluateAll(views=>views.every(v=>!v.engine)),true,'demos stay unloaded before entering view');
   assert.equal(await page.locator('#demos [role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
   assert.equal(await page.locator('.code-footer').count(),0,'tabs have no bottom bar');
@@ -63,6 +63,7 @@ try {
       const pane=page.locator('#inputbox-code');
       await pane.evaluate(p=>{p.scrollTop=p.scrollHeight;});
       await pane.hover();
+      await page.waitForTimeout(100);
       const top=await page.evaluate(()=>scrollY);
       await page.mouse.wheel(0,160);
       await page.waitForTimeout(150);
@@ -84,7 +85,7 @@ try {
     assert.equal(await view.evaluate(v=>v.engine===window.tabbedEngine && v.shadowRoot.activeElement===v.canvas),true,`${id} preview keeps state and focuses canvas`);
     await page.waitForFunction(id=>!document.querySelector(`#${id} milktea-view`).engine.paused,id);
   }
-  for (const id of ['spinners','tabs','clock','nanobots','splash','doom-fire','doom-fire-tea','spotlight','avian-assault']) {
+  for (const id of ['spinners','tabs','clock','spotlight','nanobots','splash','doom-fire','doom-fire-tea','avian-assault']) {
     const view=page.locator(`#${id} milktea-view`);
     await view.scrollIntoViewIfNeeded();
     await page.waitForFunction(id=>{const a=document.querySelector(`#${id} milktea-view`).engine;return a && a.wasm.mt_width()>0;},id);
