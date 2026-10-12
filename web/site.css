@@ -39,7 +39,7 @@ h2 { font-size:42px; }
 .step-number { font:12px/1.7 var(--font-mono); color:#999f92; padding-top:2px; }
 .steps strong { font-size:14px; font-weight:650; }.steps p { margin:2px 0 0; color:var(--muted); font-size:14px; }
 .intro-copy .fine-print { font-size:13px; }
-.code-window { min-width:0; align-self:start; border:2px solid var(--ink); border-radius:2px; overflow:hidden; background:#202a23; color:#d4dfd5; box-shadow:4px 4px 0 #c9c0a9; }
+.code-window { min-width:0; align-self:start; border:0; border-radius:5px; overflow:hidden; background:#202a23; color:#d4dfd5; box-shadow:none; }
 .code-heading { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid #ffffff10; font:11px/1.4 var(--font-mono); color:#8f9d94; }
 .code-heading>span:first-child { display:flex; gap:5px; }.code-heading i { width:6px; height:6px; border-radius:50%; background:#5d6c60; }.code-lang { margin-left:auto; color:#b7cdbb; }
 .code-window pre { margin:0; padding:24px 22px; overflow:auto; font:12px/1.75 var(--font-mono); tab-size:2; }
@@ -49,7 +49,7 @@ h2 { font-size:42px; }
 .demo { min-width:0; }.simple-demos { margin-top:12px; }.demo-simple { display:grid; grid-template-columns:.8fr 1.25fr; gap:70px; align-items:center; margin-bottom:26px; }.demo-copy { padding-right:18px; }h3 { font-size:30px; letter-spacing:-.025em; margin:10px 0 12px; }.demo p { color:var(--muted); font-size:14px; line-height:1.65; }.demo-copy p { margin:0 0 14px; max-width:300px; }.controls-note { color:#8b8f82; font-size:12px; }.controls-note span,.demo-foot>span>span { margin-inline:6px; }
 kbd { font:11px/1.5 var(--font-mono); border:1px solid #d7d9cd; border-bottom-width:2px; border-radius:3px; padding:1px 5px; color:#707666; }
 .source-link { font-size:11px; color:#7b8375; }.demo-copy .source-link { display:inline-block; margin-top:14px; }
-.demo-surface { position:relative; overflow:hidden; border:1px solid #292e2b; border-radius:9px; background:#111318; }
+.demo-surface { position:relative; overflow:hidden; border:0; border-radius:5px; background:#111318; }
 milktea-view { display:block; width:100%; height:auto; aspect-ratio:5 / 3; background:#111318; }
 .demo-simple milktea-view { height:240px; aspect-ratio:auto; }
 milktea-view::part(status) { color:#8d949d; font-size:12px; }
@@ -151,3 +151,12 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 
 #counter-code {height:auto;overflow:visible}
 #counter-code pre {padding:20px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+
+/* Quiet spacing around the live examples. */
+.demo-simple {margin-bottom:40px}
+.demo-copy h3 {margin-top:0}
+.demo-copy p {max-width:320px}
+.steps li {padding-bottom:12px;border-bottom:1px solid var(--line)}
+.steps li:last-child {border-bottom:0;padding-bottom:0}
+.demo-title {align-items:baseline}
+.demo-title>p {max-width:440px}

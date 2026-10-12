@@ -48,13 +48,13 @@
     <div class="intro-copy">
 
       <h2 id="intro-title">Based on the<br> ELM architecture</h2>
-      <p>The runtime delivers messages to update and renders the result of view.</p>
+      <p>Keep state in a model. Update it with messages. Describe the screen in a view.</p>
       <ol class="steps">
         <li><div><strong>Model</strong><p>Application state.</p></div></li>
         <li><div><strong>Update</strong><p>Handles input and timer messages.</p></div></li>
         <li><div><strong>View</strong><p>Return text, a layout tree, or a cell grid.</p></div></li>
       </ol>
-      <p class="fine-print">Glaze provides styling. Xray provides layout and compositing. These demos run through WebAssembly.</p>
+      <p class="fine-print">Style with Glaze. Arrange and composite with Xray.</p>
     </div>
     <div class="code-window">
       <div class="code-heading"><span>Counter · C3</span><div class="counter-tabs" role="tablist" aria-label="Counter example">
@@ -116,11 +116,11 @@
   </section>
 
   <section id="demos" class="demos" aria-labelledby="demos-title">
-    <div class="section-heading"><div><h2 id="demos-title">Live examples</h2></div><p>Click the canvas to focus.<br>Use the corner button for fullscreen.</p></div>
+    <div class="section-heading"><div><h2 id="demos-title">Live examples</h2></div><p>Click a preview to use the keyboard.<br>Open Code to see how it works.</p></div>
     <p class="wasm-note">All the examples below are running a real milktea binary, compiled to WASM and rendered via a custom canvas renderer - no terminal emulator involved.</p>
     <div class="simple-demos">
       <article class="demo demo-simple" id="inputbox">
-        <div class="demo-copy"><h3>Input box</h3><p>Text input with a submit history.</p><div class="controls-note"><kbd>Enter</kbd> to submit</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/inputbox">View source ↗</a></div>
+        <div class="demo-copy"><h3>Input box</h3><p>Type, edit, and submit. Each entry stays in the history.</p><div class="controls-note"><kbd>Enter</kbd> to submit</div><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/inputbox">View source ↗</a></div>
         <div class="demo-browser code-window">
         <div class="code-heading"><span>inputbox.c3</span><div class="counter-tabs" role="tablist" aria-label="inputbox example">
           <button id="inputbox-code-tab" type="button" role="tab" aria-selected="false" aria-controls="inputbox-code" tabindex="-1">Code</button>
@@ -131,7 +131,7 @@
       </div>
       </article>
       <article class="demo demo-simple" id="spinners">
-        <div class="demo-copy"><h3>Spinners</h3><p>Six text spinners updated by a timer.</p><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spinners">View source ↗</a></div>
+        <div class="demo-copy"><h3>Spinners</h3><p>Six spinners, one timer. A layout keeps each column aligned.</p><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spinners">View source ↗</a></div>
         <div class="demo-browser code-window">
         <div class="code-heading"><span>spinners.c3</span><div class="counter-tabs" role="tablist" aria-label="spinners example">
           <button id="spinners-code-tab" type="button" role="tab" aria-selected="false" aria-controls="spinners-code" tabindex="-1">Code</button>
@@ -154,7 +154,7 @@
       </article>
     </div>
 
-    <div class="section-heading chapter"><div><h2>Advanced graphics</h2><p>Draw directly into cell grids, composite transparent layers, and animate with tweens and springs. Keyboard and mouse input make the graphics interactive.</p></div></div>
+    <div class="section-heading chapter"><div><h2>Advanced graphics</h2><p>Draw into a cell grid, layer transparent content, and animate with tweens and springs.</p></div></div>
     <article class="demo demo-wide" id="splash">
       <div class="demo-title"><div><h3>Splash</h3></div><p>Direct cell drawing at 60fps</p></div>
       <div class="demo-browser code-window">
@@ -177,7 +177,7 @@
         <div id="doom-fire-code" class="demo-code" role="tabpanel" aria-labelledby="doom-fire-code-tab" tabindex="0" data-code-src="./code/doom-fire.html" hidden></div>
         <div id="doom-fire-preview" class="demo-preview" role="tabpanel" aria-labelledby="doom-fire-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/doom-fire.wasm" cols="100" rows="30" label="Doom fire animation"></milktea-view><button class="restart" type="button" aria-label="Restart Doom fire" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
       </div>
-        <p>Doom fire rendered with half-block cells.</p><div class="demo-foot"><span>Canvas · timers</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/doom-fire">Source ↗</a></div>
+        <p>A fire simulation drawn with two pixels per cell.</p><div class="demo-foot"><span>Canvas · timers</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/doom-fire">Source ↗</a></div>
       </article>
       <article class="demo" id="doom-fire-tea"><div class="demo-title"><div><h3>Compositing</h3></div></div>
         <div class="demo-browser code-window">
@@ -188,11 +188,11 @@
         <div id="doom-fire-tea-code" class="demo-code" role="tabpanel" aria-labelledby="doom-fire-tea-code-tab" tabindex="0" data-code-src="./code/doom-fire-tea.html" hidden></div>
         <div id="doom-fire-tea-preview" class="demo-preview" role="tabpanel" aria-labelledby="doom-fire-tea-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/doom-fire-overlay.wasm" cols="120" rows="36" label="Doom fire composited with a TEA text mask"></milktea-view><button class="restart" type="button" aria-label="Restart compositing example" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
       </div>
-        <p>A TEA text mask composited over the fire using transparent cells.</p><div class="demo-foot"><span>Layers · transparency</span><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
+        <p>The same fire, seen through a text mask. Transparent cells reveal the layer below.</p><div class="demo-foot"><span>Layers · transparency</span><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
       </article>
     </div>
     <article class="demo demo-wide" id="spotlight">
-      <div class="demo-title"><div><h3>Spotlight</h3></div><p>Move the pointer to move the light.<br>Hold the mouse button to increase its radius.</p></div>
+      <div class="demo-title"><div><h3>Spotlight</h3></div><p>Move the pointer to aim the light.<br>Hold the mouse button to widen it.</p></div>
       <div class="demo-browser code-window">
         <div class="code-heading"><span>spotlight.c3</span><div class="counter-tabs" role="tablist" aria-label="spotlight example">
           <button id="spotlight-code-tab" type="button" role="tab" aria-selected="false" aria-controls="spotlight-code" tabindex="-1">Code</button>
@@ -204,7 +204,7 @@
       <div class="demo-foot"><span>Mouse input · springs · easing</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spotlight">View source ↗</a></div>
     </article>
     <article class="demo demo-wide" id="avian-assault">
-      <div class="demo-title"><div><h3>Avian Assault</h3></div><p>A game with physics, menus and animation.</p></div>
+      <div class="demo-title"><div><h3>Avian Assault</h3></div><p>Aim, launch, and knock things over. Physics and animation in a cell grid.</p></div>
       <div class="demo-browser code-window">
         <div class="code-heading"><span>avian-assault.c3</span><div class="counter-tabs" role="tablist" aria-label="avian-assault example">
           <button id="avian-assault-code-tab" type="button" role="tab" aria-selected="false" aria-controls="avian-assault-code" tabindex="-1">Code</button>
@@ -216,7 +216,7 @@
       <div class="demo-foot"><span><kbd>Enter</kbd> start <span>·</span> drag / arrows to aim <span>·</span> <kbd>Space</kbd> launch</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/avian-assault">View source ↗</a></div>
     </article>
   </section>
-  <section class="your-turn" aria-labelledby="your-turn-title"><span class="end-mark" aria-hidden="true">✳</span><div><h2 id="your-turn-title">Live editor</h2><p>Edit a JavaScript program and run it in the browser.</p></div><div class="end-links"><a class="button" href="./editor.html">Open editor <span aria-hidden="true">↗</span></a><a class="text-link" href="./gallery.html">All examples →</a></div></section>
+  <section class="your-turn" aria-labelledby="your-turn-title"><span class="end-mark" aria-hidden="true">✳</span><div><h2 id="your-turn-title">Live editor</h2><p>Write JavaScript against the WASM engine. Edit the code and run it here.</p></div><div class="end-links"><a class="button" href="./editor.html">Open editor <span aria-hidden="true">↗</span></a><a class="text-link" href="./gallery.html">All examples →</a></div></section>
 </main>
 <footer class="site-footer wrap"><a class="wordmark" href="./">milktea</a><span>C3 · terminal interfaces · MIT licensed</span><a href="https://github.com/ricardobeat/milktea">Source on GitHub ↗</a></footer>
 </body>
