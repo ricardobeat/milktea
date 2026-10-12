@@ -339,6 +339,33 @@ fn void ScreenBuffer.swap(&self) {
 	self.full_redraw = false;
 }
 
+// Collect changed cell indices for non-terminal renderers, using the same
+// dirty rows, previous frame and equality rules as render_diff. Include both
+// halves of old/new wide glyphs so erasing a continuation repaints its owner.
+// The caller supplies room for the whole grid and calls swap after consuming.
+fn sz ScreenBuffer.changed_cells(&self, sz[] indices) {
+	assert(indices.len >= self.cells.len);
+	sz count = 0;
+	for (sz row = 0; row < self.height; row++) {
+		if (!self.full_redraw && !self.dirty_lines[row]) continue;
+		sz start = row * self.width;
+		for (sz col = 0; col < self.width; col++) {
+			sz i = start + col;
+			Cell current = self.cells[i];
+			Cell previous = self.prev_cells[i];
+			if (!self.full_redraw && current.eq(previous)) continue;
+			sz first = i;
+			sz last = i;
+			if (col > 0 && (current.width == 0 || previous.width == 0)) first--;
+			if (col + 1 < self.width && (current.width == 2 || previous.width == 2)) last++;
+			for (sz j = first; j <= last; j++) {
+				if (count == 0 || indices[count - 1] < j) indices[count++] = j;
+			}
+		}
+	}
+	return count;
+}
+
 // needs_redraw returns true if any line is dirty or a full redraw is pending.
 fn bool ScreenBuffer.needs_redraw(&self) {
 	if (self.full_redraw) return true;

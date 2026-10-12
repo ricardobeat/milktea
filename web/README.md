@@ -258,7 +258,17 @@ One WASM instance hosts one program; restarting loads a fresh instance.
 
 The host reacquires WASM memory after updates because allocations can grow
 linear memory. `mt_frame` returns 2 for a new grid, 1 for an idle live program,
-and 0 after quit. Events and model callbacks use scoped temporary allocations;
+and 0 after quit. After each call, `mt_dirty_cells()` points to a sorted array
+of `mt_dirty_count()` changed cell indices (32-bit integers). `mt_full_redraw()`
+marks startup and resized grids. This uses Xray's dirty rows, cell comparison,
+and previous-frame buffer, including both halves of wide glyphs. The damage
+is valid until the next `mt_frame()`; idle frames report no damage.
+
+The canvas host repaints those cells, plus cursor/blink changes. Resize, font,
+theme and pixel-density changes force a full repaint. Older WASM builds without
+the damage exports still work with full redraws.
+
+Events and model callbacks use scoped temporary allocations;
 the painted grid survives in the program's persistent ScreenBuffer. `tick`
 and `every` retain their one-shot semantics. Wall-aligned timers use the full
 JavaScript wall clock, avoiding wasm32 integer overflow for epoch milliseconds.

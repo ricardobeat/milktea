@@ -6,6 +6,9 @@ import xray;
 bool web_running;
 bool web_dirty;
 View web_view;
+sz[] web_dirty_cells;
+sz web_dirty_count;
+bool web_full_redraw;
 sz web_cols = 80;
 sz web_rows = 24;
 
@@ -44,9 +47,23 @@ fn void web_dispatch(Msg msg) @private {
 	web_dirty = true;
 }
 
+fn void web_collect_diff() @private {
+	xray::ScreenBuffer* buffer = g_program.draw_buf;
+	if (buffer == null) return;
+	if (web_dirty_cells.len != buffer.cells.len) {
+		mem::free(web_dirty_cells.ptr);
+		web_dirty_cells = mem::new_array(sz, buffer.cells.len);
+	}
+	web_full_redraw = buffer.full_redraw;
+	web_dirty_count = buffer.changed_cells(web_dirty_cells);
+	buffer.swap();
+}
+
 // Called once per animation frame. Timer callbacks run inside the same pool
 // as update/view; pixels live in Program.draw_buf after the pool is released.
 fn int web_frame() @wasm("mt_frame") {
+	web_dirty_count = 0;
+	web_full_redraw = false;
 	if (!web_running) return 0;
 	@pool() {
 		Program* p = g_program;
@@ -54,6 +71,7 @@ fn int web_frame() @wasm("mt_frame") {
 		if (web_view.cells.ptr == null) {
 			p.stamp_now();
 			web_view = draw(p.model.view());
+			web_collect_diff();
 			p.schedule_repaint(web_view.repaint_ms);
 			web_dirty = false;
 			return 2;
@@ -80,6 +98,7 @@ fn int web_frame() @wasm("mt_frame") {
 		if (web_dirty) {
 			p.stamp_now();
 			web_view = draw(p.model.view());
+			web_collect_diff();
 			p.schedule_repaint(web_view.repaint_ms);
 			web_dirty = false;
 			return 2;
@@ -101,6 +120,10 @@ fn void web_stop() @wasm("mt_stop") {
 	mem::free(g_program);
 	g_program = null;
 	web_view = {};
+	mem::free(web_dirty_cells.ptr);
+	web_dirty_cells = {};
+	web_dirty_count = 0;
+	web_full_redraw = false;
 }
 
 fn void web_resize(sz cols, sz rows, sz cw, sz ch) @wasm("mt_resize") {
@@ -156,3 +179,10 @@ fn int web_cursor_shape() @wasm("mt_cursor_shape") => web_view.cursor.shape.ordi
 fn bool web_cursor_blink() @wasm("mt_cursor_blink") => web_view.cursor.blink;
 fn char* web_mouse_cursor() @wasm("mt_mouse_cursor") => &g_program.want_mouse_cursor_buf[0];
 fn sz web_mouse_cursor_len() @wasm("mt_mouse_cursor_len") => g_program.want_mouse_cursor_len;
+
+
+// Damage describes the most recent mt_frame call; indices are wasm32 sz values.
+// The cells and damage remain valid until the next call that renders a frame.
+fn sz* web_damage_cells() @wasm("mt_dirty_cells") => web_dirty_cells.ptr;
+fn sz web_damage_count() @wasm("mt_dirty_count") => web_dirty_count;
+fn bool web_damage_full() @wasm("mt_full_redraw") => web_full_redraw;

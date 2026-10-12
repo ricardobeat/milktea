@@ -288,17 +288,44 @@ export class MilkteaCanvas {
       const state = this.wasm.mt_frame();
       if (!state) { this.stop(); this.onQuit(); return; }
       const blink = Math.floor(time / 500) % 2;
-      if (state === 2 || this.repaint || blink !== this.blink) this.paint(blink);
+      if (state === 2 || this.repaint || blink !== this.blink) this.paint(blink, true);
       this.blink = blink; this.repaint = false;
       this.raf = requestAnimationFrame(t => this.frame(t));
     } catch (error) { this.stop(); this.onError(error); }
   }
-  paint(blink) {
+  paint(blink, incremental = false) {
     const g = readGrid(this.wasm), ctx = this.ctx, cw = this.cellWidth, ch = this.cellHeight;
-    const v = this.viewport, dpr = this.dpr;
+    const v = this.viewport, dpr = this.dpr, total = g.cols * g.rows;
+    const full = !incremental || this.repaint || !this.wasm.mt_dirty_cells || this.wasm.mt_full_redraw();
+    let dirty = null;
+    const cursorX = this.wasm.mt_cursor_x(), cursorY = this.wasm.mt_cursor_y();
+    if (!full) {
+      dirty = new Set(new Uint32Array(this.wasm.memory.buffer, this.wasm.mt_dirty_cells(), this.wasm.mt_dirty_count()));
+      const include = i => {
+        if (i < 0 || i >= total) return;
+        dirty.add(i);
+        const width = g.bytes[g.ptr + i * g.stride + 9];
+        if (width === 0 && i % g.cols > 0) dirty.add(i - 1);
+        if (width === 2 && i % g.cols + 1 < g.cols) dirty.add(i + 1);
+      };
+      // Restore the old cursor before drawing the new XOR cursor, even when
+      // the cells beneath it did not change in the model.
+      if (this.paintedCursor != null) include(this.paintedCursor);
+      if (cursorX >= 0) include(cursorY * g.cols + cursorX);
+      if (blink !== this.blink) {
+        for (let i = 0; i < total; i++) {
+          if (g.bytes[g.ptr + i * g.stride + g.style + g.attrs] & 16) include(i);
+        }
+      }
+      dirty = [...dirty].sort((a, b) => a - b);
+    }
+    const count = full ? total : dirty.length;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = 1; ctx.fillStyle = this.background;
-    ctx.fillRect(0, 0, v.width, v.height);
+    if (full) {
+      ctx.clearRect(0, 0, v.width, v.height);
+      ctx.fillRect(0, 0, v.width, v.height);
+    }
     ctx.setTransform(dpr * v.scaleX, 0, 0, dpr * v.scaleY, dpr * v.offsetX, dpr * v.offsetY);
     // Fractional fit/zoom and DPR put cell edges between backing pixels.
     // Round shared edges identically so adjacent fills and clips tile without
@@ -309,9 +336,10 @@ export class MilkteaCanvas {
     // exactly half a pixel (e.g. 139 * 9.6 + 9.6 versus 140 * 9.6).
     // Resolve these ties consistently for both fills and glyph clips.
     const snap = value => Math.floor(value + 0.5 + 1e-7);
-    const pixelRect = (x, y, w, h) => {
+    const pixelRect = (x, y, w, h, clear = false) => {
       const left = snap(x * sx + ox), top = snap(y * sy + oy);
-      ctx.fillRect(left, top, snap((x + w) * sx + ox) - left, snap((y + h) * sy + oy) - top);
+      if (clear) ctx.clearRect(left, top, snap((x + w) * sx + ox) - left, snap((y + h) * sy + oy) - top);
+      else ctx.fillRect(left, top, snap((x + w) * sx + ox) - left, snap((y + h) * sy + oy) - top);
     };
     const fillRect = (x, y, w, h) => {
       // Draw directly in backing pixels to avoid transform-rounding seams.
@@ -321,14 +349,23 @@ export class MilkteaCanvas {
     };
     // Backgrounds first: a continuation cell must not erase a wide glyph.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    for (let i = 0; i < g.cols * g.rows; i++) {
+    for (let n = 0; n < count; n++) {
+      const i = full ? n : dirty[n];
       const p = g.ptr + i * g.stride, s = p + g.style, attrs = g.bytes[s + g.attrs];
+      if (!full) {
+        // A translucent background must be composited over the base color,
+        // not repeatedly over the previous frame.
+        pixelRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch, true);
+        ctx.fillStyle = this.background;
+        pixelRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
+      }
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? 0 : g.colorSize), attrs & 32 ? this.foreground : this.background);
       pixelRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
     }
     ctx.setTransform(sx, 0, 0, sy, ox, oy);
     ctx.textBaseline = 'middle';
-    for (let i = 0; i < g.cols * g.rows; i++) {
+    for (let n = 0; n < count; n++) {
+      const i = full ? n : dirty[n];
       const p = g.ptr + i * g.stride, len = g.bytes[p + 8], width = g.bytes[p + 9];
       if (!width || !len) continue;
       const s = p + g.style, attrs = g.bytes[s + g.attrs];
@@ -360,13 +397,14 @@ export class MilkteaCanvas {
       if (attrs & 64) ctx.fillRect(x, y + ch / 2, cw * width, 1);
       ctx.restore();
     }
-    const x = this.wasm.mt_cursor_x(), y = this.wasm.mt_cursor_y();
+    const x = cursorX, y = cursorY;
     if (x >= 0 && (!this.wasm.mt_cursor_blink() || !blink)) {
       const shape = this.wasm.mt_cursor_shape();
       ctx.save(); ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x * cw, y * ch + (shape === 1 ? ch - 2 : 0), shape === 2 ? 2 : cw, shape === 1 ? 2 : ch);
+      fillRect(x * cw, y * ch + (shape === 1 ? ch - 2 : 0), shape === 2 ? 2 : cw, shape === 1 ? 2 : ch);
       ctx.restore();
     }
+    this.paintedCursor = x >= 0 ? y * g.cols + x : null;
     const cursor = decoder.decode(g.bytes.subarray(this.wasm.mt_mouse_cursor(), this.wasm.mt_mouse_cursor() + this.wasm.mt_mouse_cursor_len()));
     this.canvas.style.cursor = cursor || 'default';
   }

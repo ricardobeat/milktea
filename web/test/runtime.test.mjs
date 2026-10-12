@@ -238,6 +238,12 @@ test('avian-assault: menu buttons handle clicks and honor the selected level', a
   };
   try {
     w.mt_frame();
+    assert.match(gridText(w),/RETRO PHYSICS ARCADE/);
+    for(let i=0;i<10;i++)advance(50);
+    assert.doesNotMatch(gridText(w),/RETRO PHYSICS ARCADE/);
+    assert.match(gridText(w),/Enter/,'intro button stays visible while the subtitle blinks');
+    for(let i=0;i<10;i++)advance(50);
+    assert.match(gridText(w),/RETRO PHYSICS ARCADE/);
     click('Enter');assert.match(gridText(w),/Play Game/);
     click('How to Play');assert.match(gridText(w),/HOW TO PLAY/);
     click('Back to Menu');assert.match(gridText(w),/Play Game/);
@@ -247,5 +253,24 @@ test('avian-assault: menu buttons handle clicks and honor the selected level', a
     w.mt_key(4,0,0,0);w.mt_frame();
     assert.match(gridText(w),/Play Game/);
     assert.equal(click('Exit'),0);
+  } finally {w.mt_stop();}
+});
+
+test('native damage ABI reports changed cells instead of whole-frame dirtiness', async () => {
+  const {wasm:w}=await start('counter');
+  const damage=()=>Array.from(new Uint32Array(w.memory.buffer,w.mt_dirty_cells(),w.mt_dirty_count()));
+  try {
+    w.mt_frame();
+    assert.equal(w.mt_full_redraw(),1);
+    assert.equal(damage().length,80*24);
+    w.mt_key(6,0,0,0);w.mt_frame();
+    assert.equal(w.mt_full_redraw(),0);
+    assert.equal(damage().length,1,'one counter digit changes');
+    w.mt_key(1,120,0,0);w.mt_frame();
+    assert.equal(damage().length,0,'an update with unchanged output needs no cell paint');
+    w.mt_frame();assert.equal(damage().length,0,'idle frames do not repeat stale damage');
+    w.mt_resize(100,30,10,20);w.mt_frame();
+    assert.equal(w.mt_full_redraw(),1);
+    assert.equal(damage().length,3000);
   } finally {w.mt_stop();}
 });
