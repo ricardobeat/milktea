@@ -1,4 +1,4 @@
-import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule, canvasOptions, canvasViewport} from './engine.mjs';
+import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule, canvasOptions, canvasViewport, fullscreenGrid} from './engine.mjs';
 
 // Import this module once, then place <milktea-view src="…wasm"> in any page.
 export class MilkteaView extends HTMLElement {
@@ -31,6 +31,7 @@ export class MilkteaView extends HTMLElement {
     this.button = this.shadowRoot.querySelector('button');
     this.generation = 0;
     this.visibilityChanged = () => this.updatePlayback();
+    this.fullscreenResized = () => { if (this.expanded) this.applyOptions(); };
     this.button.addEventListener('click', () => this.toggleFullscreen().catch(error => this.reportError(error)));
     // Do not deliver Escape as QUIT to the example when leaving fullscreen.
     this.shadowRoot.addEventListener('keydown', event => {
@@ -60,6 +61,7 @@ export class MilkteaView extends HTMLElement {
   connectedCallback() {
     this.ownerDocument.addEventListener('fullscreenchange', this.fullscreenChanged);
     this.ownerDocument.addEventListener('visibilitychange', this.visibilityChanged);
+    this.ownerDocument.defaultView.addEventListener('resize', this.fullscreenResized);
     this.visible = false;
     this.observer = new IntersectionObserver(entries => {
       const entry = entries.at(-1);
@@ -75,6 +77,7 @@ export class MilkteaView extends HTMLElement {
     this.observer?.disconnect();
     this.ownerDocument.removeEventListener('fullscreenchange', this.fullscreenChanged);
     this.ownerDocument.removeEventListener('visibilitychange', this.visibilityChanged);
+    this.ownerDocument.defaultView.removeEventListener('resize', this.fullscreenResized);
     this.release();
   }
   attributeChangedCallback(name, oldValue, newValue) {
@@ -105,8 +108,12 @@ export class MilkteaView extends HTMLElement {
     for (const key of ['fit', 'font', 'foreground', 'background']) {
       if (this.hasAttribute(key)) options[key] = this.getAttribute(key);
     }
-    // Fullscreen fits the same logical grid to retain the running model.
-    if (this.expanded && this.fullscreenViewport) Object.assign(options, this.fullscreenViewport, {fit: 'contain', scale: 1});
+    if (this.expanded && this.fullscreenViewport) {
+      const {cellWidth, cellHeight} = canvasOptions(options);
+      const {cols, rows} = this.fullscreenViewport;
+      Object.assign(options, fullscreenGrid(this.canvas.clientWidth, this.canvas.clientHeight,
+        cols, rows, cellWidth, cellHeight), {fit: 'contain', scale: 1});
+    }
     return options;
   }
   applyOptions() {

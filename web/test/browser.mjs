@@ -99,7 +99,11 @@ try {
   await sizing.locator('#view').locator('button').click();
   await sizing.waitForFunction(() => document.fullscreenElement === document.querySelector('#view'));
   assert.equal(await sizing.$eval('#view', v => v.engine === window.originalEngine), true);
-  assert.deepEqual(await sizing.$eval('#view', v => [v.engine.cols,v.engine.rows]), [40,10]);
+  assert.equal(await sizing.$eval('#view', v => {
+    const a=v.engine;
+    return a.cols>=48 && a.rows>=12 && a.viewport.scaleX===a.viewport.scaleY &&
+      a.viewport.offsetX<innerWidth/a.cols && a.viewport.offsetY<innerHeight/a.rows;
+  }), true, 'fullscreen expands the grid to fit the screen with higher density');
   await sizing.keyboard.press('Escape');
   await sizing.waitForFunction(() => !document.fullscreenElement);
   assert.equal(await sizing.$eval('#view', v => v.engine === window.originalEngine && !v.engine.stopped), true);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {canvasOptions, canvasViewport, canvasPointer} from '../engine.mjs';
+import {canvasOptions, canvasViewport, canvasPointer, fullscreenGrid} from '../engine.mjs';
 
 test('responsive embeds: font size and zoom determine cell counts', () => {
   let options = canvasOptions({fontSize: 12});
@@ -43,5 +43,15 @@ test('viewport: manual zoom, cover cropping, and invalid configuration', () => {
   assert.equal(zoom.scaleX, .25);
   for (const options of [{scale:0}, {fontSize:NaN}, {cols:80}, {cols:0,rows:24}, {fit:'invalid'}]) {
     assert.throws(() => canvasOptions(options), RangeError);
+  }
+});
+
+test('fullscreen expands to screen aspect with a modest density increase', () => {
+  for (const [width,height] of [[1920,1080],[1080,1920],[1280,800]]) {
+    const grid=fullscreenGrid(width,height,160,48,9.6,19.2);
+    assert.ok(grid.cols>=192 && grid.rows>=58);
+    const v=canvasViewport(width,height,canvasOptions({...grid,cellWidth:9.6,cellHeight:19.2}));
+    assert.equal(v.scaleX,v.scaleY);
+    assert.ok(v.offsetX<width/grid.cols && v.offsetY<height/grid.rows);
   }
 });

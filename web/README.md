@@ -58,9 +58,10 @@ independent memory and model state. Offscreen embeds pause rendering, and
 removing an embed stops its program. Set `loading="eager"` to load immediately.
 Call `element.restart()` to start a fresh instance using the cached module.
 
-The bottom-right button enters real browser fullscreen. It fits the current
-grid to the screen, preserving the running program. Press Escape or click the
-button again to return to the inline size. Set `expandable="false"` to hide it.
+The bottom-right button enters real browser fullscreen. It expands the grid
+to match the screen aspect ratio, with 20% more cells per fitted dimension.
+The program receives a resize while retaining its model. Press Escape or click
+the button again to restore the original inline grid. Set `expandable="false"` to hide it.
 When placing the page inside an iframe, allow fullscreen on that iframe.
 
 Choose either sizing mode:

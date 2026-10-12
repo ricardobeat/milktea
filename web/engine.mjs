@@ -159,6 +159,18 @@ export function canvasViewport(width, height, options) {
     offsetY: fixed ? (height - logicalHeight * scaleY) / 2 : 0};
 }
 
+// Keep square pixels while expanding the grid to the fullscreen aspect ratio.
+// Cells are 20% denser than simply fitting the original grid to the screen.
+export function fullscreenGrid(width, height, cols, rows, cellWidth, cellHeight) {
+  const fit = Math.min(width / (cols * cellWidth), height / (rows * cellHeight));
+  if (!(fit > 0)) return {cols, rows};
+  const scale = fit / 1.2;
+  return {
+    cols: Math.max(1, Math.min(512, Math.round(width / (cellWidth * scale)))),
+    rows: Math.max(1, Math.min(256, Math.round(height / (cellHeight * scale)))),
+  };
+}
+
 export function canvasPointer(rect, viewport, event, cw, ch) {
   // Normalize against the displayed rect as well: CSS transforms may scale it.
   const x = (event.clientX - rect.left) * viewport.width / rect.width;
