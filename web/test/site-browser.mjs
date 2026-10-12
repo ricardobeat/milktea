@@ -15,10 +15,10 @@ try {
   assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
     ['inputbox','spinners','timer','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`/build/${n}.wasm`));
   assert.equal(await page.locator('#demos milktea-view').evaluateAll(views=>views.every(v=>!v.engine)),true,'demos stay unloaded before entering view');
-  assert.equal(await page.locator('[role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
+  assert.equal(await page.locator('#demos [role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
   assert.equal(await page.locator('.code-footer').count(),0,'tabs have no bottom bar');
   assert.equal(await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname.startsWith('/code/')).length),0,'source is lazy loaded');
-  assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'false');
+  assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'true');
   await page.locator('#counter-preview-tab').click();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
   await page.waitForFunction(()=>{const v=document.querySelector('#counter-preview milktea-view');return v.shadowRoot.activeElement===v.canvas;});

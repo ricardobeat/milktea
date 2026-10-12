@@ -148,3 +148,6 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 
 .site-nav {position:sticky;top:0;z-index:20;isolation:isolate;background:var(--orange);color:var(--ink)}
 .skip-link {z-index:30}
+
+#counter-code {height:auto;overflow:visible}
+#counter-code pre {padding:20px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}

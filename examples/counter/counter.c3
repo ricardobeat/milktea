@@ -12,35 +12,27 @@ fn milktea::Cmd Counter.init(Counter* self) @dynamic {
 	return null;
 }
 
-fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
-	milktea::KeyMsg k = msg.key;
-	switch (k.code) {
-		case milktea::KeyCode.UP:
-			self.value++;
-		case milktea::KeyCode.DOWN:
-			self.value--;
-		case milktea::KeyCode.CTRL_C:
-			return milktea::quit();
-		case milktea::KeyCode.RUNE:
-			if (k.rune == 'q') return milktea::quit();
-		default:
-	}
-	return null;
+fn milktea::Cmd Counter.update(&self, milktea::Msg msg) @dynamic {
+  if (msg.kind != KEY) return null;
+  switch (msg.key.code) {
+    case UP: self.value++;
+    case DOWN: self.value--;
+    case CTRL_C: return milktea::quit();
+    case RUNE: if (msg.key.rune == 'q') return milktea::quit();
+    default:
+  }
+  return null;
 }
 
-fn milktea::Node* Counter.view(Counter* self) @dynamic {
-	glaze::Style box = glaze::style()
-		.foreground(glaze::color_hex("#00d7ff"))
-		.with_bold(true)
-		.padding(1, 3, 1, 3)
-		.with_border(glaze::ROUNDED);
-
-	String label   = string::tformat("Counter: %d", self.value);
-	String hint    = "\nUse ↑↓ to change, q to quit";
-	String content = string::tformat("%s%s", label, hint);
-	return milktea::root()
-		.add(milktea::text(box.render(content)).center());
+fn milktea::Node* Counter.view(&self) @dynamic {
+  glaze::Style box = glaze::style()
+    .foreground(glaze::color_hex("#00d7ff"))
+    .with_bold(true).padding(1, 3, 1, 3)
+    .with_border(glaze::ROUNDED);
+  String content = string::tformat(
+    "Counter: %d\nUse ↑↓ to change, q to quit", self.value);
+  return milktea::root()
+    .add(milktea::text(box.render(content)).center());
 }
 
 fn int main() {
