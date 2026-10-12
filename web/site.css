@@ -1,8 +1,9 @@
+@font-face {font-family:"Molot";src:url("./fonts/molot.woff") format("woff");font-weight:400;font-style:normal;font-display:swap}
 @font-face {font-family:"Geist";src:url("./fonts/geist.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 @font-face {font-family:"Geist";src:url("./fonts/geist-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
 @font-face {font-family:"Geist Mono";src:url("./fonts/geist-mono.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 @font-face {font-family:"Geist Mono";src:url("./fonts/geist-mono-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
-:root { --font-sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme: light; --paper:#f5f2eb; --ink:#292e2b; --muted:#737971; --line:#dedfd5; --accent:#6e4c68; --mint:#cbe3d1; font:16px/1.65 var(--font-sans); background:var(--paper); color:var(--ink); }
+:root { --font-sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme: light; --paper:#f0e6ce; --ink:#14271c; --muted:#666a56; --line:#c9c0a9; --accent:#c44819; --mint:#d4dfad; --orange:#f96a24; --font-display:"Molot",Impact,sans-serif; font:16px/1.65 var(--font-sans); background:var(--paper); color:var(--ink); }
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; scroll-padding-top:24px; }
 body { margin:0; }
@@ -20,7 +21,7 @@ nav { display:flex; gap:28px; font-size:14px; }
 .eyebrow,.demo-number { font:11px/1.5 var(--font-mono); letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); }
 .eyebrow { margin:0 0 18px; }
 .dot { display:inline-block; width:7px; height:7px; margin-right:8px; border-radius:50%; background:#7c9d83; }
-h1,h2,h3 { font-family:var(--font-sans); font-weight:400; letter-spacing:-1.8px; line-height:1.08; margin:0; }
+h1,h2,h3 { font-family:var(--font-display); font-weight:400; text-transform:uppercase; letter-spacing:-.025em; line-height:1.08; margin:0; }
 h1 { font-size:clamp(48px,6.6vw,80px); }
 h1 em { font-weight:400; color:var(--accent); }
 .lead { color:#646b63; font-size:18px; line-height:1.7; margin:24px 0; }
@@ -38,14 +39,14 @@ h2 { font-size:42px; }
 .step-number { font:12px/1.7 var(--font-mono); color:#999f92; padding-top:2px; }
 .steps strong { font-size:14px; font-weight:650; }.steps p { margin:2px 0 0; color:var(--muted); font-size:14px; }
 .intro-copy .fine-print { font-size:13px; }
-.code-window { min-width:0; align-self:start; border-radius:10px; overflow:hidden; background:#202623; color:#d4dfd5; box-shadow:0 9px 28px #26322a0a; }
+.code-window { min-width:0; align-self:start; border:2px solid var(--ink); border-radius:2px; overflow:hidden; background:#202a23; color:#d4dfd5; box-shadow:4px 4px 0 #c9c0a9; }
 .code-heading { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid #ffffff10; font:11px/1.4 var(--font-mono); color:#8f9d94; }
 .code-heading>span:first-child { display:flex; gap:5px; }.code-heading i { width:6px; height:6px; border-radius:50%; background:#5d6c60; }.code-lang { margin-left:auto; color:#b7cdbb; }
 .code-window pre { margin:0; padding:24px 22px; overflow:auto; font:12px/1.75 var(--font-mono); tab-size:2; }
 .code-window .ink { background:transparent; color:#d9e1d9; }.code-window .ink .ink-s2,.code-window .ink .ink-s7 {color:#d0a7ca;font-weight:400}.code-window .ink .ink-s3,.code-window .ink .ink-s6 {color:#9bbccb;font-weight:400}.code-window .ink .ink-s4,.code-window .ink .ink-s5 {color:#bed3ad;font-weight:400}.code-window .ink .ink-s8,.code-window .ink .ink-s10 {color:#e0c199;font-weight:400}.code-window .ink .ink-s9 {color:#a8d5ba}
 .code-footer { padding:12px 20px; border-top:1px solid #ffffff10; color:#91a094; font-size:11px; display:flex; flex-wrap:wrap; gap:5px 16px; justify-content:space-between; }.code-footer a { color:#bfcfbe; }
 .section-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:30px; padding:30px 0; border-top:1px solid var(--line); }.section-heading .eyebrow { margin-bottom:12px; }.section-heading>p { margin:0 0 3px; font-size:14px; color:var(--muted); }
-.demo { min-width:0; }.simple-demos { margin-top:12px; }.demo-simple { display:grid; grid-template-columns:.8fr 1.25fr; gap:70px; align-items:center; margin-bottom:26px; }.demo-copy { padding-right:18px; }h3 { font-size:28px; letter-spacing:-.8px; margin:10px 0 12px; }.demo p { color:var(--muted); font-size:14px; line-height:1.65; }.demo-copy p { margin:0 0 14px; max-width:300px; }.controls-note { color:#8b8f82; font-size:12px; }.controls-note span,.demo-foot>span>span { margin-inline:6px; }
+.demo { min-width:0; }.simple-demos { margin-top:12px; }.demo-simple { display:grid; grid-template-columns:.8fr 1.25fr; gap:70px; align-items:center; margin-bottom:26px; }.demo-copy { padding-right:18px; }h3 { font-size:30px; letter-spacing:-.025em; margin:10px 0 12px; }.demo p { color:var(--muted); font-size:14px; line-height:1.65; }.demo-copy p { margin:0 0 14px; max-width:300px; }.controls-note { color:#8b8f82; font-size:12px; }.controls-note span,.demo-foot>span>span { margin-inline:6px; }
 kbd { font:11px/1.5 var(--font-mono); border:1px solid #d7d9cd; border-bottom-width:2px; border-radius:3px; padding:1px 5px; color:#707666; }
 .source-link { font-size:11px; color:#7b8375; }.demo-copy .source-link { display:inline-block; margin-top:14px; }
 .demo-surface { position:relative; overflow:hidden; border:1px solid #292e2b; border-radius:9px; background:#111318; }
@@ -70,7 +71,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .features {max-width:720px;font-size:16px;margin-top:12px}
 .counter-tabs {display:flex;gap:4px;margin-left:auto}
 .counter-tabs button {padding:5px 10px;border:1px solid transparent;border-radius:4px;background:transparent;color:#91a094;font:inherit;cursor:pointer}
-.counter-tabs button[aria-selected=true] {background:#344038;border-color:#526156;color:#e0e9df}
+.counter-tabs button[aria-selected=true] {background:var(--paper);border-color:var(--paper);color:var(--ink)}
 .counter-panel {height:410px;overflow:auto}
 .counter-panel[hidden] {display:none}
 .counter-panel .demo-surface {height:100%;border:0;border-radius:0}
@@ -88,3 +89,59 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .wasm-note {margin:0 0 24px;padding:16px 20px;border:1px solid #e5cd88;border-radius:6px;background:#f8e8b5;color:#65512b;font-size:14px;line-height:1.65}
 
 .chapter p {max-width:720px;margin:16px 0 0;color:var(--muted);font-size:14px;line-height:1.65}
+
+/* Orange poster, set in Molot, breaking into the paper below. */
+.poster {position:relative;isolation:isolate;overflow:hidden;background:var(--orange);color:var(--ink)}
+.poster::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:url("./art/grain.svg");mix-blend-mode:multiply;opacity:.28}
+.poster .wrap {max-width:1600px;padding-inline:clamp(20px,4.6vw,76px)}
+.poster .site-header {padding-block:22px;border-bottom:1px solid #14271c55;gap:24px}
+.poster .wordmark {font:28px/.9 var(--font-display);letter-spacing:-.03em;text-transform:uppercase;gap:8px}
+.brand-cell {display:block;width:9px;height:9px;background:currentColor;align-self:end;margin-bottom:3px}
+.poster nav {font:12px/1.4 var(--font-mono);text-transform:uppercase;gap:30px}
+.poster a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:5px}
+.poster .hero {padding-top:36px;padding-bottom:60px;border:0}
+.hero h1 {font:clamp(64px,25.5vw,408px)/.82 var(--font-display);letter-spacing:-.045em;white-space:nowrap;margin:0 0 20px -.018em}
+.hero-bottom {display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:40px}
+.hero-statement {font-size:clamp(38px,5.1vw,76px);line-height:.94;letter-spacing:-.015em}
+.hero-statement span {color:var(--paper);text-shadow:3px 3px 0 var(--ink)}
+.hero .lead {max-width:375px;margin:24px 0 0;color:var(--ink);font:14px/1.65 var(--font-mono)}
+.hero .hero-links {margin-top:26px;gap:26px}
+.hero .button {padding:13px 18px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);border-radius:0;font:12px/1.5 var(--font-mono);text-transform:uppercase;box-shadow:4px 4px 0 #14271c55}
+.hero .button:hover {color:var(--ink);background:var(--paper);text-decoration:none}
+.hero .text-link {font:12px/1.5 var(--font-mono);color:var(--ink);border-color:var(--ink);text-transform:uppercase}
+.cell-art {position:relative;width:min(100%,400px);justify-self:center;transform:rotate(9deg);margin:6px 0 12px}
+.cell-art::before {content:"";position:absolute;inset:18% 2% 3% 6%;z-index:-1;border-radius:50%;background-color:#ffab48;background-image:radial-gradient(#14271c55 1px,transparent 1px);background-size:5px 5px;transform:rotate(-9deg)}
+.cell-cup {display:block;width:100%;height:auto;filter:drop-shadow(6px 6px 0 #f0e6ce)}
+.cell-caption {position:absolute;right:-4%;bottom:3%;padding:10px 18px;background:var(--paper);border:2px solid var(--ink);font:14px/1 var(--font-mono);transform:rotate(-16deg);box-shadow:3px 3px 0 var(--ink)}
+.poster-edge {height:120px;margin-top:-36px;background:url("./art/cell-edge.svg") repeat-x bottom;background-size:864px 120px;position:relative}
+.intro-strap {max-width:760px;margin:38px 0 0;font:16px/1.65 var(--font-mono);color:var(--ink)}
+.intro {padding-top:54px}
+.wasm-note {border-radius:0;background:#f6d987;border-color:#d7b458;color:#51401f}
+.site-footer .wordmark {font-family:var(--font-display);text-transform:uppercase;font-weight:400;font-size:24px;letter-spacing:0}
+@media(min-width:1600px) {.hero h1 {font-size:408px}}
+@media(max-width:900px) {
+  .poster nav {gap:20px}
+  .hero-bottom {gap:20px}
+  .hero .lead {font-size:13px}
+  .hero .hero-links {gap:16px;flex-wrap:wrap}
+  .cell-caption {right:0;font-size:12px;padding:8px 12px}
+}
+@media(max-width:650px) {
+  .poster .site-header {padding-block:18px;flex-wrap:nowrap;gap:16px}
+  .poster .wordmark {font-size:24px}
+  .poster nav {width:auto;gap:14px;font-size:10px}
+  .poster nav a:first-child {display:none}
+  .poster .hero {padding-top:40px;padding-bottom:50px}
+  .hero h1 {font-size:24.8vw;margin-bottom:34px}
+  .hero-bottom {grid-template-columns:1fr;gap:8px}
+  .hero-copy {position:relative;z-index:1}
+  .hero-statement {font-size:clamp(38px,9.5vw,60px)}
+  .hero .lead {max-width:300px;font-size:12px;margin-top:18px}
+  .hero .hero-links {margin-top:22px;gap:20px}
+  .hero .button {padding:11px 14px;font-size:11px;gap:16px}
+  .hero .text-link {font-size:11px}
+  .cell-art {width:230px;justify-self:end;margin:12px 8px -4px}
+  .poster-edge {height:84px;margin-top:-20px;background-size:605px 84px}
+  .intro-strap {font-size:13px;margin-top:26px}
+  .intro {padding-top:38px}
+}

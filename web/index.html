@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Terminal UI made easy. Keyboard and mouse input, flex layouts, graphics and animations in under 200KB.">
-  <meta name="theme-color" content="#f5f2eb">
+  <meta name="theme-color" content="#f96a24">
   <title>milktea — Terminal UI made easy</title>
+  <link rel="preload" href="./fonts/molot.woff" as="font" type="font/woff" crossorigin>
   <link rel="preload" href="./fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/geist-mono.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./site.css">
@@ -17,24 +18,34 @@
 </head>
 <body>
 <a class="skip-link" href="#demos">Skip to demos</a>
-<header class="site-header wrap">
-  <a class="wordmark" href="./" aria-label="milktea home"><span class="mark" aria-hidden="true">m<span>·</span></span>milktea</a>
-  <nav aria-label="Main navigation"><a href="#demos">Demos</a><a href="./editor.html">Live editor</a><a href="https://github.com/ricardobeat/milktea">GitHub <span aria-hidden="true">↗</span></a></nav>
+<header class="poster">
+  <div class="site-header wrap">
+    <a class="wordmark" href="./" aria-label="milktea home">milktea<span class="brand-cell" aria-hidden="true"></span></a>
+    <nav aria-label="Main navigation"><a href="#demos">Demos ↓</a><a href="./editor.html">Live editor ↗</a><a href="https://github.com/ricardobeat/milktea">GitHub ↗</a></nav>
+  </div>
+  <section class="hero wrap" aria-labelledby="title">
+    <h1 id="title">MILKTEA</h1>
+    <div class="hero-bottom">
+      <div class="hero-copy">
+        <h2 class="hero-statement">Terminal UI<br>made <span>easy.</span></h2>
+        <p class="lead">Milktea makes writing native terminal apps faster than web.</p>
+        <div class="hero-links"><a class="button" href="#demos">Live examples <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/ricardobeat/milktea#readme">Read the docs ↗</a></div>
+      </div>
+      <div class="cell-art" aria-hidden="true">
+        <img class="cell-cup" src="./art/cell-cup.svg" width="448" height="378" alt="">
+        <span class="cell-caption">made of cells</span>
+      </div>
+    </div>
+  </section>
+  <div class="poster-edge" aria-hidden="true"></div>
 </header>
 <main class="wrap">
-  <section class="hero" aria-labelledby="title">
-
-    <h1 id="title">Terminal UI<br>made <em>easy</em></h1>
-    <p class="lead">Milktea makes writing native terminal apps faster than web.</p>
-    <p class="lead features">Keyboard and mouse input, flex layouts, graphics and animations — all in under 200KB.</p>
-    <div class="hero-links"><a class="button" href="#demos">Examples <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/ricardobeat/milktea#readme">Read the docs <span aria-hidden="true">↗</span></a></div>
-    <span class="hero-note" aria-hidden="true">made of cells <span>✳</span></span>
-  </section>
+  <p class="intro-strap">Keyboard and mouse input, flex layouts, graphics and animations — all in under 200KB.</p>
 
   <section class="intro" aria-labelledby="intro-title">
     <div class="intro-copy">
 
-      <h2 id="intro-title">Based on the<br>ELM architecture</h2>
+      <h2 id="intro-title">Based on the<br> ELM architecture</h2>
       <p>The runtime delivers messages to update and renders the result of view.</p>
       <ol class="steps">
         <li><div><strong>Model</strong><p>Application state.</p></div></li>
