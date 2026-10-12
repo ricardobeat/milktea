@@ -309,28 +309,43 @@ export class MilkteaCanvas {
     // exactly half a pixel (e.g. 139 * 9.6 + 9.6 versus 140 * 9.6).
     // Resolve these ties consistently for both fills and glyph clips.
     const snap = value => Math.floor(value + 0.5 + 1e-7);
-    const fillRect = (x, y, w, h) => {
+    const pixelRect = (x, y, w, h) => {
       const left = snap(x * sx + ox), top = snap(y * sy + oy);
-      // Draw directly in backing pixels. Inverting the transform and applying
-      // it again can leave near-integer edges that some browsers antialias.
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillRect(left, top, snap((x + w) * sx + ox) - left, snap((y + h) * sy + oy) - top);
+    };
+    const fillRect = (x, y, w, h) => {
+      // Draw directly in backing pixels to avoid transform-rounding seams.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      pixelRect(x, y, w, h);
       ctx.setTransform(sx, 0, 0, sy, ox, oy);
     };
     // Backgrounds first: a continuation cell must not erase a wide glyph.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (let i = 0; i < g.cols * g.rows; i++) {
       const p = g.ptr + i * g.stride, s = p + g.style, attrs = g.bytes[s + g.attrs];
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? 0 : g.colorSize), attrs & 32 ? this.foreground : this.background);
-      fillRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
+      pixelRect((i % g.cols) * cw, Math.floor(i / g.cols) * ch, cw, ch);
     }
+    ctx.setTransform(sx, 0, 0, sy, ox, oy);
     ctx.textBaseline = 'middle';
     for (let i = 0; i < g.cols * g.rows; i++) {
       const p = g.ptr + i * g.stride, len = g.bytes[p + 8], width = g.bytes[p + 9];
       if (!width || !len) continue;
       const s = p + g.style, attrs = g.bytes[s + g.attrs];
       if ((attrs & 16) && blink) continue;
-      const text = decoder.decode(g.bytes.subarray(p, p + len));
       const x = (i % g.cols) * cw, y = Math.floor(i / g.cols) * ch;
+      // Fire and pixel canvases predominantly use ▀, ▄ and █. These shapes
+      // stay inside their cell and need neither text decoding nor a clip/font.
+      const last = g.bytes[p + 2];
+      if (!(attrs & (8 | 64)) && len === 3 && g.bytes[p] === 0xe2 &&
+          g.bytes[p + 1] === 0x96 && (last === 0x80 || last === 0x84 || last === 0x88)) {
+        ctx.globalAlpha = attrs & 2 ? .5 : 1;
+        ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? g.colorSize : 0), attrs & 32 ? this.background : this.foreground);
+        fillRect(x, y + (last === 0x84 ? ch / 2 : 0), cw * width, last === 0x88 ? ch : ch / 2);
+        ctx.globalAlpha = 1;
+        continue;
+      }
+      const text = decoder.decode(g.bytes.subarray(p, p + len));
       ctx.save(); ctx.beginPath();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const left = snap(x * sx + ox), top = snap(y * sy + oy);

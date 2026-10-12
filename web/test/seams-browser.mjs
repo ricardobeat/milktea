@@ -26,6 +26,11 @@ try {
           for(let i=0;i<g.cols*g.rows;i++) {
             const p=g.ptr+i*g.stride,s=p+g.style;
             if(name!=='doom-fire') {g.bytes[p]=32;g.bytes[p+8]=1;g.bytes[p+9]=1;}
+            else {
+              // Exercise all three optimized block shapes, including shared edges.
+              g.bytes.set([0xe2,0x96,[0x80,0x84,0x88][i%3]],p);
+              g.bytes[p+8]=3;g.bytes[p+9]=1;
+            }
             g.bytes[s+g.attrs]=0;
             g.bytes.set([3,0,240,80,20,255],s);
             g.bytes.set([3,0,180,190,40,255],s+g.colorSize);
