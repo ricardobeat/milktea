@@ -12,12 +12,12 @@ try {
       '<script type="module" src="/embed.mjs"></script><milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:756px;height:413px"></milktea-view>'}));
     await page.goto(`${origin}/seams-test.html`);
     await page.waitForFunction(()=>!!document.querySelector('#view').engine);
-    for (const name of ['doom-fire','dos-app']) {
-      if (name==='dos-app') {
-        await page.$eval('#view',v=>v.setAttribute('src','/build/dos-app.wasm'));
+    for (const name of ['doom-fire','dos-app','avian-assault']) {
+      if (name!=='doom-fire') {
+        await page.$eval('#view',(v,name)=>{v.setAttribute('src','/build/'+name+'.wasm');v.setAttribute('cols',name==='avian-assault'?'160':'80');v.setAttribute('rows',name==='avian-assault'?'48':'24');v.setAttribute('cell-width','9.6');v.setAttribute('cell-height','19.2');},name);
         await page.waitForFunction(()=>!!document.querySelector('#view').engine);
       }
-      for (const [width,height] of [[756,413],[867,523],[317,197]]) {
+      for (const [width,height] of [[756,413],[867,523],[317,197],[950,570],[1104,662.4]]) {
         const bad=await page.$eval('#view',async(view,{width,height,name})=>{
           const {readGrid}=await import('/engine.mjs');
           view.style.width=width+'px';view.style.height=height+'px';
@@ -25,7 +25,7 @@ try {
           const g=readGrid(a.wasm);
           for(let i=0;i<g.cols*g.rows;i++) {
             const p=g.ptr+i*g.stride,s=p+g.style;
-            if(name==='dos-app') {g.bytes[p]=32;g.bytes[p+8]=1;g.bytes[p+9]=1;}
+            if(name!=='doom-fire') {g.bytes[p]=32;g.bytes[p+8]=1;g.bytes[p+9]=1;}
             g.bytes[s+g.attrs]=0;
             g.bytes.set([3,0,240,80,20,255],s);
             g.bytes.set([3,0,180,190,40,255],s+g.colorSize);
@@ -48,5 +48,5 @@ try {
     }
     await page.close();
   }
-  console.log(`PASS ${browserName}: fire and text backgrounds have zero seams at 3 viewports × 3 pixel densities`);
+  console.log(`PASS ${browserName}: fire and text backgrounds have zero seams at 5 viewports × 3 pixel densities`);
 } finally {await browser.close();}

@@ -291,12 +291,16 @@ export class MilkteaCanvas {
     // antialiasing seams. Keep text and pointer coordinates in logical units.
     const sx = dpr * v.scaleX, sy = dpr * v.scaleY;
     const ox = dpr * v.offsetX, oy = dpr * v.offsetY;
+    // Equivalent shared edges can differ by a few floating-point bits at
+    // exactly half a pixel (e.g. 139 * 9.6 + 9.6 versus 140 * 9.6).
+    // Resolve these ties consistently for both fills and glyph clips.
+    const snap = value => Math.floor(value + 0.5 + 1e-7);
     const fillRect = (x, y, w, h) => {
-      const left = Math.round(x * sx + ox), top = Math.round(y * sy + oy);
+      const left = snap(x * sx + ox), top = snap(y * sy + oy);
       // Draw directly in backing pixels. Inverting the transform and applying
       // it again can leave near-integer edges that some browsers antialias.
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillRect(left, top, Math.round((x + w) * sx + ox) - left, Math.round((y + h) * sy + oy) - top);
+      ctx.fillRect(left, top, snap((x + w) * sx + ox) - left, snap((y + h) * sy + oy) - top);
       ctx.setTransform(sx, 0, 0, sy, ox, oy);
     };
     // Backgrounds first: a continuation cell must not erase a wide glyph.
@@ -315,8 +319,8 @@ export class MilkteaCanvas {
       const x = (i % g.cols) * cw, y = Math.floor(i / g.cols) * ch;
       ctx.save(); ctx.beginPath();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const left = Math.round(x * sx + ox), top = Math.round(y * sy + oy);
-      ctx.rect(left, top, Math.round((x + cw * width) * sx + ox) - left, Math.round((y + ch) * sy + oy) - top);
+      const left = snap(x * sx + ox), top = snap(y * sy + oy);
+      ctx.rect(left, top, snap((x + cw * width) * sx + ox) - left, snap((y + ch) * sy + oy) - top);
       ctx.clip();
       ctx.setTransform(sx, 0, 0, sy, ox, oy);
       ctx.globalAlpha = attrs & 2 ? .5 : 1;
