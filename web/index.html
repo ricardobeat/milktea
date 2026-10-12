@@ -81,15 +81,15 @@
 .ink .ink-s13{font-weight:bold;}
 .ink .ink-s14{text-decoration:underline;}
 </style>
-<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> { <span class="ink-s3">sz</span> value; }
+<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> {
+  <span class="ink-s3">sz</span> value;
+}
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
-  <span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> <span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
   <span class="ink-s2">switch</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code) {
     <span class="ink-s2">case</span> <span class="ink-s6">UP</span>: self<span class="ink-s2">.</span>value<span class="ink-s2">++</span>;
     <span class="ink-s2">case</span> <span class="ink-s6">DOWN</span>: self<span class="ink-s2">.</span>value<span class="ink-s2">--</span>;
-    <span class="ink-s2">case</span> <span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
-    <span class="ink-s2">case</span> <span class="ink-s6">RUNE</span>: <span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+    <span class="ink-s2">case</span> <span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
     <span class="ink-s2">default</span>:
   }
   <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
@@ -100,8 +100,7 @@
     <span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>))
     <span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 3, 1, 3)
     <span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
-  <span class="ink-s3">String</span> content <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(
-    <span class="ink-s9">&quot;Counter: %d\nUse ↑↓ to change, q to quit&quot;</span>, self<span class="ink-s2">.</span>value);
+  <span class="ink-s3">String</span> content <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Counter: %d&quot;</span>, self<span class="ink-s2">.</span>value);
   <span class="ink-s2">return</span> milktea::<span class="ink-s4">root</span>()
     <span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(box<span class="ink-s2">.</span><span class="ink-s4">render</span>(content))<span class="ink-s2">.</span><span class="ink-s4">center</span>());
 }
