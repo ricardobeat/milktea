@@ -5,7 +5,7 @@
 @font-face {font-family:"Geist Mono";src:url("./fonts/geist-mono-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
 :root { --font-sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme: light; --paper:#f0e6ce; --ink:#14271c; --muted:#666a56; --line:#c9c0a9; --accent:#c44819; --mint:#d4dfad; --orange:#f96a24; --font-display:"Molot",Impact,sans-serif; font:16px/1.65 var(--font-sans); background:var(--paper); color:var(--ink); }
 * { box-sizing:border-box; }
-html { scroll-behavior:smooth; scroll-padding-top:24px; }
+html { scroll-behavior:smooth; scroll-padding-top:90px; }
 body { margin:0; }
 a { color:inherit; text-decoration:none; }
 a:hover { color:var(--accent); }
@@ -93,12 +93,12 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 /* Orange poster, set in Molot, breaking into the paper below. */
 .poster {position:relative;isolation:isolate;overflow:hidden;background:var(--orange);color:var(--ink)}
 .poster::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:url("./art/grain.svg");mix-blend-mode:multiply;opacity:.28}
-.poster .wrap {max-width:1600px;padding-inline:clamp(20px,4.6vw,76px)}
-.poster .site-header {padding-block:22px;border-bottom:1px solid #14271c55;gap:24px}
-.poster .wordmark {font:28px/.9 var(--font-display);letter-spacing:-.03em;text-transform:uppercase;gap:8px}
+.poster .wrap,.site-nav .wrap {max-width:1600px;padding-inline:clamp(20px,4.6vw,76px)}
+.site-nav .site-header {padding-block:22px;border-bottom:1px solid #14271c55;gap:24px}
+.site-nav .wordmark {font:28px/.9 var(--font-display);letter-spacing:-.03em;text-transform:uppercase;gap:8px}
 .brand-cell {display:block;width:9px;height:9px;background:currentColor;align-self:end;margin-bottom:3px}
-.poster nav {font:12px/1.4 var(--font-mono);text-transform:uppercase;gap:30px}
-.poster a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:5px}
+.site-nav nav {font:12px/1.4 var(--font-mono);text-transform:uppercase;gap:30px}
+.poster a:hover,.site-nav a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:5px}
 .poster .hero {padding-top:36px;padding-bottom:60px;border:0}
 .hero h1 {font:clamp(64px,25.5vw,408px)/.82 var(--font-display);letter-spacing:-.045em;white-space:nowrap;margin:0 0 20px -.018em}
 .hero-bottom {display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:40px}
@@ -120,17 +120,17 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .site-footer .wordmark {font-family:var(--font-display);text-transform:uppercase;font-weight:400;font-size:24px;letter-spacing:0}
 @media(min-width:1600px) {.hero h1 {font-size:408px}}
 @media(max-width:900px) {
-  .poster nav {gap:20px}
+  .site-nav nav {gap:20px}
   .hero-bottom {gap:20px}
   .hero .lead {font-size:13px}
   .hero .hero-links {gap:16px;flex-wrap:wrap}
   .cell-caption {right:0;font-size:12px;padding:8px 12px}
 }
 @media(max-width:650px) {
-  .poster .site-header {padding-block:18px;flex-wrap:nowrap;gap:16px}
-  .poster .wordmark {font-size:24px}
-  .poster nav {width:auto;gap:14px;font-size:10px}
-  .poster nav a:first-child {display:none}
+  .site-nav .site-header {padding-block:18px;flex-wrap:nowrap;gap:16px}
+  .site-nav .wordmark {font-size:24px}
+  .site-nav nav {width:auto;gap:14px;font-size:10px}
+  .site-nav nav a:first-child {display:none}
   .poster .hero {padding-top:40px;padding-bottom:50px}
   .hero h1 {font-size:24.8vw;margin-bottom:34px}
   .hero-bottom {grid-template-columns:1fr;gap:8px}
@@ -145,3 +145,6 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
   .intro-strap {font-size:13px;margin-top:26px}
   .intro {padding-top:38px}
 }
+
+.site-nav {position:sticky;top:0;z-index:20;background:var(--orange)}
+.skip-link {z-index:30}
