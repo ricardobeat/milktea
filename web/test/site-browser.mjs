@@ -13,7 +13,7 @@ try {
   assert.equal(await page.locator('#demos-title').textContent(),'Live examples');
   assert.match(await page.locator('.wasm-note').textContent(),/real milktea binary.*no terminal emulator involved/);
   assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
-    ['inputbox','spinners','tabs','progress','clock','spotlight','nanobots','splash','doom-fire','doom-fire-overlay','avian-assault'].map(n=>`/build/${n}.wasm`));
+    ['inputbox','spinners','tabs','progress','clock','spotlight','nanobots','splash','color-swatches','doom-fire-overlay','avian-assault'].map(n=>`/build/${n}.wasm`));
   assert.equal(await page.locator('#demos milktea-view').evaluateAll(views=>views.every(v=>!v.engine)),true,'demos stay unloaded before entering view');
   assert.equal(await page.locator('#demos [role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
   assert.equal(await page.locator('.code-footer').count(),0,'tabs have no bottom bar');
@@ -85,7 +85,7 @@ try {
     assert.equal(await view.evaluate(v=>v.engine===window.tabbedEngine && v.shadowRoot.activeElement===v.canvas),true,`${id} preview keeps state and focuses canvas`);
     await page.waitForFunction(id=>!document.querySelector(`#${id} milktea-view`).engine.paused,id);
   }
-  for (const id of ['spinners','tabs','progress','clock','spotlight','nanobots','splash','doom-fire','doom-fire-tea','avian-assault']) {
+  for (const id of ['spinners','tabs','progress','clock','spotlight','nanobots','splash','color-swatches','doom-fire-tea','avian-assault']) {
     const view=page.locator(`#${id} milktea-view`);
     await view.scrollIntoViewIfNeeded();
     await page.waitForFunction(id=>{const a=document.querySelector(`#${id} milktea-view`).engine;return a && a.wasm.mt_width()>0;},id);
@@ -95,7 +95,7 @@ try {
       await view.locator('canvas').focus();await page.keyboard.press('ArrowRight');
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#tabs milktea-view').engine.wasm).includes('TTY management');});
     }
-    if (id==='doom-fire') {
+    if (id==='color-swatches') {
       assert.deepEqual(await view.evaluate(v=>[v.engine.wasm.mt_width(),v.engine.wasm.mt_height()]),[100,30]);
       await page.screenshot({path:`/private/tmp/milktea-fire-${browserName}.png`});
     }
@@ -103,6 +103,21 @@ try {
       assert.equal(await view.evaluate(v=>Math.abs(v.canvas.getBoundingClientRect().height-v.getBoundingClientRect().height)<1),true,'canvas stays inside the game viewport');
       assert.equal(await view.evaluate(v=>v.engine.viewport.scaleX===v.engine.viewport.scaleY && v.engine.cellHeight===v.engine.cellWidth*2),true,'half-block pixels remain square');
       await view.locator('canvas').focus();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
+      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
+      await page.keyboard.press('Escape');
+      async function clickGameButton(label) {
+        await page.waitForFunction(async label=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes(label);},label);
+        const position=await view.evaluate(async(v,label)=>{
+          const {gridText}=await import('/engine.mjs'), a=v.engine;
+          const rows=gridText(a.wasm).split('\n'), row=rows.findIndex(r=>r.includes(label));
+          const col=[...rows[row].slice(0,rows[row].indexOf(label))].length+1;
+          return {x:a.viewport.offsetX+(col+.5)*a.cellWidth*a.viewport.scaleX,y:a.viewport.offsetY+(row+.5)*a.cellHeight*a.viewport.scaleY};
+        },label);
+        await view.locator('canvas').click({position});
+      }
+      await clickGameButton('How to Play');
+      await clickGameButton('Back to Menu');
+      await clickGameButton('Play Game');
       await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
     }
   }

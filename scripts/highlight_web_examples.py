@@ -14,7 +14,7 @@ EXAMPLES = {
     'clock': 'clock/clock.c3',
     'nanobots': 'nanobots/nanobots.c3',
     'splash': 'splash/splash.c3',
-    'doom-fire': 'doom-fire/doom-fire.c3',
+    'color-swatches': 'color-swatches/color-swatches.c3',
     'doom-fire-tea': 'doom-fire/doom-fire-overlay.c3',
     'spotlight': 'spotlight/spotlight.c3',
     'avian-assault': 'avian-assault/avian-assault.c3',
