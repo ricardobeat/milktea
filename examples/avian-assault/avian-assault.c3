@@ -1334,7 +1334,8 @@ fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 			.with_align(milktea::ALIGN_CENTER)
 			.add(logo(AVIAN[..], c1, c2))
 			.add(logo(ASSAULT[..], c2, c1)))
-		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true))
+		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true)
+			.alpha((self.ticks / 10) % 2 == 0 ? 255 : 0))
 		.add(self.menu_button("Enter", MenuAction.OPEN_MENU));
 }
 

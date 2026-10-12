@@ -1334,7 +1334,8 @@
 			<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>)
 			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">AVIAN</span>[<span class="ink-s2">..</span>], c1, c2))
 			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">ASSAULT</span>[<span class="ink-s2">..</span>], c2, c1)))
-		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;░▒▓ RETRO PHYSICS ARCADE ▓▒░&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 240, 200), bold: true))
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;░▒▓ RETRO PHYSICS ARCADE ▓▒░&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 240, 200), bold: true)
+			<span class="ink-s2">.</span><span class="ink-s4">alpha</span>((self<span class="ink-s2">.</span>ticks <span class="ink-s2">/</span> 10) <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0 <span class="ink-s2">?</span> 255 <span class="ink-s2">:</span> 0))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Enter&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">OPEN_MENU</span>));
 }
 
