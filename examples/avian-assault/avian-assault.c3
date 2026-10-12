@@ -108,7 +108,17 @@ struct ActiveBird {
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
+enum MenuAction { NONE, OPEN_MENU, PLAY, SELECT_LEVEL, HELP, EXIT, NEXT_LEVEL, RETRY }
+struct MenuButton {
+	AvianAssaultModel* model;
+	MenuAction action;
+}
+
 struct AvianAssaultModel {
+	MenuAction pending_action;
+	MenuButton[8] menu_buttons;
+	xray::ClickTarget[16] menu_targets;
+	sz menu_target_count;
 	sz term_w;
 	sz term_h;
 	sz ticks;
@@ -663,7 +673,33 @@ fn milktea::Cmd AvianAssaultModel.init(AvianAssaultModel* self) @dynamic {
 	return milktea::tick(FRAME_MS);
 }
 
+fn milktea::Cmd AvianAssaultModel.activate(&self, MenuAction action) {
+	self.is_dragging = false;
+	switch (action) {
+		case OPEN_MENU: self.state = GameState.MENU;
+		case PLAY: self.load_level(self.current_level);
+		case SELECT_LEVEL: self.current_level = (self.current_level + 1) % MAX_LEVELS;
+		case HELP: self.state = GameState.HELP;
+		case EXIT: return milktea::quit();
+		case NEXT_LEVEL: self.load_level((self.current_level + 1) % MAX_LEVELS);
+		case RETRY: self.load_level(self.current_level);
+		default:
+	}
+	return null;
+}
+
 fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg msg) @dynamic {
+	// Dialogs are painted into our canvas; retain their solved hit regions.
+	if (msg.kind == milktea::MsgKind.MOUSE &&
+		msg.mouse.action == milktea::MouseAction.MOUSE_PRESS &&
+		msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+		xray::dispatch_click(self.menu_targets[:self.menu_target_count], msg.mouse.col, msg.mouse.row);
+	}
+	if (self.pending_action != MenuAction.NONE) {
+		MenuAction action = self.pending_action;
+		self.pending_action = MenuAction.NONE;
+		return self.activate(action);
+	}
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		self.term_w = msg.window_size.width;
 		self.term_h = msg.window_size.height;
@@ -755,10 +791,10 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 						self.menu_selected = (self.menu_selected + 1) % 4;
 					case milktea::KeyCode.ENTER:
 						switch (self.menu_selected) {
-							case 0: self.load_level(0);
-							case 1: self.current_level = (self.current_level + 1) % MAX_LEVELS;
-							case 2: self.state = GameState.HELP;
-							case 3: return milktea::quit();
+							case 0: return self.activate(MenuAction.PLAY);
+							case 1: return self.activate(MenuAction.SELECT_LEVEL);
+							case 2: return self.activate(MenuAction.HELP);
+							case 3: return self.activate(MenuAction.EXIT);
 						}
 					case milktea::KeyCode.RUNE:
 						if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
@@ -1164,6 +1200,8 @@ fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 	}
 	ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
 	self.screen.paint(ui);
+	self.menu_target_count = 0;
+	xray::collect_click_targets(ui, self.menu_targets[..], &self.menu_target_count);
 
 	return milktea::canvas(self.screen);
 }
@@ -1269,14 +1307,25 @@ const String[6] ASSAULT = {
 	"╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ",
 };
 
+fn void menu_clicked(void* ctx, sz col, sz row) {
+	MenuButton* button = (MenuButton*)ctx;
+	button.model.pending_action = button.action;
+}
+
+fn milktea::Node* AvianAssaultModel.menu_button(&self, String label, MenuAction action, bool selected = false) {
+	MenuButton* button = &self.menu_buttons[(sz)action];
+	*button = { .model = self, .action = action };
+	glaze::Style style = glaze::style()
+		.foreground(selected ? xray::color_rgb(255, 245, 120) : xray::color_rgb(240, 235, 220))
+		.background(selected ? xray::color_rgb(110, 30, 25) : xray::color_rgb(45, 58, 68))
+		.with_bold(true).padding(0, 2, 0, 2);
+	return milktea::text(label, style).on_click(&menu_clicked, button);
+}
+
 fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
 	xray::Color c1 = xray::color_rgb(255, (char)(60 + pulse * 60), 30);
 	xray::Color c2 = xray::color_rgb(255, 220, 50);
-
-	// The prompt blinks without moving what is below it: at alpha 0 it keeps
-	// its place in the layout and paints nothing.
-	bool blink_on = (self.ticks / 10) % 2 == 0;
 
 	return backdrop(xray::color_rgba(28, 14, 16, 215))
 		.center()
@@ -1286,8 +1335,7 @@ fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 			.add(logo(AVIAN[..], c1, c2))
 			.add(logo(ASSAULT[..], c2, c1)))
 		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true))
-		.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
-			.alpha(blink_on ? 255 : 0));
+		.add(self.menu_button("Enter", MenuAction.OPEN_MENU));
 }
 
 fn milktea::Node* AvianAssaultModel.menu_dialog(&self) {
@@ -1299,13 +1347,9 @@ fn milktea::Node* AvianAssaultModel.menu_dialog(&self) {
 	};
 
 	milktea::Node* items = milktea::vstack().with_gap(1).with_align(milktea::ALIGN_CENTER);
+	MenuAction[4] actions = { PLAY, SELECT_LEVEL, HELP, EXIT };
 	foreach (i, opt : options) {
-		bool sel = i == self.menu_selected;
-		glaze::Style s = sel
-			? glaze::style().foreground(xray::color_rgb(255, 245, 120)).with_bold(true)
-				.background(xray::color_rgba(110, 30, 25, 210))
-			: glaze::style().foreground(xray::color_rgb(240, 210, 205));
-		items.add(milktea::text(string::tformat(sel ? "▶ %s ◀" : "  %s  ", opt), s));
+		items.add(self.menu_button(opt, actions[i], i == self.menu_selected));
 	}
 
 	// A fiery red-to-orange border over a dark crimson backdrop.
@@ -1334,7 +1378,9 @@ fn milktea::Node* AvianAssaultModel.won_dialog(&self) {
 			xray::color_rgb(120, 255, 120), xray::color_rgb(255, 230, 80), true)))
 		.add(milktea::text(stars))
 		.add(stats)
-		.add(line("[SPACE] Next Level  |  [M] Menu", xray::color_rgb(220, 240, 255)));
+		.add(milktea::hstack().with_gap(2)
+			.add(self.menu_button("Next Level", MenuAction.NEXT_LEVEL))
+			.add(self.menu_button("Menu", MenuAction.OPEN_MENU)));
 }
 
 fn milktea::Node* AvianAssaultModel.lost_dialog(&self) {
@@ -1342,7 +1388,9 @@ fn milktea::Node* AvianAssaultModel.lost_dialog(&self) {
 			xray::color_rgb(255, 60, 60), xray::color_rgb(255, 140, 40))
 		.add(line(" 💀 LEVEL FAILED 💀 ", xray::color_rgb(255, 70, 70), bold: true))
 		.add(line("You ran out of birds!", xray::color_rgb(240, 200, 200)))
-		.add(line("[SPACE] Retry  |  [M] Menu", xray::color_rgb(220, 240, 255)));
+		.add(milktea::hstack().with_gap(2)
+			.add(self.menu_button("Retry", MenuAction.RETRY))
+			.add(self.menu_button("Menu", MenuAction.OPEN_MENU)));
 }
 
 const String[5] HOW_TO_PLAY = {
@@ -1359,7 +1407,7 @@ fn milktea::Node* AvianAssaultModel.help_dialog(&self) {
 		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
 			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
 		.add(lines(HOW_TO_PLAY[..], xray::color_rgb(220, 230, 245)))
-		.add(line("[Press SPACE or ESC to Return]", xray::color_rgb(255, 215, 100)));
+		.add(self.menu_button("Back to Menu", MenuAction.OPEN_MENU));
 }
 
 // ── Main Entry Point ──────────────────────────────────────────────────────────

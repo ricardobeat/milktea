@@ -224,3 +224,28 @@ test('doom fire keeps headroom at small and large viewport sizes', async () => {
     } finally {w.mt_stop();}
   }
 });
+
+test('avian-assault: menu buttons handle clicks and honor the selected level', async () => {
+  const {wasm:w,advance}=await start('avian-assault',160,48);
+  const click=label=>{
+    const rows=gridText(w).split('\n'), row=rows.findIndex(line=>line.includes(label));
+    assert.ok(row>=0, `button visible: ${label}`);
+    const col=[...rows[row].slice(0,rows[row].indexOf(label))].length+1;
+    w.mt_mouse(0,0,col,row,col*10,row*20,0);
+    const state=w.mt_frame();
+    w.mt_mouse(0,1,col,row,col*10,row*20,0);
+    return state;
+  };
+  try {
+    w.mt_frame();
+    click('Enter');assert.match(gridText(w),/Play Game/);
+    click('How to Play');assert.match(gridText(w),/HOW TO PLAY/);
+    click('Back to Menu');assert.match(gridText(w),/Play Game/);
+    click('Select Level');assert.match(gridText(w),/Level 2/);
+    click('Play Game');assert.match(gridText(w),/LEVEL 2/);
+    assert.match(gridText(w),/Aim/);
+    w.mt_key(4,0,0,0);w.mt_frame();
+    assert.match(gridText(w),/Play Game/);
+    assert.equal(click('Exit'),0);
+  } finally {w.mt_stop();}
+});

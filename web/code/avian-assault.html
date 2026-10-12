@@ -108,7 +108,17 @@
 
 <span class="ink-s0">// ── Model ─────────────────────────────────────────────────────────────────────</span>
 
+<span class="ink-s2">enum</span> <span class="ink-s3">MenuAction</span> { <span class="ink-s6">NONE</span>, <span class="ink-s6">OPEN_MENU</span>, <span class="ink-s6">PLAY</span>, <span class="ink-s6">SELECT_LEVEL</span>, <span class="ink-s6">HELP</span>, <span class="ink-s6">EXIT</span>, <span class="ink-s6">NEXT_LEVEL</span>, <span class="ink-s6">RETRY</span> }
+<span class="ink-s2">struct</span> <span class="ink-s3">MenuButton</span> {
+	<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> model;
+	<span class="ink-s3">MenuAction</span> action;
+}
+
 <span class="ink-s2">struct</span> <span class="ink-s3">AvianAssaultModel</span> {
+	<span class="ink-s3">MenuAction</span> pending_action;
+	<span class="ink-s3">MenuButton</span>[8] menu_buttons;
+	xray::<span class="ink-s3">ClickTarget</span>[16] menu_targets;
+	<span class="ink-s3">sz</span> menu_target_count;
 	<span class="ink-s3">sz</span> term_w;
 	<span class="ink-s3">sz</span> term_h;
 	<span class="ink-s3">sz</span> ticks;
@@ -663,7 +673,33 @@
 	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(<span class="ink-s6">FRAME_MS</span>);
 }
 
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">activate</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">MenuAction</span> action) {
+	self<span class="ink-s2">.</span>is_dragging <span class="ink-s2">=</span> false;
+	<span class="ink-s2">switch</span> (action) {
+		<span class="ink-s2">case</span> <span class="ink-s6">OPEN_MENU</span>: self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">MENU</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">PLAY</span>: self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(self<span class="ink-s2">.</span>current_level);
+		<span class="ink-s2">case</span> <span class="ink-s6">SELECT_LEVEL</span>: self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">HELP</span>: self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">HELP</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">EXIT</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> <span class="ink-s6">NEXT_LEVEL</span>: self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>((self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>);
+		<span class="ink-s2">case</span> <span class="ink-s6">RETRY</span>: self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(self<span class="ink-s2">.</span>current_level);
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s0">// Dialogs are painted into our canvas; retain their solved hit regions.</span>
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE</span> <span class="ink-s2">&amp;&amp;</span>
+		msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_PRESS</span> <span class="ink-s2">&amp;&amp;</span>
+		msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>button <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseButton</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_LEFT</span>) {
+		xray::<span class="ink-s4">dispatch_click</span>(self<span class="ink-s2">.</span>menu_targets[:self<span class="ink-s2">.</span>menu_target_count], msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>col, msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>row);
+	}
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>pending_action <span class="ink-s2">!=</span> <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">NONE</span>) {
+		<span class="ink-s3">MenuAction</span> action <span class="ink-s2">=</span> self<span class="ink-s2">.</span>pending_action;
+		self<span class="ink-s2">.</span>pending_action <span class="ink-s2">=</span> <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">NONE</span>;
+		<span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">activate</span>(action);
+	}
 	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
 		self<span class="ink-s2">.</span>term_w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
 		self<span class="ink-s2">.</span>term_h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
@@ -755,10 +791,10 @@
 						self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>menu_selected <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> 4;
 					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ENTER</span>:
 						<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>menu_selected) {
-							<span class="ink-s2">case</span> 0: self<span class="ink-s2">.</span><span class="ink-s4">load_level</span>(0);
-							<span class="ink-s2">case</span> 1: self<span class="ink-s2">.</span>current_level <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>current_level <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">MAX_LEVELS</span>;
-							<span class="ink-s2">case</span> 2: self<span class="ink-s2">.</span>state <span class="ink-s2">=</span> <span class="ink-s3">GameState</span><span class="ink-s2">.</span><span class="ink-s6">HELP</span>;
-							<span class="ink-s2">case</span> 3: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+							<span class="ink-s2">case</span> 0: <span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">activate</span>(<span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">PLAY</span>);
+							<span class="ink-s2">case</span> 1: <span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">activate</span>(<span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">SELECT_LEVEL</span>);
+							<span class="ink-s2">case</span> 2: <span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">activate</span>(<span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">HELP</span>);
+							<span class="ink-s2">case</span> 3: <span class="ink-s2">return</span> self<span class="ink-s2">.</span><span class="ink-s4">activate</span>(<span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">EXIT</span>);
 						}
 					<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
 						<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
@@ -1164,6 +1200,8 @@
 	}
 	ui<span class="ink-s2">.</span><span class="ink-s4">solve</span>(xray::<span class="ink-s4">new_rect</span>(0, 0, self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span>width, self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span>height));
 	self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span><span class="ink-s4">paint</span>(ui);
+	self<span class="ink-s2">.</span>menu_target_count <span class="ink-s2">=</span> 0;
+	xray::<span class="ink-s4">collect_click_targets</span>(ui, self<span class="ink-s2">.</span>menu_targets[<span class="ink-s2">..</span>], <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>menu_target_count);
 
 	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(self<span class="ink-s2">.</span>screen);
 }
@@ -1269,14 +1307,25 @@
 	<span class="ink-s9">&quot;╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   &quot;</span>,
 };
 
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">menu_clicked</span>(<span class="ink-s3">void</span><span class="ink-s2">*</span> ctx, <span class="ink-s3">sz</span> col, <span class="ink-s3">sz</span> row) {
+	<span class="ink-s3">MenuButton</span><span class="ink-s2">*</span> button <span class="ink-s2">=</span> (<span class="ink-s3">MenuButton</span><span class="ink-s2">*</span>)ctx;
+	button<span class="ink-s2">.</span>model<span class="ink-s2">.</span>pending_action <span class="ink-s2">=</span> button<span class="ink-s2">.</span>action;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s2">&amp;</span>self, <span class="ink-s3">String</span> label, <span class="ink-s3">MenuAction</span> action, <span class="ink-s3">bool</span> selected <span class="ink-s2">=</span> false) {
+	<span class="ink-s3">MenuButton</span><span class="ink-s2">*</span> button <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>menu_buttons[(<span class="ink-s3">sz</span>)action];
+	<span class="ink-s2">*</span>button <span class="ink-s2">=</span> { <span class="ink-s2">.</span>model <span class="ink-s2">=</span> self, <span class="ink-s2">.</span>action <span class="ink-s2">=</span> action };
+	glaze::<span class="ink-s3">Style</span> style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(selected <span class="ink-s2">?</span> xray::<span class="ink-s4">color_rgb</span>(255, 245, 120) <span class="ink-s2">:</span> xray::<span class="ink-s4">color_rgb</span>(240, 235, 220))
+		<span class="ink-s2">.</span><span class="ink-s4">background</span>(selected <span class="ink-s2">?</span> xray::<span class="ink-s4">color_rgb</span>(110, 30, 25) <span class="ink-s2">:</span> xray::<span class="ink-s4">color_rgb</span>(45, 58, 68))
+		<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 2, 0, 2);
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(label, style)<span class="ink-s2">.</span><span class="ink-s4">on_click</span>(<span class="ink-s2">&amp;</span>menu_clicked, button);
+}
+
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">intro_dialog</span>(<span class="ink-s2">&amp;</span>self) {
 	<span class="ink-s3">float</span> pulse <span class="ink-s2">=</span> (math::<span class="ink-s4">sin</span>((<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>ticks <span class="ink-s2">*</span> 0.15f) <span class="ink-s2">+</span> 1.0f) <span class="ink-s2">*</span> 0.5f;
 	xray::<span class="ink-s3">Color</span> c1 <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, (<span class="ink-s3">char</span>)(60 <span class="ink-s2">+</span> pulse <span class="ink-s2">*</span> 60), 30);
 	xray::<span class="ink-s3">Color</span> c2 <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 220, 50);
-
-	<span class="ink-s0">// The prompt blinks without moving what is below it: at alpha 0 it keeps</span>
-	<span class="ink-s0">// its place in the layout and paints nothing.</span>
-	<span class="ink-s3">bool</span> blink_on <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>ticks <span class="ink-s2">/</span> 10) <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0;
 
 	<span class="ink-s2">return</span> <span class="ink-s4">backdrop</span>(xray::<span class="ink-s4">color_rgba</span>(28, 14, 16, 215))
 		<span class="ink-s2">.</span><span class="ink-s4">center</span>()
@@ -1286,8 +1335,7 @@
 			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">AVIAN</span>[<span class="ink-s2">..</span>], c1, c2))
 			<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">logo</span>(<span class="ink-s6">ASSAULT</span>[<span class="ink-s2">..</span>], c2, c1)))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;░▒▓ RETRO PHYSICS ARCADE ▓▒░&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 240, 200), bold: true))
-		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;Press any key to enter...&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 230, 100))
-			<span class="ink-s2">.</span><span class="ink-s4">alpha</span>(blink_on <span class="ink-s2">?</span> 255 <span class="ink-s2">:</span> 0));
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Enter&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">OPEN_MENU</span>));
 }
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">menu_dialog</span>(<span class="ink-s2">&amp;</span>self) {
@@ -1299,13 +1347,9 @@
 	};
 
 	milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> items <span class="ink-s2">=</span> milktea::<span class="ink-s4">vstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(1)<span class="ink-s2">.</span><span class="ink-s4">with_align</span>(milktea::<span class="ink-s6">ALIGN_CENTER</span>);
+	<span class="ink-s3">MenuAction</span>[4] actions <span class="ink-s2">=</span> { <span class="ink-s6">PLAY</span>, <span class="ink-s6">SELECT_LEVEL</span>, <span class="ink-s6">HELP</span>, <span class="ink-s6">EXIT</span> };
 	<span class="ink-s2">foreach</span> (i, opt : options) {
-		<span class="ink-s3">bool</span> sel <span class="ink-s2">=</span> i <span class="ink-s2">==</span> self<span class="ink-s2">.</span>menu_selected;
-		glaze::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> sel
-			<span class="ink-s2">?</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(xray::<span class="ink-s4">color_rgb</span>(255, 245, 120))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)
-				<span class="ink-s2">.</span><span class="ink-s4">background</span>(xray::<span class="ink-s4">color_rgba</span>(110, 30, 25, 210))
-			<span class="ink-s2">:</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(xray::<span class="ink-s4">color_rgb</span>(240, 210, 205));
-		items<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(string::<span class="ink-s4">tformat</span>(sel <span class="ink-s2">?</span> <span class="ink-s9">&quot;▶ %s ◀&quot;</span> <span class="ink-s2">:</span> <span class="ink-s9">&quot;  %s  &quot;</span>, opt), s));
+		items<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(opt, actions[i], i <span class="ink-s2">==</span> self<span class="ink-s2">.</span>menu_selected));
 	}
 
 	<span class="ink-s0">// A fiery red-to-orange border over a dark crimson backdrop.</span>
@@ -1334,7 +1378,9 @@
 			xray::<span class="ink-s4">color_rgb</span>(120, 255, 120), xray::<span class="ink-s4">color_rgb</span>(255, 230, 80), true)))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(stars))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(stats)
-		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[SPACE] Next Level  |  [M] Menu&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(220, 240, 255)));
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">hstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(2)
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Next Level&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">NEXT_LEVEL</span>))
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Menu&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">OPEN_MENU</span>)));
 }
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">AvianAssaultModel</span><span class="ink-s2">.</span><span class="ink-s4">lost_dialog</span>(<span class="ink-s2">&amp;</span>self) {
@@ -1342,7 +1388,9 @@
 			xray::<span class="ink-s4">color_rgb</span>(255, 60, 60), xray::<span class="ink-s4">color_rgb</span>(255, 140, 40))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot; 💀 LEVEL FAILED 💀 &quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 70, 70), bold: true))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;You ran out of birds!&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(240, 200, 200)))
-		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[SPACE] Retry  |  [M] Menu&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(220, 240, 255)));
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">hstack</span>()<span class="ink-s2">.</span><span class="ink-s4">with_gap</span>(2)
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Retry&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">RETRY</span>))
+			<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Menu&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">OPEN_MENU</span>)));
 }
 
 <span class="ink-s2">const</span> <span class="ink-s3">String</span>[5] <span class="ink-s6">HOW_TO_PLAY</span> <span class="ink-s2">=</span> {
@@ -1359,7 +1407,7 @@
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(glaze::<span class="ink-s4">gradient_text</span>(<span class="ink-s9">&quot; HOW TO PLAY &quot;</span>,
 			xray::<span class="ink-s4">color_rgb</span>(100, 220, 255), xray::<span class="ink-s4">color_rgb</span>(200, 150, 255), true)))
 		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">lines</span>(<span class="ink-s6">HOW_TO_PLAY</span>[<span class="ink-s2">..</span>], xray::<span class="ink-s4">color_rgb</span>(220, 230, 245)))
-		<span class="ink-s2">.</span><span class="ink-s4">add</span>(<span class="ink-s4">line</span>(<span class="ink-s9">&quot;[Press SPACE or ESC to Return]&quot;</span>, xray::<span class="ink-s4">color_rgb</span>(255, 215, 100)));
+		<span class="ink-s2">.</span><span class="ink-s4">add</span>(self<span class="ink-s2">.</span><span class="ink-s4">menu_button</span>(<span class="ink-s9">&quot;Back to Menu&quot;</span>, <span class="ink-s3">MenuAction</span><span class="ink-s2">.</span><span class="ink-s6">OPEN_MENU</span>));
 }
 
 <span class="ink-s0">// ── Main Entry Point ──────────────────────────────────────────────────────────</span>
