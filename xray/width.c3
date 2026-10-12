@@ -27,7 +27,7 @@ fn sz char_width(uint cp) {
 // A half-open-free inclusive codepoint range, sorted ascending.
 struct CodepointRange { uint lo; uint hi; }
 
-const CodepointRange[357] XRAY_WIDTH_ZERO_RANGES = {
+const CodepointRange[357] XRAY_WIDTH_ZERO_RANGES @local = {
 	{ 0x0000, 0x0000 },
 	{ 0x0300, 0x036F },
 	{ 0x0483, 0x0489 },
@@ -387,7 +387,7 @@ const CodepointRange[357] XRAY_WIDTH_ZERO_RANGES = {
 	{ 0xE0100, 0xE01EF },
 };
 
-const CodepointRange[122] XRAY_WIDTH_WIDE_RANGES = {
+const CodepointRange[122] XRAY_WIDTH_WIDE_RANGES @local = {
 	{ 0x1100, 0x115F },
 	{ 0x231A, 0x231B },
 	{ 0x2329, 0x232A },

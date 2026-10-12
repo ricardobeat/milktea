@@ -8,6 +8,8 @@ import std::math;
 import std::core::string;
 import std::core::dstring;
 import std::core::mem;
+import tgp;
+import nineslice;
 
 extern fn int rand();
 extern fn void srand(uint seed);
@@ -96,7 +98,13 @@ struct FlappyModel {
 
 	// Graphics buffer
 	xray::PixelBuffer* vbuf;
-	xray::Cell[] view_cells;
+	ScreenBuffer* screen;
+
+	// Kitty graphics, for the dialogs' rounded outlines. Without it they
+	// keep their box-drawing borders.
+	bool gfx_ok;
+	tgp::Session gfx;
+	Outline[OUTLINE_COUNT] outlines;
 }
 
 // ── Random Helpers ────────────────────────────────────────────────────────────
@@ -225,6 +233,9 @@ fn milktea::Cmd FlappyModel.init(FlappyModel* self) @dynamic {
 	self.high_score = 0;
 	self.ticks = 0;
 
+	self.gfx_ok = milktea::kitty_graphics_supported();
+	if (self.gfx_ok) self.gfx = tgp::new_session();
+
 	return milktea::tick(FRAME_MS);
 }
 
@@ -236,9 +247,11 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 		self.vbuf = xray::new_pixel_buffer((sz)self.term_w, (sz)(self.term_h * 2));
 		self.vbuf.clear(xray::color_rgb(20, 24, 40));
 
-		mem::free(self.view_cells.ptr);
-		sz total = (sz)self.term_w * (sz)self.term_h;
-		self.view_cells = mem::new_array(xray::Cell, total);
+		if (self.screen == null) {
+			self.screen = xray::new_screen_buffer(self.term_w, self.term_h);
+		} else {
+			self.screen.resize(self.term_w, self.term_h);
+		}
 		return null;
 	}
 
@@ -511,10 +524,11 @@ fn void FlappyModel.draw_background(&self) {
 
 		self.vbuf.fill_rect(xray::new_rect(bx, by, bw, bh), bldg_c);
 
-		// Windows
+		// Windows. Which ones are lit depends on where they sit in their
+		// building, not on screen, so they stay lit as the skyline scrolls.
 		for (sz wy = by + 2; wy < ground_y - 2; wy += 4) {
 			for (sz wx = bx + 2; wx < bx + bw - 2; wx += 3) {
-				if ((b + wx + wy) % 5 != 0) {
+				if ((b + (wx - bx) + (wy - by)) % 5 != 0) {
 					self.vbuf.set_pixel(wx, wy, win_c);
 				}
 			}
@@ -745,15 +759,10 @@ fn void FlappyModel.draw_score_hud(&self) {
 	}
 }
 
-// ── Screen Conversion & Overlay Painting ──────────────────────────────────────
+// ── Screen Conversion & Dialogs ───────────────────────────────────────────────
 
-fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
-	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::view("");
-	}
-
-	sz w = self.term_w;
-	sz h = self.term_h;
+fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
+	if (self.screen == null) return milktea::text("");
 
 	// 1. Render all procedural art into virtual pixel buffer
 	self.draw_background();
@@ -788,231 +797,290 @@ fn milktea::View FlappyModel.view(FlappyModel* self) @dynamic {
 		}
 	}
 
-	// 2. Convert PixelBuffer (2 pixel rows -> 1 cell with '▀') into view_cells
-	xray::Style base = xray::default_style();
-	for (sz vy = 0; vy < h; vy++) {
-		sz py_top = vy * 2;
-		sz py_bot = py_top + 1;
-		sz row_offset = (sz)vy * (sz)w;
+	// 2. Convert the pixels to cells, two pixel rows to each.
+	self.vbuf.to_half_blocks(self.screen);
 
-		for (sz vx = 0; vx < w; vx++) {
-			xray::Color c_top = self.vbuf.get_pixel(vx, py_top);
-			xray::Color c_bot = self.vbuf.get_pixel(vx, py_bot);
-
-			xray::Cell c;
-			// UTF-8 for '▀' (U+2580): 0xE2 0x96 0x80
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base.set_fg(c_top).set_bg(c_bot);
-
-			self.view_cells[row_offset + (sz)vx] = c;
-		}
-	}
-
-	// 3. Composite UI Overlays into cell buffer
-	ScreenBuffer canvas;
-	canvas.width = (sz)w;
-	canvas.height = (sz)h;
-	canvas.cells = self.view_cells;
-	canvas.prev_cells = self.view_cells;
-	canvas.dirty_lines = mem::temp_array(bool, (sz)h);
-
+	// 3. Paint the dialog for this state over the game. It goes into the
+	// game's own cells rather than a layer above them, so its backdrop can
+	// dim the pixels it covers.
+	foreach (&o : self.outlines) o.node = null;
+	milktea::Node* dialog;
 	switch (self.state) {
-		case INTRO:
-			self.render_intro_overlay(&canvas);
-		case MENU:
-			self.render_menu_overlay(&canvas);
-		case GAME_OVER:
-			self.render_game_over_overlay(&canvas);
-		case HELP:
-			self.render_help_overlay(&canvas);
+		case INTRO:     dialog = self.intro_dialog();
+		case MENU:      dialog = self.menu_dialog();
+		case GAME_OVER: dialog = self.game_over_dialog();
+		case HELP:      dialog = self.help_dialog();
 		default:
 	}
+	if (dialog) {
+		milktea::Node* ui = milktea::root().add(dialog);
+		ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
+		foreach (&o : self.outlines) {
+			if (o.node != null) blank_edge(self.screen, o.node.computed_rect);
+		}
+		self.screen.paint(ui);
+	}
+	// Each outline goes where its dialog was laid out, and a dialog that
+	// closed takes its outline with it.
+	if (self.gfx_ok) {
+		foreach (&o : self.outlines) {
+			if (o.node != null) {
+				o.show(o.node.computed_rect);
+			} else {
+				o.hide();
+			}
+		}
+		self.gfx.sync();
+	}
 
-	return milktea::cell_view(self.view_cells, w, h);
+	return milktea::canvas(self.screen);
 }
 
-// ── Overlay UI Renders ────────────────────────────────────────────────────────
+// ── Rounded outlines ──────────────────────────────────────────────────────────
 
-fn void FlappyModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
+// With kitty graphics, a dialog's border is a heavy rounded outline. nineslice's
+// slicer draws a three-cell-square box and cuts it into the eight cells
+// around its middle: the corners are placed as they are, and the edges are
+// stretched along the dialog's sides. The images sit under the text layer,
+// so the terminal blends their tint over each border cell's background, and
+// beyond the rounded corners that background shows through untouched.
 
+const sz OUTLINE_MENU = 0;
+const sz OUTLINE_GAME_OVER = 1;
+const sz OUTLINE_HELP = 2;
+const sz OUTLINE_COUNT = 3;
+
+const sz OUTLINE_RADIUS = 12; // px, within one cell
+// nineslice's heavy outline: a 4px line, 3px in from the dialog's edge.
+const float OUTLINE_W = 4.0f;
+const float OUTLINE_INSET = 3.0f;
+const sz OUTLINE_TILES = 8;
+// Each tile's cell in the sliced box: the corners, then the edges, ordered
+// top-left, top, top-right, left, right, bottom-left, bottom, bottom-right.
+const sz[OUTLINE_TILES] TILE_COL = { 0, 1, 2, 0, 2, 0, 1, 2 };
+const sz[OUTLINE_TILES] TILE_ROW = { 0, 0, 0, 1, 1, 2, 2, 2 };
+
+struct Outline {
+	tgp::Session* gfx;
+	bool made;
+	bool placed;
+	// The dialog it frames this frame, or null when that dialog is closed.
+	milktea::Node* node;
+	tgp::Glyph[OUTLINE_TILES] tiles;
+	tgp::InstId[OUTLINE_TILES] ids;
+}
+
+fn uint rgb_of(xray::Color c) => ((uint)c.r << 16) | ((uint)c.g << 8) | (uint)c.b;
+
+// outline returns the outline for a dialog's slot, drawing its images the
+// first time, or null without kitty graphics.
+fn Outline* FlappyModel.outline(&self, sz slot, xray::Color tint, xray::Color line) {
+	if (!self.gfx_ok) return null;
+	Outline* o = &self.outlines[slot];
+	if (o.made) return o;
+
+	nineslice::BoxStyle st = {
+		.bg = rgb_of(tint),
+		.line = rgb_of(line),
+		.line_w = OUTLINE_W,
+		.inset = OUTLINE_INSET,
+		.stroke = nineslice::STROKE_INSET,
+		.see_through = true,
+		.fill_alpha = tint.a,
+	};
+	char[] surf = mem::new_array(char, 3 * nineslice::GX * 3 * nineslice::GY * 4);
+	defer mem::free(surf);
+	nineslice::render_surface(surf, 3, 3, OUTLINE_RADIUS, st);
+
+	o.gfx = &self.gfx;
+	for (sz i = 0; i < OUTLINE_TILES; i++) {
+		// The session keeps the frames until it has sent them.
+		char[] tile = mem::new_array(char, nineslice::TILE_BYTES);
+		nineslice::blit_tile(tile, surf, 3, TILE_COL[i], TILE_ROW[i]);
+		o.tiles[i] = self.gfx.register({
+			.frames = tile,
+			.count = 1, .width = nineslice::GX, .height = nineslice::GY,
+			.fallback = " ",
+		})!!;
+	}
+	o.made = true;
+	return o;
+}
+
+// show places the outline around r, or moves it there. Every tile is
+// stretched to its cells, so the terminal's cell size does not matter.
+fn void Outline.show(&self, xray::Rect r) {
+	if (r.w < 3 || r.h < 3) {
+		self.hide();
+		return;
+	}
+	sz right = r.x + r.w - 1;
+	sz bottom = r.y + r.h - 1;
+	sz[OUTLINE_TILES] col = { r.x, r.x + 1, right, r.x, right, r.x, r.x + 1, right };
+	sz[OUTLINE_TILES] row = { r.y, r.y, r.y, r.y + 1, r.y + 1, bottom, bottom, bottom };
+	sz[OUTLINE_TILES] cols = { 1, r.w - 2, 1, 1, 1, 1, r.w - 2, 1 };
+	sz[OUTLINE_TILES] rows = { 1, 1, 1, r.h - 2, r.h - 2, 1, 1, 1 };
+	for (sz i = 0; i < OUTLINE_TILES; i++) {
+		if (!self.placed) {
+			self.ids[i] = self.tiles[i].place(col[i], row[i], tgp::Z_UNDER_TEXT, cols[i], rows[i]);
+		} else {
+			self.gfx.move(self.ids[i], col[i], row[i]);
+			self.gfx.resize(self.ids[i], cols[i], rows[i]);
+		}
+	}
+	self.placed = true;
+}
+
+fn void Outline.hide(&self) {
+	if (!self.placed) return;
+	foreach (id : self.ids) self.gfx.remove(id);
+	self.placed = false;
+}
+
+// ── Dialogs ───────────────────────────────────────────────────────────────────
+
+// blank_edge clears the cells around the edge of r for an outline. The
+// outline's image tints each cell, blending over its background, and hides
+// any text in it. So a half block becomes a plain cell of its two colors'
+// average.
+fn void blank_edge(ScreenBuffer* dst, xray::Rect r) {
+	if (r.w < 3 || r.h < 3) return;
+	for (sz y = r.y; y < r.y + r.h; y++) {
+		for (sz x = r.x; x < r.x + r.w; x++) {
+			if (x < 0 || y < 0 || x >= dst.width || y >= dst.height) continue;
+			if (x != r.x && y != r.y && x != r.x + r.w - 1 && y != r.y + r.h - 1) continue;
+			xray::Cell* c = &dst.cells[y * dst.width + x];
+			xray::Color top = c.style.fg;
+			top.a = 128;
+			*c = xray::new_cell(" ", 1, xray::default_style().set_bg(top.blend_over(c.style.bg)));
+		}
+	}
+}
+
+// panel is a dialog box centred on screen, as wide as width or, at 0, as its
+// widest line. Its translucent background dims the game behind it without
+// hiding it, and its border runs from edge_from to edge_to. With kitty
+// graphics the border is the slot's rounded outline instead, drawn over a
+// blank edge. Its first line sits under the top border, and the rest stack
+// below it with a blank row between each. Each dialog has its own outline
+// slot, since the outline's colors are baked into its images.
+fn milktea::Node* FlappyModel.panel(&self, sz slot, sz width, xray::Color tint,
+		xray::Color edge_from, xray::Color edge_to) {
+	glaze::Style box = {
+		.bg = tint, .border = glaze::ROUNDED,
+		.border_color = edge_from, .border_gradient = edge_to,
+	};
+	Outline* o = self.outline(slot, tint, edge_from);
+	if (o != null) {
+		// The outline's images carry the tint, so the edge cells under them
+		// keep the game's colors, made plain by blank_edge.
+		box.border = glaze::HIDDEN;
+		box.border_bg = xray::color_transparent();
+	}
+
+	milktea::Node* n = milktea::vstack().style(box);
+	if (o != null) o.node = n;
+	if (width > 0) n.width(milktea::cells(width));
+	return n
+		.with_padding(0, 2, 0, 2)
+		.with_gap(1)
+		.with_align(milktea::ALIGN_CENTER)
+		.center();
+}
+
+// backdrop dims the game behind its lines, with no border.
+fn milktea::Node* backdrop(xray::Color tint) {
+	return milktea::vstack().style({ .bg = tint })
+		.with_padding(1, 4, 1, 4)
+		.with_gap(1)
+		.with_align(milktea::ALIGN_CENTER);
+}
+
+fn milktea::Node* line(String s, xray::Color fg, bool bold = false) {
+	return milktea::text(s, glaze::style().foreground(fg).with_bold(bold));
+}
+
+// lines stacks strings one under the other, a blank row between each.
+fn milktea::Node* lines(String[] items, xray::Color fg) {
+	milktea::Node* col = milktea::vstack().with_gap(1);
+	foreach (s : items) col.add(line(s, fg));
+	return col;
+}
+
+const String[6] LOGO = {
+	"███████╗██╗      █████╗ ██████╗ ██████╗ ██╗   ██╗",
+	"██╔════╝██║     ██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝",
+	"█████╗  ██║     ███████║██████╔╝██████╔╝ ╚████╔╝ ",
+	"██╔══╝  ██║     ██╔══██║██╔═══╝ ██╔═══╝   ╚██╔╝  ",
+	"██║     ███████╗██║  ██║██║     ██║        ██║   ",
+	"╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   ",
+};
+
+fn milktea::Node* FlappyModel.intro_dialog(&self) {
 	// Animated glowing title
-	sz title_y = h / 2 - 4;
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
-
 	xray::Color c_start = xray::color_rgb(255, (char)(120 + pulse * 100), 20);
 	xray::Color c_end = xray::color_rgb((char)(255 - pulse * 50), 230, 50);
 
-	String logo_line1 = "  ███████╗██╗      █████╗ ██████╗ ██████╗ ██╗   ██╗";
-	String logo_line2 = "  ██╔════╝██║     ██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝";
-	String logo_line3 = "  █████╗  ██║     ███████║██████╔╝██████╔╝ ╚████╔╝ ";
-	String logo_line4 = "  ██╔══╝  ██║     ██╔══██║██╔═══╝ ██╔═══╝   ╚██╔╝  ";
-	String logo_line5 = "  ██║     ███████╗██║  ██║██║     ██║        ██║   ";
-	String logo_line6 = "  ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝        ╚═╝   ";
+	milktea::Node* logo = milktea::vstack();
+	foreach (l : LOGO) logo.add(milktea::text(glaze::gradient_text(l, c_start, c_end, true)));
 
-	sz lx = (w - 52) / 2;
-	if (lx < 0) lx = 0;
-
-	String[6] lines = { logo_line1, logo_line2, logo_line3, logo_line4, logo_line5, logo_line6 };
-	for (sz i = 0; i < 6; i++) {
-		String styled = glaze::gradient_text(lines[i], c_start, c_end, true);
-		canvas.render_ansi_string((sz)lx, (sz)(title_y + i), styled, xray::default_style());
-	}
-
-	// Flying intro bird
+	// The bird flies across the whole screen, bobbing in a lane above the logo.
+	sz w = self.screen.width;
 	sz bird_x = (sz)((float)self.ticks * 1.8f) % (w + 20) - 10;
-	sz bird_y = title_y - 2 + (sz)(math::sin((float)self.ticks * 0.2f) * 2.0f);
-	if (bird_x >= 0 && bird_x < w - 4 && bird_y >= 0 && bird_y < h) {
-		canvas.render_ansi_string((sz)bird_x, (sz)bird_y, "🐤💨", xray::default_style());
-	}
+	sz bird_y = (sz)(math::sin((float)self.ticks * 0.2f) * 2.0f);
+	milktea::Node* lane = milktea::zstack().width(milktea::fill(1)).height(milktea::cells(1));
+	if (bird_x >= 0 && bird_x < w - 4) lane.add(milktea::text("🐤💨").at(bird_x, bird_y));
 
-	// Subtitle
-	String sub = "░▒▓ RETRO ARCADE EDITION ▓▒░";
-	String sub_styled = glaze::style()
-		.foreground(xray::color_rgb(220, 240, 255))
-		.with_bold(true)
-		.render(sub);
-	sz sx = (w - glaze::string_width(sub)) / 2;
-	canvas.render_ansi_string((sz)sx, (sz)(title_y + 7), sub_styled, xray::default_style());
+	// The prompt blinks without moving what is below it: at alpha 0 it keeps
+	// its place in the layout and paints nothing.
+	bool blink_on = (self.ticks / 10) % 2 == 0;
 
-	// Press any key
-	if ((self.ticks / 10) % 2 == 0) {
-		String press = "Press any key to enter...";
-		String press_styled = glaze::style()
-			.foreground(xray::color_rgb(255, 230, 100))
-			.render(press);
-		sz px = (w - glaze::string_width(press)) / 2;
-		canvas.render_ansi_string((sz)px, (sz)(title_y + 10), press_styled, xray::default_style());
-	}
+	return milktea::vstack()
+		.with_justify(milktea::CENTER)
+		.with_align(milktea::ALIGN_CENTER)
+		.with_gap(1)
+		.add(lane)
+		.add(backdrop(xray::color_rgba(10, 14, 28, 215))
+			.shadow(xray::shadow(1, 1, 160))
+			.add(logo)
+			.add(line("░▒▓ RETRO ARCADE EDITION ▓▒░", xray::color_rgb(220, 240, 255), bold: true))
+			.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
+				.alpha(blink_on ? 255 : 0)));
 }
 
-fn void FlappyModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-
-	sz box_w = 44;
-	sz box_h = 16;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2 - 1;
-	if (bx < 0) bx = 0;
-	if (by < 0) by = 0;
-
-	// Semi-transparent / styled dialog box
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(255, 200, 50),
-		xray::color_rgb(255, 90, 30)
-	);
-
-	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
-	xray::Color menu_tint = xray::color_rgba(10, 14, 28, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = menu_tint.blend_over(cl.style.fg);
-			cl.style.bg = menu_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	// Title
-	String title = " ★ FLAPPY BIRD ★ ";
-	String title_s = glaze::gradient_text(title, xray::color_rgb(255, 240, 100), xray::color_rgb(255, 120, 40), true);
-	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
-
-	// Menu items
+fn milktea::Node* FlappyModel.menu_dialog(&self) {
 	String diff_str = "NORMAL";
 	if (self.difficulty == Difficulty.EASY) diff_str = "EASY";
 	if (self.difficulty == Difficulty.HARD) diff_str = "HARD (DYNAMIC!)";
 
-	DString opt1 = dstring::temp();
-	opt1.append_string(string::tformat("Difficulty: [%s]", diff_str));
-
 	String[4] options = {
 		"Start Game",
-		opt1.str_view(),
+		string::tformat("Difficulty: [%s]", diff_str),
 		"How to Play",
 		"Exit",
 	};
 
-	for (sz i = 0; i < 4; i++) {
-		bool sel = (i == self.menu_selected);
-		DString line = dstring::temp();
-		if (sel) {
-			line.append_string("▶ ");
-			line.append_string(options[i]);
-			line.append_string(" ◀");
-		} else {
-			line.append_string("  ");
-			line.append_string(options[i]);
-			line.append_string("  ");
-		}
-
-		xray::Color fg = sel ? xray::color_rgb(255, 255, 80) : xray::color_rgb(180, 190, 210);
-		xray::Color bg = sel ? xray::color_rgba(60, 40, 90, 200) : xray::color_none();
-
-		glaze::Style s = glaze::style().foreground(fg).with_bold(sel);
-		if (sel) s = s.background(bg);
-
-		String rendered = s.render(line.str_view());
-		sz ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
-		canvas.render_ansi_string((sz)ox, (sz)(inner.y + 3 + i * 2), rendered, xray::default_style());
+	milktea::Node* items = milktea::vstack().with_gap(1).with_align(milktea::ALIGN_CENTER);
+	foreach (i, opt : options) {
+		bool sel = i == self.menu_selected;
+		glaze::Style s = sel
+			? glaze::style().foreground(xray::color_rgb(255, 255, 80)).with_bold(true)
+				.background(xray::color_rgba(60, 40, 90, 200))
+			: glaze::style().foreground(xray::color_rgb(180, 190, 210));
+		items.add(milktea::text(string::tformat(sel ? "▶ %s ◀" : "  %s  ", opt), s));
 	}
 
-	// High score badge at bottom of menu
-	DString hs_str = dstring::temp();
-	hs_str.append_string(string::tformat("🏆 Best Score: %d", self.high_score));
-	String hs_s = glaze::style().foreground(xray::color_rgb(255, 215, 0)).render(hs_str.str_view());
-	sz hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
-	canvas.render_ansi_string((sz)hx, (sz)(inner.y + inner.h - 2), hs_s, xray::default_style());
+	return self.panel(OUTLINE_MENU, 44, xray::color_rgba(10, 14, 28, 178),
+			xray::color_rgb(255, 200, 50), xray::color_rgb(255, 90, 30))
+		.offset(0, -1)
+		.add(milktea::text(glaze::gradient_text(" ★ FLAPPY BIRD ★ ",
+			xray::color_rgb(255, 240, 100), xray::color_rgb(255, 120, 40), true)))
+		.add(items)
+		.add(line(string::tformat("🏆 Best Score: %d", self.high_score), xray::color_rgb(255, 215, 0)));
 }
 
-fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-
-	sz box_w = 40;
-	sz box_h = 15;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2 - 1;
-	if (bx < 0) bx = 0;
-	if (by < 0) by = 0;
-
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(255, 60, 60),
-		xray::color_rgb(255, 140, 40)
-	);
-
-	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
-	xray::Color go_tint = xray::color_rgba(20, 10, 15, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = go_tint.blend_over(cl.style.fg);
-			cl.style.bg = go_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	// GAME OVER Banner
-	String go_text = "💀 GAME OVER 💀";
-	String go_s = glaze::style()
-		.foreground(xray::color_rgb(255, 70, 70))
-		.with_bold(true)
-		.render(go_text);
-	sz gx = inner.x + (inner.w - glaze::string_width(go_text)) / 2;
-	canvas.render_ansi_string((sz)gx, (sz)inner.y, go_s, xray::default_style());
-
-	// Medal Award
+fn milktea::Node* FlappyModel.game_over_dialog(&self) {
 	String medal = "🥉 Bronze";
 	xray::Color medal_c = xray::color_rgb(205, 127, 50);
 	if (self.score >= 20) {
@@ -1026,80 +1094,35 @@ fn void FlappyModel.render_game_over_overlay(&self, ScreenBuffer* canvas) {
 		medal_c = xray::color_rgb(192, 192, 192);
 	}
 
-	// Score Stats Panel
-	DString score_str = dstring::temp();
-	score_str.append_string(string::tformat("Score: %d", self.score));
-	String sc_s = glaze::style().foreground(xray::color_rgb(255, 255, 255)).with_bold(true).render(score_str.str_view());
-	canvas.render_ansi_string((sz)(inner.x + 4), (sz)(inner.y + 3), sc_s, xray::default_style());
+	// The stats are one left-aligned block, centred as a whole.
+	milktea::Node* stats = milktea::vstack().with_gap(1)
+		.add(line(string::tformat("Score: %d", self.score), xray::color_rgb(255, 255, 255), bold: true))
+		.add(line(string::tformat("Best:  %d", self.high_score), xray::color_rgb(255, 215, 0), bold: true))
+		.add(line(string::tformat("Medal: %s", medal), medal_c, bold: true));
 
-	DString best_str = dstring::temp();
-	best_str.append_string(string::tformat("Best:  %d", self.high_score));
-	String bst_s = glaze::style().foreground(xray::color_rgb(255, 215, 0)).with_bold(true).render(best_str.str_view());
-	canvas.render_ansi_string((sz)(inner.x + 4), (sz)(inner.y + 5), bst_s, xray::default_style());
-
-	DString med_str = dstring::temp();
-	med_str.append_string(string::tformat("Medal: %s", medal));
-	String med_s = glaze::style().foreground(medal_c).with_bold(true).render(med_str.str_view());
-	canvas.render_ansi_string((sz)(inner.x + 4), (sz)(inner.y + 7), med_s, xray::default_style());
-
-	// Retry Prompt
-	String prompt = "[SPACE] Play Again  |  [M] Menu";
-	String prompt_s = glaze::style().foreground(xray::color_rgb(200, 220, 240)).render(prompt);
-	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
-	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
+	return self.panel(OUTLINE_GAME_OVER, 40, xray::color_rgba(20, 10, 15, 178),
+			xray::color_rgb(255, 60, 60), xray::color_rgb(255, 140, 40))
+		.offset(0, -1)
+		.add(line("💀 GAME OVER 💀", xray::color_rgb(255, 70, 70), bold: true))
+		.add(stats)
+		.add(line("[SPACE] Play Again  |  [M] Menu", xray::color_rgb(200, 220, 240)));
 }
 
-fn void FlappyModel.render_help_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
+const String[5] HOW_TO_PLAY = {
+	"• Press [SPACE] or [UP] to flap wings",
+	"• Fly through pipe gaps to score points",
+	"• Avoid colliding with pipes or ground",
+	"• Hard mode has moving procedural pipes!",
+	"• Press [ESC] or [Q] to pause/quit",
+};
 
-	sz box_w = 46;
-	sz box_h = 16;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2;
-	if (bx < 0) bx = 0;
-	if (by < 0) by = 0;
-
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(80, 200, 255),
-		xray::color_rgb(140, 100, 255)
-	);
-
-	// Semi-transparent backdrop: tint both fg and bg half-block colors evenly (~70% opacity)
-	xray::Color help_tint = xray::color_rgba(12, 16, 28, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = help_tint.blend_over(cl.style.fg);
-			cl.style.bg = help_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	String h_title = " HOW TO PLAY ";
-	String ht_s = glaze::gradient_text(h_title, xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true);
-	sz tx = inner.x + (inner.w - glaze::string_width(h_title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, ht_s, xray::default_style());
-
-	String[5] instructions = {
-		"• Press [SPACE] or [UP] to flap wings",
-		"• Fly through pipe gaps to score points",
-		"• Avoid colliding with pipes or ground",
-		"• Hard mode has moving procedural pipes!",
-		"• Press [ESC] or [Q] to pause/quit",
-	};
-
-	for (sz i = 0; i < 5; i++) {
-		String line_s = glaze::style().foreground(xray::color_rgb(220, 230, 245)).render(instructions[i]);
-		canvas.render_ansi_string((sz)(inner.x + 2), (sz)(inner.y + 2 + i * 2), line_s, xray::default_style());
-	}
-
-	String back = "[Press SPACE or ESC to Return]";
-	String back_s = glaze::style().foreground(xray::color_rgb(255, 215, 100)).render(back);
-	sz back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
-	canvas.render_ansi_string((sz)back_x, (sz)(inner.y + inner.h - 2), back_s, xray::default_style());
+fn milktea::Node* FlappyModel.help_dialog(&self) {
+	return self.panel(OUTLINE_HELP, 0, xray::color_rgba(12, 16, 28, 178),
+			xray::color_rgb(80, 200, 255), xray::color_rgb(140, 100, 255))
+		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
+			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
+		.add(lines(HOW_TO_PLAY[..], xray::color_rgb(220, 230, 245)))
+		.add(line("[Press SPACE or ESC to Return]", xray::color_rgb(255, 215, 100)));
 }
 
 // ── Main Entry Point ──────────────────────────────────────────────────────────

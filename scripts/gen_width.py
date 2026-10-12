@@ -88,7 +88,7 @@ def emit(zero, wide, prefix: str) -> str:
     """
 
     def table(name, rs):
-        lines = [f"const CodepointRange[{len(rs)}] {name} = {{"]
+        lines = [f"const CodepointRange[{len(rs)}] {name} @local = {{"]
         for lo, hi in rs:
             lines.append(f"\t{{ 0x{lo:04X}, 0x{hi:04X} }},")
         lines.append("};")

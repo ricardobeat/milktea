@@ -12,16 +12,16 @@ Six modules, one-way dependency chain:
 dye     — Color, palettes, HSL/HCL/LUV colour spaces              (no internal deps)
 xray    — cell grid, diff renderer, layout solver                (depends on dye)
 glaze   — styles, borders, gradients → ANSI strings              (depends on dye)
-milktea — event loop, input parsing, TTY control, View/Cmd       (depends on dye, xray)
+milktea — event loop, input parsing, TTY control, Node/Cmd       (depends on dye, xray)
 boba    — widget collection (list, textinput, viewport, ...)     (depends on milktea, glaze, xray)
 taro    — QuickJS bridge (JS models drive milktea from taro.js)  (depends on milktea, glaze, xray, boba)
 ```
 
 `xray` and `glaze` don't depend on each other or on milktea and are usable
 standalone. `glaze` produces ANSI-styled strings; `xray` owns the persistent
-cell grid and the diffing renderer. `milktea` composites the two: a `View`
-carries either a plain string (parsed by xray's ANSI parser) or a direct
-`Cell[]` grid. Package manifests (`*/manifest.json`) encode this same order.
+cell grid and the diffing renderer. `milktea` composites the two: a model's
+view is an xray node tree whose leaves are glaze strings (parsed by xray's
+ANSI parser) or `Cell[]` grids copied in whole. Package manifests (`*/manifest.json`) encode this same order.
 
 `dye` sits under both. It owns the one `Color` type, its constructors, the
 xterm-256 palette and the downsampling between colour depths, plus the
@@ -43,7 +43,7 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
 ## Core types (milktea/milktea.c3)
 
 - `Model` — interface apps implement: `init() -> Cmd`, `update(Msg) -> Cmd`,
-  `view() -> View`, plus optional lifecycle hooks `on_mount`, `on_destroy`,
+  `view() -> Node*`, plus optional lifecycle hooks `on_mount`, `on_destroy`,
   `on_focus`, `on_blur` (`@optional`, checked with `&self.model.on_x` before
   calling).
 - `Msg` — tagged union (`MsgKind`: NONE, KEY, WINDOW_SIZE, FOCUS, BLUR,
@@ -58,12 +58,13 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
 - `Cmd` — `alias Cmd = fn Msg()`. `null` means "no command." There is no
   batch-command buffer in the current code: `update()` returns one `Cmd`,
   which `dispatch()` calls and chains through `update()` again.
-- `View` — either `content: String` (parsed by xray's ANSI parser) or a
-  direct `cells: Cell[]` grid (`cells_width`/`cells_height`), plus cursor
-  state, mouse mode, and up to `MAX_OVERLAYS` (8) `Overlay` entries for
-  floating content (menus, shadows) over the base view. Built fluently:
-  `view(s).set_cursor(x, y).set_mouse_mode(mode)`. The alternate screen
-  is a program option (`Options.alt_screen`), entered once before `init()`.
+- `View` (private) — one painted frame as the renderer takes it: a
+  `cells: Cell[]` grid (`cells_width`/`cells_height`) or, in tests, a
+  `content: String`, plus cursor state. The runtime builds it from the tree
+  `view()` returns, solved against the terminal (`Options.alt_screen`) or at
+  the tree's content height (inline). The alternate screen is entered once
+  before `init()`; mouse mode, key events and the mouse pointer start from
+  `Options` and change through `set_mouse_mode` and friends.
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`
@@ -79,8 +80,9 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
 ## Event-loop lifecycle (`Program.run`)
 
 1. **Setup** (skipped in test mode): enter raw mode, hide the cursor,
-   enable focus reporting, install `SIGWINCH`/`SIGINT`/`SIGTERM` handlers,
-   spawn the input reader thread (`thread::Thread.create`).
+   enable focus reporting, install the `SIGWINCH` handler and the fatal
+   crash/termination handlers (`setup_signals`), spawn the input reader
+   thread (`thread::Thread.create`).
 2. **Model init**: call `model.init()`; if it returns a `Cmd`, invoke it
    and dispatch the resulting `Msg` (can already quit). Call `on_mount()`.
 3. **Initial size**: from `with_window_size()` injection, a real
@@ -122,23 +124,21 @@ chain makes `dispatch()` return `true`, which `run()` treats as "stop."
 ## Render pipeline
 
 `render_current_view()` wraps `model.view()` in `@pool()` (temp allocator
-freed at block exit):
+freed at block exit). The tree it returns is solved and painted into
+`Program.draw_buf`, which also collects the frame's click targets and the
+cursor; the resulting `View` points at that grid.
 
 1. Toggles alt-screen SGR sequences on transition, and mouse-reporting
-   sequences when `View.mouse_mode` changes.
+   sequences when the mouse mode asked for changes.
 2. In test mode, renders the `View` into a `DString` capture buffer
    instead of stdout.
 3. In real mode, drives the `xray::Renderer`:
    - **Direct-cell path**: if `View.cells.ptr != null`, cells are copied
-     straight into `r.screen` via `set_cell()`, clamped to the smaller of
-     the view's and renderer's dimensions — no string building or ANSI
-     parsing.
+     straight into `r.screen`, clamped to the smaller of the view's and
+     renderer's dimensions — no string building or ANSI parsing.
    - **String path**: otherwise `View.content` is split on `\n`, each line
      parsed via `screen.render_ansi_string()` (understands SGR and CUP,
      skips other CSI).
-   - Overlays are composited: shadow → content (alpha-blended via
-     `Color.blend_over` for `0 < alpha < 255`, or `blit_ansi` when opaque)
-     → inner shadow.
    - `r.end_frame()`: diffs `cells` against `prev_cells`
      (`ScreenBuffer.render_diff`), wraps the diff in synchronized-output
      markers (`ESC[?2026h`/`l`, mode 2026) when supported, hides the
@@ -178,10 +178,22 @@ Shutdown is two-phase: `input_queue_close()` sets `closed = true` and
 broadcasts the condition variable, then `run()` joins the reader thread
 (`self.reader_thread.join()`), and only then calls
 `input_queue_destroy()` — the mutex is never destroyed while the reader
-might still hold it. `SIGINT`/`SIGTERM` are handled directly in
-`fatal_signal_handler` (`tty.c3`), which restores termios and alt-screen
-state synchronously before re-raising the signal — this bypasses the
-normal `defer` unwind since it can fire mid-render.
+might still hold it.
+
+Crash and termination signals are handled directly in
+`fatal_signal_handler` (`tty.c3`), which bypasses the normal `defer`
+unwind since it can fire mid-render. It restores termios, writes a
+prebuilt constant (`FATAL_MODE_RESET`) that turns off every terminal mode
+the loop can enable — mouse tracking (all variants plus SGR-pixels),
+bracketed paste, both kitty keyboard layers, focus reporting, cursor
+colour and pointer shape — and leaves the alt screen. This is what keeps
+a segfaulting fullscreen app from leaving the shell stuck in
+mouse-reporting mode. `setup_signals` covers the crash set
+(`SIGSEGV`/`SIGBUS`/`SIGABRT`/`SIGFPE`/`SIGILL`/`SIGTRAP`, the last because a
+C3 panic ends in `$$trap()`) plus `SIGHUP`/`SIGINT`/`SIGQUIT`/`SIGTERM`,
+capturing each signal's prior disposition via `sigaction` so the handler can
+chain to it: the C3 runtime's own `SIGSEGV`/`SIGBUS`/`SIGILL` backtrace
+handler still runs after the terminal is restored.
 
 **Capacity-drop diagnostics**: every fixed buffer that silently drops on
 overflow — the timer table, the send queue, the pending buffer, the input
@@ -197,12 +209,10 @@ stderr, which belong to the rendering surface).
   across frames.
 - **Heap ownership**: `xray::new_screen_buffer` and `xray::new_renderer`
   return heap pointers the caller owns.
-  `Program.run()` frees the renderer in its shutdown `defer`. Temporary
-  `ScreenBuffer`s created mid-render for overlay blending always pair
-  their allocation with `defer { tmp.destroy(); mem::free(tmp); }`.
+  `Program.run()` frees the renderer in its shutdown `defer`.
 - **Fixed-capacity buffers over dynamic allocation**: `Program.timers`
   (32), `Program.send_queue` (16), `Program.pending` (512 bytes),
-  `InputQueue.buf` (4096 bytes), and `View.overlays` (8) are fixed-size
+  and `InputQueue.buf` (4096 bytes) are fixed-size
   arrays scanned linearly or treated as ring buffers — no heap churn per
   event/frame on the hot path.
 

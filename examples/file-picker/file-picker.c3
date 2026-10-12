@@ -58,14 +58,14 @@ fn milktea::Cmd PickerModel.update(PickerModel* self, milktea::Msg msg) @dynamic
 	}
 
 	if (self.fp.handle_key(k)) {
-		if (self.fp.selected.len > 0) return milktea::quit();
+		if (self.fp.selected_name.len > 0) return milktea::quit();
 		return null;
 	}
 
 	return null;
 }
 
-fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
+fn milktea::Node* PickerModel.view(PickerModel* self) @dynamic {
 	DString out = dstring::temp();
 
 	if (self.has_error) {
@@ -74,14 +74,14 @@ fn milktea::View PickerModel.view(PickerModel* self) @dynamic {
 	}
 
 	out.append_string(self.fp.view());
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {
 	PickerModel m = { };
 	milktea::@run(&m, { .alt_screen = true });
-	if (m.fp.selected.len > 0) {
-		io::printfn("Selected: %s", m.fp.selected);
+	if (m.fp.selected_name.len > 0) {
+		io::printfn("Selected: %s", m.fp.selected_name);
 	} else {
 		io::printn("No file selected.");
 	}

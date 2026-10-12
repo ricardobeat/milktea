@@ -46,8 +46,8 @@ fn void TestModel.on_destroy(TestModel* self) @dynamic {
 	self.destroyed = true;
 }
 
-fn milktea::View TestModel.view(TestModel* self) @dynamic {
-	return milktea::view(string::tformat("count=%d", self.counter));
+fn milktea::Node* TestModel.view(TestModel* self) @dynamic {
+	return milktea::text(string::tformat("count=%d", self.counter));
 }
 
 // ============================================================
@@ -159,8 +159,8 @@ fn milktea::Cmd SizeTrackerModel.update(SizeTrackerModel* self, milktea::Msg msg
 	return null;
 }
 
-fn milktea::View SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
-	return milktea::view(string::tformat("%dx%d", self.last_w, self.last_h));
+fn milktea::Node* SizeTrackerModel.view(SizeTrackerModel* self) @dynamic {
+	return milktea::text(string::tformat("%dx%d", self.last_w, self.last_h));
 }
 
 fn void SizeTrackerModel.on_mount(SizeTrackerModel* self) @dynamic {
@@ -233,8 +233,8 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
-	return milktea::view("");
+fn milktea::Node* TimerModel.view(TimerModel* self) @dynamic {
+	return milktea::text("");
 }
 
 // test_tick_fires verifies tick() delivers TICK messages and the model
@@ -320,8 +320,8 @@ fn milktea::Cmd ZeroIntervalModel.update(ZeroIntervalModel* self, milktea::Msg m
 	return null;
 }
 
-fn milktea::View ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
-	return milktea::view("ok");
+fn milktea::Node* ZeroIntervalModel.view(ZeroIntervalModel* self) @dynamic {
+	return milktea::text("ok");
 }
 
 fn void ZeroIntervalModel.on_mount(ZeroIntervalModel* self) @dynamic { }
@@ -342,68 +342,6 @@ fn void test_every_zero_no_crash() @test {
 }
 
 // ============================================================
-// add_overlay field round-trip tests
-// ============================================================
-
-// test_add_overlay_defaults verifies that add_overlay with only positional
-// args leaves transparent=false and layer_style zero-initialised, preserving
-// backward-compatible behaviour for all existing call sites.
-fn void test_add_overlay_defaults() @test {
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(1, 2, 10, 5, "hello");
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(o.x == 1);
-	assert(o.y == 2);
-	assert(o.w == 10);
-	assert(o.h == 5);
-	assert(o.alpha == 0);
-	// Defaults must be false / zero — behaviour preserved for existing callers.
-	assert(!o.transparent);
-	assert(!o.layer_style.shadow.enabled);
-	assert(!o.layer_style.inner_shadow.enabled);
-}
-
-// test_add_overlay_transparent_and_shadow verifies that the transparent and
-// layer_style params are stored in the Overlay entry when supplied.
-fn void test_add_overlay_transparent_and_shadow() @test {
-	xray::LayerStyle ls = {
-		.shadow = xray::shadow(offset_x: 1, offset_y: 1, opacity: 128, blur: 2),
-	};
-
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(0, 0, 20, 8, "popup", transparent: true, layer_style: ls);
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(o.transparent);
-	assert(o.layer_style.shadow.enabled);
-	assert(o.layer_style.shadow.offset_x == 1);
-	// offset_y is stored in half-rows, so one row is 2.
-	assert(o.layer_style.shadow.offset_y == 2);
-	assert(o.layer_style.shadow.opacity == 128);
-	assert(o.layer_style.shadow.blur == 2);
-	// Inner shadow untouched when only shadow was set.
-	assert(!o.layer_style.inner_shadow.enabled);
-}
-
-// test_add_overlay_inner_shadow verifies inner_shadow round-trips correctly.
-fn void test_add_overlay_inner_shadow() @test {
-	xray::LayerStyle ls = {
-		.inner_shadow = xray::inner_shadow(right: 3, opacity: 40),
-	};
-
-	milktea::View v = milktea::view("bg");
-	v = v.add_overlay(0, 0, 30, 10, "panel", layer_style: ls);
-
-	assert(v.overlay_count == 1);
-	milktea::Overlay o = v.overlays[0];
-	assert(!o.transparent); // transparent defaults to false
-	assert(!o.layer_style.shadow.enabled);
-	assert(o.layer_style.inner_shadow.enabled);
-}
-// ============================================================
 // Test-mode loop termination
 // ============================================================
 
@@ -422,8 +360,8 @@ fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
-	return milktea::view("still here");
+fn milktea::Node* NeverQuitsModel.view(NeverQuitsModel* self) @dynamic {
+	return milktea::text("still here");
 }
 
 // test_test_mode_terminates_without_quit pins down that the event loop ends
@@ -446,13 +384,13 @@ fn void test_test_mode_terminates_without_quit() @test {
 }
 
 // ============================================================
-// Overlay clipping
+// Layer clipping
 // ============================================================
 
-// NegativeOverlayModel places an overlay partly off the left/top edge, which
+// NegativeOverlayModel places a layer partly off the left/top edge, which
 // is what happens when a model scrolls or animates a floating panel out of
-// view. sz is signed, so the destination guard (dx >= width) let negative
-// coordinates through to index before the cell buffer.
+// view. sz is signed, so a destination guard of only dx >= width would let
+// negative coordinates through to index before the cell buffer.
 struct NegativeOverlayModel {
 	sz frames;
 }
@@ -466,15 +404,15 @@ fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea:
 	return null;
 }
 
-fn milktea::View NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
+fn milktea::Node* NegativeOverlayModel.view(NegativeOverlayModel* self) @dynamic {
 	self.frames++;
-	milktea::View v = milktea::view("base content");
-	// Off the top-left corner, and off the right/bottom edge. alpha != 0
-	// selects the per-cell blending path, which does its own destination
+	// Off the top-left corner, and off the right/bottom edge. An alpha
+	// below 255 selects the blending path, which does its own destination
 	// bounds check rather than going through ScreenBuffer.set_cell.
-	v = v.add_overlay(-5, -3, 10, 6, "overlay", alpha: 128);
-	v = v.add_overlay(78, 22, 10, 6, "overlay", alpha: 128);
-	return v;
+	return milktea::root()
+		.add(milktea::text("base content"))
+		.add(milktea::text("overlay").at(-5, -3).width(xray::cells(10)).height(xray::cells(6)).alpha(128))
+		.add(milktea::text("overlay").at(78, 22).width(xray::cells(10)).height(xray::cells(6)).alpha(128));
 }
 
 fn void test_overlay_with_negative_origin_is_clipped() @test {
@@ -507,8 +445,8 @@ fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dyn
 	return null;
 }
 
-fn milktea::View SendRaceModel.view(SendRaceModel* self) @dynamic {
-	return milktea::view("race");
+fn milktea::Node* SendRaceModel.view(SendRaceModel* self) @dynamic {
+	return milktea::text("race");
 }
 
 fn int send_race_sender(void* arg) @private {
@@ -573,10 +511,10 @@ fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
+fn milktea::Node* ScreenSizeModel.view(ScreenSizeModel* self) @dynamic {
 	self.w_in_view = milktea::screen_width();
 	self.h_in_view = milktea::screen_height();
-	return milktea::view("size");
+	return milktea::text("size");
 }
 
 // The accessors report the program's injected size from inside update/view,
@@ -617,19 +555,19 @@ fn milktea::Cmd TreeModel.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View TreeModel.view(&self) @dynamic {
+fn milktea::Node* TreeModel.view(&self) @dynamic {
 	glaze::Style plain = {};
 	milktea::Node* root = milktea::root()
 		.add(milktea::vstack()
-			.add(milktea::text(plain, "HEADER").height(milktea::cells(1)))
-			.add(milktea::text(plain, "body").fill(1))
-			.add(milktea::text(plain, "FOOTER").height(milktea::cells(1))));
+			.add(milktea::text("HEADER", plain).height(milktea::cells(1)))
+			.add(milktea::text("body", plain).fill(1))
+			.add(milktea::text("FOOTER", plain).height(milktea::cells(1))));
 
 	if (self.modal) {
-		root.add(milktea::text(plain, "MODAL").center());
+		root.add(milktea::text("MODAL", plain).center());
 	}
 
-	return self.inline_mode ? milktea::draw_inline(root) : milktea::draw(root);
+	return self.inline_mode ? root : root;
 }
 
 fn void test_draw_places_header_and_footer_at_the_edges() @test {
@@ -676,8 +614,8 @@ fn void test_draw_inline_sizes_the_block_to_its_content() @test {
 
 fn void test_text_style_box_frames_children() @test {
 	glaze::Style box = { .border = glaze::ROUNDED, .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2 };
-	xray::Node* child = milktea::text({}, "hi");
-	xray::Node* panel = milktea::vbox(box).add(child).center();
+	xray::Node* child = milktea::text("hi", {});
+	xray::Node* panel = milktea::vstack().style(box).add(child).center();
 	xray::Node* r = xray::root().add(panel);
 	r.solve(xray::new_rect(0, 0, 40, 20));
 
@@ -734,8 +672,8 @@ fn milktea::Cmd CellModel.update(CellModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View CellModel.view(CellModel* self) @dynamic {
-	return milktea::cell_view(self.cells, self.w, self.h);
+fn milktea::Node* CellModel.view(CellModel* self) @dynamic {
+	return milktea::grid(self.cells, self.w, self.h);
 }
 
 // A View carries cells_width/cells_height separately from the cells slice, so

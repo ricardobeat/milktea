@@ -19,7 +19,7 @@ Milktea is part of a small family of libraries:
 | `glaze` | Styles, colors, borders, text layout |
 | `xray` | Cell grid, screen buffer, constraint solver |
 | `tgp` | Kitty-graphics images (see "Images with tgp") |
-| `xray::layout` | `vstack` / `hstack` layout helpers |
+| `xray::layout` | `vertical` / `horizontal` rect-splitting helpers |
 
 You only need to import what you use. A simple app needs just `milktea` and `glaze`.
 
@@ -83,10 +83,10 @@ Messages come in several kinds:
 
 ## view
 
-`view` turns the model into something to display. It runs after every `update`. Return a `View`.
+`view` turns the model into something to display. It runs after every `update`, and returns a tree of nodes; a screen built as one glaze string is a tree of one.
 
 ```c3
-fn milktea::View Counter.view(Counter* self) @dynamic {
+fn milktea::Node* Counter.view(Counter* self) @dynamic {
     glaze::Style box = glaze::style()
         .foreground(glaze::color_hex("#00d7ff"))
         .with_bold(true)
@@ -94,7 +94,7 @@ fn milktea::View Counter.view(Counter* self) @dynamic {
         .with_border(glaze::ROUNDED);
 
     String content = string::tformat("Counter: %d\nUse ↑↓ to change, q to quit", self.value);
-    return milktea::view(box.render(content));
+    return milktea::text(box.render(content));
 }
 ```
 
@@ -163,6 +163,17 @@ glaze::style()
     .border_bg(glaze::color_hex("#1e1e2e"))
 ```
 
+`border_gradient` runs the border from `border_color` on its top row to the
+gradient color on its bottom row:
+
+```c3
+glaze::Style s = {
+    .border = glaze::ROUNDED,
+    .border_color = glaze::color_hex("#ffc832"),
+    .border_gradient = glaze::color_hex("#ff5a1e"),
+};
+```
+
 ### Joining strings
 
 Glaze knows how to stack strings that might already contain ANSI codes:
@@ -186,25 +197,24 @@ A view is a tree of nodes. The solver gives each node a rect, and each node
 paints itself there — so pieces can overlap, nest, and size themselves.
 
 ```c3
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     glaze::Style title_s  = { .fg = glaze::color_hex("#00d7ff"), .bold = true };
     glaze::Style body_s   = { .fg = glaze::color_hex("#ffffff") };
     glaze::Style status_s = { .fg = glaze::color_hex("#555555") };
 
-    return milktea::draw(milktea::root()
-        .add(milktea::vstack()
-            .add(milktea::text(title_s, "  My App").height(milktea::cells(1)))
-            .add(milktea::text(body_s, self.body).fill(1))
-            .add(milktea::text(status_s, "  Ready").height(milktea::cells(1)))));
+    return milktea::vstack()
+        .add(milktea::text("  My App", title_s))
+        .add(milktea::text(self.body, body_s).fill(1))
+        .add(milktea::text("  Ready", status_s));
 }
 ```
 
-`milktea::root()` is the outermost node and is always present. Anything added
-to it sits over the rest of the tree, which is how a modal works:
+`milktea::root()` is a stack of layers: each child added to it sits over the
+ones before, which is how a modal works:
 
 ```c3
 if (self.confirming_quit) {
-    root.add(milktea::text(modal_s, "Really quit? (y/n)").center());
+    root.add(milktea::text("Really quit? (y/n)", modal_s).center());
 }
 ```
 
@@ -223,6 +233,23 @@ call and conditional content is a plain `if`.
 Containers take `.with_gap(n)`, `.with_padding(top, right, bottom, left)`,
 `.with_justify(...)` and `.with_align(...)`.
 
+Any node takes `.style(s)`, which gives it a background, a border and padding
+from a glaze style. The background covers the whole node, and the children go
+inside the border and the padding:
+
+```c3
+glaze::Style panel = { .bg = glaze::color_hex("#1e1e2e"), .border = glaze::ROUNDED, .pad_left = 1 };
+milktea::vstack().style(panel)
+    .add(milktea::text("Title", title_s))
+    .add(milktea::text(self.body, body_s));
+```
+
+A translucent background, such as `glaze::color_rgba(10, 14, 28, 178)`,
+tints whatever is painted beneath the node and keeps its glyphs.
+
+`text()` styles its own box the same way, and is a leaf: it cannot hold
+children.
+
 ### Sizing
 
 `.width()` and `.height()` are both optional on every node, and take:
@@ -230,13 +257,17 @@ Containers take `.with_gap(n)`, `.with_padding(top, right, bottom, left)`,
 ```c3
 milktea::cells(n)     // exactly n cells
 milktea::percent(p)   // percentage of the parent
-milktea::at_least(n)  // at least n cells
-milktea::at_most(n)   // at most n cells
+milktea::min(n)       // at least n cells
+milktea::max(n)       // at most n cells
+milktea::fit()        // as big as its content
 ```
 
-`.fill(weight)` divides whatever space is left over among siblings.
-`.center()` sizes a node to its content and puts it in the middle of its
-parent. A node given neither fills.
+A node given no size follows CSS flexbox. In a `vstack` or `hstack` it is as
+big as its content along the stack and stretches across it; in a `zstack` or
+`root` it fills the whole layer. `.fill(weight)` makes a node grow into the
+space left over, divided among its siblings by weight, and `.fit()` is the
+opposite: as big as its content on both axes. `.center()` sizes a node to its
+content and puts it in the middle of its parent.
 
 ### GUI layout units
 
@@ -284,9 +315,9 @@ so the terminal cursor follows the layout rather than a hand-counted row.
 
 ### Inline mode
 
-`milktea::draw()` uses the whole terminal. `milktea::draw_inline()` measures
-the tree and claims only as many rows as it needs, leaving the scrollback
-alone.
+A program run with `.alt_screen = true` fills the terminal with its tree.
+Without it the program runs inline: the tree is measured and claims only as
+many rows as it needs, leaving the scrollback alone.
 
 ### Solving to rects instead
 
@@ -296,7 +327,7 @@ view as a string:
 ```c3
 xray::Rect top, body, bottom;
 
-layout::vstack(layout::screen(w, h), {
+layout::vertical(layout::screen(w, h), {
     layout::slot(xray::cells(1),  &top),
     layout::slot(xray::fill(1),   &body),
     layout::slot(xray::cells(1),  &bottom),
@@ -436,7 +467,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     // ...
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     String cell = self.spinner.render();          // 1-cell image, in text
     tgp::InstId id = self.spinner.place(0, 0);    // absolute placement
     // ...
@@ -457,12 +488,15 @@ Terminal support: placements work in kitty, WezTerm, Ghostty, Konsole, iTerm2 an
 
 ## Mouse support
 
-Enable mouse tracking by returning a view with mouse mode set:
+Turn mouse tracking on with a program option:
 
 ```c3
-return milktea::view(doc)
-    .set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
+return milktea::@run(&model, { .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
 ```
+
+or while the program runs, from `update`, with
+`milktea::set_mouse_mode(...)`. `set_mouse_cursor("crosshair")` changes the
+pointer the same way, as does the `.mouse_cursor` option.
 
 Then handle mouse messages in `update`:
 
@@ -505,17 +539,20 @@ milktea automatically pushes the [kitty keyboard protocol](https://sw.kovidgoyal
 
 ---
 
-## View types
+## What view returns
 
-A view carries content; whether that content lands on the alternate screen is a
-program option, not a property of the view.
+`view` returns a node. Whether it lands on the alternate screen is a program
+option, not a property of the view.
 
-| Function | Content |
+| Node | Content |
 |----------|---------|
-| `milktea::view(s)` | A string, styled with glaze |
-| `milktea::cell_view(cells, w, h)` | A cell grid you own |
-| `buf.view()` | The grid inside an `xray::ScreenBuffer` |
-| `milktea::draw(root)` | A solved node tree |
+| `milktea::text(s)` | A string, styled with glaze |
+| `milktea::canvas(buf)` | The grid inside an `xray::ScreenBuffer` |
+| `milktea::grid(cells, w, h)` | A cell grid you own |
+| `milktea::vstack()`, `root()`, … | A tree of any of these |
+
+`canvas` and `grid` take an optional `milktea::ContentCursor`, relative to the
+grid's top left, for where the terminal cursor goes.
 
 Run full-screen by passing the option to `@run`:
 
@@ -550,8 +587,8 @@ The `examples/` directory has runnable demos for most features:
 | `counter` | Minimal TEA loop, key handling |
 | `spinner` | Timed ticks, custom messages |
 | `timer` | `boba::Timer` component, pause/resume |
-| `inputbox` | Layout with `vstack`, text input |
-| `split-editors` | `hstack`, multiple panes, tab focus |
+| `inputbox` | Layout with `layout::vertical`, text input |
+| `split-editors` | `layout_h`, multiple panes, tab focus |
 | `dos-app` | Complex nested layout, modals, menus |
 | `color-swatches` | Color spaces, mouse motion |
 | `doom-fire` | Fullscreen animation, cell-level rendering |

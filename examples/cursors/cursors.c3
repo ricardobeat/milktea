@@ -28,8 +28,8 @@ fn String cursor_crosshair(sz x, sz y, bool blink, String under) {
 }
 
 fn String cursor_snake(sz x, sz y, bool blink, String under) {
-	long now  = milktea::time_ms();
-	sz phase = (sz)((now / 150) % 4);
+	sz now   = milktea::frame_ms();
+	sz phase = (now / 150) % 4;
 	switch (phase) {
 		case 0: return "█";
 		case 1: return "▓";
@@ -39,15 +39,15 @@ fn String cursor_snake(sz x, sz y, bool blink, String under) {
 }
 
 fn String cursor_rainbow(sz x, sz y, bool blink, String under) {
-	long now = milktea::time_ms();
+	sz now = milktea::frame_ms();
 	double t = ((double)(now % 1500)) / 1500.0;
 	return glaze::style().foreground(glaze::hcl(t * 360.0, 100.0, 60.0)).render("█");
 }
 
 fn String cursor_matrix(sz x, sz y, bool blink, String under) {
 	if (!blink && under.len > 0) return under;
-	long now = milktea::time_ms();
-	sz idx  = (sz)(((now / 80) + (long)x * 7 + (long)y * 13) % 48);
+	sz now = milktea::frame_ms();
+	sz idx  = ((now / 80) + x * 7 + y * 13) % 48;
 	uint cp  = 0x30A1u + (uint)idx; // katakana block
 	char[4] buf;
 	sz len;
@@ -173,19 +173,19 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	String title = "\x1b[1;37m  CURSOR GALLERY\x1b[0m  \x1b[2;37m tab/shift+tab · q quit\x1b[0m";
 
 	milktea::Node* body = milktea::hstack().with_gap(COL_GAP);
-	body.add(self.column(0));
-	body.add(self.column(N / 2));
+	body.add(self.column(0).fill(1));
+	body.add(self.column(N / 2).fill(1));
 
-	return milktea::draw(milktea::root()
+	return milktea::root()
 		.add(milktea::vstack()
 			.with_gap(TITLE_GAP)
 			.with_padding(TOP_MARGIN, SIDE_MARGIN, 0, SIDE_MARGIN)
-			.add(milktea::text({}, title).height(milktea::cells(1)))
-			.add(body.fill(1))));
+			.add(milktea::text(title).height(milktea::cells(1)))
+			.add(body.fill(1)));
 }
 
 // column builds one stack of entry rows, starting at entry `first`.
@@ -213,11 +213,11 @@ fn milktea::Node* Model.entry_row(&self, sz i) {
 	return milktea::hstack()
 		.height(milktea::cells(BOX_ROWS))
 		.with_gap(NAME_GAP)
-		.add(milktea::text(name_s, e.label).width(milktea::cells(NAME_COLS)))
+		.add(milktea::text(e.label, name_s).width(milktea::cells(NAME_COLS)))
 		.add(e.input.node().fill(1));
 }
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true });
 }

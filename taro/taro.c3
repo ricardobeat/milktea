@@ -42,6 +42,9 @@ extern fn long taro_next_timer_ms();
 extern fn int taro_has_pending_fetch();
 extern fn int taro_is_job_pending(void* rt);
 
+// now_ms is taro_now_ms as a size, the type every other ms value here is.
+fn sz now_ms() => (sz)taro_now_ms();
+
 // ── Memory profiling ────────────────────────────────────────────────────────
 
 struct MemStats {
@@ -252,8 +255,8 @@ fn void Runtime.register_globals(&self) {
 }
 
 // next_timer_ms returns ms until the soonest JS setTimeout fires, or -1 if none.
-fn long Runtime.next_timer_ms(&self) {
-	return taro_next_timer_ms();
+fn sz Runtime.next_timer_ms(&self) {
+	return (sz)taro_next_timer_ms();
 }
 
 // has_pending_fetch returns true if any fetch() responses are waiting to be drained.

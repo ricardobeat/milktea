@@ -634,7 +634,7 @@ fn sz clamp_color(sz v) {
 	return v;
 }
 
-fn milktea::View App.view(App* self) @dynamic {
+fn milktea::Node* App.view(App* self) @dynamic {
 	sz w = self.width;
 	sz h = self.height;
 	if (w < 2) w = 80;
@@ -643,9 +643,7 @@ fn milktea::View App.view(App* self) @dynamic {
 	if (self.mode == SHOWING_IMAGE && self.img_data != null) {
 		// Render PNG image as half-block cells
 		xray::Cell[] cells = self.ensure_cells((sz)(w * h));
-
-		xray::Style base_style = xray::default_style();
-		sz pixel_rows         = h * 2;
+		sz pixel_rows = h * 2;
 
 		for (sz y = 0; y < h; y++) {
 			for (sz x = 0; x < w; x++) {
@@ -668,18 +666,11 @@ fn milktea::View App.view(App* self) @dynamic {
 				char bg2 = self.img_data[bot_idx + 1];
 				char bb  = self.img_data[bot_idx + 2];
 
-				xray::Cell c;
-				c.content[0] = 0xe2;
-				c.content[1] = 0x96;
-				c.content[2] = 0x80;
-				c.content_len = 3;
-				c.width = 1;
-				c.style = base_style.set_fg(xray::color_rgb(tr, tg, tb)).set_bg(xray::color_rgb(br, bg2, bb));
-				cells[y * w + x] = c;
+				cells[y * w + x] = xray::half_block(xray::color_rgb(tr, tg, tb), xray::color_rgb(br, bg2, bb));
 			}
 		}
 
-		return milktea::cell_view(cells, w, h);
+		return milktea::grid(cells, w, h);
 	}
 
 	if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -919,7 +910,7 @@ fn milktea::View App.view(App* self) @dynamic {
 			}
 		}
 
-		return milktea::cell_view(self.model.cells, w, h);
+		return milktea::grid(self.model.cells, w, h);
 	}
 
 	// Fallback: loading screen
@@ -935,20 +926,17 @@ fn milktea::View App.view(App* self) @dynamic {
 			cells[(sz)(h / 2) * w + (sz)(start_x) + i] = xray::new_cell(msg[i:1], 1, txt_style);
 		}
 	}
-	return milktea::cell_view(cells, w, h);
+	return milktea::grid(cells, w, h);
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
 fn int main() {
 	App* app = mem::new(App);
-	milktea::enable_mouse();
-	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
-		milktea::disable_mouse();
+	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
-	milktea::disable_mouse();
 	if (app.view_cells.ptr != null) mem::free(app.view_cells.ptr);
 	mem::free(app);
 	return 0;

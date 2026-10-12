@@ -1,5 +1,4 @@
-module osc11_test @test;
-import milktea;
+module milktea @test;
 
 fn void parses_four_digit_reply() @test {
 	milktea::report_term_bg_reply(0, 0, 0);

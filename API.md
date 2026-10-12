@@ -33,7 +33,7 @@ lifecycle hooks are optional.
 interface Model {
     fn Cmd init();
     fn Cmd update(Msg msg);
-    fn View view();
+    fn Node* view();
     fn void on_mount()   @optional;
     fn void on_destroy() @optional;
     fn void on_focus()   @optional;
@@ -69,12 +69,12 @@ fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
     return null;
 }
 
-fn milktea::View Counter.view(Counter* self) @dynamic {
+fn milktea::Node* Counter.view(Counter* self) @dynamic {
     glaze::Style box = glaze::style()
         .foreground(glaze::color_hex("#00d7ff"))
         .padding(1, 3, 1, 3)
         .with_border(glaze::ROUNDED);
-    return milktea::view(box.render(string::tformat("Counter: %d", self.value)));
+    return milktea::text(box.render(string::tformat("Counter: %d", self.value)));
 }
 
 fn int main() {
@@ -109,11 +109,11 @@ p.run()!!;
 ## Two ways to write `view`
 
 **Strings** — build one with `glaze`, optionally solving rects with
-`xray::layout`, and hand it to `view`. Simple and composable; joining
+`xray::layout`, and return `text(s)`. Simple and composable; joining
 discards coordinates, so pieces land in argument order and cannot overlap.
 
 **A node tree** — build with `milktea::root()`/`vstack()`/`hstack()` and return
-`milktea::draw(root)`. The solver assigns every node a rect and each node paints
+the root. The solver assigns every node a rect and each node paints
 itself there, so nodes nest, overlap, take components, and report cursor
 positions. Prefer this once a layout nests deeply or contains widgets.
 
@@ -189,7 +189,7 @@ struct WindowSizeMsg { sz width, height; }
 directly (`k.rune == 'q'`).
 
 `KeyAction`: `KEY_PRESS`, `KEY_REPEAT`, `KEY_RELEASE`. Only kitty-protocol
-terminals with `View.set_report_key_events(true)` ever send the latter two.
+terminals with `report_key_events` on ever send the latter two.
 
 `MouseAction`: `MOUSE_PRESS`, `MOUSE_RELEASE`, `MOUSE_MOTION`.
 `MouseButton`: `MOUSE_LEFT`, `MOUSE_MIDDLE`, `MOUSE_RIGHT`, `MOUSE_NONE`,
@@ -203,11 +203,18 @@ terminals with `View.set_report_key_events(true)` ever send the latter two.
 | `tick(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer, delay from now |
 | `every(ms = 16, callback = &tick_msg, owner = null)` | One-shot timer snapped to the next wall-clock multiple of `ms` |
 | `cancel(owner)` | Cancels timers registered with that owner pointer |
+| `frames_until(deadline_ms)` | Repaint every frame until `deadline_ms` on the `frame_ms()` clock |
 
 Both timers are one-shot: re-arm from `update` to keep them firing. `tick` is
 for animation, where only the gap between frames matters; `every` is for
 clocks and countdowns, which must stay locked to absolute time despite update
 and render cost.
+
+`frames_until` is for something that keeps changing after `update` set it
+going, such as a tween running to its end. The runtime keeps painting until the
+deadline, and so does a drawn tree with a node that calls `.animate(fps)`. Both
+feed one repaint timer, aligned to the `frame_ms()` clock. A repaint is not a
+message: `view` runs again, but `update` does not.
 
 A custom `Cmd` is just a function returning a `Msg`:
 
@@ -220,48 +227,30 @@ return milktea::tick(100, &produce);
 
 ## Views
 
-A `View` carries content and per-frame terminal state. Whether it renders on the
-alternate screen is a program option, not part of the view.
+`view()` returns a `Node*`. Whether it renders on the alternate screen is a
+program option, not part of the view: with `.alt_screen = true` the tree is
+solved against the whole terminal, and without it the program runs inline, as
+tall as the tree's content.
 
-| Function | Content |
+| Node | Content |
 |---|---|
-| `view(s)` | A string |
-| `cell_view(cells, w, h)` | A caller-owned `xray::Cell` grid |
-| `ScreenBuffer.view()` | The grid inside a `ScreenBuffer`, sized from the buffer |
-| `draw(root)` | A node tree solved against the whole terminal |
-| `draw_inline(root)` | The same tree, sized to its content height |
+| `text(s, style = {})` | A string; unstyled, painted as it is |
+| `canvas(buf, cursor = {})` | The grid inside a `ScreenBuffer`, sized from the buffer |
+| `grid(cells, w, h, cursor = {})` | A caller-owned `xray::Cell` grid |
 
-`View` builder methods (each returns the view):
-
-```c3
-.set_cursor(x, y)
-.set_cursor_shape(x, y, CursorShape shape, bool blink)
-.set_cursor_color(String color)
-.set_mouse_cursor(String name)          // OSC 22 CSS cursor name
-.set_mouse_mode(MouseMode mode)
-.set_mouse_pixels(bool on)              // SGR-Pixels; fills MouseMsg.px/py
-.set_report_key_events(bool on)         // kitty repeat/release events
-.add_overlay(x, y, w, h, content, alpha = 0, ...)
-.draw(xray::Rect rect, glaze::Style style, String content)  // cell views
-```
+`cursor` is a `ContentCursor` relative to the grid's top left: `.x`, `.y`,
+`.has_cursor = true`, and `.shape` (a `CursorShape`), `.blink`, `.color`.
+Components report their own cursor, so a tree of them needs none.
 
 `CursorShape` is `CURSOR_BLOCK`/`CURSOR_UNDERLINE`/`CURSOR_BAR`; `MouseMode` is
-`MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Up to
-`MAX_OVERLAYS` (8) overlays per view.
-
-`View.draw(rect, style, content)` paints styled content into a cell-backed
-view's grid at `rect`, and returns the view so calls chain:
-
-```c3
-return self.canvas.view()
-    .draw(header_rect, title_style, "My App")
-    .draw(body_rect,   body_style,  body_text);
-```
+`MOUSE_MODE_NONE`/`MOUSE_MODE_CELL_MOTION`/`MOUSE_MODE_ALL_MOTION`. Content
+that floats over the rest goes in a layer of a `zstack` or `root`, placed with
+`.at(x, y)`, `.place(...)` or `.center()`.
 
 ## Options
 
-`Options` is program-level terminal state, fixed for the run and applied before
-the first frame. Pass it as the second argument to any launch macro.
+`Options` is program-level terminal state, applied before the first frame.
+Pass it as the second argument to any launch macro.
 
 ```c3
 return milktea::@run(&model, { .alt_screen = true });
@@ -270,15 +259,25 @@ return milktea::@run(&model, { .alt_screen = true });
 | Field | Effect |
 |---|---|
 | `alt_screen` | Runs on the alternate screen buffer, leaving scrollback untouched |
+| `mouse_mode` | `MOUSE_MODE_NONE` (default), `MOUSE_MODE_CELL_MOTION` or `MOUSE_MODE_ALL_MOTION` |
+| `mouse_pixels` | SGR-Pixels reporting; fills `MouseMsg.px/py` |
+| `report_key_events` | Kitty key repeat/release events |
+| `mouse_cursor` | Mouse pointer shape, by CSS name (`"crosshair"`); `""` is the terminal's own |
 
 The alternate screen is entered before `init()` and exited on teardown,
 including on a fatal signal, so `in_alt_screen()` is already true when `init()`
 runs and screen-tied writes (kitty-graphics images) are safe from the first
 frame.
 
-Mouse mode, key-event reporting and pixel-resolution mouse reporting stay on
-the `View`: each legitimately changes while a program runs, so a view declares
-what it wants and the runtime applies the difference.
+`alt_screen` is fixed for the run. The other four are where the program
+starts, and each can change while it runs, from the next frame on:
+
+```c3
+milktea::set_mouse_mode(MouseMode mode);
+milktea::set_mouse_pixels(bool on);
+milktea::set_report_key_events(bool on);
+milktea::set_mouse_cursor(String name);   // copied; "" resets
+```
 
 ## Runtime accessors
 
@@ -291,8 +290,13 @@ Callable from `init`, `update`, `view` and `on_mount`; main thread only.
 | `cell_size_known()` | Whether the terminal answered the probe |
 | `kitty_graphics_supported()` | Result of the `a=q` probe |
 | `in_alt_screen()` | Whether the alternate screen is showing |
-| `monotonic_ms()` | Monotonic milliseconds |
+| `frame_ms()` | The frame clock: monotonic ms, fixed for the current callback |
+| `time_ms()` | Monotonic milliseconds, live |
 | `emit(String escape)` | Writes a raw escape through the renderer's tty path |
+
+`frame_ms()` is stamped once before each `init`, `update`, `view` and `on_mount`
+call, so everything one callback reads agrees on the time. Outside a running
+program it reads the live clock.
 
 The size is set before the first `view` and refreshed on resize, so there is no
 startup gap — you do not need to mirror it in the model. Handle
@@ -316,6 +320,7 @@ turns true.
 | `with_window_size(&p, w, h)` | Fixes the size (tests) |
 | `with_test_mode(&p, DString*)` | Captures output instead of writing to the tty |
 | `with_input(&p, char[])` | Preloads input bytes (tests) |
+| `with_clock(&p, ClockFn)` | Replaces the clock behind `frame_ms()` (tests) |
 
 ## Node tree
 
@@ -325,44 +330,95 @@ turns true.
 alias Node, Rect, Content, ContentCursor, Shadow, InnerShadow, Constraint;
 alias component = xray::content_node;
 alias root, vstack, hstack, zstack, shadow, inner_shadow;
-alias cells, fill, percent, at_least, at_most;
+alias cells, fill, percent, min, max, fit;
 const START, CENTER, END, BETWEEN, AROUND, EVENLY;      // JustifyContent
 const STRETCH, ALIGN_START, ALIGN_CENTER, ALIGN_END;    // AlignItems
-fn Node* text(glaze::Style style, String s);
+fn Node* text(String s, glaze::Style style = {});
+fn Node* canvas(xray::ScreenBuffer* buf, ContentCursor cursor = {});
+fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {});
 ```
 
-`root()` is the mandatory outermost node and is a zstack, so anything added to
-it sits over the rest of the tree — that is how a modal works. `.add()`
-returns the same node, so chained and statement forms are the same call and
-conditional content is a plain `if`.
+`text()` is a leaf: its style's background, border and padding become the
+node's box, the rest styles the string, and adding a child to it is an
+error. To put a background or border behind other nodes, style a container:
 
 ```c3
-return milktea::draw(milktea::root()
+milktea::vstack().style(panel_s).add(title).add(body)
+```
+
+`root()` is a zstack, so each child added to it sits over the ones before —
+that is how a modal works. `.add()` returns the same node, so chained and
+statement forms are the same call and conditional content is a plain `if`.
+
+```c3
+return milktea::root()
     .add(milktea::vstack()
-        .add(milktea::text(title_s, "  My App").height(milktea::cells(1)))
-        .add(milktea::text(body_s, self.body).fill(1))
-        .add(self.list.node())));
+        .add(milktea::text("  My App", title_s))
+        .add(milktea::text(self.body, body_s).fill(1))
+        .add(self.list.node()));
 ```
 
 ## Tweens and motion
 
+A `Tween` carries a value to a target over a fixed duration and easing. It is
+used the way a `Spring` is: `update()` aims it, `view()` reads it, and each
+change asks the runtime for frames until it arrives, so the model runs no
+timer for it.
+
 ```c3
-Tween t = milktea::tween(300, Easing.EASE_OUT_CUBIC);
-t.step();            // advance one 16ms frame (or step(dt_ms))
-t.advance_to(now);   // advance to an absolute monotonic time
-t.value();           // 0.0 .. 1.0, eased
-t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha();
-t.done(); t.restart();
+Tween t = milktea::tween(0, 300, Easing.EASE_OUT_CUBIC); // resting at 0
+t.update(target);    // run to target from wherever it is now (in update())
+t.value();           // where it is now (in view())
+t.moving();          // false once it arrives
+t.settles_at();      // when it arrives, on the frame_ms() clock
+t.showing();         // over 0..1: on its way in, in, or still on its way out
+t.set(value);        // jump, no animation
+t.lerp(a, b); t.lerpf(a, b); t.lerp_color(a, b); t.alpha(); // over 0..1
 ```
 
-`tween_reversed` and `tween_at(now, ...)` build the same thing running backwards
-or anchored to a start time. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
+The plain calls read `frame_ms()`; `update_at`, `value_at`, `moving_at` and
+`set_at` take the time explicitly. A run takes the full duration, except one
+that turns back toward where the current run began, which takes only as long
+as the tween has run so far. `Easing` is `LINEAR`, the `QUAD` and `CUBIC`
 in/out/in-out family, and `EASE_OUT_BACK` — which deliberately overshoots past
-1 before settling, so clamp anything that must stay in range.
+the target before settling, so clamp anything that must stay in range.
+
+## Springs
+
+A `Spring` eases toward a target that can change at any time, keeping its
+momentum through each change. It is solved exactly from the moment it was last
+updated, so reading it never writes it: `update()` aims it, `view()` reads it.
+Each change asks the runtime for frames until the spring settles, so the model
+runs no timer for it.
+
+```c3
+Spring s = milktea::spring(0, milktea::spring_smooth());
+s.update(target);    // aim from wherever it is now (in update())
+s.value();           // where it is now (in view())
+s.velocity();        // units per second
+s.moving();          // false once settled
+s.settles_at();      // when it comes to rest, on the frame_ms() clock
+s.set(value, velocity = 0);  // jump, or fling with a velocity
+```
+
+The plain calls read `frame_ms()`; `update_at`, `value_at`, `velocity_at`,
+`moving_at` and `set_at` take the time explicitly. `Spring.rest` (default
+`SPRING_REST`, 0.01) is how close and slow counts as settled, in the value's
+own units.
+
+Parameters are `SpringParams { stiffness, damping }`, built with:
+
+| Function | Spring |
+|---|---|
+| `spring_feel(duration_ms, bounce = 0)` | Takes about `duration_ms`; `bounce` 0 settles without overshoot, 0..1 wobbles, < 0 is sluggish |
+| `spring_overshoot(duration_ms, overshoot)` | Swings `overshoot` (0.1 = 10%) past the target once |
+| `spring_physics(stiffness, damping)` | Raw physics, unit mass |
+| `spring_smooth()` / `spring_snappy()` / `spring_bouncy()` | Presets: bounce 0, 0.15, 0.3 at 500ms |
 
 `Motion` animates a node's entry: `slide_down(rows)`, `slide_up(rows)`,
 `slide_in(cols)`, `fade_in()`, and `.fade()` to add a fade to any of them. Apply
-with `milktea::animate(node, motion, &tween)`.
+with `node.transition(motion, tween)`, which reads a tween running over 0..1 at
+`frame_ms()`: 1 is at rest in place, 0 fully away.
 
 ## Other helpers
 
@@ -448,9 +504,10 @@ r.right(); r.bottom(); r.contains(px, py);
 r.inset(left, top, right, bottom);
 ```
 
-`Constraint` kinds: `cells(n)`, `fill(weight)`, `percent(p)`, `at_least(n)`,
-`at_most(n)`, `fit(measure, ctx)`, `min_fit(n, ...)`, `max_fit(n, ...)`,
-`range_fit(lo, hi, ...)`.
+`Constraint` kinds: `cells(n)`, `fill(weight)`, `percent(p)`, `min(n)`,
+`max(n)`, `fit()` (a node's content size), and for rect splitting with no node
+to measure, `measured(measure, ctx)`, `min_measured(n, ...)`,
+`max_measured(n, ...)`, `range_measured(lo, hi, ...)`.
 
 Raw splitters write into a caller-supplied array:
 
@@ -467,7 +524,7 @@ xray::layout_h_gap(area, cs[..], 1, out[..]);
 
 ```c3
 xray::Rect top, body, bottom;
-layout::vstack(layout::screen(w, h), {
+layout::vertical(layout::screen(w, h), {
     layout::slot(layout::cells(1), &top),
     layout::slot(layout::fill(1),  &body),
     layout::slot(layout::cells(1), &bottom),
@@ -475,21 +532,25 @@ layout::vstack(layout::screen(w, h), {
 ```
 
 `screen(w, h)` is `new_rect(0, 0, w, h)`. Constraint shorthands here are
-`cells`, `fill`, `percent`, `min`, `max`. `hstack` is the horizontal twin.
+`cells`, `fill`, `percent`, `min`, `max`. `horizontal` is the horizontal twin.
 
 ## Node tree
 
 ```c3
 Node* n = xray::vstack();   // or hstack(), zstack(), root(), content_node(c)
 n.add(child); n.add_content(c);
-n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight);
+n.width(c); n.height(c); n.min_width(n); n.min_height(n); n.fill(weight); n.fit();
 n.with_justify(j); n.with_align(a); n.with_gap(g);
-n.with_padding(top, right, bottom, left);
+n.with_padding(top, right, bottom, left); n.style(glaze_style);
 n.place(j, a); n.at(x, y); n.center(); n.offset(dx, dy);
-n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.repaint_after(ms);
+n.shadow(s); n.with_inner_shadow(s); n.alpha(a); n.animate(fps = 60);
 n.on_click(handler, ctx); n.on_click_outside(handler, ctx);
 n.solve(area); n.rect(); n.child_rect(i); n.count();
 ```
+
+A node with no width or height is as big as its content along a row or
+column and stretches across it (or, under any alignment but `ALIGN_STRETCH`,
+is its content size there too); in a stack it fills the layer.
 
 `JustifyContent`: `JUSTIFY_START/CENTER/END/SPACE_BETWEEN/SPACE_AROUND/SPACE_EVENLY`.
 `AlignItems`: `ALIGN_STRETCH/START/CENTER/END`. `MAX_NODE_CHILDREN` is 32.
@@ -504,6 +565,13 @@ interface Content {
     fn ContentCursor cursor(Rect r)  @optional;
 }
 ```
+
+`style` gives a node a box from a glaze style: `bg`, `bg_gradient`, the
+border and its colors, and `pad_*`. The box is painted across the node's
+whole rect, behind its border, padding, content and children. Content and
+children go inside the border and the padding, and the style's padding adds
+to `with_padding`. The rect a content's `render`, `paint` and `cursor`
+receive is that inner rect.
 
 `cursor` lets content report where the caret belongs so the terminal cursor
 follows the layout instead of a hand-counted row; build the return value with
@@ -530,6 +598,8 @@ buf.draw_gradient_border(rect, border, c1, c2);
 buf.fill_gradient_v(rect, c1, c2); buf.fill_gradient_ellipse(...);
 buf.blit(dst_x, dst_y, src, transparent);
 buf.blit_ansi(dst_x, dst_y, w, h, ansi_text, transparent);
+buf.overlay(x, y, w, h, ansi_text, alpha = 255, transparent = false); // < 255 blends, keeps the characters
+buf.render_shadow(x, y, w, h, xray::shadow(...)); buf.render_inner_shadow(x, y, w, h, xray::inner_shadow(...));
 buf.render_ansi(); buf.render_frame(); buf.render_diff_str();
 buf.paint(node_root, &scratch, now_ms);
 ```
@@ -553,16 +623,22 @@ for a transparent channel.
 
 ## PixelBuffer
 
-Half-block pixel rendering at twice the vertical resolution.
+A grid of colours to draw pixel art into, then turn into cells.
 
 ```c3
-PixelBuffer* p = xray::new_pixel_buffer(w, h);
+PixelBuffer* p = xray::new_pixel_buffer(w, h * 2);
 p.clear(c); p.set_pixel(col, row, c); p.get_pixel(col, row); p.blend_pixel(...);
 p.fill_rect(rect, c, to, space); p.fill_ellipse(cx, cy, rx, ry, c, to, space);
 p.draw_line(x0, y0, x1, y1, c, to, space);
-p.to_cells(cells, grid_width, base_style);
+p.to_half_blocks(screen);                  // two pixel rows to each cell, as '▀'
+p.to_cells(cells, grid_width, base_style); // one pixel to each cell, as ' '
 p.destroy();
 ```
+
+A cell is about twice as tall as it is wide, so `to_half_blocks` gives
+square pixels: each cell shows its top pixel in the foreground of a `▀` and
+its bottom pixel in the background. `xray::half_block(top, bottom)` builds one
+such cell, for colours computed some other way.
 
 ## Renderer
 
@@ -616,7 +692,7 @@ consumed) and some take `update(Msg) -> Cmd`.
 | `Pagination` | `new_pagination(per_page, total)` | `.with_kind`, `.next_page`, `.prev_page`, `.goto_page`, `.total_pages()`, `.page_start/end()` |
 | `Help` | `new_help()` / `default_help()` | `.add_entry(key, desc)`, `.clear`, `.with_styles`, `.with_separator`, `.view_vertical()` |
 | `KeyMap` | `new_keymap()` | `.bind(key, action)`, `.bind_mod(key, action, alt, ctrl)`, `.match(k) -> action`, `.has_binding` |
-| `Toast` | `new_toast()` | `.show(msg)`, `.dismiss`, `.update`, `.visible()`, `.add_overlays(view)` |
+| `Toast` | `new_toast()` | `.show(msg)`, `.dismiss`, `.update`, `.visible()`, `.node()` (null while hidden) |
 
 `TextInput.handle_paste` inserts up to the first newline (single-line
 semantics); `Textarea.handle_paste` inserts the text as given, newlines
@@ -654,7 +730,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     return milktea::tick(80, &on_spin);
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
     String inline_cell = self.spinner.render();
     tgp::InstId id     = self.spinner.place(0, 0);
     // ...

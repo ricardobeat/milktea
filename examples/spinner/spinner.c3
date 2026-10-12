@@ -40,9 +40,9 @@ fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynam
 	return null;
 }
 
-fn milktea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
-	String[12] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "⠋", "⠙" };
-	String spin       = frames[self.frame % 12];
+fn milktea::Node* SpinnerModel.view(SpinnerModel* self) @dynamic {
+	String[10] frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+	String spin       = frames[self.frame % frames.len];
 
 	glaze::Style title = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 
@@ -52,7 +52,7 @@ fn milktea::View SpinnerModel.view(SpinnerModel* self) @dynamic {
 	out.append_string(title.render(string::tformat("%s  Loading...", spin)));
 	out.append_char('\n');
 	out.append_string(subtle.render("Press q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

@@ -8,9 +8,35 @@ import std::collections::list;
 
 const xray::LayoutMetrics PIXELS = { .pixels = true, .cell_w = 10, .cell_h = 20 };
 
+fn void test_pixel_auto_sizes_text_inside_a_styled_box() @test {
+	xray::Node* text = milktea::text("abc");
+	xray::Node* panel = milktea::vstack()
+		.style({ .border = glaze::NORMAL, .pad_left = 1, .pad_top = 1 })
+		.add(text).center();
+	xray::Node* root = xray::root().add(panel);
+	root.solve({ .w = 200, .h = 200 }, PIXELS);
+	assert(panel.rect().w == 60 && panel.rect().h == 80);
+	assert(text.rect().x == panel.rect().x + 20);
+	assert(text.rect().y == panel.rect().y + 40);
+	assert(text.rect().w == 30 && text.rect().h == 20);
+
+	xray::ScreenBuffer* buf = xray::new_screen_buffer(20, 10);
+	defer { buf.destroy(); mem::free(buf); }
+	buf.record_paint = true;
+	buf.paint(root);
+	bool found = false;
+	foreach (op : buf.paint_ops.array_view()) {
+		if (op.kind == xray::PaintKind.CELL && op.cell.content[0] == 'a') {
+			assert(op.col == text.rect().x && op.row == text.rect().y);
+			found = true;
+		}
+	}
+	assert(found);
+}
+
 fn void test_pixel_padding_sizes_fixed_bar_and_fill_sibling() @test {
-	xray::Node* body = xray::vstack();
-	xray::Node* text = milktea::text({}, "bar").height(xray::cells(1));
+	xray::Node* body = xray::vstack().fill(1);
+	xray::Node* text = milktea::text("bar", {}).height(xray::cells(1));
 	xray::Node* bar = xray::vstack().height(xray::cells(1))
 		.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(4, 4, 4, 4)).add(text);
 	xray::Node* root = xray::vstack().add(body).add(bar);
@@ -26,7 +52,7 @@ fn void test_pixel_padding_sizes_fixed_bar_and_fill_sibling() @test {
 }
 
 fn void test_pixel_fit_asymmetric_nested_padding_and_font_metrics() @test {
-	xray::Node* leaf = milktea::text({}, "abc").fit_width().fit_height()
+	xray::Node* leaf = milktea::text("abc", {}).fit_width().fit_height()
 		.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(1, 2, 3, 4));
 	xray::Node* box = xray::vstack().fit_width().fit_height().add(leaf)
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(5, 6, 7, 8));
@@ -42,7 +68,7 @@ fn void test_pixel_fit_asymmetric_nested_padding_and_font_metrics() @test {
 
 fn void test_pixel_percentage_fill_gap_and_pinned_offsets() @test {
 	xray::Node* a = xray::vstack().width(xray::percent(50));
-	xray::Node* b = xray::vstack();
+	xray::Node* b = xray::vstack().fill(1);
 	xray::Node* row = xray::hstack().with_gap(1).add(a).add(b);
 	row.solve({ .w = 213, .h = 47 }, PIXELS);
 	assert(a.rect().w + b.rect().w + 10 == 213);
@@ -55,7 +81,7 @@ fn void test_pixel_percentage_fill_gap_and_pinned_offsets() @test {
 }
 
 fn void test_pixel_bounded_fit_and_wrapping() @test {
-	xray::Node* text = milktea::text({}, "abcdefghij").max_width(4).fit_height()
+	xray::Node* text = milktea::text("abcdefghij", { .fg = glaze::color_hex("#ffffff") }).max_width(4).fit_height()
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 4, 5, 6));
 	xray::Node* root = xray::root().add(text);
 	root.solve({ .w = 200, .h = 200 }, PIXELS);
@@ -76,7 +102,7 @@ fn void left(void* ctx, String id, sz col, sz row) { ((Hit*)ctx).left++; }
 
 fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	Hit hit;
-	xray::Node* child = milktea::text({}, "abc").width(xray::cells(3)).height(xray::cells(1))
+	xray::Node* child = milktea::text("abc", {}).width(xray::cells(3)).height(xray::cells(1))
 		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* root = xray::root().decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 2, 1, 4)).add(child);
 	root.solve({ .w = 200, .h = 100 }, PIXELS);
@@ -138,8 +164,8 @@ fn void test_pixel_paint_and_cursor_origins_are_not_cell_snapped() @test {
 }
 
 fn void test_pixel_padding_does_not_change_terminal_cells() @test {
-	xray::Node* plain = milktea::text({}, "hello").fit_width().fit_height();
-	xray::Node* decorated = milktea::text({}, "hello").fit_width().fit_height()
+	xray::Node* plain = milktea::text("hello", {}).fit_width().fit_height();
+	xray::Node* decorated = milktea::text("hello", {}).fit_width().fit_height()
 		.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(7, 3, 5, 1));
 	xray::Node* a = xray::root().add(plain);
 	xray::Node* b = xray::root().add(decorated);
@@ -167,19 +193,19 @@ fn sz custom_height(void* ctx, sz width) {
 fn void test_pixel_custom_fit_retains_cell_units() @test {
 	sz measured_width = -1;
 	xray::Node* child = xray::vstack()
-		.height(xray::fit(&custom_height, &measured_width))
+		.height(xray::measured(&custom_height, &measured_width))
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 4, 5, 6));
 	xray::Node* root = xray::root().add(child);
 	root.solve({ .w = 129, .h = 200 }, PIXELS);
 	assert(measured_width == 11);
 	assert(child.rect().h == 48);
-	child.height(xray::fit(null, null));
+	child.height(xray::fill(1));
 	root.solve({ .w = 129, .h = 200 }, PIXELS);
 	assert(child.rect().h == 200);
 }
 
 fn void test_pixel_partial_cell_background_reaches_box_edge() @test {
-	xray::Node* root = milktea::text({ .bg = glaze::color_hex("#204060") }, "");
+	xray::Node* root = milktea::text("", { .bg = glaze::color_hex("#204060") });
 	root.solve({ .w = 23, .h = 47 }, PIXELS);
 	xray::ScreenBuffer* buf = xray::new_screen_buffer(3, 3);
 	defer { buf.destroy(); mem::free(buf); }
@@ -192,7 +218,7 @@ fn void test_pixel_partial_cell_background_reaches_box_edge() @test {
 }
 
 fn void test_pixel_tiny_padded_box_has_no_text_or_negative_extent() @test {
-	xray::Node* leaf = milktea::text({}, "abc")
+	xray::Node* leaf = milktea::text("abc", {})
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(4, 4, 4, 4));
 	xray::Node* root = xray::root().add(leaf);
 	root.solve({ .w = 3, .h = 2 }, PIXELS);
@@ -206,8 +232,8 @@ fn void test_pixel_tiny_padded_box_has_no_text_or_negative_extent() @test {
 
 fn void test_pixel_overlap_does_not_repaint_wide_neighbour_at_wrong_origin() @test {
 	xray::Node* root = xray::root()
-		.add(milktea::text({}, "界").width(xray::cells(2)).height(xray::cells(1)))
-		.add(milktea::text({}, "B").at(1, 0).width(xray::cells(1)).height(xray::cells(1))
+		.add(milktea::text("界", {}).width(xray::cells(2)).height(xray::cells(1)))
+		.add(milktea::text("B", {}).at(1, 0).width(xray::cells(1)).height(xray::cells(1))
 			.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(0, 0, 0, 4)));
 	root.solve({ .w = 100, .h = 40 }, PIXELS);
 	xray::ScreenBuffer* buf = xray::new_screen_buffer(10, 2);
@@ -229,7 +255,7 @@ fn void test_pixel_overlap_does_not_repaint_wide_neighbour_at_wrong_origin() @te
 fn void test_pixel_partial_offscreen_cell_is_recorded_for_framebuffer_clipping() @test {
 	xray::Node* root = xray::root()
 		.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 0, 0, 4))
-		.add(milktea::text({}, "ab").at(-1, -1).width(xray::cells(2)).height(xray::cells(1)));
+		.add(milktea::text("ab", {}).at(-1, -1).width(xray::cells(2)).height(xray::cells(1)));
 	root.solve({ .w = 100, .h = 40 }, PIXELS);
 	xray::ScreenBuffer* buf = xray::new_screen_buffer(10, 2);
 	defer { buf.destroy(); mem::free(buf); }
@@ -258,7 +284,7 @@ fn void test_pixel_fixed_size_does_not_scale_with_font() @test {
 // modal reads as leaving the list behind it.
 fn void test_block_pointer_covers_what_is_beneath() @test {
 	Hit hit;
-	xray::Node* under = milktea::text({}, "row").width(xray::cells(10)).height(xray::cells(1))
+	xray::Node* under = milktea::text("row", {}).width(xray::cells(10)).height(xray::cells(1))
 		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* modal = xray::root().width(xray::cells(5)).height(xray::cells(5)).at(0, 0).block_pointer();
 	xray::Node* root = xray::root().add(under).add(modal);

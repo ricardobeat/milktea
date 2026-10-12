@@ -92,16 +92,14 @@ fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
-	if (self.width == 0 || self.height == 0) return milktea::view("");
+fn milktea::Node* SpaceModel.view(SpaceModel* self) @dynamic {
+	if (self.width == 0 || self.height == 0) return milktea::text("");
 	if (!self.matrix_init) self.compute_colors();
 
 	sz w      = self.width;
 	sz h      = self.height;
 	sz frame  = self.frame;
 	sz view_h = h;
-
-	xray::Style base_style = xray::default_style();
 
 	for (sz vy = 0; vy < view_h; vy++) {
 		sz fire_y     = vy * 2;
@@ -128,18 +126,11 @@ fn milktea::View SpaceModel.view(SpaceModel* self) @dynamic {
 				bb = tb;
 			}
 
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base_style.set_fg(xray::color_rgb(tr, tg, tb)).set_bg(xray::color_rgb(br, bg, bb));
-			self.view_cells[row_offset + vx] = c;
+			self.view_cells[row_offset + vx] = xray::half_block(xray::color_rgb(tr, tg, tb), xray::color_rgb(br, bg, bb));
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, w, view_h);
+	return milktea::grid(self.view_cells, w, view_h);
 }
 
 fn int main() {

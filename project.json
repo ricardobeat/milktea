@@ -15,8 +15,6 @@
     "xray/**",
     "src/**",
     "test/**",
-    "examples/rounded/rounded.c3",
-    "examples/rounded/gfx.c3",
     "examples/nineslice/nineslice.c3",
     "examples/nineslice/slice.c3"
   ],
@@ -55,7 +53,7 @@
     },
     "examples/component-viewer": {
       "type": "executable",
-      "sources": ["examples/component-viewer/**"],
+      "sources": ["boba/**", "xray/**", "examples/component-viewer/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -111,14 +109,18 @@
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/dos-app/button.c3", "examples/dos-app/dialog.c3", "examples/dos-app/menu.c3", "examples/dos-app/picker.c3", "examples/dos-app/theme.c3", "examples/dos-app-gui/**"],
       "opt": "O0",
-      "c-sources": ["milktea-gui/macos_window.c"],
+      "c-sources": ["milktea-gui/macos_window.c", "vendor/plutovg/src/plutovg-blend.c", "vendor/plutovg/src/plutovg-canvas.c", "vendor/plutovg/src/plutovg-font.c", "vendor/plutovg/src/plutovg-ft-math.c", "vendor/plutovg/src/plutovg-ft-raster.c", "vendor/plutovg/src/plutovg-ft-stroker.c", "vendor/plutovg/src/plutovg-matrix.c", "vendor/plutovg/src/plutovg-paint.c", "vendor/plutovg/src/plutovg-path.c", "vendor/plutovg/src/plutovg-rasterize.c", "vendor/plutovg/src/plutovg-surface.c"],
+      "c-include-dirs": ["vendor/plutovg/include"],
+      "cflags": "-DPLUTOVG_DISABLE_IMAGE_WRITE",
       "dependencies": ["raylib6"]
     },
     "examples/doom-fire-gui": {
       "type": "executable",
       "sources": ["milktea-gui/**", "examples/doom-fire-gui/**"],
       "opt": "O0",
-      "c-sources": ["milktea-gui/macos_window.c"],
+      "c-sources": ["milktea-gui/macos_window.c", "vendor/plutovg/src/plutovg-blend.c", "vendor/plutovg/src/plutovg-canvas.c", "vendor/plutovg/src/plutovg-font.c", "vendor/plutovg/src/plutovg-ft-math.c", "vendor/plutovg/src/plutovg-ft-raster.c", "vendor/plutovg/src/plutovg-ft-stroker.c", "vendor/plutovg/src/plutovg-matrix.c", "vendor/plutovg/src/plutovg-paint.c", "vendor/plutovg/src/plutovg-path.c", "vendor/plutovg/src/plutovg-rasterize.c", "vendor/plutovg/src/plutovg-surface.c"],
+      "c-include-dirs": ["vendor/plutovg/include"],
+      "cflags": "-DPLUTOVG_DISABLE_IMAGE_WRITE",
       "dependencies": ["raylib6"]
     },
     "examples/pagination": {
@@ -135,7 +137,7 @@
     },
     "examples/spinners": {
       "type": "executable",
-      "sources": ["examples/spinners/**"],
+      "sources": ["tgp/**", "examples/spinners/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -190,7 +192,7 @@
     },
     "examples/canvas": {
       "type": "executable",
-      "sources": ["examples/canvas/**"],
+      "sources": ["xray/**", "examples/canvas/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -214,7 +216,7 @@
     },
     "examples/split-editors": {
       "type": "executable",
-      "sources": ["examples/split-editors/**"],
+      "sources": ["xray/**", "examples/split-editors/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -232,7 +234,7 @@
     },
     "examples/clock": {
       "type": "executable",
-      "sources": ["examples/clock/**"],
+      "sources": ["xray/**", "examples/clock/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -250,7 +252,7 @@
     },
     "examples/paint": {
       "type": "executable",
-      "sources": ["examples/paint/**"],
+      "sources": ["xray/**", "examples/paint/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -287,13 +289,13 @@
     },
     "examples/minecraft": {
       "type": "executable",
-      "sources": ["taro/**", "examples/minecraft/**"],
+      "sources": ["boba/**", "xray/**", "taro/**", "src/**", "examples/minecraft/**"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/wolf3d": {
       "type": "executable",
-      "sources": ["taro/**", "examples/wolf3d/**"],
+      "sources": ["boba/**", "xray/**", "taro/**", "src/**", "examples/wolf3d/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -337,7 +339,7 @@
     },
     "examples/paste": {
       "type": "executable",
-      "sources": ["examples/paste/**"],
+      "sources": ["boba/**", "xray/**", "examples/paste/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -352,13 +354,13 @@
     },
     "examples/nanobots": {
       "type": "executable",
-      "sources": ["examples/nanobots/**"],
+      "sources": ["xray/**", "examples/nanobots/**"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/avian-assault": {
       "type": "executable",
-      "sources": ["examples/avian-assault/**"],
+      "sources": ["xray/**", "examples/avian-assault/**"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -370,31 +372,31 @@
     },
     "examples/flappybird": {
       "type": "executable",
-      "sources": ["examples/flappybird/**"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "tgp/**", "examples/nineslice/slice.c3", "examples/flappybird/**"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/modal": {
       "type": "executable",
-      "sources": ["examples/modal/**"],
+      "sources": ["xray/**", "examples/modal/**"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/nineslice": {
       "type": "executable",
-      "sources": ["examples/nineslice/**"],
-      "opt": "Os",
-      "strip-unused": true
-    },
-    "examples/rounded": {
-      "type": "executable",
-      "sources": ["examples/rounded/**"],
+      "sources": ["tgp/**", "examples/nineslice/**"],
       "opt": "Os",
       "strip-unused": true
     },
     "examples/squiggle": {
       "type": "executable",
-      "sources": ["examples/squiggle/**"],
+      "sources": ["tgp/**", "examples/squiggle/**"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/spotlight": {
+      "type": "executable",
+      "sources": ["xray/**", "examples/spotlight/**"],
       "opt": "Os",
       "strip-unused": true
     }

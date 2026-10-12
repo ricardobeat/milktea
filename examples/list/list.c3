@@ -55,7 +55,7 @@ fn milktea::Cmd ListModel.update(ListModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View ListModel.view(ListModel* self) @dynamic {
+fn milktea::Node* ListModel.view(ListModel* self) @dynamic {
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style hint_style  = glaze::style().foreground(glaze::color_hex("#666666"));
 
@@ -66,7 +66,7 @@ fn milktea::View ListModel.view(ListModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(hint_style.render("Up/Down navigate | Enter select | q quit"));
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

@@ -49,6 +49,21 @@ QUICKJS_C_SOURCES = [
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
 #   dependencies         - value for "dependencies" (e.g. ["raylib6"])
+GUI_C_SOURCES = [
+    "milktea-gui/macos_window.c",
+    "vendor/plutovg/src/plutovg-blend.c",
+    "vendor/plutovg/src/plutovg-canvas.c",
+    "vendor/plutovg/src/plutovg-font.c",
+    "vendor/plutovg/src/plutovg-ft-math.c",
+    "vendor/plutovg/src/plutovg-ft-raster.c",
+    "vendor/plutovg/src/plutovg-ft-stroker.c",
+    "vendor/plutovg/src/plutovg-matrix.c",
+    "vendor/plutovg/src/plutovg-paint.c",
+    "vendor/plutovg/src/plutovg-path.c",
+    "vendor/plutovg/src/plutovg-rasterize.c",
+    "vendor/plutovg/src/plutovg-surface.c",
+]
+
 OVERRIDES = {
     "ai-harness": {
         "sources": ["examples/ai-harness/**"],
@@ -56,14 +71,33 @@ OVERRIDES = {
         "optsize": "tiny",
         "linked_libraries": ["curl"],
     },
-    "component-viewer": {},
-    "paste": {},
-    "split-editors": {},
-    "clock": {},
-    "nanobots": {},
-    "paint": {},
-    "minecraft": {"extra_dirs": ["taro"]},
-    "wolf3d": {"extra_dirs": ["taro"]},
+    "canvas": {"extra_dirs": ["xray"]},
+    "component-viewer": {"extra_dirs": ["boba", "xray"]},
+    "modal": {"extra_dirs": ["xray"]},
+    "paste": {"extra_dirs": ["boba", "xray"]},
+    "split-editors": {"extra_dirs": ["xray"]},
+    "avian-assault": {"extra_dirs": ["xray"]},
+    "clock": {"extra_dirs": ["xray"]},
+    "spinners": {"extra_dirs": ["tgp"]},
+    "nineslice": {"extra_dirs": ["tgp"]},
+    "squiggle": {"extra_dirs": ["tgp"]},
+    # The dialogs' rounded outlines are cut by nineslice's slicer.
+    "flappybird": {
+        "sources": [
+            "milktea/**",
+            "glaze/**",
+            "dye/**",
+            "xray/**",
+            "tgp/**",
+            "examples/nineslice/slice.c3",
+            "examples/flappybird/**",
+        ],
+    },
+    "nanobots": {"extra_dirs": ["xray"]},
+    "paint": {"extra_dirs": ["xray"]},
+    "spotlight": {"extra_dirs": ["xray"]},
+    "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
+    "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d-server": {
         "sources": ["examples/wolf3d-server/**"],
         "linked_libraries": ["sqlite3"],
@@ -125,14 +159,18 @@ OVERRIDES = {
         ],
         "opt": "O0",
         "strip_unused": False,
-        "c_sources": ["milktea-gui/macos_window.c"],
+        "c_sources": GUI_C_SOURCES,
+        "c_include_dirs": ["vendor/plutovg/include"],
+        "cflags": "-DPLUTOVG_DISABLE_IMAGE_WRITE",
         "dependencies": ["raylib6"],
     },
     "doom-fire-gui": {
         "extra_dirs": ["milktea-gui"],
         "opt": "O0",
         "strip_unused": False,
-        "c_sources": ["milktea-gui/macos_window.c"],
+        "c_sources": GUI_C_SOURCES,
+        "c_include_dirs": ["vendor/plutovg/include"],
+        "cflags": "-DPLUTOVG_DISABLE_IMAGE_WRITE",
         "dependencies": ["raylib6"],
     },
 }
@@ -219,6 +257,10 @@ def build_target(name):
         target["linked-libraries"] = override["linked_libraries"]
     if "linker_search_paths" in override:
         target["linker-search-paths"] = override["linker_search_paths"]
+    if "c_include_dirs" in override:
+        target["c-include-dirs"] = override["c_include_dirs"]
+    if "cflags" in override:
+        target["cflags"] = override["cflags"]
     if "dependencies" in override:
         target["dependencies"] = override["dependencies"]
     return target

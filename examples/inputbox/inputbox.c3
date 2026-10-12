@@ -51,7 +51,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	sz w = milktea::screen_width();
 	sz h = milktea::screen_height();
 
@@ -59,7 +59,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	String help_text   = string::tformat("  input len: %d chars", (sz)self.input.len());
 
 	xray::Rect title_r, output_r, input_r, hint_r;
-	layout::vstack(layout::screen(w, h), {
+	layout::vertical(layout::screen(w, h), {
 		layout::slot(layout::cells(1),    &title_r),
 		layout::slot(layout::fill(1),   &output_r),
 		layout::slot(layout::cells(3),    &input_r),
@@ -80,7 +80,7 @@ fn milktea::View Model.view(&self) @dynamic {
 	String doc = glaze::join_vertical(glaze::Position.LEFT, title_v, output_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, input_v);
 	doc = glaze::join_vertical(glaze::Position.LEFT, doc, hint_v);
-	return milktea::view(doc);
+	return milktea::text(doc);
 }
 
 fn void Model.on_destroy(&self) @dynamic {

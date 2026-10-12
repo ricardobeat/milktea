@@ -704,12 +704,14 @@ bool g_dirty = true;
 fn bool dispatch_gui(milktea::Model m, milktea::Msg msg) {
 	g_dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
+	milktea::g_program.stamp_now();
 	milktea::Cmd c = m.update(msg);
 	int chain = 0;
 	while (c != null && chain < milktea::MAX_BATCH) {
 		milktea::Msg next = c();
 		if (next.kind == milktea::MsgKind.QUIT) return true;
 		if (next.kind == milktea::MsgKind.NONE) break;
+		milktea::g_program.stamp_now();
 		c = m.update(next);
 		chain++;
 	}
@@ -1025,6 +1027,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		}
 	}
 
+	prog.stamp_now();
 	milktea::Cmd init_cmd = m.init();
 	{
 		int chain = 0;
@@ -1033,6 +1036,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 			milktea::Msg next = c();
 			if (next.kind == milktea::MsgKind.QUIT) return;
 			if (next.kind == milktea::MsgKind.NONE) break;
+			milktea::g_program.stamp_now();
 			c = m.update(next);
 			chain++;
 		}
@@ -1178,6 +1182,7 @@ fn bool gui_frame(GuiLoop* l) @local {
 			milktea::Cmd cb = l.prog.timers[i].callback;
 			void* owner = l.prog.timers[i].owner;
 			l.prog.timers[i].active = false;
+			g_dirty = true;
 			milktea::Msg tmsg = cb();
 			tmsg.owner = owner;
 			if (tmsg.kind != milktea::MsgKind.NONE && dispatch_gui(l.m, tmsg)) {
@@ -1454,7 +1459,9 @@ fn bool gui_frame(GuiLoop* l) @local {
 	}
 	g_dirty = false;
 
-	milktea::View v = l.m.view();
+	l.prog.stamp_now();
+	milktea::View v = milktea::draw(l.m.view());
+	l.prog.schedule_repaint(v.repaint_ms);
 
 	sz cell_count = v.cells.ptr != null ? v.cells_width * v.cells_height : 0;
 	bool same_paint = l.prev_paint.len == v.paint_ops.len

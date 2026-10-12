@@ -29,7 +29,7 @@ fn sz codepoint_width(uint cp) {
 // A half-open-free inclusive codepoint range, sorted ascending.
 struct CodepointRange { uint lo; uint hi; }
 
-const CodepointRange[357] GLAZE_WIDTH_ZERO_RANGES = {
+const CodepointRange[357] GLAZE_WIDTH_ZERO_RANGES @local = {
 	{ 0x0000, 0x0000 },
 	{ 0x0300, 0x036F },
 	{ 0x0483, 0x0489 },
@@ -389,7 +389,7 @@ const CodepointRange[357] GLAZE_WIDTH_ZERO_RANGES = {
 	{ 0xE0100, 0xE01EF },
 };
 
-const CodepointRange[122] GLAZE_WIDTH_WIDE_RANGES = {
+const CodepointRange[122] GLAZE_WIDTH_WIDE_RANGES @local = {
 	{ 0x1100, 0x115F },
 	{ 0x231A, 0x231B },
 	{ 0x2329, 0x232A },
@@ -712,6 +712,9 @@ struct Style {
 	// border used as a drop shadow wants the surface behind the block instead,
 	// so that the half of each cell the shadow does not cover shows it.
 	Color border_bg;
+	// Second border color. When set, the border runs from border_color on its
+	// top row to this on its bottom row, one step per row, blended in LUV.
+	Color border_gradient;
 	// Second background color. When set, the block's background is a vertical
 	// gradient from bg to this, one step per row, interpolated in LUV so the
 	// change reads evenly. Unset leaves bg flat.
@@ -1201,7 +1204,7 @@ fn String Style.render(self, String input) {
 
 	if (!border_is_empty) {
 		Color bbg = self.border_bg.kind != ColorKind.NONE ? self.border_bg : self.bg;
-		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg, self.corner_color);
+		String bordered = self.border.wrap_with_color(rendered, self.border_color, bbg, self.corner_color, self.border_gradient);
 		// The gradient runs over the whole block, border rows included, so it
 		// is applied after wrapping rather than to the content alone.
 		return apply_bg_gradient(bordered, self.bg, self.bg_gradient);
@@ -1289,6 +1292,7 @@ fn String Style.render_content_only(self, String input) {
 	s.border = { };
 	s.border_color = { };
 	s.corner_color = { };
+	s.border_gradient = { };
 	s.border_animation = BorderAnimation.NONE;
 	String result = s.render(input);
 	return result;

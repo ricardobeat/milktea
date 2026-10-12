@@ -92,7 +92,12 @@ fn String Border.wrap(self, String input) {
 	return self.wrap_with_color(input, { .kind = ColorKind.NONE });
 }
 
-fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }, Color corner_fg = { .kind = ColorKind.NONE }) {
+// wrap_with_color is wrap with colors: border_fg for the sides, corner_fg
+// for the corners (border_fg when unset) and border_bg behind both. With
+// border_to set, the border's color runs from border_fg on the top row to
+// border_to on the bottom one, blended in LUV; a corner_fg of its own stays
+// fixed.
+fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }, Color corner_fg = { .kind = ColorKind.NONE }, Color border_to = { .kind = ColorKind.NONE }) {
 	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
 		&& self.top_left.len == 0
 		&& self.top_right.len == 0
@@ -100,49 +105,18 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 		&& self.bottom_right.len == 0;
 	if (is_empty) return input.tcopy();
 
-	// Corners use corner_fg when set, otherwise fall back to border_fg.
-	Color corner = corner_fg.kind != ColorKind.NONE ? corner_fg : border_fg;
+	bool graded = border_to.kind == ColorKind.TRUECOLOR && border_fg.kind == ColorKind.TRUECOLOR;
 
-	bool color_border = border_fg.kind != ColorKind.NONE || border_bg.kind != ColorKind.NONE;
-	bool color_corner = corner.kind != ColorKind.NONE || border_bg.kind != ColorKind.NONE;
-	DString sgr_open  = dstring::temp();
-	DString sgr_corner = dstring::temp();
-	String sgr_close  = "\x1b[0m";
-	if (color_border) {
-		sgr_open.append_string("\x1b[0");
-		if (border_fg.kind != ColorKind.NONE) {
-			sgr_open.append_char(';');
-			border_fg.write_sgr_params(&sgr_open, true);
-		}
-		if (border_bg.kind != ColorKind.NONE) {
-			sgr_open.append_char(';');
-			border_bg.write_sgr_params(&sgr_open, false);
-		}
-		sgr_open.append_char('m');
-	}
-	if (color_corner) {
-		sgr_corner.append_string("\x1b[0");
-		if (corner.kind != ColorKind.NONE) {
-			sgr_corner.append_char(';');
-			corner.write_sgr_params(&sgr_corner, true);
-		}
-		if (border_bg.kind != ColorKind.NONE) {
-			sgr_corner.append_char(';');
-			border_bg.write_sgr_params(&sgr_corner, false);
-		}
-		sgr_corner.append_char('m');
-	}
-	String sgr_open_str = sgr_open.str_view();
-	String sgr_corner_str = sgr_corner.str_view();
-
-	// Find max line width (visual).
+	// Find max line width (visual) and count lines.
 	sz max_width  = 0;
+	sz line_count = 0;
 	sz line_start = 0;
 	for (sz i = 0; i <= input.len; i++) {
 		if (i == input.len || input[i] == '\n') {
 			String line = input[line_start:i - line_start];
 			sz w        = (sz)string_width(line);
 			if (w > max_width) max_width = w;
+			line_count++;
 			line_start = i + 1;
 			if (i == input.len) break;
 		}
@@ -155,18 +129,25 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 	// otherwise cost a blank line where its missing top should be.
 	bool has_top = self.top.len > 0 || self.top_left.len > 0 || self.top_right.len > 0;
 	bool has_bottom = self.bottom.len > 0 || self.bottom_left.len > 0 || self.bottom_right.len > 0;
+	sz rows = line_count + (has_top ? 1 : 0) + (has_bottom ? 1 : 0);
+	sz row = 0;
+
+	String sgr_close = "\x1b[0m";
+	String side;
+	String corner;
 
 	// Top border row.
 	if (has_top) {
-		if (color_corner) out.append_string(sgr_corner_str);
+		side_sgrs(border_fg, border_to, graded, corner_fg, border_bg, row++, rows, &side, &corner);
+		out.append_string(corner);
 		out.append_string(self.top_left);
-		if (color_corner) out.append_string(sgr_close);
-		if (color_border) out.append_string(sgr_open_str);
+		if (corner.len > 0) out.append_string(sgr_close);
+		out.append_string(side);
 		for (sz i = 0; i < max_width; i++) out.append_string(self.top);
-		if (color_border) out.append_string(sgr_close);
-		if (color_corner) out.append_string(sgr_corner_str);
+		if (side.len > 0) out.append_string(sgr_close);
+		out.append_string(corner);
 		out.append_string(self.top_right);
-		if (color_corner) out.append_string(sgr_close);
+		if (corner.len > 0) out.append_string(sgr_close);
 		out.append_char('\n');
 	}
 
@@ -175,14 +156,15 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 	for (sz i = 0; i <= input.len; i++) {
 		if (i == input.len || input[i] == '\n') {
 			String line = input[line_start:i - line_start];
-			if (color_border) out.append_string(sgr_open_str);
+			side_sgrs(border_fg, border_to, graded, corner_fg, border_bg, row++, rows, &side, &corner);
+			out.append_string(side);
 			out.append_string(self.left);
-			if (color_border) out.append_string(sgr_close);
+			if (side.len > 0) out.append_string(sgr_close);
 			out.append_string(line);
 			for (sz p = (sz)string_width(line); p < max_width; p++) out.append_char(' ');
-			if (color_border) out.append_string(sgr_open_str);
+			out.append_string(side);
 			out.append_string(self.right);
-			if (color_border) out.append_string(sgr_close);
+			if (side.len > 0) out.append_string(sgr_close);
 			out.append_char('\n');
 			line_start = i + 1;
 			if (i == input.len) break;
@@ -191,19 +173,46 @@ fn String Border.wrap_with_color(self, String input, Color border_fg, Color bord
 
 	// Bottom border row.
 	if (has_bottom) {
-		if (color_corner) out.append_string(sgr_corner_str);
+		side_sgrs(border_fg, border_to, graded, corner_fg, border_bg, row++, rows, &side, &corner);
+		out.append_string(corner);
 		out.append_string(self.bottom_left);
-		if (color_corner) out.append_string(sgr_close);
-		if (color_border) out.append_string(sgr_open_str);
+		if (corner.len > 0) out.append_string(sgr_close);
+		out.append_string(side);
 		for (sz i = 0; i < max_width; i++) out.append_string(self.bottom);
-		if (color_border) out.append_string(sgr_close);
-		if (color_corner) out.append_string(sgr_corner_str);
+		if (side.len > 0) out.append_string(sgr_close);
+		out.append_string(corner);
 		out.append_string(self.bottom_right);
-		if (color_corner) out.append_string(sgr_close);
+		if (corner.len > 0) out.append_string(sgr_close);
 	} else {
 		// The last body line left a trailing newline that nothing follows.
 		out.chop(out.len() - 1);
 	}
 
 	return out.copy_str(tmem);
+}
+
+// side_sgrs sets the escapes that open a border's sides and corners on one
+// row: empty when that part has no color.
+fn void side_sgrs(Color from, Color to, bool graded, Color corner_fg, Color bg, sz row, sz rows,
+		String* side, String* corner) @local {
+	Color fg = from;
+	if (graded) fg = blend_luv(from, to, rows > 1 ? (double)row / (double)(rows - 1) : 0.0);
+	*side = border_sgr(fg, bg);
+	*corner = border_sgr(corner_fg.kind != ColorKind.NONE ? corner_fg : fg, bg);
+}
+
+fn String border_sgr(Color fg, Color bg) @local {
+	if (fg.kind == ColorKind.NONE && bg.kind == ColorKind.NONE) return "";
+	DString s = dstring::temp();
+	s.append_string("\x1b[0");
+	if (fg.kind != ColorKind.NONE) {
+		s.append_char(';');
+		fg.write_sgr_params(&s, true);
+	}
+	if (bg.kind != ColorKind.NONE) {
+		s.append_char(';');
+		bg.write_sgr_params(&s, false);
+	}
+	s.append_char('m');
+	return s.str_view();
 }

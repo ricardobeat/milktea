@@ -180,8 +180,8 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
-fn milktea::View DosModel.view(DosModel* self) @dynamic {
-	return milktea::draw(milktea::root()
+fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
+	return milktea::root()
 		.add(milktea::vstack()
 			.add(self.menu.bar(self.theme()))
 			.add(milktea::vstack()
@@ -193,7 +193,7 @@ fn milktea::View DosModel.view(DosModel* self) @dynamic {
 		// neither needs a condition here.
 		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
 		.add(self.about.node(self.theme()))
-		.add(self.theme_picker.node(self.theme())));
+		.add(self.theme_picker.node(self.theme()));
 }
 
 fn xray::Node* DosModel.content(&self) {
@@ -214,9 +214,9 @@ fn xray::Node* DosModel.content(&self) {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	return milktea::vbox(panel)
-		.add(milktea::text(title, tab_titles[self.active_tab]).fit_height())
-		.add(milktea::text(body, tab_bodies[self.active_tab]).fit_height());
+	return milktea::vstack().style(panel)
+		.add(milktea::text(tab_titles[self.active_tab], title).fit_height())
+		.add(milktea::text(tab_bodies[self.active_tab], body).fit_height());
 }
 
 fn xray::Node* DosModel.statusbar(&self) {
@@ -234,6 +234,6 @@ fn xray::Node* DosModel.statusbar(&self) {
 	// neither side needs its width computed.
 	return milktea::hstack()
 		.height(milktea::cells(BAR_ROWS))
-		.add(milktea::text(bar, hints).fill(1))
-		.add(milktea::text(info, right).fit_width());
+		.add(milktea::text(hints, bar).fill(1))
+		.add(milktea::text(right, info).fit_width());
 }

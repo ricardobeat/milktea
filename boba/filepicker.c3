@@ -307,7 +307,7 @@ fn xray::Node* FilePicker.row_node(&self, sz i) {
 	PickRowCtx* rc = mem::tnew(PickRowCtx);
 	rc.picker = self;
 	rc.index = i;
-	xray::Node* n = milktea::text(*s, label).height(milktea::cells(1));
+	xray::Node* n = milktea::text(label, *s).height(milktea::cells(1));
 	n.id_with(rc)
 		.on_click(&picker_row_clicked)
 		.on_hover_in(&picker_row_hover_in)
@@ -333,7 +333,7 @@ fn xray::Node* FilePicker.tree_node(&self) {
 	if (end > self.count) end = self.count;
 
 	xray::Node* v = xray::vstack();
-	v.add(milktea::text(self.title_style, string::tformat("Files: %s", self.current_dir))
+	v.add(milktea::text(string::tformat("Files: %s", self.current_dir), self.title_style)
 		.height(milktea::cells(1)));
 	for (sz i = self.scroll; i < end; i++) {
 		v.add(self.row_node(i));
@@ -343,9 +343,9 @@ fn xray::Node* FilePicker.tree_node(&self) {
 	// than `visible` rows exist.
 	sz pad = visible - (end - self.scroll);
 	for (sz i = 0; i < pad; i++) {
-		v.add(milktea::text(self.file_style, "").height(milktea::cells(1)));
+		v.add(milktea::text("", self.file_style).height(milktea::cells(1)));
 	}
-	v.add(milktea::text(self.hint_style, "Enter: open | Backspace: parent | q: quit")
+	v.add(milktea::text("Enter: open | Backspace: parent | q: quit", self.hint_style)
 		.height(milktea::cells(1)));
 	return v;
 }

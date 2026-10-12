@@ -606,7 +606,7 @@ fn void test_layout_h_gap() @test {
 
 fn void test_layout_h_max() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { at_most(5), fill(1) };
+	Constraint[2] constraints = { max(5), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w <= 5);
@@ -616,7 +616,7 @@ fn void test_layout_h_max() @test {
 
 fn void test_layout_h_min() @test {
 	Rect[8] out;
-	Constraint[2] constraints = { at_least(8), fill(1) };
+	Constraint[2] constraints = { min(8), fill(1) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w >= 8);
@@ -637,7 +637,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 	// A lone CMAX child used to swallow the entire axis: pass 2 clamped it to
 	// the cap, then the remainder loop handed the slack straight back.
 	Rect[1] out;
-	Constraint[1] constraints = { at_most(5) };
+	Constraint[1] constraints = { max(5) };
 	layout_h(new_rect(0, 0, 80, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 5);
@@ -646,7 +646,7 @@ fn void test_layout_max_alone_respects_cap() @test {
 fn void test_layout_all_max_respect_caps() @test {
 	// With every child capped, the last one absorbed all the leftover space.
 	Rect[3] out;
-	Constraint[3] constraints = { at_most(2), at_most(2), at_most(2) };
+	Constraint[3] constraints = { max(2), max(2), max(2) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 2);
@@ -657,7 +657,7 @@ fn void test_layout_all_max_respect_caps() @test {
 fn void test_layout_max_then_len_respects_cap() @test {
 	// A zero-length trailing child must not let the CMAX child grow past its cap.
 	Rect[2] out;
-	Constraint[2] constraints = { at_most(20), cells(0) };
+	Constraint[2] constraints = { max(20), cells(0) };
 	layout_h(new_rect(0, 0, 100, 5), constraints[..], out[..]);
 
 	assert(out[0].w == 20);
@@ -667,7 +667,7 @@ fn void test_layout_min_stays_inside_area() @test {
 	// Oversubscribed CMIN children used to be emitted at their full requested
 	// size, putting the second rect's right edge at 80 in a 30-wide area.
 	Rect[2] out;
-	Constraint[2] constraints = { at_least(40), at_least(40) };
+	Constraint[2] constraints = { min(40), min(40) };
 	layout_h(new_rect(0, 0, 30, 5), constraints[..], out[..]);
 
 	assert(out[0].w + out[1].w <= 30);
@@ -687,7 +687,7 @@ fn void test_layout_fill_consumes_full_axis() @test {
 fn void test_layout_vertical_stays_inside_area() @test {
 	// Same invariant on the vertical axis, including the gap accounting.
 	Rect[3] out;
-	Constraint[3] constraints = { at_most(4), fill(1), at_least(50) };
+	Constraint[3] constraints = { max(4), fill(1), min(50) };
 	layout_v_gap(new_rect(0, 0, 20, 24), constraints[..], 1, out[..]);
 
 	assert(out[0].h <= 4);
@@ -1377,6 +1377,49 @@ fn void test_blit_at_negative_origin_is_clipped() @test {
 	assert(dst.cell_at(0, 0) != null);
 }
 
+fn void test_opaque_overlay_replaces_what_is_there() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abcdefghij", default_style());
+
+	sb.overlay(2, 0, 3, 1, "XY");
+
+	assert(sb.cell_at(2, 0).content[0] == 'X');
+	assert(sb.cell_at(3, 0).content[0] == 'Y');
+	assert(sb.cell_at(5, 0).content[0] == 'f', "outside the box is left alone");
+}
+
+fn void test_translucent_overlay_tints_and_keeps_the_characters() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abcdefghij", default_style().set_bg(color_rgb(0, 0, 0)));
+
+	// A white background at half alpha, over black.
+	sb.overlay(-1, 0, 4, 1, "\x1b[48;2;255;255;255mXXXX\x1b[0m", alpha: 128);
+
+	Cell* c = sb.cell_at(1, 0);
+	assert(c.content[0] == 'b', "the character beneath stays");
+	assert(c.style.bg.r > 100 && c.style.bg.r < 160, "half way to white, got %d", c.style.bg.r);
+	assert(sb.cell_at(3, 0).style.bg.r == 0, "past the box is untouched");
+}
+
+fn void test_invisible_overlay_paints_nothing() @test {
+	ScreenBuffer* sb = new_screen_buffer(10, 3);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.set_string(0, 0, "abc", default_style());
+	sb.overlay(0, 0, 3, 1, "XYZ", alpha: 0);
+	assert(sb.cell_at(0, 0).content[0] == 'a');
+}
+
 fn void test_blit_ansi_at_negative_origin_is_clipped() @test {
 	ScreenBuffer* dst = new_screen_buffer(20, 5);
 	defer { dst.destroy(); mem::free(dst); }
@@ -1493,12 +1536,12 @@ fn void test_absolute_diff_column_accounts_for_wide_glyphs() @test {
 }
 
 fn void test_layout_min_alone_absorbs_leftover_space() @test {
-	// A lone at_least(n) with no fill/max sibling has nothing else to claim
+	// A lone min(n) with no fill/max sibling has nothing else to claim
 	// the leftover space, so it should grow to fill it — otherwise it just
 	// leaves a gap, which is what the old (broken) "CMIN is always fixed"
 	// semantics did.
 	Rect[1] out;
-	Constraint[1] constraints = { at_least(8) };
+	Constraint[1] constraints = { min(8) };
 	layout_h(new_rect(0, 0, 20, 1), constraints[..], out[..]);
 
 	assert(out[0].w == 20);
@@ -1730,4 +1773,30 @@ fn void test_pixel_buffer_gradient_hcl_space() @test {
 	// Midpoint should differ from both endpoints.
 	Color mid = pb.get_pixel(0, 2);
 	assert(!mid.eq(top) && !mid.eq(bottom));
+}
+
+fn void test_half_block_stacks_two_pixels() @test {
+	xray::Cell c = xray::half_block(color_rgb(1, 2, 3), color_rgb(4, 5, 6));
+	assert(c.content[:c.content_len] == "▀");
+	assert(c.width == 1);
+	assert(c.style.fg.eq(color_rgb(1, 2, 3)) && c.style.bg.eq(color_rgb(4, 5, 6)));
+}
+
+fn void test_to_half_blocks_fits_two_pixel_rows_in_each_cell() @test {
+	xray::PixelBuffer* pb = xray::new_pixel_buffer(2, 3);
+	defer { pb.destroy(); mem::free(pb); }
+	pb.set_pixel(1, 0, color_rgb(10, 0, 0));
+	pb.set_pixel(1, 1, color_rgb(20, 0, 0));
+	pb.set_pixel(0, 2, color_rgb(30, 0, 0));
+
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(3, 3);
+	defer { sb.destroy(); mem::free(sb); }
+	pb.to_half_blocks(sb);
+
+	assert(sb.cell_at(1, 0).style.fg.eq(color_rgb(10, 0, 0)));
+	assert(sb.cell_at(1, 0).style.bg.eq(color_rgb(20, 0, 0)));
+	assert(sb.cell_at(0, 1).style.fg.eq(color_rgb(30, 0, 0)), "odd last row fills the top half");
+	assert(sb.cell_at(0, 1).style.bg.is_none());
+	assert(sb.cell_at(2, 0).content[0] == ' ', "columns past the buffer are left alone");
+	assert(sb.cell_at(0, 2).content[0] == ' ', "rows past the buffer are left alone");
 }

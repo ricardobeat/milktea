@@ -194,8 +194,8 @@ fn Session new_session() {
 	Session s = { };
 	// Auto-assigned ids unique per run: seed from the monotonic clock so a
 	// quick restart cannot collide with ids the terminal still holds.
-	s.next_id = ((uint)(milktea::monotonic_ms() % 1024) * 4096) + 4096;
-	s.born_ms = milktea::monotonic_ms();
+	s.next_id = ((uint)(milktea::time_ms() % 1024) * 4096) + 4096;
+	s.born_ms = milktea::time_ms();
 	s.next_pid = 1;
 	return s;
 }
@@ -277,7 +277,7 @@ fn void Session.release(&self, Glyph g) {
 // reconciles placements. Call it from update() on every animation message
 // (it is idempotent and emits nothing when nothing changed).
 fn void Session.tick(&self) {
-	self.clock_ms = milktea::monotonic_ms() - self.born_ms;
+	self.clock_ms = milktea::time_ms() - self.born_ms;
 	self.flush();
 	self.sync();
 }
@@ -539,16 +539,25 @@ fn InstId Glyph.place(&self, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0)
 // unknown.
 fn InstId Session.place(&self, Glyph g, sz col, sz row, sz z = 0, sz cols = 0, sz rows = 0) {
 	if (!supported()) return NO_INSTANCE;
-	sz glyph_idx = -1;	for (sz i = 0; i < self.glyph_count; i++) {
+	sz glyph_idx = -1;
+	for (sz i = 0; i < self.glyph_count; i++) {
 		if (self.glyphs[i].base_id == g.base_id) {
 			glyph_idx = i;
 			break;
 		}
 	}
 	if (glyph_idx < 0) return NO_INSTANCE;
-	if (self.placement_count >= MAX_INSTANCES) return NO_INSTANCE;
 
-	sz pid_idx = self.placement_count++;
+	// Reuse a removed placement once sync() has taken it off the screen, so a
+	// view that shows and hides the same images keeps a bounded table.
+	sz pid_idx = -1;
+	for (sz p = 0; p < self.placement_count; p++) {
+		if (!self.placements[p].active && !self.placements[p].shown) { pid_idx = p; break; }
+	}
+	if (pid_idx < 0) {
+		if (self.placement_count >= MAX_INSTANCES) return NO_INSTANCE;
+		pid_idx = self.placement_count++;
+	}
 	self.placements[pid_idx] = {
 		.active = true,
 		.glyph = glyph_idx,

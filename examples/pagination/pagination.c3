@@ -57,7 +57,7 @@ fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) 
 	return null;
 }
 
-fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
+fn milktea::Node* PaginationModel.view(PaginationModel* self) @dynamic {
 	glaze::Style title_style = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true)
 		.padding(0, 0, 1, 0);
 	glaze::Style cursor_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true);
@@ -93,7 +93,7 @@ fn milktea::View PaginationModel.view(PaginationModel* self) @dynamic {
 	out.append_string(self.pg.view());
 	out.append_string(dim_style.render("  |  ↑↓ j/k navigate  |  ENTER toggle  |  ←→ pages  |  q quit"));
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

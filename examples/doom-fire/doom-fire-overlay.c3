@@ -265,8 +265,8 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View FireModel.view(FireModel* self) @dynamic {
-	if (self.width == 0) return milktea::view("Initializing...");
+fn milktea::Node* FireModel.view(FireModel* self) @dynamic {
+	if (self.width == 0) return milktea::text("Initializing...");
 
 	// Build cell grid directly — no string, no ANSI, no parsing.
 	// xray's diff engine handles minimal output.
@@ -337,7 +337,7 @@ fn milktea::View FireModel.view(FireModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.view_cells, view_w, view_h);
+	return milktea::grid(self.view_cells, view_w, view_h);
 }
 
 fn int main() {

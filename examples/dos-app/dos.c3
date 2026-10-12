@@ -11,10 +11,8 @@ import glaze;
 import xray;
 import std::io;
 
-// Chrome the layout reserves: the menu bar and status bar are one row each,
-// and the content panel sits inside a one-row, two-column margin.
-const sz BAR_ROWS       = 1;
-const sz CONTENT_MARGIN = 1;
+// The menu bar and the status bar are one row each.
+const sz BAR_ROWS = 1;
 
 const sz TAB_COUNT = 3;
 
@@ -180,21 +178,17 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
-fn milktea::View DosModel.view(DosModel* self) @dynamic {
-	return milktea::draw(milktea::root()
+fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
+	return milktea::root()
 		.add(milktea::vstack()
 			.add(self.menu.bar(self.theme()))
-			.add(milktea::vstack()
-				.fill(1)
-				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2)
-				.add(self.content().fill(1)))
+			.add(self.content().fill(1))
 			.add(self.statusbar()))
 		// Both return null when closed, and add() ignores a null child, so
 		// neither needs a condition here.
 		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
 		.add(self.about.node(self.theme()))
-		.add(self.theme_picker.node(self.theme())))
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_CELL_MOTION);
+		.add(self.theme_picker.node(self.theme()));
 }
 
 fn xray::Node* DosModel.content(&self) {
@@ -215,9 +209,11 @@ fn xray::Node* DosModel.content(&self) {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	return milktea::vbox(panel)
-		.add(milktea::text(title, tab_titles[self.active_tab]).fit_height())
-		.add(milktea::text(body, tab_bodies[self.active_tab]).fit_height());
+	String inner = glaze::join_vertical(glaze::Position.LEFT,
+		title.render(tab_titles[self.active_tab]),
+		body.render(tab_bodies[self.active_tab]));
+
+	return milktea::text(inner, panel);
 }
 
 fn xray::Node* DosModel.statusbar(&self) {
@@ -235,11 +231,11 @@ fn xray::Node* DosModel.statusbar(&self) {
 	// neither side needs its width computed.
 	return milktea::hstack()
 		.height(milktea::cells(BAR_ROWS))
-		.add(milktea::text(bar, hints).fill(1))
-		.add(milktea::text(info, right).fit_width());
+		.add(milktea::text(hints, bar).fill(1))
+		.add(milktea::text(right, info).width(milktea::cells(glaze::string_width(right))));
 }
 
 fn int main() {
 	DosModel m = { };
-	return milktea::@run(&m);
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION });
 }

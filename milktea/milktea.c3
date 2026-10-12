@@ -35,60 +35,38 @@ struct Cursor {
 	String color;
 }
 
-struct Overlay {
-	String content;
-	sz x;
-	sz y;
-	sz w;
-	sz h;
-	bool transparent;
-	char alpha; // 0 = opaque (default), 1-254 = blended
-	xray::LayerStyle layer_style;
-}
-
-const sz MAX_OVERLAYS = 8;
-
+// View is one painted frame, as the renderer takes it: a cell grid or a
+// string, and where the terminal cursor goes.
 struct View {
-	// Optional GUI commands, owned by the draw buffer until its next paint.
 	xray::PaintOp[] paint_ops;
 	String content;
 	Cursor cursor;
 	bool has_cursor;
-	MouseMode mouse_mode;
 	xray::Cell[] cells;
 	sz cells_width;
 	sz cells_height;
-	String mouse_cursor;
-	Overlay[MAX_OVERLAYS] overlays;
-	sz overlay_count;
-	bool report_key_events;
-	bool mouse_pixels;
+	sz repaint_ms; // paint again after this long; 0 = wait for the next message
 }
 
 // view creates a View displaying the given string.
-//
-// Whether the string lands on the alternate screen or inline is a property of
-// the program: see Options.alt_screen and @run.
-fn View view(String content) {
+fn View view(String content) @private {
 	return { .content = content };
 }
 
 // cell_view creates a View backed by a caller-owned cell grid.
 //
-// The slice must stay alive until the frame is rendered; the usual owner is a
-// field on the model. For a grid held in an xray::ScreenBuffer, buf.view()
-// takes the geometry from the buffer itself.
-fn View cell_view(xray::Cell[] cells, sz width, sz height) {
+// The slice must stay alive until the frame is rendered.
+fn View cell_view(xray::Cell[] cells, sz width, sz height) @private {
 	return { .cells = cells, .cells_width = width, .cells_height = height };
 }
 
 // new_cursor creates a Cursor at the given position with default shape (blinking block).
-fn Cursor new_cursor(sz x, sz y) {
+fn Cursor new_cursor(sz x, sz y) @private {
 	return { .x = x, .y = y, .shape = CursorShape.CURSOR_BLOCK, .blink = true };
 }
 
 // View builder methods — enable fluent declarative View construction.
-// Example: return view("hello").set_cursor(5, 3).set_mouse_mode(mode);
+// Example: return view("hello").set_cursor(5, 3);
 
 fn View View.set_cursor(self, sz x, sz y) {
 	View v = self;
@@ -110,79 +88,10 @@ fn View View.set_cursor_color(self, String color) {
 	return v;
 }
 
-fn View View.set_mouse_cursor(self, String name) {
-	View v = self;
-	v.mouse_cursor = name;
-	return v;
-}
-
-fn View View.set_mouse_mode(self, MouseMode mode) {
-	View v = self;
-	v.mouse_mode = mode;
-	return v;
-}
-
-// set_report_key_events opts in to the kitty keyboard protocol's key-release
-// and key-repeat reporting (progressive enhancement flag 2). When enabled,
-// KeyMsg.action carries KEY_PRESS / KEY_REPEAT / KEY_RELEASE; terminals that
-// don't support the kitty protocol are unaffected (the extra push/pop is
-// silently ignored, same as the base kitty keyboard layer). Apps that never
-// call this see byte-identical KeyMsg.action == KEY_PRESS behavior to before
-// this option existed.
-fn View View.set_report_key_events(self, bool on) {
-	View v = self;
-	v.report_key_events = on;
-	return v;
-}
-
-// set_mouse_pixels opts in to DEC mode 1016 (SGR-Pixels mouse reporting).
-// When enabled (and mouse_mode is not MOUSE_MODE_NONE), the terminal reports
-// mouse coordinates in pixels relative to the terminal window in addition to
-// cell coordinates; MouseMsg.px/py carry the raw 0-based pixel values while
-// row/col continue to carry the cell position (converted from pixels using
-// the terminal's reported window/cell size). Terminals that don't support
-// mode 1016 simply ignore it and continue sending cell coordinates — in that
-// case px/py stay 0 and row/col behave exactly as before this option existed.
-fn View View.set_mouse_pixels(self, bool on) {
-	View v = self;
-	v.mouse_pixels = on;
-	return v;
-}
-
-// add_overlay attaches a floating overlay to the view.
-// Overlays are rendered in insertion order, up to MAX_OVERLAYS (8) total.
-// Any call beyond MAX_OVERLAYS is silently ignored — callers that need more
-// overlays must merge content before adding.
-//
-// transparent: when true, blit_ansi skips cells whose content is a space with
-//   default style, letting the background show through instead of overwriting it.
-//   Use for overlays whose content is sparse or irregularly shaped.
-//
-// layer_style: configures drop-shadow and inner-shadow effects rendered around
-//   the overlay. The drop-shadow is composited under the overlay content;
-//   the inner-shadow is composited on top (inside the overlay bounds).
-//   Both fields default to disabled (zero-value LayerStyle).
-fn View View.add_overlay(self, sz x, sz y, sz w, sz h, String content, char alpha = 0,
-	bool transparent = false, xray::LayerStyle layer_style = {})
-{
-	View v = self;
-	if (v.overlay_count < MAX_OVERLAYS) {
-		v.overlays[v.overlay_count] = {
-			.content = content,
-			.x = x, .y = y, .w = w, .h = h,
-			.alpha = alpha,
-			.transparent = transparent,
-			.layer_style = layer_style,
-		};
-		v.overlay_count++;
-	}
-	return v;
-}
-
 // should_support_sync_output checks env vars to estimate whether the
 // terminal supports synchronized output (mode 2026). This is a heuristic
 // matching the Go version's shouldQuerySynchronizedOutput().
-fn bool should_support_sync_output() {
+fn bool should_support_sync_output() @private {
 	// SSH sessions — most modern SSH terminals support it
 	char* ssh_tty = getenv("SSH_TTY");
 	if (ssh_tty != null) return true;
@@ -267,12 +176,18 @@ struct Options {
 	// leaving the user's scrollback untouched. The screen is entered before
 	// the first frame and exited on teardown, including on a fatal signal.
 	bool alt_screen;
+	// The terminal modes a program starts with. Each can be changed while it
+	// runs, with the call of the same name: set_mouse_mode and so on.
+	MouseMode mouse_mode;
+	bool mouse_pixels;
+	bool report_key_events;
+	String mouse_cursor;
 }
 
 interface Model {
 	fn Cmd init();
 	fn Cmd update(Msg msg);
-	fn View view();
+	fn Node* view();
 	fn void on_mount() @optional;
 	fn void on_destroy() @optional;
 	fn void on_focus() @optional;
@@ -284,14 +199,14 @@ const sz MAX_BATCH  = 16;
 const sz MAX_TIMERS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
-const sz ESC_HOLD_MS = 50;
+const sz ESC_HOLD_MS @private = 50;
 // Longest OSC 22 mouse cursor name tracked across frames. The longest CSS
 // cursor keyword is "no-drop"/"nesw-resize" class at 12 chars; 32 leaves room
 // for terminal-specific names. Longer names still render — they just always
 // re-emit, since they can't be cached for comparison.
-const sz MAX_MOUSE_CURSOR_LEN = 32;
+const sz MAX_MOUSE_CURSOR_LEN @private = 32;
 
-struct TimerEntry {
+struct TimerEntry @private {
 	bool active;
 	sz deadline_ms;
 	Cmd callback;
@@ -337,9 +252,17 @@ struct Program {
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
 	WinSize cached_ws;
+	// The modes the terminal is in, and the ones the program has asked for
+	// (from Options, then set_mouse_mode and friends). Each frame brings the
+	// first in line with the second.
 	MouseMode mouse_mode;
 	bool report_key_events;
 	bool mouse_pixels;
+	MouseMode want_mouse_mode;
+	bool want_report_key_events;
+	bool want_mouse_pixels;
+	char[MAX_MOUSE_CURSOR_LEN] want_mouse_cursor_buf;
+	sz want_mouse_cursor_len;
 	bool debug;
 	// debug_mouse turns on the framework's mouse-event tracing: every click
 	// dispatch prints its target list, every hover edge print which targets
@@ -368,6 +291,12 @@ struct Program {
 	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
 	// which the lone ESC is flushed as a real keypress. 0 = no hold active.
 	sz esc_deadline_ms;
+	// The frame clock behind frame_ms(): stamped from `clock` right before every
+	// init(), update() and view() call, so one call reads one instant.
+	sz now_ms;
+	ClockFn clock; // null = the monotonic clock; see with_clock
+	// Paint every frame until this time on the frame_ms() clock; see frames_until.
+	sz frames_until_ms;
 
 	// Test / injection support
 	bool test_mode;
@@ -402,10 +331,8 @@ struct Program {
 	xray::Renderer* renderer;
 
 	// Last emitted OSC 22 mouse cursor name; avoids re-emitting every frame.
-	// Stored as owned bytes rather than a String: the name comes from a View
-	// built inside render_current_view's @pool(), so keeping the slice would
-	// retain temp memory that is freed before the next frame compares against
-	// it. Names are short CSS cursor keywords ("pointer", "nwse-resize").
+	// Stored as owned bytes, like the name asked for in want_mouse_cursor_buf.
+	// Names are short CSS cursor keywords ("pointer", "nwse-resize").
 	char[MAX_MOUSE_CURSOR_LEN] last_mouse_cursor_buf;
 	sz last_mouse_cursor_len;
 	// False once an uncacheable (over-long) name has been emitted, forcing the
@@ -432,9 +359,9 @@ InputQueue g_input_queue;
 // The reader thread pushes; the main event loop drains.
 // ============================================================
 
-const sz INPUT_BUF_SIZE = 4096;
+const sz INPUT_BUF_SIZE @private = 4096;
 
-struct InputQueue {
+struct InputQueue @private {
 	char[INPUT_BUF_SIZE] buf;
 	sz head;
 	sz tail;
@@ -446,7 +373,7 @@ struct InputQueue {
 	sz dropped;
 }
 
-fn void? input_queue_init(InputQueue* q) {
+fn void? input_queue_init(InputQueue* q) @private {
 	q.head = 0;
 	q.tail = 0;
 	q.closed = false;
@@ -458,21 +385,21 @@ fn void? input_queue_init(InputQueue* q) {
 // It is safe to call while the reader is still running — it locks the mutex,
 // sets closed, and broadcasts so the reader wakes from its cond wait.
 // After this call, join the reader thread before calling input_queue_destroy.
-fn void input_queue_close(InputQueue* q) {
+fn void input_queue_close(InputQueue* q) @private {
 	q.mu.lock();
 	q.closed = true;
 	q.cond.broadcast();
 	q.mu.unlock();
 }
 
-fn void input_queue_destroy(InputQueue* q) {
+fn void input_queue_destroy(InputQueue* q) @private {
 	// At this point the reader thread must have already been joined.
 	// Destroying the condvar and mutex while the reader is alive is UB.
 	q.cond.destroy();
 	q.mu.destroy();
 }
 
-fn void input_queue_push(InputQueue* q, char[] data) {
+fn void input_queue_push(InputQueue* q, char[] data) @private {
 	q.mu.lock();
 	for (sz i = 0; i < data.len; i++) {
 		sz next = (q.head + 1) % INPUT_BUF_SIZE;
@@ -491,7 +418,7 @@ fn void input_queue_push(InputQueue* q, char[] data) {
 
 // input_queue_take_dropped reads and resets the dropped-byte counter under
 // the queue mutex. Returns 0 when nothing was dropped.
-fn sz input_queue_take_dropped(InputQueue* q) {
+fn sz input_queue_take_dropped(InputQueue* q) @private {
 	q.mu.lock();
 	sz n = q.dropped;
 	q.dropped = 0;
@@ -499,7 +426,7 @@ fn sz input_queue_take_dropped(InputQueue* q) {
 	return n;
 }
 
-fn sz input_queue_drain(InputQueue* q, char[] out) {
+fn sz input_queue_drain(InputQueue* q, char[] out) @private {
 	q.mu.lock();
 	defer q.mu.unlock();
 	sz count = 0;
@@ -513,7 +440,7 @@ fn sz input_queue_drain(InputQueue* q, char[] out) {
 
 // input_queue_wait blocks until data is available or timeout_ms elapses.
 // Called with the queue unlocked; returns with queue unlocked.
-fn void input_queue_wait(InputQueue* q, sz timeout_ms) {
+fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private {
 	q.mu.lock();
 	if (q.tail == q.head && !q.closed) {
 		(void)q.cond.wait_timeout(&q.mu, (time::Duration)((long)timeout_ms * time::MS));
@@ -521,7 +448,7 @@ fn void input_queue_wait(InputQueue* q, sz timeout_ms) {
 	q.mu.unlock();
 }
 
-fn bool input_queue_is_closed(InputQueue* q) {
+fn bool input_queue_is_closed(InputQueue* q) @private {
 	q.mu.lock();
 	bool c = q.closed;
 	q.mu.unlock();
@@ -534,7 +461,7 @@ fn bool input_queue_is_closed(InputQueue* q) {
 // by stdout writes.
 // ============================================================
 
-fn int input_reader_fn(void* arg) {
+fn int input_reader_fn(void* arg) @private {
 	InputQueue* q = (InputQueue*)arg;
 	char[256] tmp;
 
@@ -562,6 +489,10 @@ fn int input_reader_fn(void* arg) {
 	}
 	return 0;
 }
+
+// ClockFn supplies the time behind frame_ms(), in milliseconds. The runtime uses
+// the monotonic clock; a test swaps in its own with with_clock.
+alias ClockFn = fn sz();
 
 // Global pointer to the currently running program.
 // Set during Program.run(), cleared on exit.
@@ -690,6 +621,48 @@ fn void test_pointer(sz col, sz row, long after_frame) {
 	g_program.test_pointer_armed = true;
 }
 
+// set_mouse_mode turns mouse reporting on or off from the next frame. A
+// program starts in Options.mouse_mode.
+fn void set_mouse_mode(MouseMode mode) {
+	if (g_program == null) return;
+	g_program.want_mouse_mode = mode;
+}
+
+// set_mouse_pixels opts in to DEC mode 1016 (SGR-Pixels mouse reporting).
+// When enabled (and mouse_mode is not MOUSE_MODE_NONE), the terminal reports
+// mouse coordinates in pixels relative to the terminal window in addition to
+// cell coordinates; MouseMsg.px/py carry the raw 0-based pixel values while
+// row/col continue to carry the cell position (converted from pixels using
+// the terminal's reported window/cell size). Terminals that don't support
+// mode 1016 simply ignore it and continue sending cell coordinates — in that
+// case px/py stay 0 and row/col behave exactly as before this option existed.
+fn void set_mouse_pixels(bool on) {
+	if (g_program == null) return;
+	g_program.want_mouse_pixels = on;
+}
+
+// set_report_key_events opts in to the kitty keyboard protocol's key-release
+// and key-repeat reporting (progressive enhancement flag 2). When enabled,
+// KeyMsg.action carries KEY_PRESS / KEY_REPEAT / KEY_RELEASE; terminals that
+// don't support the kitty protocol are unaffected (the extra push/pop is
+// silently ignored, same as the base kitty keyboard layer). Apps that never
+// call this see byte-identical KeyMsg.action == KEY_PRESS behavior to before
+// this option existed.
+fn void set_report_key_events(bool on) {
+	if (g_program == null) return;
+	g_program.want_report_key_events = on;
+}
+
+// set_mouse_cursor sets the mouse pointer's shape by its CSS name ("pointer",
+// "crosshair"), or puts the terminal's own back with "". The name is copied,
+// so it need not outlive the call; one longer than MAX_MOUSE_CURSOR_LEN is
+// ignored.
+fn void set_mouse_cursor(String name) {
+	if (g_program == null || name.len > MAX_MOUSE_CURSOR_LEN) return;
+	for (sz i = 0; i < name.len; i++) g_program.want_mouse_cursor_buf[i] = name[i];
+	g_program.want_mouse_cursor_len = name.len;
+}
+
 // debug_warn appends a timestamped line to milktea-debug.log.
 // Only writes when the running program has debug=true; silently swallows all
 // I/O errors so a logging failure never disrupts the TUI surface.
@@ -766,10 +739,32 @@ fn bool in_alt_screen() {
 	return g_manual_alt_screen;
 }
 
-// monotonic_ms exposes the runtime's monotonic clock to models — the same
-// time base timers use. Immune to wall-clock steps (NTP, DST).
-fn sz monotonic_ms() {
-	return time_ms();
+// frame_ms is the frame clock: the time of the init(), update() or view() call in
+// progress, in monotonic milliseconds. It stays fixed for the whole call, so
+// everything one view draws agrees on the instant it is drawing, and a value
+// set in update() is read back in view() against the same time base.
+//
+// Outside a running program (a unit test, direct rendering) there is no frame,
+// and frame_ms reads the live monotonic clock instead.
+fn sz frame_ms() {
+	if (g_program == null) return time_ms();
+	return g_program.now_ms;
+}
+
+// frames_until keeps the runtime painting every frame until `deadline_ms` on
+// the frame_ms() clock. It is for a value that goes on changing by itself after
+// update() set it going — a tween running to its end, a spring settling — so
+// the model need not run a frame timer for it. Requests merge, the latest
+// deadline winning. Outside a program it does nothing.
+fn void frames_until(sz deadline_ms) {
+	if (g_program == null) return;
+	if (deadline_ms > g_program.frames_until_ms) g_program.frames_until_ms = deadline_ms;
+}
+
+// stamp_now advances the frame clock to the current time. Called right before
+// each model callback, never during one.
+fn void Program.stamp_now(&self) {
+	self.now_ms = self.clock ? self.clock() : time_ms();
 }
 
 // Cell-size accessors — the pixel size of one character cell, discovered via
@@ -826,6 +821,13 @@ fn void with_window_size(Program* self, sz w, sz h) {
 fn void with_test_mode(Program* self, DString* output) {
 	self.test_mode = true;
 	self.output_buf = output;
+}
+
+// with_clock replaces the clock behind frame_ms(), so a test can render an
+// animation at chosen instants instead of whenever the test happens to run.
+// Timers keep the real clock: this only moves what the model sees.
+fn void with_clock(Program* self, ClockFn clock) {
+	self.clock = clock;
 }
 
 // with_input injects raw input bytes that the event loop will consume
@@ -899,6 +901,7 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
+	self.stamp_now();
 	if (m.kind == MsgKind.MOUSE
 		&& (m.mouse.action == MouseAction.MOUSE_PRESS
 			|| m.mouse.action == MouseAction.MOUSE_MOTION)) {
@@ -910,6 +913,7 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 		Msg next = c();
 		if (next.kind == MsgKind.QUIT) return true;
 		if (next.kind == MsgKind.NONE) break;
+		self.stamp_now();
 		c = model.update(next);
 		chain++;
 	}
@@ -1010,7 +1014,7 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 // snap_delay returns how long to wait from `wall` to reach the next multiple
 // of `interval_ms`. Always in (0, interval_ms], so a timer re-armed exactly on
 // a boundary waits a full interval rather than firing again immediately.
-fn sz snap_delay(sz wall, sz interval_ms) {
+fn sz snap_delay(sz wall, sz interval_ms) @private {
 	if (interval_ms <= 0) return 1;
 	sz elapsed = wall % interval_ms;
 	return elapsed == 0 ? interval_ms : interval_ms - elapsed;
@@ -1134,7 +1138,11 @@ fn void? Program.run(Program* self) {
 				disable_mouse_pixels();
 				self.mouse_pixels = false;
 			}
-			disable_mouse();
+			// Mirror the frame-level transition: an all-motion program turned on
+			// mode 1003 rather than 1000/1002, so it needs the all-motion off
+			// sequence; otherwise the terminal keeps reporting every pointer
+			// move after the program exits.
+			disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
 			disable_bracketed_paste();
 			// Pop the key-events enhancement layer first (if it was pushed on top
 			// of the base layer), then pop the base kitty keyboard layer — restores
@@ -1255,13 +1263,22 @@ fn void? Program.run(Program* self) {
 		self.in_alt_screen = true;
 	}
 
+	set_mouse_mode(self.options.mouse_mode);
+	set_mouse_pixels(self.options.mouse_pixels);
+	set_report_key_events(self.options.report_key_events);
+	set_mouse_cursor(self.options.mouse_cursor);
+
+	self.stamp_now();
 	Cmd c0 = self.model.init();
 	if (c0 != null) {
 		Msg m0 = c0();
 		if (m0.kind != MsgKind.NONE && dispatch(self, self.model, m0)) return;
 	}
 
-	if (&self.model.on_mount) self.model.on_mount();
+	if (&self.model.on_mount) {
+		self.stamp_now();
+		self.model.on_mount();
+	}
 
 	// Determine initial window size
 	WinSize initial_ws;
@@ -1662,17 +1679,11 @@ fn void Program.remember_mouse_cursor(Program* self, String name) {
 // For the cell path that is the grid height; for the string path it is the
 // newline count plus one. Inline rendering needs this to size the screen
 // buffer to the content rather than to the terminal.
-fn sz view_content_rows(View v) {
+fn sz view_content_rows(View v) @private {
 	if (v.cells.ptr != null) return v.cells_height;
 	sz rows = 1;
 	for (sz i = 0; i < v.content.len; i++) {
 		if (v.content[i] == '\n') rows++;
-	}
-	// Overlays are positioned against the same origin and may extend past
-	// the content, so the block has to be tall enough to contain them.
-	for (sz oi = 0; oi < v.overlay_count; oi++) {
-		sz bottom = (sz)v.overlays[oi].y + (sz)v.overlays[oi].h;
-		if (bottom > rows) rows = bottom;
 	}
 	return rows;
 }
@@ -1680,7 +1691,7 @@ fn sz view_content_rows(View v) {
 // view_content_cols returns the widest display column the view's content
 // reaches. Inline blocks are sized to this rather than the terminal width so
 // the renderer never paints trailing blanks over columns it does not own.
-fn sz view_content_cols(View v) {
+fn sz view_content_cols(View v) @private {
 	if (v.cells.ptr != null) return v.cells_width;
 	sz widest = 0;
 	sz cur = 0;
@@ -1705,10 +1716,6 @@ fn sz view_content_cols(View v) {
 		cur += 1;
 	}
 	if (cur > widest) widest = cur;
-	for (sz oi = 0; oi < v.overlay_count; oi++) {
-		sz right = (sz)v.overlays[oi].x + (sz)v.overlays[oi].w;
-		if (right > widest) widest = right;
-	}
 	return widest;
 }
 
@@ -1742,60 +1749,88 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 	r.resize(cols, rows);
 }
 
+// schedule_repaint arms the runtime's one repaint timer after each frame: at
+// the rate the drawn tree animates at (`ms`, from Node.animate), or every
+// frame while something is still on its way (see frames_until), whichever is
+// sooner. Cancel first: every frame re-arms it, and without that each would
+// leave another timer behind. The program doubles as the owner token.
+fn void Program.schedule_repaint(&self, sz ms) {
+	cancel(self);
+	if (self.now_ms < self.frames_until_ms && (ms <= 0 || FRAME_MS < ms)) ms = FRAME_MS;
+	if (ms <= 0) return;
+	// Land on the next multiple of the interval on the monotonic clock, the
+	// one frame_ms() reads. Content that picks its frame from frame_ms() then changes on
+	// every repaint and holds each frame for exactly one interval; a delay
+	// counted from the end of this frame would drift against it and now and
+	// then show a frame twice.
+	sz t = time_ms();
+	tick(snap_delay(t, ms), &repaint_msg, self);
+}
+
+// repaint_msg is what the repaint timer delivers: no message at all, so the
+// runtime paints again without calling update(). Nothing changed in the
+// model; only the time it is drawn at.
+fn Msg repaint_msg() @local => {};
+
 // render_current_view renders the model's current view, handling
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
 fn void Program.render_current_view(Program* self) {
 	self.frame_no++;
 	@pool() {
-		View v = self.model.view();
+		self.stamp_now();
+		// The alternate screen is the program's to fill; inline, the block is
+		// as tall as the tree.
+		Node* root = self.model.view();
+		View v = self.options.alt_screen ? draw(root) : draw_inline(root);
+		self.schedule_repaint(v.repaint_ms);
 		// Enable/disable mouse reporting when mouse_mode changes
-		if (v.mouse_mode != self.mouse_mode) {
-			if (v.mouse_mode == MOUSE_MODE_NONE) {
-				disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
+		if (self.want_mouse_mode != self.mouse_mode) {
+			if (self.want_mouse_mode == MOUSE_MODE_NONE) {
+				self.emit_sgr(self.mouse_mode == MOUSE_MODE_ALL_MOTION ? SGR_MOUSE_ALL_OFF : SGR_MOUSE_SGR_OFF);
 				// Mouse reporting itself was just turned off — 1016 no longer
 				// applies. Reset it so re-enabling mouse_mode later re-asserts
 				// it explicitly rather than relying on terminal state.
 				if (self.mouse_pixels) {
-					disable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_OFF);
 				}
 			} else {
-				enable_mouse(v.mouse_mode == MOUSE_MODE_ALL_MOTION);
+				self.emit_sgr(self.want_mouse_mode == MOUSE_MODE_ALL_MOTION ? SGR_MOUSE_ALL_ON : SGR_MOUSE_SGR_ON);
 				// Re-assert pixel reporting: some terminals reset SGR-Pixels
 				// mode (1016) when the base mouse tracking mode changes, so
-				// if the view has pixel mode on, turn it back on here too.
+				// if pixel mode is on, turn it back on here too.
 				if (self.mouse_pixels) {
-					enable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_ON);
 				}
 			}
-			self.mouse_mode = v.mouse_mode;
+			self.mouse_mode = self.want_mouse_mode;
 		}
 		// Enable/disable SGR-Pixels mouse reporting (DEC mode 1016) when
 		// mouse_pixels changes. Only meaningful while mouse_mode is active;
 		// still track the flag even if mouse_mode is currently NONE so it
 		// gets asserted the moment mouse_mode turns on (handled above).
-		if (v.mouse_pixels != self.mouse_pixels) {
-			if (v.mouse_pixels) {
-				if (v.mouse_mode != MOUSE_MODE_NONE) {
-					enable_mouse_pixels();
+		if (self.want_mouse_pixels != self.mouse_pixels) {
+			if (self.want_mouse_pixels) {
+				if (self.want_mouse_mode != MOUSE_MODE_NONE) {
+					self.emit_sgr(SGR_MOUSE_PIXELS_ON);
 				}
 			} else {
 				if (self.mouse_mode != MOUSE_MODE_NONE) {
-					disable_mouse_pixels();
+					self.emit_sgr(SGR_MOUSE_PIXELS_OFF);
 				}
 			}
-			self.mouse_pixels = v.mouse_pixels;
+			self.mouse_pixels = self.want_mouse_pixels;
 		}
 		// Enable/disable kitty key event reporting (press/repeat/release) when
 		// report_key_events changes. Pushed/popped as an extra enhancement layer
 		// on top of the base disambiguate layer pushed at startup.
-		if (v.report_key_events != self.report_key_events) {
-			if (v.report_key_events) {
-				enable_kitty_key_events();
+		if (self.want_report_key_events != self.report_key_events) {
+			if (self.want_report_key_events) {
+				self.emit_sgr(SGR_KITTY_KEY_EVENTS_ON);
 			} else {
-				disable_kitty_key_events();
+				self.emit_sgr(SGR_KITTY_KEY_EVENTS_OFF);
 			}
-			self.report_key_events = v.report_key_events;
+			self.report_key_events = self.want_report_key_events;
 		}
 		if (self.test_mode) {
 			if (self.output_buf != null) {
@@ -1909,84 +1944,18 @@ fn void Program.render_current_view(Program* self) {
 					self.last_content_rows = cur_row;
 				}
 
-				// Render overlays
-				for (sz oi = 0; oi < v.overlay_count; oi++) {
-					Overlay o = v.overlays[oi];
-
-					// Render shadow before content so it appears underneath
-					if (o.layer_style.shadow.enabled) {
-						r.screen.render_shadow(o.x, o.y, o.w, o.h, o.layer_style.shadow);
-					}
-
-					if (o.alpha != 0 && o.alpha < 255) {
-						// Alpha overlay: blend color over existing cells in-place,
-						// preserving underlying characters.
-						//
-						// Reuse r.overlay_scratch to avoid a heap alloc+free per frame.
-						// Lazily allocate on first use; grow (resize) when a larger overlay
-						// arrives. The scratch may be wider/taller than this overlay — that
-						// is fine because the blend loop indexes cells[cy * tmp.width + cx],
-						// which uses the scratch's own stride, so rows stay correctly aligned.
-						xray::ScreenBuffer* tmp = r.overlay_scratch;
-						if (tmp == null) {
-							// First alpha overlay ever seen — allocate the scratch.
-							tmp = xray::new_screen_buffer((sz)o.w, (sz)o.h);
-							r.overlay_scratch = tmp;
-						} else if (tmp.width < (sz)o.w || tmp.height < (sz)o.h) {
-							// Current scratch is too small in at least one dimension; grow it.
-							// Use the larger of old and new for each axis so one resize
-							// accommodates the largest overlay seen so far.
-							sz new_w = tmp.width  < (sz)o.w ? (sz)o.w : tmp.width;
-							sz new_h = tmp.height < (sz)o.h ? (sz)o.h : tmp.height;
-							tmp.resize(new_w, new_h);
-						}
-						// Clear before each use so content from a previous frame's overlay
-						// does not bleed into this overlay's cell region.
-						tmp.clear();
-						tmp.render_ansi_string(0, 0, o.content, xray::default_style());
-						for (sz cy = 0; cy < (sz)o.h; cy++) {
-							for (sz cx = 0; cx < (sz)o.w; cx++) {
-								sz dx = (sz)o.x + cx;
-								sz dy = (sz)o.y + cy;
-								// sz is signed: an overlay scrolled off the left
-								// or top edge yields negative coordinates that
-								// would index before the buffer.
-								if (dx < 0 || dy < 0 || dx >= r.screen.width || dy >= r.screen.height) continue;
-								xray::Cell src = tmp.cells[cy * tmp.width + cx];
-								src.style.bg.a = o.alpha;
-								src.style.fg.a = o.alpha;
-								xray::Cell* dst = &r.screen.cells[dy * r.screen.width + dx];
-								// Blend overlay color over existing cell colors, preserve content
-								if (src.style.bg.kind == xray::ColorKind.TRUECOLOR) {
-									dst.style.bg = src.style.bg.blend_over(dst.style.bg);
-								}
-								if (src.style.fg.kind == xray::ColorKind.TRUECOLOR) {
-									dst.style.fg = src.style.fg.blend_over(dst.style.fg);
-								}
-								r.screen.dirty_lines[dy] = true;
-							}
-						}
-						// tmp is owned by r.overlay_scratch; do NOT free it here.
-					} else {
-						r.screen.blit_ansi((sz)o.x, (sz)o.y, (sz)o.w, (sz)o.h, o.content, o.transparent);
-					}
-
-					if (o.layer_style.inner_shadow.enabled) {
-						r.screen.render_inner_shadow(o.x, o.y, o.w, o.h, o.layer_style.inner_shadow);
-					}
-				}
-
 				// Cursor positioning (CUP) is emitted after end_frame, below.
 				r.end_frame();
 
 				// Emit OSC 22 mouse cursor shape when it changes.
-				if (!self.mouse_cursor_matches(v.mouse_cursor)) {
-					if (v.mouse_cursor.len > 0) {
-						write_stdout((char[])mouse_cursor_seq(v.mouse_cursor));
+				String mouse_cursor = (String)self.want_mouse_cursor_buf[:self.want_mouse_cursor_len];
+				if (!self.mouse_cursor_matches(mouse_cursor)) {
+					if (mouse_cursor.len > 0) {
+						write_stdout((char[])mouse_cursor_seq(mouse_cursor));
 					} else {
 						write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
 					}
-					self.remember_mouse_cursor(v.mouse_cursor);
+					self.remember_mouse_cursor(mouse_cursor);
 				}
 
 				// Emit cursor positioning and shape after the diff frame

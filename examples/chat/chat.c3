@@ -80,7 +80,7 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
+fn milktea::Node* ChatModel.view(ChatModel* self) @dynamic {
 	glaze::Style you_style   = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
 	glaze::Style sys_style   = glaze::style().foreground(glaze::color_hex("#888888"));
 	glaze::Style input_style = glaze::style().foreground(glaze::color_hex("#ffffff"));
@@ -163,7 +163,7 @@ fn milktea::View ChatModel.view(ChatModel* self) @dynamic {
 	out.append_string(border.render(input_line.str_view()));
 	out.append_char('\n');
 	out.append_string(hint_style.render("ENTER send | ESC quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

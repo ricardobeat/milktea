@@ -147,7 +147,7 @@ struct AvianAssaultModel {
 	sz flash_timer;
 
 	xray::PixelBuffer* vbuf;
-	xray::Cell[] view_cells;
+	ScreenBuffer* screen;
 }
 
 // ── Random Helpers ────────────────────────────────────────────────────────────
@@ -671,9 +671,11 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 		self.vbuf = xray::new_pixel_buffer((sz)self.term_w, (sz)(self.term_h * 2));
 		self.vbuf.clear(xray::color_rgb(20, 24, 40));
 
-		mem::free(self.view_cells.ptr);
-		sz total = (sz)self.term_w * (sz)self.term_h;
-		self.view_cells = mem::new_array(xray::Cell, total);
+		if (self.screen == null) {
+			self.screen = xray::new_screen_buffer(self.term_w, self.term_h);
+		} else {
+			self.screen.resize(self.term_w, self.term_h);
+		}
 		return null;
 	}
 
@@ -1086,13 +1088,8 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 
 // ── Screen Conversion & Overlay Painting ──────────────────────────────────────
 
-fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
-	if (self.term_w <= 0 || self.term_h <= 0) {
-		return milktea::view("");
-	}
-
-	sz w = self.term_w;
-	sz h = self.term_h;
+fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
+	if (self.screen == null) return milktea::text("");
 
 	// 1. Draw procedural world into pixel buffer
 	self.draw_background();
@@ -1147,347 +1144,207 @@ fn milktea::View AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 		}
 	}
 
-	// 2. Convert PixelBuffer to terminal cells (half-blocks '▀')
-	xray::Style base = xray::default_style();
-	for (sz vy = 0; vy < h; vy++) {
-		sz py_top = vy * 2;
-		sz py_bot = py_top + 1;
-		sz row_offset = (sz)vy * (sz)w;
+	// 2. Convert the pixels to cells, two pixel rows to each, then paint the
+	// HUD and this state's dialog over them. They go into the game's own cells
+	// rather than a layer above them, so a dialog's backdrop can dim the
+	// pixels it covers.
+	self.vbuf.to_half_blocks(self.screen);
 
-		for (sz vx = 0; vx < w; vx++) {
-			xray::Color c_top = self.vbuf.get_pixel(vx, py_top);
-			xray::Color c_bot = self.vbuf.get_pixel(vx, py_bot);
-
-			xray::Cell c;
-			c.content[0] = 0xe2;
-			c.content[1] = 0x96;
-			c.content[2] = 0x80;
-			c.content_len = 3;
-			c.width = 1;
-			c.style = base.set_fg(c_top).set_bg(c_bot);
-
-			self.view_cells[row_offset + (sz)vx] = c;
-		}
-	}
-
-	// 3. Composite UI Overlays into cell buffer
-	ScreenBuffer canvas;
-	canvas.width = (sz)w;
-	canvas.height = (sz)h;
-	canvas.cells = self.view_cells;
-	canvas.prev_cells = self.view_cells;
-	canvas.dirty_lines = mem::temp_array(bool, (sz)h);
-
-	// HUD Top Bar during gameplay
-	if (self.state == GameState.AIMING || self.state == GameState.FLYING || self.state == GameState.SETTLING) {
-		DString hud = dstring::temp();
-		hud.append_string(string::tformat("LEVEL %d  |  SCORE: %d  |  HIGH: %d  |  BIRDS: %d", self.current_level + 1, self.score, self.high_score, self.birds_left));
-		String hud_s = glaze::style().foreground(xray::color_rgb(255, 255, 255)).with_bold(true).render(hud.str_view());
-		canvas.render_ansi_string(2, 1, hud_s, xray::default_style());
-
-		String help_tip = "[DRAG/ARROWS] Aim  |  [SPACE/CLICK] Boost  |  [R] Reset  |  [ESC] Menu";
-		String ht_s = glaze::style().foreground(xray::color_rgb(230, 240, 255)).render(help_tip);
-		canvas.render_ansi_string((sz)(w - glaze::string_width(help_tip) - 2), 1, ht_s, xray::default_style());
-	}
-
+	milktea::Node* ui = milktea::root();
 	switch (self.state) {
-		case INTRO:
-			self.render_intro_overlay(&canvas);
-		case MENU:
-			self.render_menu_overlay(&canvas);
-		case LEVEL_WON:
-			self.render_won_overlay(&canvas);
-		case LEVEL_LOST:
-			self.render_lost_overlay(&canvas);
-		case HELP:
-			self.render_help_overlay(&canvas);
+		case AIMING:
+		case FLYING:
+		case SETTLING:   ui.add(self.hud());
+		case INTRO:      ui.add(self.intro_dialog());
+		case MENU:       ui.add(self.menu_dialog());
+		case LEVEL_WON:  ui.add(self.won_dialog());
+		case LEVEL_LOST: ui.add(self.lost_dialog());
+		case HELP:       ui.add(self.help_dialog());
 		default:
 	}
+	ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
+	self.screen.paint(ui);
 
-	return milktea::cell_view(self.view_cells, w, h).set_mouse_cursor("crosshair");
+	return milktea::canvas(self.screen);
 }
 
-// ── Overlays ──────────────────────────────────────────────────────────────────
+// ── HUD & Dialogs ─────────────────────────────────────────────────────────────
 
-fn void AvianAssaultModel.render_intro_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-	sz title_y = h / 2 - 6;
+// hud is what shows during play: the score in the top left, and the keys
+// along the bottom, where they have the screen's whole width.
+fn milktea::Node* AvianAssaultModel.hud(&self) {
+	return milktea::zstack()
+		.add(line(string::tformat("LEVEL %d  |  SCORE: %d  |  HIGH: %d  |  BIRDS: %d",
+			self.current_level + 1, self.score, self.high_score, self.birds_left),
+			xray::color_rgb(255, 255, 255), bold: true)
+			.at(2, 1))
+		.add(line("[DRAG/ARROWS] Aim  |  [SPACE/CLICK] Boost  |  [R] Reset  |  [ESC] Menu",
+			xray::color_rgb(230, 240, 255))
+			.place(milktea::CENTER, milktea::ALIGN_END));
+}
 
+// panel is a dialog box centred on screen, as wide as width or, at 0, as its
+// widest line. Its translucent background dims the game behind it without
+// hiding it, and its border runs from edge_from to edge_to. Its first line
+// sits under the top border, and the rest stack below it with a blank row
+// between each.
+fn milktea::Node* panel(sz width, xray::Color tint, xray::Color edge_from, xray::Color edge_to) {
+	glaze::Style box = {
+		.bg = tint, .border = glaze::ROUNDED,
+		.border_color = edge_from, .border_gradient = edge_to,
+	};
+	milktea::Node* n = milktea::vstack().style(box);
+	if (width > 0) n.width(milktea::cells(width));
+	return n
+		.with_padding(0, 2, 0, 2)
+		.with_gap(1)
+		.with_align(milktea::ALIGN_CENTER)
+		.center();
+}
+
+// backdrop dims the game behind its lines, with no border.
+fn milktea::Node* backdrop(xray::Color tint) {
+	return milktea::vstack().style({ .bg = tint })
+		.with_padding(1, 4, 1, 4)
+		.with_gap(1)
+		.with_align(milktea::ALIGN_CENTER);
+}
+
+fn milktea::Node* line(String s, xray::Color fg, bool bold = false) {
+	return milktea::text(s, glaze::style().foreground(fg).with_bold(bold));
+}
+
+// lines stacks strings one under the other, a blank row between each.
+fn milktea::Node* lines(String[] items, xray::Color fg) {
+	milktea::Node* col = milktea::vstack().with_gap(1);
+	foreach (s : items) col.add(line(s, fg));
+	return col;
+}
+
+// logo stacks the rows of a block-letter word, each shaded from one color to
+// the other.
+fn milktea::Node* logo(String[] rows, xray::Color from, xray::Color to) {
+	milktea::Node* col = milktea::vstack();
+	foreach (r : rows) col.add(milktea::text(glaze::gradient_text(r, from, to, true)));
+	return col;
+}
+
+const String[6] AVIAN = {
+	"  █████╗ ██╗   ██╗██╗ █████╗ ███╗   ██╗",
+	" ██╔══██╗██║   ██║██║██╔══██╗████╗  ██║",
+	" ███████║██║   ██║██║███████║██╔██╗ ██║",
+	" ██╔══██║╚██╗ ██╔╝██║██╔══██║██║╚██╗██║",
+	" ██║  ██║ ╚████╔╝ ██║██║  ██║██║ ╚████║",
+	" ╚═╝  ╚═╝  ╚═══╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝",
+};
+
+const String[6] ASSAULT = {
+	" █████╗ ███████╗███████╗█████╗ ██╗   ██╗██╗  ████████╗",
+	"██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██║  ╚══██╔══╝",
+	"███████║███████╗███████╗███████║██║   ██║██║     ██║   ",
+	"██╔══██║╚════██║╚════██║██╔══██║██║   ██║██║     ██║   ",
+	"██║  ██║███████║███████║██║  ██║╚██████╔╝███████╗██║   ",
+	"╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ",
+};
+
+fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
 	xray::Color c1 = xray::color_rgb(255, (char)(60 + pulse * 60), 30);
 	xray::Color c2 = xray::color_rgb(255, 220, 50);
 
-	String logo1 = "  █████╗ ██╗   ██╗██╗ █████╗ ███╗   ██╗";
-	String logo2 = " ██╔══██╗██║   ██║██║██╔══██╗████╗  ██║";
-	String logo3 = " ███████║██║   ██║██║███████║██╔██╗ ██║";
-	String logo4 = " ██╔══██║╚██╗ ██╔╝██║██╔══██║██║╚██╗██║";
-	String logo5 = " ██║  ██║ ╚████╔╝ ██║██║  ██║██║ ╚████║";
-	String logo6 = " ╚═╝  ╚═╝  ╚═══╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝";
+	// The prompt blinks without moving what is below it: at alpha 0 it keeps
+	// its place in the layout and paints nothing.
+	bool blink_on = (self.ticks / 10) % 2 == 0;
 
-	String ass1  = " █████╗ ███████╗███████╗█████╗ ██╗   ██╗██╗  ████████╗";
-	String ass2  = "██╔══██╗██╔════╝██╔════╝██╔══██╗██║   ██║██║  ╚══██╔══╝";
-	String ass3  = "███████║███████╗███████╗███████║██║   ██║██║     ██║   ";
-	String ass4  = "██╔══██║╚════██║╚════██║██╔══██║██║   ██║██║     ██║   ";
-	String ass5  = "██║  ██║███████║███████║██║  ██║╚██████╔╝███████╗██║   ";
-	String ass6  = "╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ";
-
-	sz lx1 = (w - 40) / 2;
-	if (lx1 < 0) lx1 = 0;
-	sz lx2 = (w - 56) / 2;
-	if (lx2 < 0) lx2 = 0;
-
-	String[6] avian_lines = { logo1, logo2, logo3, logo4, logo5, logo6 };
-	for (sz i = 0; i < 6; i++) {
-		String styled = glaze::gradient_text(avian_lines[i], c1, c2, true);
-		canvas.render_ansi_string((sz)lx1, (sz)(title_y + i), styled, xray::default_style());
-	}
-
-	String[6] assault_lines = { ass1, ass2, ass3, ass4, ass5, ass6 };
-	for (sz i = 0; i < 6; i++) {
-		String styled = glaze::gradient_text(assault_lines[i], c2, c1, true);
-		canvas.render_ansi_string((sz)lx2, (sz)(title_y + 6 + i), styled, xray::default_style());
-	}
-
-	String sub = "░▒▓ RETRO PHYSICS ARCADE ▓▒░";
-	String sub_s = glaze::style().foreground(xray::color_rgb(255, 240, 200)).with_bold(true).render(sub);
-	sz sx = (w - glaze::string_width(sub)) / 2;
-	canvas.render_ansi_string((sz)sx, (sz)(title_y + 13), sub_s, xray::default_style());
-
-	if ((self.ticks / 10) % 2 == 0) {
-		String press = "Press any key to enter...";
-		String press_s = glaze::style().foreground(xray::color_rgb(255, 230, 100)).render(press);
-		sz px = (w - glaze::string_width(press)) / 2;
-		canvas.render_ansi_string((sz)px, (sz)(title_y + 15), press_s, xray::default_style());
-	}
+	return backdrop(xray::color_rgba(28, 14, 16, 215))
+		.center()
+		.shadow(xray::shadow(1, 1, 160))
+		.add(milktea::vstack()
+			.with_align(milktea::ALIGN_CENTER)
+			.add(logo(AVIAN[..], c1, c2))
+			.add(logo(ASSAULT[..], c2, c1)))
+		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true))
+		.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
+			.alpha(blink_on ? 255 : 0));
 }
 
-fn void AvianAssaultModel.render_menu_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-	sz box_w = 46;
-	sz box_h = 16;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2;
-
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	// Red-to-Orange fiery gradient border
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(255, 60, 40),
-		xray::color_rgb(255, 140, 20)
-	);
-
-	// 70% semi-transparent dark crimson/charcoal backdrop
-	xray::Color menu_tint = xray::color_rgba(28, 14, 16, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = menu_tint.blend_over(cl.style.fg);
-			cl.style.bg = menu_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	String title = " ★ AVIAN ASSAULT ★ ";
-	String title_s = glaze::gradient_text(title, xray::color_rgb(255, 220, 80), xray::color_rgb(255, 75, 45), true);
-	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
-
-	DString lvl_str = dstring::temp();
-	lvl_str.append_string(string::tformat("Select Level: [Level %d]", self.current_level + 1));
-
+fn milktea::Node* AvianAssaultModel.menu_dialog(&self) {
 	String[4] options = {
 		"Play Game",
-		lvl_str.str_view(),
+		string::tformat("Select Level: [Level %d]", self.current_level + 1),
 		"How to Play",
 		"Exit",
 	};
 
-	for (sz i = 0; i < 4; i++) {
-		bool sel = (i == self.menu_selected);
-		DString line = dstring::temp();
-		if (sel) {
-			line.append_string("▶ ");
-			line.append_string(options[i]);
-			line.append_string(" ◀");
-		} else {
-			line.append_string("  ");
-			line.append_string(options[i]);
-			line.append_string("  ");
-		}
-
-		xray::Color fg = sel ? xray::color_rgb(255, 245, 120) : xray::color_rgb(240, 210, 205);
-		xray::Color bg = sel ? xray::color_rgba(110, 30, 25, 210) : xray::color_none();
-
-		glaze::Style s = glaze::style().foreground(fg).with_bold(sel);
-		if (sel) s = s.background(bg);
-
-		String rendered = s.render(line.str_view());
-		sz ox = inner.x + (inner.w - glaze::string_width(line.str_view())) / 2;
-		canvas.render_ansi_string((sz)ox, (sz)(inner.y + 3 + i * 2), rendered, xray::default_style());
+	milktea::Node* items = milktea::vstack().with_gap(1).with_align(milktea::ALIGN_CENTER);
+	foreach (i, opt : options) {
+		bool sel = i == self.menu_selected;
+		glaze::Style s = sel
+			? glaze::style().foreground(xray::color_rgb(255, 245, 120)).with_bold(true)
+				.background(xray::color_rgba(110, 30, 25, 210))
+			: glaze::style().foreground(xray::color_rgb(240, 210, 205));
+		items.add(milktea::text(string::tformat(sel ? "▶ %s ◀" : "  %s  ", opt), s));
 	}
 
-	DString hs_str = dstring::temp();
-	hs_str.append_string(string::tformat("🏆 High Score: %d", self.high_score));
-	String hs_s = glaze::style().foreground(xray::color_rgb(255, 185, 40)).with_bold(true).render(hs_str.str_view());
-	sz hx = inner.x + (inner.w - glaze::string_width(hs_str.str_view())) / 2;
-	canvas.render_ansi_string((sz)hx, (sz)(inner.y + inner.h - 2), hs_s, xray::default_style());
+	// A fiery red-to-orange border over a dark crimson backdrop.
+	return panel(46, xray::color_rgba(28, 14, 16, 178),
+			xray::color_rgb(255, 60, 40), xray::color_rgb(255, 140, 20))
+		.add(milktea::text(glaze::gradient_text(" ★ AVIAN ASSAULT ★ ",
+			xray::color_rgb(255, 220, 80), xray::color_rgb(255, 75, 45), true)))
+		.add(items)
+		.add(line(string::tformat("🏆 High Score: %d", self.high_score), xray::color_rgb(255, 185, 40), bold: true));
 }
 
-fn void AvianAssaultModel.render_won_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-	sz box_w = 42;
-	sz box_h = 16;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2;
-
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(100, 255, 100),
-		xray::color_rgb(255, 215, 0)
-	);
-
-	xray::Color won_tint = xray::color_rgba(10, 25, 15, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = won_tint.blend_over(cl.style.fg);
-			cl.style.bg = won_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	String title = " ★ LEVEL CLEARED! ★ ";
-	String title_s = glaze::gradient_text(title, xray::color_rgb(120, 255, 120), xray::color_rgb(255, 230, 80), true);
-	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
-
-	// 3 Star rating based on birds remaining
+fn milktea::Node* AvianAssaultModel.won_dialog(&self) {
+	// Three stars, one lost for each bird used past the first.
 	String stars = "⭐⭐⭐";
 	if (self.birds_left == 1) stars = "⭐⭐";
 	if (self.birds_left == 0) stars = "⭐";
-	sz sx = inner.x + (inner.w - glaze::string_width(stars)) / 2;
-	canvas.render_ansi_string((sz)sx, (sz)(inner.y + 3), stars, xray::default_style());
 
-	DString sc = dstring::temp();
-	sc.append_string(string::tformat("Score: %d", self.score));
-	String sc_s = glaze::style().foreground(xray::color_rgb(255, 255, 255)).with_bold(true).render(sc.str_view());
-	canvas.render_ansi_string((sz)(inner.x + 6), (sz)(inner.y + 6), sc_s, xray::default_style());
+	// The stats are one left-aligned block, centred as a whole.
+	milktea::Node* stats = milktea::vstack().with_gap(1)
+		.add(line(string::tformat("Score: %d", self.score), xray::color_rgb(255, 255, 255), bold: true))
+		.add(line(string::tformat("Best:  %d", self.high_score), xray::color_rgb(255, 215, 0), bold: true));
 
-	DString hs = dstring::temp();
-	hs.append_string(string::tformat("Best:  %d", self.high_score));
-	String hs_s = glaze::style().foreground(xray::color_rgb(255, 215, 0)).with_bold(true).render(hs.str_view());
-	canvas.render_ansi_string((sz)(inner.x + 6), (sz)(inner.y + 8), hs_s, xray::default_style());
-
-	String prompt = "[SPACE] Next Level  |  [M] Menu";
-	String prompt_s = glaze::style().foreground(xray::color_rgb(220, 240, 255)).render(prompt);
-	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
-	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
+	return panel(42, xray::color_rgba(10, 25, 15, 178),
+			xray::color_rgb(100, 255, 100), xray::color_rgb(255, 215, 0))
+		.add(milktea::text(glaze::gradient_text(" ★ LEVEL CLEARED! ★ ",
+			xray::color_rgb(120, 255, 120), xray::color_rgb(255, 230, 80), true)))
+		.add(milktea::text(stars))
+		.add(stats)
+		.add(line("[SPACE] Next Level  |  [M] Menu", xray::color_rgb(220, 240, 255)));
 }
 
-fn void AvianAssaultModel.render_lost_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-	sz box_w = 40;
-	sz box_h = 15;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2;
-
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(255, 60, 60),
-		xray::color_rgb(255, 140, 40)
-	);
-
-	xray::Color lost_tint = xray::color_rgba(25, 10, 15, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = lost_tint.blend_over(cl.style.fg);
-			cl.style.bg = lost_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	String title = " 💀 LEVEL FAILED 💀 ";
-	String title_s = glaze::style().foreground(xray::color_rgb(255, 70, 70)).with_bold(true).render(title);
-	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
-
-	String msg = "You ran out of birds!";
-	String msg_s = glaze::style().foreground(xray::color_rgb(240, 200, 200)).render(msg);
-	sz mx = inner.x + (inner.w - glaze::string_width(msg)) / 2;
-	canvas.render_ansi_string((sz)mx, (sz)(inner.y + 4), msg_s, xray::default_style());
-
-	String prompt = "[SPACE] Retry  |  [M] Menu";
-	String prompt_s = glaze::style().foreground(xray::color_rgb(220, 240, 255)).render(prompt);
-	sz px = inner.x + (inner.w - glaze::string_width(prompt)) / 2;
-	canvas.render_ansi_string((sz)px, (sz)(inner.y + inner.h - 2), prompt_s, xray::default_style());
+fn milktea::Node* AvianAssaultModel.lost_dialog(&self) {
+	return panel(40, xray::color_rgba(25, 10, 15, 178),
+			xray::color_rgb(255, 60, 60), xray::color_rgb(255, 140, 40))
+		.add(line(" 💀 LEVEL FAILED 💀 ", xray::color_rgb(255, 70, 70), bold: true))
+		.add(line("You ran out of birds!", xray::color_rgb(240, 200, 200)))
+		.add(line("[SPACE] Retry  |  [M] Menu", xray::color_rgb(220, 240, 255)));
 }
 
-fn void AvianAssaultModel.render_help_overlay(&self, ScreenBuffer* canvas) {
-	sz w = (sz)canvas.width;
-	sz h = (sz)canvas.height;
-	sz box_w = 48;
-	sz box_h = 17;
-	sz bx = (w - box_w) / 2;
-	sz by = (h - box_h) / 2;
+const String[5] HOW_TO_PLAY = {
+	"• Drag slingshot with Mouse or use Arrows",
+	"• Press [SPACE] / [ENTER] to launch bird",
+	"• Mid-flight [SPACE] / [CLICK] triggers abilities:",
+	"  - ⚡ Yellow Chuck: Speed turbo dive",
+	"  - 💣 Black Bomb: Explosive blast wave",
+};
 
-	xray::Rect dialog_rect = xray::new_rect(bx, by, box_w, box_h);
-	xray::Rect inner = canvas.draw_gradient_border(
-		dialog_rect,
-		xray::ROUNDED,
-		xray::color_rgb(80, 200, 255),
-		xray::color_rgb(140, 100, 255)
-	);
-
-	xray::Color help_tint = xray::color_rgba(12, 16, 28, 178);
-	for (sz y = inner.y; y < inner.y + inner.h; y++) {
-		for (sz x = inner.x; x < inner.x + inner.w; x++) {
-			xray::Cell* cl = &canvas.cells[(sz)y * canvas.width + (sz)x];
-			cl.style.fg = help_tint.blend_over(cl.style.fg);
-			cl.style.bg = help_tint.blend_over(cl.style.bg);
-		}
-	}
-
-	String title = " HOW TO PLAY ";
-	String title_s = glaze::gradient_text(title, xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true);
-	sz tx = inner.x + (inner.w - glaze::string_width(title)) / 2;
-	canvas.render_ansi_string((sz)tx, (sz)inner.y, title_s, xray::default_style());
-
-	String[5] instructions = {
-		"• Drag slingshot with Mouse or use Arrows",
-		"• Press [SPACE] / [ENTER] to launch bird",
-		"• Mid-flight [SPACE] / [CLICK] triggers abilities:",
-		"  - ⚡ Yellow Chuck: Speed turbo dive",
-		"  - 💣 Black Bomb: Explosive blast wave",
-	};
-
-	for (sz i = 0; i < 5; i++) {
-		String line_s = glaze::style().foreground(xray::color_rgb(220, 230, 245)).render(instructions[i]);
-		canvas.render_ansi_string((sz)(inner.x + 2), (sz)(inner.y + 2 + i * 2), line_s, xray::default_style());
-	}
-
-	String back = "[Press SPACE or ESC to Return]";
-	String back_s = glaze::style().foreground(xray::color_rgb(255, 215, 100)).render(back);
-	sz back_x = inner.x + (inner.w - glaze::string_width(back)) / 2;
-	canvas.render_ansi_string((sz)back_x, (sz)(inner.y + inner.h - 2), back_s, xray::default_style());
+fn milktea::Node* AvianAssaultModel.help_dialog(&self) {
+	return panel(0, xray::color_rgba(12, 16, 28, 178),
+			xray::color_rgb(80, 200, 255), xray::color_rgb(140, 100, 255))
+		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
+			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
+		.add(lines(HOW_TO_PLAY[..], xray::color_rgb(220, 230, 245)))
+		.add(line("[Press SPACE or ESC to Return]", xray::color_rgb(255, 215, 100)));
 }
 
 // ── Main Entry Point ──────────────────────────────────────────────────────────
 
 fn int main() {
 	AvianAssaultModel* m = mem::new(AvianAssaultModel);
-	milktea::enable_mouse();
-	defer {
-		milktea::disable_mouse();
-	}
-
-	if (catch err = milktea::@run_program(m, { .alt_screen = true })) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -71,7 +71,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View Model.view(&self) @dynamic {
+fn milktea::Node* Model.view(&self) @dynamic {
 	sz w = milktea::screen_width();
 	sz h = milktea::screen_height();
 
@@ -178,7 +178,7 @@ fn milktea::View Model.view(&self) @dynamic {
 
 	xray::Rect r00, r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11;
 	xray::Rect r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22;
-	layout::vstack(area, {
+	layout::vertical(area, {
 		layout::slot(layout::cells(1), &r00),
 		layout::slot(layout::cells(1), &r01),
 		layout::slot(layout::cells(1), &r02),
@@ -287,11 +287,8 @@ fn milktea::View Model.view(&self) @dynamic {
 		screen.set_cell((sz)p.col, (sz)p.row, xray::new_cell(ch, 1, s));
 	}
 
-	milktea::View view = screen.view()
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION);
 	// screen is owned by the model (self.screen); freed in on_destroy.
-
-	return view;
+	return milktea::canvas(screen);
 }
 
 fn void Model.on_destroy(&self) @dynamic {
@@ -304,5 +301,5 @@ fn void Model.on_destroy(&self) @dynamic {
 
 fn int main() {
 	Model m;
-	return milktea::@run(&m, { .alt_screen = true });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
 }

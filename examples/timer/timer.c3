@@ -37,7 +37,7 @@ fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
+fn milktea::Node* TimerModel.view(TimerModel* self) @dynamic {
 	glaze::Style box_style = glaze::style().foreground(glaze::color_hex("#ff00ff")).with_bold(true)
 		.padding(2, 4, 2, 4)
 		.with_border(glaze::ROUNDED);
@@ -64,7 +64,7 @@ fn milktea::View TimerModel.view(TimerModel* self) @dynamic {
 
 	out.append_char('\n');
 	out.append_string(subtle.render("r to reset  |  q to quit"));
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

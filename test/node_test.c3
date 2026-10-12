@@ -85,6 +85,67 @@ fn void test_hstack_divides_cross_axis() @test {
 	assert(right.got.h == 4, "full height");
 }
 
+// solve_and_paint lays r out in a w×h area and paints it, so each Fixed in it
+// records the rect it got.
+fn void solve_and_paint(xray::Node* r, sz w, sz h) {
+	r.solve(xray::new_rect(0, 0, w, h));
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(w, h);
+	defer {
+		sb.destroy();
+		mem::free(sb);
+	}
+	sb.paint(r);
+}
+
+fn void test_column_child_defaults_to_its_content_height_and_full_width() @test {
+	Fixed* a = fixed(5, 2);
+	Fixed* b = fixed(3, 1);
+	solve_and_paint(xray::vstack().add(xray::content_node(a)).add(xray::content_node(b)), 20, 10);
+
+	assert(a.got.h == 2 && b.got.h == 1, "as tall as their content, got %d and %d", a.got.h, b.got.h);
+	assert(b.got.y == 2, "packed at the top, got %d", b.got.y);
+	assert(a.got.w == 20 && b.got.w == 20, "stretched across");
+}
+
+fn void test_row_child_defaults_to_its_content_width_and_full_height() @test {
+	Fixed* a = fixed(5, 2);
+	solve_and_paint(xray::hstack().add(xray::content_node(a)), 20, 10);
+
+	assert(a.got.w == 5, "as wide as its content, got %d", a.got.w);
+	assert(a.got.h == 10, "stretched down, got %d", a.got.h);
+}
+
+fn void test_unstretched_column_child_is_its_content_width() @test {
+	Fixed* a = fixed(5, 2);
+	solve_and_paint(xray::vstack().with_align(xray::AlignItems.ALIGN_CENTER).add(xray::content_node(a)), 21, 10);
+
+	assert(a.got.w == 5, "content width, got %d", a.got.w);
+	assert(a.got.x == 8, "centred across, got %d", a.got.x);
+}
+
+fn void test_stack_child_defaults_to_filling_the_layer() @test {
+	Fixed* bg = fixed(5, 2);
+	solve_and_paint(xray::zstack().add(xray::content_node(bg)), 20, 10);
+
+	assert(bg.got.w == 20 && bg.got.h == 10, "fills, got %dx%d", bg.got.w, bg.got.h);
+}
+
+fn void test_fit_sizes_a_stack_child_to_its_content() @test {
+	Fixed* box = fixed(5, 2);
+	solve_and_paint(xray::root().add(xray::content_node(box).fit()), 20, 10);
+
+	assert(box.got.w == 5 && box.got.h == 2, "content size, got %dx%d", box.got.w, box.got.h);
+	assert(box.got.x == 0 && box.got.y == 0, "at the top left");
+}
+
+fn void test_fit_constraint_measures_one_axis() @test {
+	Fixed* box = fixed(5, 2);
+	solve_and_paint(xray::root().add(xray::content_node(box).width(xray::fit())), 20, 10);
+
+	assert(box.got.w == 5, "content width, got %d", box.got.w);
+	assert(box.got.h == 10, "the other axis still fills, got %d", box.got.h);
+}
+
 fn void test_nested_stacks_solve_through() @test {
 	Fixed* body = fixed(0, 0);
 
@@ -173,8 +234,8 @@ fn void test_content_that_declines_the_cursor_is_ignored() @test {
 }
 
 fn void test_repaint_interval_is_the_smallest_requested() @test {
-	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).repaint_after(500))
-		.add(xray::content_node(fixed(0, 1)).repaint_after(80))
+	xray::Node* r = xray::vstack().add(xray::content_node(fixed(0, 1)).animate(2))
+		.add(xray::content_node(fixed(0, 1)).animate(12))
 		.add(xray::content_node(fixed(0, 1)));
 	r.solve(xray::new_rect(0, 0, 10, 3));
 
@@ -183,7 +244,7 @@ fn void test_repaint_interval_is_the_smallest_requested() @test {
 		sb.destroy();
 		mem::free(sb);
 	}
-	assert(sb.paint(r).repaint_ms == 80, "fastest node wins");
+	assert(sb.paint(r).repaint_ms == 83, "fastest node wins");
 }
 
 // An alpha-0 node is skipped by paint, but its repaint request must still be
@@ -192,7 +253,7 @@ fn void test_repaint_interval_is_the_smallest_requested() @test {
 fn void test_invisible_node_still_requests_repaint() @test {
 	xray::Node* r = xray::root()
 		.add(xray::content_node(fixed(2, 1)).width(xray::cells(2)).height(xray::cells(1)).at(1, 1)
-			.alpha(0).repaint_after(16));
+			.alpha(0).animate(60));
 	r.solve(xray::new_rect(0, 0, 10, 5));
 
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 5);
@@ -409,7 +470,7 @@ fn void test_frame_insets_children_on_top_of_padding() @test {
 	Fixed* inner = fixed(0, 0);
 
 	xray::Node* r = xray::vstack()
-		.with_frame(1, 3, 1, 3)
+		.style({ .pad_top = 1, .pad_right = 3, .pad_bottom = 1, .pad_left = 3 })
 		.with_padding(1, 1, 0, 0)
 		.add(xray::content_node(inner).fill(1));
 	r.solve(xray::new_rect(0, 0, 20, 10));
@@ -424,7 +485,7 @@ fn void test_frame_insets_children_on_top_of_padding() @test {
 
 fn void test_frame_counts_toward_natural_size() @test {
 	xray::Node* r = xray::vstack()
-		.with_frame(1, 2, 1, 2)
+		.style({ .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2 })
 		.add(xray::content_node(fixed(6, 3)));
 	assert(r.natural_width(0) == 10, "6 + 2 + 2");
 	assert(r.natural_height(0) == 5, "3 + 1 + 1");

@@ -9,7 +9,7 @@ import glaze;
 const sz STOPWATCH_INTERVAL_MS = 10;
 
 struct Stopwatch (xray::Content) {
-	long elapsed_ms;
+	sz elapsed_ms;
 	bool running;
 	glaze::Style timer_style;
 	glaze::Style paused_style;
@@ -71,11 +71,11 @@ fn void Stopwatch.resume(&self) {
 
 // view returns the rendered stopwatch string.
 fn String Stopwatch.view(&self) {
-	long total_secs = self.elapsed_ms / 1000;
-	sz hours   = (sz)(total_secs / 3600);
-	sz minutes = (sz)((total_secs % 3600) / 60);
-	sz secs    = (sz)(total_secs % 60);
-	sz cs      = (sz)((self.elapsed_ms % 1000) / 10);
+	sz total_secs = self.elapsed_ms / 1000;
+	sz hours   = total_secs / 3600;
+	sz minutes = (total_secs % 3600) / 60;
+	sz secs    = total_secs % 60;
+	sz cs      = (self.elapsed_ms % 1000) / 10;
 
 	DString out = dstring::temp();
 	if (hours > 0) {

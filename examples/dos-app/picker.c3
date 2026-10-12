@@ -143,21 +143,12 @@ fn void picker_backdrop_dismissed(void* id, String id_str, sz col, sz row) @loca
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
-	glaze::Style panel = {
-		.bg = th.panel, .fg = th.text,
-		.border = glaze::DOUBLE, .border_color = th.accent,
-		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-		.min_width = self.min_cols,
-	};
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
-	xray::Node* panel_node = milktea::vbox(panel)
-		.with_gap(1)
-		.center()
-		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+	xray::Node* panel_node = modal_panel(th, self.min_cols);
 	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
 
-	panel_node.add(milktea::text(title_s, self.title).fit_height());
+	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));
 
 	xray::Node* list_node = xray::vstack().fit_height();
 	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
@@ -169,7 +160,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.choice_slots[i] = { .picker = self, .index = i };
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
-		xray::Node* choice_node = milktea::text(on ? current : row, label).fit_height();
+		xray::Node* choice_node = milktea::text(label, on ? current : row).height(milktea::cells(1));
 		choice_node.id_with(&self.choice_slots[i]).on_click(&picker_choice_clicked);
 		list_node.add(choice_node);
 	}
@@ -182,7 +173,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
-		xray::Node* btn = milktea::text({ .bg = th.panel }, label).width(milktea::cells(self.buttons[i].measure_width(2)));
+		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
 		btn.id_with(&self.button_slots[i]).on_click(&picker_button_clicked);
 		buttons_row.add(btn);
 	}

@@ -1,6 +1,7 @@
 module xray;
 
 import std::core::mem;
+import glaze;
 
 // Content is anything that can fill a solved rect with text.
 //
@@ -10,7 +11,11 @@ import std::core::mem;
 // solver chose. Implementations return a string sized to that rect; it may
 // carry ANSI escapes, which paint decodes with render_ansi_string. xray does
 // not know how those escapes are produced — milktea builds them with glaze.
-// 
+//
+// Content that already holds cells, such as a game's frame, implements paint
+// instead: it writes straight into the buffer, inside r, and render is not
+// called.
+//
 // measure reports how tall the content wants to be at a given width, and
 // measure_width how wide it wants to be at a given height. Both are consulted
 // only when nothing else fixes that axis — CFIT sizing, which is what place()
@@ -18,16 +23,23 @@ import std::core::mem;
 // leave either unimplemented; an unimplemented axis measures 0, which for a
 // leaf under center() means it collapses on that axis, so implement the ones
 // that matter.
-// 
+//
 // cursor reports where the terminal cursor belongs, in screen coordinates,
-// given the node's solved rect. Content that does not own a cursor leaves it
-// unimplemented. Content that owns one only when focused should return
-// has_cursor = false when it is not, rather than relying on paint order.
+// given the rect the content was painted in. Content that does not own a
+// cursor leaves it unimplemented. Content that owns one only when focused
+// should return has_cursor = false when it is not, rather than relying on
+// paint order.
 interface Content {
-	fn String render(Rect r);
+	fn String render(Rect r) @optional;
+	fn void paint(ScreenBuffer* dst, Rect r) @optional;
 	fn sz measure(sz width) @optional;
 	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;
+}
+
+// Insets holds a size in layout units for each side of a rect.
+struct Insets {
+	sz top, right, bottom, left;
 }
 
 // DrawCursorFn paints the cursor itself instead of leaving it to the
@@ -35,7 +47,7 @@ interface Content {
 // the character already at that cell — a crosshair or a matrix rain effect
 // can show it through rather than hiding it. Returning an empty string
 // leaves the cell as it was.
-// 
+//
 // blink alternates on the interval the cursor asked for; a callback that
 // animates on its own clock can ignore it.
 alias DrawCursorFn = fn String(sz x, sz y, bool blink, String under);
@@ -58,7 +70,7 @@ alias ClickFn = fn void(void* id, String id_str, sz col, sz row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
-// 
+//
 // col and row are relative to the text, so content passes its own caret
 // position and the layout supplies the origin. A caret scrolled out of view
 // reports no cursor rather than one clamped to the edge, which would sit on a
@@ -80,7 +92,7 @@ fn ContentCursor place_cursor(Rect text, sz col, sz row, CursorStyle cs = { }) {
 // CursorStyle is how a caret looks. Leaving draw null gives the terminal's own
 // cursor with the given shape, blink and color; setting it paints the cursor
 // into the grid instead, and the terminal cursor stays hidden.
-// 
+//
 // shape is an index into whatever shapes the host defines
 // (milktea::CursorShape); xray does not name them.
 struct CursorStyle {
@@ -93,7 +105,7 @@ struct CursorStyle {
 
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
 // coordinates. has_cursor = false means "not mine this frame".
-// 
+//
 // Leaving draw null gives the real terminal cursor at that position, with
 // the given shape and blink. Setting it paints the cursor into the grid
 // instead, and the terminal cursor stays hidden.
@@ -133,18 +145,20 @@ enum AlignItems : char {
 // Direction of a container's main axis. STACK has no main axis: every child
 // is solved against the parent's whole rect, and later children paint over
 // earlier ones.
-enum NodeDirection : char {
+enum NodeDirection : char @private {
 	ROW,
 	COLUMN,
 	STACK,
 }
 
-const sz MAX_NODE_CHILDREN = 32;
+const sz MAX_NODE_CHILDREN @private = 32;
 
-// Node is one box in a layout tree. It is either a container (children, a
-// direction) or a leaf (content), never usefully both — a node with content
-// and children paints its content first and its children on top.
-// 
+// Node is one box in a layout tree. It can have a box style (see style()),
+// content, and children. The box is painted across the node's whole rect, and
+// the content and the children go inside its border and padding. A node with
+// both content and children paints the content first and the children on
+// top of it.
+//
 // Nodes are temp-allocated: a tree lives for one frame and is rebuilt by the
 // next view() call. Do not store a Node* across frames.
 struct Node {
@@ -165,14 +179,15 @@ struct Node {
 
 	sz pad_top, pad_right, pad_bottom, pad_left;
 
-	// The box the node's own content draws around itself — a border and the
-	// padding inside it, say. Kept apart from pad_* so each has one owner:
-	// content sets the frame (milktea::text copies it from its glaze style),
-	// the caller sets padding, and children sit inside both. Measuring adds
-	// both too, so a bordered panel sized to its content includes its border.
-	sz frame_top, frame_right, frame_bottom, frame_left;
+	// The node's background, border and box padding, set by style(). Only
+	// those fields of the glaze style are kept.
+	glaze::Style box;
 
 	Content content;
+
+	// A leaf cannot hold children: add() on it is an error. text() makes
+	// leaves, because a child would be laid out over the text.
+	bool leaf;
 
 	// Effects applied when this node paints. shadow lands under the content,
 	// inner_shadow over it, and alpha blends the content's colors into
@@ -235,8 +250,8 @@ struct Node {
 fn Node* new_node(NodeDirection dir) @local {
 	Node* n = mem::tnew(Node);
 	n.alpha_value = 255; // opaque is the default; 0 means fully invisible
-	n.size_w = fill(1);
-	n.size_h = fill(1);
+	n.size_w = { .kind = ConstraintKind.CAUTO };
+	n.size_h = { .kind = ConstraintKind.CAUTO };
 	n.direction = dir;
 	n.justify = JustifyContent.JUSTIFY_START;
 	n.align = AlignItems.ALIGN_STRETCH;
@@ -269,10 +284,15 @@ fn Node* content_node(Content c) {
 
 // add appends a child and returns this node, so the chained and statement
 // forms are the same call.
-// 
+//
 // A null child is ignored, which lets content that is sometimes hidden return
 // null from its node() and be added unconditionally.
+//
+// Adding a child to a leaf, such as a text node, is a programming error. Put
+// the text and the child in a vstack instead, and style the vstack if it
+// should have a background or border.
 fn Node* Node.add(&self, Node* child) {
+	assert(child == null || !self.leaf, "a leaf node, such as text(), cannot hold children");
 	if (child != null && self.child_count < MAX_NODE_CHILDREN) {
 		self.children[self.child_count++] = child;
 	}
@@ -289,13 +309,34 @@ fn Node* Node.add_content(&self, Content c) {
 // so a caller does not have to remember which is which for the container it
 // is in. In a column, height is the main axis and width the cross axis; in a
 // row it is the other way around.
+//
+// A node with neither set follows CSS flexbox: in a row or column it is as
+// big as its content along the main axis and stretches across the other, and
+// in a stack it fills the whole layer.
 fn Node* Node.width(&self, Constraint c) {
-	self.size_w = c;
+	self.size_w = self.own_measure(c, true);
 	return self;
 }
 
 fn Node* Node.height(&self, Constraint c) {
-	self.size_h = c;
+	self.size_h = self.own_measure(c, false);
+	return self;
+}
+
+// own_measure points a fit() constraint, which carries no measure of its own,
+// at this node, so it measures the node's content.
+fn Constraint Node.own_measure(&self, Constraint c, bool width) {
+	if (c.kind == ConstraintKind.CFIT && c.measure == null) {
+		c.measure = width ? &node_measure_w : &node_measure_h;
+		c.ctx = self;
+	}
+	return c;
+}
+
+// fit sizes this node to its content on both axes: the opposite of fill.
+fn Node* Node.fit(&self) {
+	self.size_w = measured(&node_measure_w, self);
+	self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
@@ -334,19 +375,19 @@ fn Node* Node.max_height(&self, sz n) {
 // block's height is auto: a paragraph in a column takes the lines it needs
 // rather than a share of the column's leftover space.
 fn Node* Node.fit_width(&self) {
-	self.size_w = fit(&node_measure_w, self);
+	self.size_w = measured(&node_measure_w, self);
 	return self;
 }
 
 fn Node* Node.fit_height(&self) {
-	self.size_h = fit(&node_measure_h, self);
+	self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
 // bounded_fit fits an axis to its content, setting whichever of lo and hi is
 // not -1 and keeping the other from c when c already fits to content.
 fn Constraint bounded_fit(Constraint c, sz lo, sz hi, MeasureFn measure, Node* n) @local {
-	if (c.kind != ConstraintKind.CFIT) c = fit(measure, n);
+	if (c.kind != ConstraintKind.CFIT) c = measured(measure, n);
 	if (lo >= 0) c.fit_min = lo;
 	if (hi >= 0) c.fit_max = hi;
 	return c;
@@ -384,26 +425,42 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 	return self;
 }
 
-// with_frame records the box this node's content draws around itself. See
-// the frame_* fields.
-fn Node* Node.with_frame(&self, sz top, sz right, sz bottom, sz left) {
-	self.frame_top = top;
-	self.frame_right = right;
-	self.frame_bottom = bottom;
-	self.frame_left = left;
+// style gives this node a background, a border and padding, taken from a
+// glaze style: bg, bg_gradient, border, border_color, border_gradient,
+// corner_color, border_bg, border_animation, anim_speed_ms and pad_*. The
+// other fields are ignored, so text colour and attributes are set on the text
+// itself, and the node is sized with width() and height().
+//
+// A translucent bg tints what is beneath the node and keeps its glyphs.
+//
+// Content and children go inside the border and then inside the padding. The
+// style's padding adds to whatever with_padding sets.
+fn Node* Node.style(&self, glaze::Style s) {
+	self.box = {
+		.bg = s.bg,
+		.bg_gradient = s.bg_gradient,
+		.border = s.border,
+		.border_color = s.border_color,
+		.corner_color = s.corner_color,
+		.border_bg = s.border_bg,
+		.border_gradient = s.border_gradient,
+		.border_animation = s.border_animation,
+		.anim_speed_ms = s.anim_speed_ms,
+		.pad_top = s.pad_top,
+		.pad_right = s.pad_right,
+		.pad_bottom = s.pad_bottom,
+		.pad_left = s.pad_left,
+	};
 	return self;
 }
 
-// inset_* are the frame and padding together: how far children and measured
-// content sit from the node's edge.
-fn sz Node.inset_top(&self) => (self.frame_top + self.pad_top) * self.layout_metrics.unit_h()
-	+ (self.layout_metrics.pixels ? self.decoration.pad_top : 0);
-fn sz Node.inset_right(&self) => (self.frame_right + self.pad_right) * self.layout_metrics.unit_w()
-	+ (self.layout_metrics.pixels ? self.decoration.pad_right : 0);
-fn sz Node.inset_bottom(&self) => (self.frame_bottom + self.pad_bottom) * self.layout_metrics.unit_h()
-	+ (self.layout_metrics.pixels ? self.decoration.pad_bottom : 0);
-fn sz Node.inset_left(&self) => (self.frame_left + self.pad_left) * self.layout_metrics.unit_w()
-	+ (self.layout_metrics.pixels ? self.decoration.pad_left : 0);
+// has_box reports whether the node's box paints anything: a background or a
+// border. Box padding alone takes space but leaves it unpainted.
+fn bool Node.has_box(&self) {
+	glaze::Border b = self.box.border;
+	return self.box.bg.kind != ColorKind.NONE || self.box.bg_gradient.kind != ColorKind.NONE
+		|| b.top.len > 0 || b.bottom.len > 0 || b.left.len > 0 || b.right.len > 0;
+}
 
 // place centres or aligns this node inside its parent's rect on both axes at
 // once, and sizes it to its content. It is meant for a child of a zstack —
@@ -413,10 +470,9 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 	self.justify = j;
 	self.align = a;
 	// Fit only the axes the caller has not already sized, so .width(30) before
-	// .center() survives and only the height is measured. An axis still set to
-	// the default fill has nothing to preserve.
-	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
-	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
+	// .center() survives and only the height is measured.
+	if (self.size_w.kind == ConstraintKind.CAUTO) self.size_w = measured(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CAUTO) self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
@@ -424,15 +480,15 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 // unless a width or height was given. It is for content whose position is
 // known rather than solved — a dropdown under the menu title that opened it,
 // a tooltip beside its anchor.
-// 
+//
 // Only meaningful in a stack, where every child gets the parent's whole rect
 // to place itself in; a row or column decides its children's offsets itself.
 fn Node* Node.at(&self, sz x, sz y) {
 	self.offset_x = x;
 	self.offset_y = y;
 	self.pinned = true;
-	if (self.size_w.kind == ConstraintKind.CFILL) self.size_w = fit(&node_measure_w, self);
-	if (self.size_h.kind == ConstraintKind.CFILL) self.size_h = fit(&node_measure_h, self);
+	if (self.size_w.kind == ConstraintKind.CAUTO) self.size_w = measured(&node_measure_w, self);
+	if (self.size_h.kind == ConstraintKind.CAUTO) self.size_h = measured(&node_measure_h, self);
 	return self;
 }
 
@@ -444,14 +500,14 @@ fn Node* Node.center(&self) {
 // offset displaces this node by (dx, dy) from wherever it was placed, without
 // resizing it. It composes with placement rather than replacing it, so a node
 // can stay centred on one axis while being displaced on the other:
-// 
+//
 //     panel.center().offset(0, -4)   // centred, then lifted four rows
-// 
+//
 // That is the difference from at(), which names an absolute position and
 // discards justify/align entirely, and from padding, which grows the node so
 // its background paints over the displaced area. Sliding a node is a matter of
-// animating this, which is what milktea::animate does.
-// 
+// animating this, which is what milktea's Node.transition does.
+//
 // The displacement is applied after the child's rect is solved, so it can push
 // a node past its parent's edge; the painter clips whatever lands outside.
 fn Node* Node.offset(&self, sz dx, sz dy) {
@@ -480,11 +536,16 @@ fn Node* Node.alpha(&self, char a) {
 	return self;
 }
 
-// repaint_after asks the runtime to paint this tree again in ms milliseconds.
-// Content that animates on its own — a border cycling colors — calls this so
-// the app does not have to run a timer for it.
-fn Node* Node.repaint_after(&self, sz ms) {
-	self.repaint_ms = ms;
+// animate marks this node's content as changing over time, fps times a
+// second, so the runtime keeps painting it for as long as it is on screen.
+// Content that animates on its own — a spinner, a border cycling colors —
+// calls this so the app does not have to run a timer for it. fps <= 0 stops.
+fn Node* Node.animate(&self, sz fps = 60) {
+	if (fps <= 0) {
+		self.repaint_ms = 0;
+		return self;
+	}
+	self.repaint_ms = fps < 1000 ? 1000 / fps : 1;
 	return self;
 }
 

@@ -90,7 +90,7 @@ struct LayerStyle {
 
 // Distance from point (col, row) to the edge of rect (rx, ry, rw, rh).
 // Returns 0 if inside, positive distance if outside.
-fn sz shadow_edge_dist(sz col, sz row, sz rx, sz ry, sz rw, sz rh) {
+fn sz shadow_edge_dist(sz col, sz row, sz rx, sz ry, sz rw, sz rh) @private {
 	sz dx = 0;
 	if (col < rx) {
 		dx = rx - col;
@@ -110,7 +110,7 @@ fn sz shadow_edge_dist(sz col, sz row, sz rx, sz ry, sz rw, sz rh) {
 
 // Upper half block. Its foreground paints the top half of the cell and its
 // background the bottom, giving a shadow two vertical samples per cell.
-const String HALF_BLOCK_UPPER = "▀";
+const String HALF_BLOCK_UPPER @private = "▀";
 
 // shadow_edge_dist_half is shadow_edge_dist measured in half-rows vertically.
 // `half_row` counts half-cells from the top of the buffer (row*2, row*2+1), and
@@ -127,7 +127,7 @@ const String HALF_BLOCK_UPPER = "▀";
 // would hold a corner cell at the same alpha as the cells straight out from
 // each edge, drawing the fringe as nested rectangles with a visible X where
 // their diagonals meet.
-fn sz shadow_edge_dist_half(sz col, sz half_row, sz rx, sz ry, sz rw, sz rh) {
+fn sz shadow_edge_dist_half(sz col, sz half_row, sz rx, sz ry, sz rw, sz rh) @private {
 	sz dx = 0;
 	if (col < rx) {
 		dx = rx - col;
@@ -153,7 +153,7 @@ fn sz shadow_edge_dist_half(sz col, sz half_row, sz rx, sz ry, sz rw, sz rh) {
 // isqrt is the integer square root, rounded to nearest. Newton's method; the
 // arguments here are a few hundred at most, so it converges in a handful of
 // iterations.
-fn sz isqrt(sz n) {
+fn sz isqrt(sz n) @private {
 	if (n <= 0) return 0;
 	sz x = n;
 	sz y = (x + 1) / 2;
@@ -167,7 +167,7 @@ fn sz isqrt(sz n) {
 
 // shadow_alpha_at is the fringe falloff: full opacity inside the shadow's core,
 // fading to nothing over the blur radius. Distance is in half-cell units.
-fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) {
+fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) @private {
 	if (dist_half <= 0) return opacity;
 	sz span = blur * 2;
 	if (dist_half > span) return 0;
@@ -184,7 +184,7 @@ fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) {
 // A zero alpha means the fringe has run out, and the surface underneath is
 // returned untouched: blend_over reads Color.a == 0 as opaque (see
 // effective_alpha), so blending would paint the shadow at full strength.
-fn Color shadow_half(Color shade, int alpha, Color under) {
+fn Color shadow_half(Color shade, int alpha, Color under) @private {
 	if (alpha <= 0) return under;
 	Color c = shade;
 	c.a = (char)alpha;

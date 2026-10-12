@@ -35,7 +35,7 @@ const String[3] TAB_CONTENTS = {
 	"Theme     Default\nBorder    Rounded\nColors    True color",
 };
 
-fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
+fn milktea::Node* TabsModel.view(TabsModel* self) @dynamic {
 	glaze::Style active_style = glaze::style()
 		.foreground(glaze::color_hex("#ffffff"))
 		.with_border(glaze::ROUNDED)
@@ -69,7 +69,7 @@ fn milktea::View TabsModel.view(TabsModel* self) @dynamic {
 	String content = content_style.render(TAB_CONTENTS[self.active_tab]);
 	String hint    = "\n  ← → / h l  switch tabs    q  quit";
 
-	return milktea::view(
+	return milktea::text(
 		glaze::join_vertical(glaze::Position.LEFT, tabbar,
 			glaze::join_vertical(glaze::Position.LEFT, content, hint)));
 }

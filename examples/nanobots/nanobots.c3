@@ -871,7 +871,7 @@ fn void draw_badge(Model* self) {
 	}
 }
 
-fn milktea::View Model.view(Model* self) @dynamic {
+fn milktea::Node* Model.view(Model* self) @dynamic {
 	xray::ScreenBuffer* sb = self.canvas;
 	sb.clear();
 
@@ -902,7 +902,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	if (self.fx_active) {
 		self.fx.render(self);
 		draw_badge(self);
-		return sb.view();
+		return milktea::canvas(sb);
 	}
 
 	// In flight a bot is a half block, so it moves at twice the vertical
@@ -953,7 +953,7 @@ fn milktea::View Model.view(Model* self) @dynamic {
 	// Effect name badge, top right, shown briefly after TAB.
 	draw_badge(self);
 
-	return sb.view();
+	return milktea::canvas(sb);
 }
 
 fn int main() {

@@ -1,7 +1,25 @@
 module paint_stream_test;
 
 import xray;
+import milktea;
 import std::core::mem;
+
+fn void test_canvas_records_cells_at_the_pixel_origin() @test {
+	xray::Cell[2] cells = {
+		xray::new_cell("a", 1, xray::default_style()),
+		xray::new_cell("b", 1, xray::default_style()),
+	};
+	xray::Node* root = milktea::root().add(milktea::grid(cells[..], 2, 1).at(1, 1));
+	root.solve({ .w = 40, .h = 40 }, { .pixels = true, .cell_w = 10, .cell_h = 20 });
+	xray::ScreenBuffer* buf = xray::new_screen_buffer(4, 2);
+	defer { buf.destroy(); mem::free(buf); }
+	buf.record_paint = true;
+	buf.paint(root);
+	xray::PaintOp[] ops = buf.paint_ops.array_view();
+	assert(ops.len == 2);
+	assert(ops[0].col == 10 && ops[0].row == 20 && ops[0].cell.content[0] == 'a');
+	assert(ops[1].col == 20 && ops[1].row == 20 && ops[1].cell.content[0] == 'b');
+}
 
 struct Text (xray::Content) { String value; }
 fn String Text.render(&self, xray::Rect r) @dynamic => self.value;

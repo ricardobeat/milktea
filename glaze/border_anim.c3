@@ -98,7 +98,7 @@ fn Color _color_lerp(Color base, Color target, sz t255) @local {
 //   2W+3+H       : bottom_left corner
 //   2W+4+H..total-1: left edge (bottom→top)
 //   total = 2*(W+H)+4
-fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation anim, Style style, long time_ms) {
+fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation anim, Style style, sz time_ms) {
 	if (anim == BorderAnimation.NONE) return self.wrap_with_color("", style.border_color);
 
 	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
@@ -116,7 +116,7 @@ fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation
 
 	Color base = style.border_color.kind != ColorKind.NONE ? style.border_color : color_hex("#ffffff");
 	sz speed  = style.anim_speed_ms > 0 ? style.anim_speed_ms : 1000;
-	sz t      = (sz)(time_ms % (long)speed);
+	sz t      = time_ms % speed;
 
 	DString out = dstring::temp();
 

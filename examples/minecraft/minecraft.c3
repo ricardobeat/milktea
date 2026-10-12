@@ -816,7 +816,7 @@ macro sz tex_hash(sz a, sz b, sz c, sz d, sz e, sz f) {
 	return h;
 }
 
-fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
+fn milktea::Node* Minecraft.view(Minecraft* self) @dynamic {
 	// Only rebuild the face list when the world has changed — the O(n²)
 	// neighbor scan is cheap enough for ~260 blocks, but there is no point
 	// doing it 30× per second when nothing moved.
@@ -1176,17 +1176,19 @@ fn milktea::View Minecraft.view(Minecraft* self) @dynamic {
 		self.cells[(h - 1) * w + hint_x + (sz)ci] = xray::new_cell((String)buf[:1], 1, hud_style);
 	}
 
-	// set_mouse_mode(ALL_MOTION) lets the runtime manage mouse tracking, so
-	// free-look works by moving the mouse without holding any button.
-	return milktea::cell_view(self.cells, w, h)
-		.set_mouse_mode(milktea::MouseMode.MOUSE_MODE_ALL_MOTION)
-		.set_report_key_events(true)
-		.set_mouse_pixels(true);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main(String[] args) {
 	Minecraft* app = mem::new(Minecraft);
-	if (catch err = milktea::@run_program(app, { .alt_screen = true })) {
+	if (catch err = milktea::@run_program(app, {
+		.alt_screen = true,
+		// ALL_MOTION lets the runtime manage mouse tracking, so free-look
+		// works by moving the mouse without holding any button.
+		.mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION,
+		.mouse_pixels = true,
+		.report_key_events = true,
+	})) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

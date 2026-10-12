@@ -80,13 +80,13 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 	}
 }
 
-fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
+fn milktea::Node* PasteModel.view(PasteModel* self) @dynamic {
 	sz w = milktea::screen_width()  > 0 ? milktea::screen_width()  : 80;
 	sz h = milktea::screen_height();
 
 	// Layout: textarea area (fill) + one-line status bar.
 	xray::Rect editor_r, status_r;
-	layout::vstack(layout::screen(w, h), {
+	layout::vertical(layout::screen(w, h), {
 		layout::slot(layout::fill(1), &editor_r),
 		layout::slot(layout::cells(1),  &status_r),
 	});
@@ -131,7 +131,7 @@ fn milktea::View PasteModel.view(PasteModel* self) @dynamic {
 	out.append_char('\n');
 	out.append_string(status_text);
 
-	return milktea::view(out.str_view());
+	return milktea::text(out.str_view());
 }
 
 fn int main() {

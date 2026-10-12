@@ -1,5 +1,7 @@
 module xray;
 
+import glaze;
+
 // Natural sizing.
 // 
 // A node's natural size is what it wants when nothing constrains it: for a
@@ -43,11 +45,28 @@ fn sz Node.natural_height(&self, sz width) {
 	return constraint_natural(self.layout_constraint(false), width, self.content_height(width));
 }
 
+// frame is the space between a node's edge and what goes inside it: its
+// box's border and padding, plus the padding set with with_padding.
+fn Insets Node.frame(&self) {
+	glaze::Style b = self.box;
+	return {
+		.top    = (self.pad_top    + b.pad_top    + (b.border.top.len > 0 ? 1 : 0)) * self.layout_metrics.unit_h()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_top : 0),
+		.right  = (self.pad_right  + b.pad_right  + (b.border.right.len > 0 ? 1 : 0)) * self.layout_metrics.unit_w()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_right : 0),
+		.bottom = (self.pad_bottom + b.pad_bottom + (b.border.bottom.len > 0 ? 1 : 0)) * self.layout_metrics.unit_h()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_bottom : 0),
+		.left   = (self.pad_left   + b.pad_left   + (b.border.left.len > 0 ? 1 : 0)) * self.layout_metrics.unit_w()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_left : 0),
+	};
+}
+
 // content_width measures what is inside this node, ignoring the node's own
 // width constraint.
 fn sz Node.content_width(&self, sz height) {
-	sz pad_x = self.inset_left() + self.inset_right();
-	sz inner_h = height - self.inset_top() - self.inset_bottom();
+	Insets f = self.frame();
+	sz pad_x   = f.left + f.right;
+	sz inner_h = height - f.top - f.bottom;
 	if (inner_h < 0) inner_h = 0;
 
 	if (self.child_count == 0) {
@@ -78,8 +97,9 @@ fn sz Node.content_width(&self, sz height) {
 // content_height measures what is inside this node, ignoring the node's own
 // height constraint.
 fn sz Node.content_height(&self, sz width) {
-	sz pad_y = self.inset_top() + self.inset_bottom();
-	sz inner_w = width - self.inset_left() - self.inset_right();
+	Insets f = self.frame();
+	sz pad_y   = f.top + f.bottom;
+	sz inner_w = width - f.left - f.right;
 	if (inner_w < 0) inner_w = 0;
 
 	if (self.child_count == 0) {
@@ -109,11 +129,11 @@ fn sz Node.content_height(&self, sz width) {
 
 // MeasureFn adapters, so a CFIT constraint can point back at the node it
 // belongs to. The solver passes the size available on the other axis.
-fn sz node_measure_w(void* ctx, sz height) {
+fn sz node_measure_w(void* ctx, sz height) @private {
 	return ((Node*)ctx).content_width(height);
 }
 
-fn sz node_measure_h(void* ctx, sz width) {
+fn sz node_measure_h(void* ctx, sz width) @private {
 	return ((Node*)ctx).content_height(width);
 }
 
@@ -128,7 +148,8 @@ fn void Node.solve_layout(&self, Rect area) {
 
 	if (self.child_count == 0) return;
 
-	Rect inner = area.inset(self.inset_left(), self.inset_top(), self.inset_right(), self.inset_bottom());
+	Insets f = self.frame();
+	Rect inner = area.inset(f.left, f.top, f.right, f.bottom);
 
 	// A stack gives each child the full inner rect, subject to that child's
 	// own constraints and its own justify/align — which is how a centered
@@ -147,9 +168,16 @@ fn void Node.solve_layout(&self, Rect area) {
 	Rect[MAX_NODE_CHILDREN] child_rects;
 
 	// The main axis belongs to the parent, so it picks which of each child's
-	// two constraints applies along it.
+	// two constraints applies along it. A child with no size of its own is as
+	// big as its content along it.
 	for (sz i = 0; i < cc; i++) {
-		constraints[i] = self.children[i].layout_constraint(row);
+		Node* child = self.children[i];
+		constraints[i] = child.layout_constraint(row);
+		if (constraints[i].kind == ConstraintKind.CAUTO) {
+			constraints[i].kind = ConstraintKind.CFIT;
+			constraints[i].measure = row ? &node_measure_w : &node_measure_h;
+			constraints[i].ctx = child;
+		}
 	}
 
 	if (row) {
@@ -183,8 +211,19 @@ fn void Node.solve_layout(&self, Rect area) {
 	sz cross_origin = row ? inner.y : inner.x;
 
 	for (sz i = 0; i < cc; i++) {
-		Constraint cross = self.children[i].layout_constraint(!row);
+		Node* child = self.children[i];
+		Constraint cross = child.layout_constraint(!row);
 		sz main_size = row ? child_rects[i].w : child_rects[i].h;
+
+		// With no cross size of its own a child stretches, as in CSS; under
+		// any other alignment it is as big as its content instead.
+		if (cross.kind == ConstraintKind.CAUTO) {
+			if (self.align == AlignItems.ALIGN_STRETCH) {
+				cross = fill(1);
+			} else {
+				cross = row ? measured(&node_measure_h, child) : measured(&node_measure_w, child);
+			}
+		}
 
 		// ALIGN_STRETCH means "fill the cross axis", but a child that asked
 		// for a specific cross size still gets it — otherwise .with_width(30)

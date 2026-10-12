@@ -1,16 +1,17 @@
 module milktea;
 import std::atomic;
+import libc;
 
 faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;
 
-const int STDIN_FILENO  = 0;
-const int STDOUT_FILENO = 1;
-const int TCSANOW       = 0;
+const int STDIN_FILENO  @private = 0;
+const int STDOUT_FILENO @private = 1;
+const int TCSANOW       @private = 0;
 const short POLLIN      = 1;
 
 // TIOCGWINSZ is provided by <sys/ioctl.h> in tty_winsize.c — not needed here.
 // SIGWINCH is 28 on both macOS and Linux.
-const int SIGWINCH = 28;
+const int SIGWINCH @private = 28;
 
 extern fn int tcgetattr(int fd, char* termios_buf);
 extern fn int tcsetattr(int fd, int flags, char* termios_buf);
@@ -34,7 +35,7 @@ extern fn int raise(int signum);
 extern fn int kill(int pid, int signum);
 extern fn int getpid();
 
-struct TtyState {
+struct TtyState @private {
 	char[256] termios_buf;
 }
 
@@ -105,20 +106,20 @@ bool g_term_bg_known = false;
 // How long probe_terminal_caps waits for replies before giving up. Terminals
 // that support none of the queries (alacritty, GNU Screen) pay this cost at
 // startup; keep it small.
-const sz PROBE_TIMEOUT_MS = 150;
+const sz PROBE_TIMEOUT_MS @private = 150;
 
-fn void report_cell_size_reply(sz height, sz width) {
+fn void report_cell_size_reply(sz height, sz width) @private {
 	if (height <= 0 || width <= 0) return;
 	g_cell_h_px = height;
 	g_cell_w_px = width;
 	g_cell_px_known = true;
 }
 
-fn void report_tgp_reply() {
+fn void report_tgp_reply() @private {
 	g_tgp_replied = true;
 }
 
-fn void report_term_bg_reply(int r, int g, int b) {
+fn void report_term_bg_reply(int r, int g, int b) @private {
 	g_term_bg_r = r;
 	g_term_bg_g = g;
 	g_term_bg_b = b;
@@ -253,7 +254,7 @@ fn void handle_probe_string(bool is_osc, char[] body) @local {
 // of buf and returns the number of bytes consumed. Noise bytes (e.g. keys the
 // user typed during the probe) are skipped; an incomplete trailing sequence is
 // left in the buffer for the next round or returned to the input stream.
-fn sz parse_probe_replies(char[] buf) {
+fn sz parse_probe_replies(char[] buf) @private {
 	sz pos = 0;
 	while (pos < buf.len) {
 		if (buf[pos] != 0x1b) {
@@ -292,7 +293,7 @@ fn sz parse_probe_replies(char[] buf) {
 // — keystrokes typed during the probe, trailing incomplete sequences — are
 // copied to leftover (up to its length) so the event loop can process them
 // like any other input; the return value is the number of bytes copied.
-fn sz probe_terminal_caps(char[] leftover) {
+fn sz probe_terminal_caps(char[] leftover) @private {
 	write_stdout((char[])"\x1b[16t");
 	write_stdout((char[])"\x1b]1337;ReportCellSize\x07");
 	// Background-color query. Terminals that support it answer
@@ -364,15 +365,67 @@ bool g_tty_saved = false;
 
 bool* g_in_alt_screen_ptr = null;
 
-const int SIGINT  = 2;
-const int SIGTERM = 15;
+// Fatal-signal numbers. POSIX fixes these on macOS and Linux with one exception:
+// SIGBUS is 10 on the BSDs (macOS included) and 7 on Linux. SIGWINCH (28) is the
+// same on both. Kept inline rather than imported so this file's extern surface
+// stays self-contained.
+const int SIGHUP  @private = 1;
+const int SIGINT  @private = 2;
+const int SIGQUIT @private = 3;
+const int SIGILL  @private = 4;
+const int SIGTRAP @private = 5;
+const int SIGABRT @private = 6;
+const int SIGBUS  @private = env::DARWIN ? 10 : 7;
+const int SIGFPE  @private = 8;
+const int SIGSEGV @private = 11;
+const int SIGTERM @private = 15;
 
-fn void sigwinch_handler(int sig) {
+// The signals whose delivery means the terminal must be restored immediately:
+// the crash set (SIGSEGV/SIGBUS/SIGABRT/SIGFPE/SIGILL/SIGTRAP) and the "user
+// wants out" set (SIGHUP/SIGINT/SIGQUIT/SIGTERM). Left unhandled, every one of
+// them kills the process with the terminal still in raw mode and mouse tracking
+// enabled. SIGTRAP is in the crash set because the C3 runtime ends a panic with
+// `$$trap()`, which raises it on arm64.
+const int[10] FATAL_SIGNALS @private = { SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGSEGV, SIGTERM, SIGBUS };
+
+fn void sigwinch_handler(int sig) @private {
 	g_win_resized.store(true, RELAXED);
 }
 
-// fatal_signal_handler restores the terminal and re-raises the signal with default action.
-fn void fatal_signal_handler(int sig) {
+// Terminal-mode teardown written by the fatal-signal handler. A signal handler
+// may only call write() with prebuilt data, so this is a single constant: no
+// formatting, no allocation. It undoes every mode the event loop can switch on
+// (mouse tracking and SGR-pixels, bracketed paste, both kitty keyboard layers,
+// focus reporting) and restores the cursor colour and pointer shape, so a crash
+// never leaves the shell echoing raw escape codes.
+const String FATAL_MODE_RESET @private =
+	"\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?1000l" // mouse tracking off (SGR, cell-motion, all-motion, base)
+	"\x1b[?1016l"                                    // SGR-pixels off
+	"\x1b[?2004l"                                    // bracketed paste off
+	"\x1b[<u\x1b[<u"                                 // pop key-events layer, then base kitty keyboard layer
+	"\x1b[?1004l"                                    // focus reporting off
+	"\x1b]112\x1b\\"                                 // reset cursor colour
+	"\x1b]22;\x1b\\"                                 // reset mouse pointer shape
+	"\x1b[?25h";                                     // show cursor
+const String FATAL_ALT_SCREEN_OFF @private = "\x1b[?1049l";
+
+// Dispositions captured when the fatal handlers were installed, so the handler
+// can chain to them rather than clobbering them. The C3 runtime installs its
+// own SIGSEGV/SIGBUS/SIGILL handlers to print a crash backtrace; chaining keeps
+// that backtrace while still cleaning up the terminal first.
+libc::Sigaction[10] g_prev_fatal @private;
+
+fn libc::Sigaction* fatal_prev_for(int sig) @private {
+	for (sz i = 0; i < FATAL_SIGNALS.len; i++) {
+		if (FATAL_SIGNALS[i] == sig) return &g_prev_fatal[i];
+	}
+	return null;
+}
+
+// fatal_signal_handler restores the terminal, then hands the signal on to
+// whatever disposition was in place before: the C3 backtrace handler for a
+// crash, or the default action (terminate) for everything else.
+fn void fatal_signal_handler(int sig, void* info, void* ctx) @private {
 	// Drop graphics state first, while the alt screen (if any) is still up —
 	// avoids flashing tiles onto the restored normal screen.
 	if (g_cleanup_fn != null) g_cleanup_fn();
@@ -380,52 +433,75 @@ fn void fatal_signal_handler(int sig) {
 	if (g_tty_saved) {
 		tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_tty.termios_buf[0]);
 	}
-	// Exit alt screen if active
+	// Undo every terminal mode the event loop may have switched on. Without
+	// this a crash leaves mouse tracking enabled, so the shell keeps receiving
+	// raw reports for every keypress and pointer move.
+	write_stdout((char[])FATAL_MODE_RESET);
 	if (g_in_alt_screen_ptr != null && *g_in_alt_screen_ptr) {
-		// write alt-screen-off and show-cursor directly (avoid calling render fns)
-		char[] alt_off = (char[])"\x1b[?1049l\x1b[?25h";
-		sz written     = 0;
-		while (written < alt_off.len) {
-			sz n = write(STDOUT_FILENO, &alt_off[written], alt_off.len - written);
-			if (n <= 0) break;
-			written += n;
-		}
-	} else {
-		// Inline mode: show cursor
-		char[] show = (char[])"\x1b[?25h";
-		write(STDOUT_FILENO, &show[0], show.len);
+		write_stdout((char[])FATAL_ALT_SCREEN_OFF);
 	}
-	// Reset signal to default and re-raise so the process exits with correct status
+	// Chain to the previous disposition when it was a real handler (the C3
+	// runtime's SA_SIGINFO backtrace handler, in practice). Otherwise reset to
+	// the default action and re-raise so the process exits with the right
+	// status.
+	libc::Sigaction* prev = fatal_prev_for(sig);
+	if (prev != null && ((uint)prev.sa_flags & libc::SA_SIGINFO) != 0 && prev.sa_sigaction != null) {
+		libc::sigaction(sig, prev, null);
+		prev.sa_sigaction(sig, info, ctx);
+		return;
+	}
 	signal(sig, null);
 	raise(sig);
 }
 
-fn void setup_signals(TtyState saved, bool* in_alt_screen) {
+fn void setup_signals(TtyState saved, bool* in_alt_screen) @private {
 	g_saved_tty = saved;
 	g_tty_saved = true;
 	g_in_alt_screen_ptr = in_alt_screen;
 	signal(SIGWINCH, &sigwinch_handler);
-	signal(SIGINT, &fatal_signal_handler);
-	signal(SIGTERM, &fatal_signal_handler);
+
+	// Fatal signals go through sigaction rather than signal(): only sigaction
+	// reports the previous disposition, which is what lets the handler chain to
+	// the C3 runtime's crash handler instead of silently dropping its backtrace.
+	// SA_ONSTACK lets the handler run on the alternate stack the runtime set up,
+	// so a stack-overflow fault can still reach the cleanup below.
+	int flags = (int)libc::SA_SIGINFO;
+	$if env::LINUX:
+		flags |= (int)libc::SA_ONSTACK;
+	$endif
+	libc::Sigaction action = {
+		.sa_sigaction = &fatal_signal_handler,
+		.sa_flags     = flags
+	};
+	libc::sigemptyset(&action.sa_mask);
+	for (sz i = 0; i < FATAL_SIGNALS.len; i++) {
+		libc::sigaction(FATAL_SIGNALS[i], &action, &g_prev_fatal[i]);
+	}
 }
 
-// teardown_signals restores the default disposition for every signal
-// setup_signals installed and drops the pointer into the Program frame.
+// teardown_signals restores the disposition every fatal signal had before
+// setup_signals replaced it, and drops the pointer into the Program frame.
+//
+// Restoring the captured disposition (rather than resetting to SIG_DFL) keeps
+// the C3 runtime's own crash handlers installed for the rest of the process, so
+// a Program run does not disable backtraces for whatever runs after it.
 //
 // Program is a stack local in every entry point (run, @run, @run_program), so
 // leaving the handlers installed after run() returns leaves
 // g_in_alt_screen_ptr aimed at a reclaimed frame — a later SIGINT would read
 // whatever now occupies that slot. Sequential Program runs are supported, so
 // this is a reachable path, not just a shutdown nicety.
-fn void teardown_signals() {
+fn void teardown_signals() @private {
 	signal(SIGWINCH, null);
-	signal(SIGINT, null);
-	signal(SIGTERM, null);
+	for (sz i = 0; i < FATAL_SIGNALS.len; i++) {
+		// A zeroed action is SIG_DFL, which is what an un-run setup leaves here.
+		libc::sigaction(FATAL_SIGNALS[i], &g_prev_fatal[i], null);
+	}
 	g_in_alt_screen_ptr = null;
 	g_tty_saved = false;
 }
 
-fn TtyState? raw_mode_enter() {
+fn TtyState? raw_mode_enter() @private {
 	TtyState saved;
 
 	if (tcgetattr(STDIN_FILENO, &saved.termios_buf[0]) < 0) {
@@ -442,7 +518,7 @@ fn TtyState? raw_mode_enter() {
 	return saved;
 }
 
-fn void raw_mode_restore(TtyState saved) {
+fn void raw_mode_restore(TtyState saved) @private {
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved.termios_buf[0]);
 }
 
@@ -461,7 +537,7 @@ fn sz wall_time_ms() {
 	return (sz)c3_time_ms();
 }
 
-fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
+fn sz read_stdin_timeout(char[] buf, sz timeout_ms) @private {
 	if (buf.len == 0) return 0;
 
 	PollFd pfd;
@@ -469,7 +545,7 @@ fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
 	pfd.events = POLLIN;
 	pfd.revents = 0;
 
-	int poll_result = poll(&pfd, 1, timeout_ms);
+	int poll_result = poll(&pfd, 1, (int)timeout_ms);
 	if (poll_result <= 0) return 0;
 
 	sz n = read(STDIN_FILENO, &buf[0], buf.len);
@@ -477,7 +553,7 @@ fn sz read_stdin_timeout(char[] buf, int timeout_ms) {
 	return n;
 }
 
-fn sz read_stdin(char[] buf) {
+fn sz read_stdin(char[] buf) @private {
 	return read_stdin_timeout(buf, 50);
 }
 
@@ -533,4 +609,55 @@ fn void test_probe_parse_split_reply() @test {
 	foreach (b : part2) acc[len++] = b;
 	parse_probe_replies(acc[0:len]);
 	assert(g_tgp_replied);
+}
+
+// A crash must leave the shell usable, which means the fatal-signal teardown
+// has to turn off every mode the event loop can enable. Pin the sequences here
+// so dropping one is caught by the suite rather than by a wedged terminal.
+fn void test_fatal_teardown_covers_every_mode() @test {
+	const String[8] REQUIRED = {
+		"\x1b[?1000l", // base mouse tracking
+		"\x1b[?1002l", // cell-motion tracking
+		"\x1b[?1003l", // all-motion tracking
+		"\x1b[?1006l", // SGR mouse encoding
+		"\x1b[?1016l", // SGR-pixels
+		"\x1b[?2004l", // bracketed paste
+		"\x1b[?1004l", // focus reporting
+		"\x1b[?25h",   // show cursor
+	};
+	foreach (seq : REQUIRED) {
+		assert(FATAL_MODE_RESET.contains(seq), "fatal teardown must disable %s", seq);
+	}
+	// Two pops: the key-events layer sits on top of the base keyboard layer.
+	assert(FATAL_MODE_RESET.contains("\x1b[<u\x1b[<u"), "fatal teardown must pop both kitty keyboard layers");
+	assert(FATAL_ALT_SCREEN_OFF == "\x1b[?1049l", "fatal teardown must leave the alt screen");
+}
+
+// setup_signals must capture the disposition it replaces, and teardown must put
+// it back; otherwise a Program run would leave the C3 runtime's crash handlers
+// uninstalled, or leave our handler pointing at a dead Program frame.
+fn void test_fatal_signal_setup_round_trips() @test {
+	libc::Sigaction before;
+	libc::sigaction(SIGSEGV, null, &before);
+
+	TtyState saved;
+	bool in_alt = true;
+	setup_signals(saved, &in_alt);
+	defer teardown_signals();
+
+	libc::Sigaction during;
+	libc::sigaction(SIGSEGV, null, &during);
+	assert(during.sa_sigaction == &fatal_signal_handler, "SIGSEGV must route to the fatal handler");
+	assert(g_in_alt_screen_ptr == &in_alt, "the handler must see the Program's alt-screen flag");
+	assert(fatal_prev_for(SIGSEGV) != null, "the replaced disposition must be captured");
+	assert(fatal_prev_for(SIGSEGV).sa_sigaction == before.sa_sigaction, "captured disposition must match");
+	// C3 ends a panic with $$trap(), which raises SIGTRAP on arm64.
+	assert(fatal_prev_for(SIGTRAP) != null, "C3 panics must be covered too");
+
+	teardown_signals();
+	libc::Sigaction after;
+	libc::sigaction(SIGSEGV, null, &after);
+	assert(after.sa_sigaction == before.sa_sigaction, "the original disposition must be restored");
+	assert(g_in_alt_screen_ptr == null, "teardown must drop the alt-screen pointer");
+	assert(!g_tty_saved, "teardown must clear the saved-tty flag");
 }

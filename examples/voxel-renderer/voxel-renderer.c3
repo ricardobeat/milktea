@@ -202,7 +202,7 @@ fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
 	return null;
 }
 
-fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
+fn milktea::Node* VoxelModel.view(VoxelModel* self) @dynamic {
 	sz w    = self.width;
 	sz h    = self.height;
 	sz total = (sz)(w * h);
@@ -357,7 +357,7 @@ fn milktea::View VoxelModel.view(VoxelModel* self) @dynamic {
 		}
 	}
 
-	return milktea::cell_view(self.cells, w, h);
+	return milktea::grid(self.cells, w, h);
 }
 
 fn int main() {

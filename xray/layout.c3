@@ -33,6 +33,11 @@ enum ConstraintKind : char {
 	CPERCENT,
 	CFILL,
 	CFIT, // measure content; requires a MeasureFn + context pointer
+	// No size set. A node starts with this on both axes, and its parent
+	// decides: a row or column sizes it to its content along the main axis
+	// and stretches it across, a stack fills with it. Rect splitting
+	// (layout_v/layout_h) never sees it.
+	CAUTO,
 }
 
 // MeasureFn is called during layout to size a CFIT child.
@@ -66,11 +71,11 @@ fn Constraint pixels(sz n, sz terminal_cells = 0) {
 		.pixel_units = true, .cell_fallback = terminal_cells };
 }
 
-fn Constraint at_least(sz n) {
+fn Constraint min(sz n) {
 	return { .kind = ConstraintKind.CMIN, .value = n };
 }
 
-fn Constraint at_most(sz n) {
+fn Constraint max(sz n) {
 	return { .kind = ConstraintKind.CMAX, .value = n };
 }
 
@@ -82,42 +87,51 @@ fn Constraint fill(sz weight) {
 	return { .kind = ConstraintKind.CFILL, .value = weight };
 }
 
-fn Constraint fit(MeasureFn measure, void* ctx) {
+// fit sizes a node to its content, the CSS fit-content: a node given
+// .width(fit()) or .height(fit()) measures its own content or children on
+// that axis.
+fn Constraint fit() {
+	return { .kind = ConstraintKind.CFIT };
+}
+
+// measured sizes to whatever `measure` reports, for a rect that has no node
+// to measure — layout_v/layout_h over plain constraints.
+fn Constraint measured(MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .measure = measure, .ctx = ctx };
 }
 
-// min_fit is fit(), floored: content grows the size past n, but never below
-// it. Where at_least(n) has no content to grow toward at all — a bare
+// min_measured is measured(), floored: content grows the size past n, but
+// never below it. Where min(n) has no content to grow toward at all — a bare
 // number can only ever fall back to whatever leftover space nothing else
 // on the axis claims — this measures a real Content/child tree (the same
-// machinery fit() uses) and floors that measurement, the CSS min-width
+// machinery measured() uses) and floors that measurement, the CSS min-width
 // idiom: a short child gets n, a long one gets its own natural size.
-fn Constraint min_fit(sz n, MeasureFn measure, void* ctx) {
+fn Constraint min_measured(sz n, MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .fit_min = n, .measure = measure, .ctx = ctx };
 }
 
-// max_fit is fit(), capped: content shrinks the measured size only if it
-// exceeds n — the mirror of min_fit, for a node that should hug its content
-// but never grow past some ceiling (a tooltip, a sidebar that must not
-// swallow the screen).
-fn Constraint max_fit(sz n, MeasureFn measure, void* ctx) {
+// max_measured is measured(), capped: content shrinks the measured size only
+// if it exceeds n — the mirror of min_measured, for a node that should hug
+// its content but never grow past some ceiling (a tooltip, a sidebar that
+// must not swallow the screen).
+fn Constraint max_measured(sz n, MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .fit_max = n, .measure = measure, .ctx = ctx };
 }
 
-// range_fit combines both: content sizes the node between lo and hi.
-fn Constraint range_fit(sz lo, sz hi, MeasureFn measure, void* ctx) {
+// range_measured combines both: content sizes the node between lo and hi.
+fn Constraint range_measured(sz lo, sz hi, MeasureFn measure, void* ctx) {
 	return { .kind = ConstraintKind.CFIT, .fit_min = lo, .fit_max = hi, .measure = measure, .ctx = ctx };
 }
 
 // resolve_fit runs a CFIT constraint's measure callback and applies its
-// fit_min/fit_max bounds — the one place that logic lives, so min_fit/
-// max_fit/range_fit behave identically everywhere a CFIT constraint is
+// fit_min/fit_max bounds — the one place that logic lives, so min_measured/
+// max_measured/range_measured behave identically everywhere a CFIT constraint is
 // resolved (layout_axis_cross's two passes, node_solve's resolve_axis).
 // fit_max = 0 means unbounded, matching fit_min = 0 meaning no floor.
 // no_measure is what a constraint with no measure callback falls back to —
 // callers differ (0 for the flex-distribution passes, the full available
 // span for a lone stack child) so it isn't baked in here.
-fn sz resolve_fit(Constraint c, sz cross, sz no_measure = 0) {
+fn sz resolve_fit(Constraint c, sz cross, sz no_measure = 0) @private {
 	sz size = c.measure ? c.measure(c.ctx, cross) : no_measure;
 	if (size < 0) size = 0;
 	if (size < c.fit_min) size = c.fit_min;
@@ -260,7 +274,7 @@ fn sz layout_axis_cross(sz total, sz gap, sz cross, Constraint[] cs, sz[] out_si
 
 	// Distribute any remainder to the last fill child — or, when nothing on
 	// the axis has a real grow factor at all, to the last CMIN child, so an
-	// at_least(n) row with no fill() sibling still absorbs slack instead of
+	// min(n) row with no fill() sibling still absorbs slack instead of
 	// leaving a gap. Real flex-grow always wins when both are present: a
 	// min-width item does not expand just because it has a floor, only
 	// because nothing else claimed the space (same as CSS/ratatui).
@@ -298,7 +312,7 @@ fn sz layout_axis_cross(sz total, sz gap, sz cross, Constraint[] cs, sz[] out_si
 	// Copy to output, clamping the running total to the axis budget. Fixed
 	// constraints (CLEN/CMIN/CPERCENT/CFIT) are individually capped at
 	// `available` but can still oversubscribe it collectively — e.g. two
-	// at_least(40) children in a 30-wide area. Truncating here keeps the
+	// min(40) children in a 30-wide area. Truncating here keeps the
 	// caller's invariant that every returned rect lies inside `area`, so
 	// downstream drawing never runs past the parent.
 	sz used = 0;

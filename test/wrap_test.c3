@@ -43,8 +43,8 @@ fn void test_render_nowrap_overflows() @test {
 
 fn void test_text_grows_taller_when_its_box_is_narrow() @test {
 	glaze::Style box = { .border = glaze::ROUNDED, .pad_left = 1, .pad_right = 1 };
-	xray::Node* panel = milktea::vbox(box)
-		.add(milktea::text({}, "the quick brown fox jumps over"))
+	xray::Node* panel = milktea::vstack().style(box)
+		.add(milktea::text("the quick brown fox jumps over", { .fg = glaze::color_hex("#ffffff") }))
 		.max_width(14)
 		.center();
 	xray::Node* r = xray::root().add(panel);
@@ -65,8 +65,8 @@ fn void test_render_max_width_wraps_and_min_width_pads() @test {
 }
 
 fn void test_style_width_bounds_size_the_node() @test {
-	xray::Node* narrow = milktea::vbox({ .min_width = 20 })
-		.add(milktea::text({}, "hi"))
+	xray::Node* narrow = milktea::vstack().min_width(20)
+		.add(milktea::text("hi", { .fg = glaze::color_hex("#ffffff") }))
 		.center();
 	xray::Node* r = xray::root().add(narrow);
 	r.solve(xray::new_rect(0, 0, 40, 20));
@@ -74,16 +74,16 @@ fn void test_style_width_bounds_size_the_node() @test {
 }
 
 fn void test_a_later_max_width_keeps_the_style_floor() @test {
-	xray::Node* panel = milktea::vbox({ .min_width = 20, .max_width = 30 })
-		.add(milktea::text({}, "the quick brown fox jumps over the lazy dog"))
+	xray::Node* panel = milktea::vstack().min_width(20).max_width(30)
+		.add(milktea::text("the quick brown fox jumps over the lazy dog", { .fg = glaze::color_hex("#ffffff") }))
 		.max_width(24)
 		.center();
 	xray::Node* r = xray::root().add(panel);
 	r.solve(xray::new_rect(0, 0, 80, 20));
 	assert(panel.rect().w == 24, "the call's cap wins over the style's");
 
-	xray::Node* small = milktea::vbox({ .min_width = 20 })
-		.add(milktea::text({}, "hi"))
+	xray::Node* small = milktea::vstack().min_width(20)
+		.add(milktea::text("hi", { .fg = glaze::color_hex("#ffffff") }))
 		.max_width(24)
 		.center();
 	r = xray::root().add(small);

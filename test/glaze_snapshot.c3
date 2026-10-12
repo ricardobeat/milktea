@@ -569,6 +569,29 @@ fn void test_bg_gradient_leaves_the_foreground_alone() @test {
 	assert(out.contains("38;2;255;0;0"), "text keeps its color over the ramp");
 }
 
+// border_gradient runs the border from border_color on its top row to the
+// gradient color on its bottom row. A corner_color of its own stays put.
+fn void test_border_gradient_runs_top_to_bottom() @test {
+	glaze::Style s = {
+		.border = glaze::ROUNDED,
+		.border_color = glaze::color_hex("#ff0000"),
+		.border_gradient = glaze::color_hex("#0000ff"),
+		.width = 6,
+		.height = 5,
+	};
+
+	String out = s.render("");
+	String[] rows = out.tsplit("\n");
+
+	assert(rows[0].contains("38;2;255;0;0"), "top row: %s", rows[0]);
+	assert(rows[4].contains("38;2;0;0;255"), "bottom row: %s", rows[4]);
+	assert(!rows[2].contains("38;2;255;0;0") && !rows[2].contains("38;2;0;0;255"), "a middle row is between: %s", rows[2]);
+
+	s.corner_color = glaze::color_hex("#00ff00");
+	rows = s.render("").tsplit("\n");
+	assert(rows[4].contains("38;2;0;255;0"), "corners keep their own color: %s", rows[4]);
+}
+
 // A style with no bg_gradient renders exactly as it did before the field
 // existed: one background for the whole block.
 fn void test_no_bg_gradient_leaves_the_background_flat() @test {

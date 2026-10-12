@@ -5,19 +5,17 @@ import std::collections::list;
 import glaze;
 import xray;
 
-// Tree layout. A view is built as a tree of nodes, solved against the screen,
-// then painted at the coordinates the solver chose:
+// Tree layout. A view is a tree of nodes, which the runtime solves against the
+// screen and paints at the coordinates the solver chose:
 //
-//   fn milktea::View Model.view(&self) @dynamic {
-//       return milktea::draw(milktea::root()
-//           .add(milktea::vstack()
-//               .add(milktea::text(title_s, "Title").with_height(1))
-//               .add(milktea::text(body_s, self.body).fill(1))));
+//   fn milktea::Node* Model.view(&self) @dynamic {
+//       return milktea::vstack()
+//           .add(milktea::text("Title", title_s))
+//           .add(milktea::text(self.body, body_s).fill(1));
 //   }
 //
-// The string-building API (glaze::join_vertical over rects) still works and is
-// the better fit for simple stacked output. Use a tree when pieces overlap,
-// when nesting gets deep, or when a component should size itself.
+// A whole screen built as one glaze string is a tree of one: text(s). A frame
+// drawn cell by cell is canvas(buf) or grid(cells, w, h).
 
 // Re-exports, so an app needs to import only milktea and glaze.
 alias Node           = xray::Node;
@@ -47,8 +45,9 @@ alias inner_shadow = xray::inner_shadow;
 alias cells    = xray::cells;
 alias fill     = xray::fill;
 alias percent  = xray::percent;
-alias at_least = xray::at_least;
-alias at_most  = xray::at_most;
+alias min      = xray::min;
+alias max      = xray::max;
+alias fit      = xray::fit;
 
 // Alignment constants, named for what they do to a node rather than for the
 // axis they act on.
@@ -64,78 +63,124 @@ const xray::AlignItems ALIGN_START  = xray::AlignItems.ALIGN_START;
 const xray::AlignItems ALIGN_CENTER = xray::AlignItems.ALIGN_CENTER;
 const xray::AlignItems ALIGN_END    = xray::AlignItems.ALIGN_END;
 
-// StyledText is the bridge between the tree and glaze: it holds a style and a
-// string, and renders them at whatever size the layout settled on. Sizing at
-// paint time rather than build time is what makes .fill(1) meaningful on a
-// bordered box — the border is drawn around the final rect, not around the
-// text's own width.
-struct StyledText (xray::Content) {
+// StyledText is the text inside a text() node. The node holds the style's
+// background, border and padding (see xray::Node.style); this holds the
+// rest, and renders the string at whatever size the layout leaves inside the
+// node's frame.
+struct StyledText (xray::Content) @private {
 	glaze::Style style;
 	String text;
+	bool plain;
+	// Size inside the frame that the style's width and height ask for, or -1
+	// when the text's own size decides.
+	sz fixed_w, fixed_h;
 }
 
 fn String StyledText.render(&self, xray::Rect r) @dynamic {
+	if (self.text.len == 0 || self.plain) return self.text;
 	return self.style.with_width(r.w).with_height(r.h).render(self.text);
 }
 
 // measure and measure_width report what the text needs before layout has
-// picked a size: the text's own extent. The style's border and padding are
-// the node's frame (see text()), which the layout adds on top. They
-// are consulted for a centered modal and under draw_inline, where nothing
-// else fixes that axis.
+// picked a size, not counting the node's frame. They are consulted for a
+// centered modal and under draw_inline, where nothing else fixes that axis.
 //
-// The style's border and padding are the node's frame (see text()), so these
-// measure the text alone. A style carrying an explicit size names the answer
-// outright: render() sizes the box to it, so measuring the text instead would
-// hand the node a rect smaller than what it paints.
+// A style carrying an explicit size names the answer outright: render() sizes
+// the box to it, so measuring the text instead would hand the node a rect
+// smaller than what it paints.
 fn sz StyledText.measure(&self, sz width) @dynamic {
-	if (self.style.height > 0) {
-		sz inner = self.style.height - frame_height(self.style);
-		return inner > 0 ? inner : 0;
-	}
-	// Text wraps to the width it is given (see Style.render), so it is as
-	// many lines tall as wrapping at that width makes it.
-	if (self.style.nowrap) width = 0;
-	return glaze::wrapped_line_count(self.text, width);
+	if (self.fixed_h >= 0) return self.fixed_h;
+	if (!self.plain && !self.style.nowrap) return glaze::wrapped_line_count(self.text, width);
+	sz lines = 1;
+	foreach (c : self.text) if (c == '\n') lines++;
+	return lines;
 }
 
 fn sz StyledText.measure_width(&self, sz height) @dynamic {
-	if (self.style.width > 0) {
-		sz inner = self.style.width - frame_width(self.style);
-		return inner > 0 ? inner : 0;
+	if (self.fixed_w >= 0) return self.fixed_w;
+	sz widest = 0;
+	usz start = 0;
+	for (usz i = 0; i <= self.text.len; i++) {
+		if (i < self.text.len && self.text[i] != '\n') continue;
+		sz w = glaze::string_width(self.text[start:i - start]);
+		if (w > widest) widest = w;
+		start = i + 1;
 	}
-	return glaze::widest_line(self.text);
+	return widest;
 }
 
-// text puts a styled string in the tree. The style's border and padding
-// become the node's frame, so the layout measures them and children added to
-// it sit inside them rather than on top of the border.
-fn Node* text(glaze::Style style, String s) {
+// text puts a string in the tree, styled by `style` (plain by default). The
+// style's background, border and padding become the node's box, and the
+// string is painted inside them. A text node is a leaf: it cannot hold
+// children.
+//
+// Unstyled, the string is painted as it is, escapes and all, rather than
+// fitted to the rect: a screen built with glaze already has its own shape.
+fn Node* text(String s, glaze::Style style = {}) {
 	StyledText* st = mem::tnew(StyledText);
-	st.style = style;
 	st.text = s;
-	Node* n = xray::content_node(st).with_frame(
-		style.pad_top + (style.border.top.len > 0 ? 1 : 0),
-		style.pad_right + (style.border.right.len > 0 ? 1 : 0),
-		style.pad_bottom + (style.border.bottom.len > 0 ? 1 : 0),
-		style.pad_left + (style.border.left.len > 0 ? 1 : 0));
-	// The style's width bounds become the node's, so a panel can carry its
-	// sizing in its style. A later .width() or .max_width() replaces them.
-	if (style.min_width > 0 || style.max_width > 0) {
-		n.size_w = xray::range_fit(style.min_width, style.max_width, &xray::node_measure_w, n);
-	}
+	glaze::Style plain = {};
+	st.plain = mem::equals(&style, &plain, glaze::Style::size);
+	st.fixed_w = -1;
+	st.fixed_h = -1;
+	if (style.width > 0) st.fixed_w = sz_max(style.width - frame_width(style), 0);
+	if (style.height > 0) st.fixed_h = sz_max(style.height - frame_height(style), 0);
+
+	glaze::Style ts = style;
+	ts.bg = {};
+	ts.bg_gradient = {};
+	ts.border = {};
+	ts.border_color = {};
+	ts.corner_color = {};
+	ts.border_bg = {};
+	ts.border_gradient = {};
+	ts.border_animation = glaze::BorderAnimation.NONE;
+	ts.pad_top = ts.pad_right = ts.pad_bottom = ts.pad_left = 0;
+	ts.width = ts.height = 0;
+	st.style = ts;
+
+	Node* n = xray::content_node(st).style(style);
+	n.leaf = true;
 	return n;
 }
 
-// vbox and hbox are a vstack and an hstack that draw a styled box — its
-// background, border and padding — with their children laid out inside it,
-// the way a CSS box with a border and padding holds its content.
-fn Node* vbox(glaze::Style style) => text(style, "");
+fn sz sz_max(sz a, sz b) @local => a > b ? a : b;
 
-fn Node* hbox(glaze::Style style) {
-	Node* n = text(style, "");
-	n.direction = xray::NodeDirection.ROW;
-	return n;
+// Grid is a cell grid owned by the caller, painted into the tree as it is.
+struct Grid (xray::Content) @private {
+	xray::Cell[] cells;
+	sz w, h;
+	xray::ContentCursor cursor_at;
+}
+
+fn void Grid.paint(&self, xray::ScreenBuffer* dst, xray::Rect r) @dynamic {
+	dst.put_cells(self.cells, self.w, self.h, r);
+}
+
+fn sz Grid.measure(&self, sz width) @dynamic => self.h;
+fn sz Grid.measure_width(&self, sz height) @dynamic => self.w;
+
+fn xray::ContentCursor Grid.cursor(&self, xray::Rect r) @dynamic {
+	if (!self.cursor_at.has_cursor) return {};
+	xray::ContentCursor c = self.cursor_at;
+	c.x += r.x;
+	c.y += r.y;
+	return c;
+}
+
+// canvas puts a ScreenBuffer's cells in the tree: a frame drawn cell by cell,
+// such as a game's. `cursor`, if it has one, is relative to the buffer's top
+// left. The buffer must outlive the frame; the usual owner is the model.
+fn Node* canvas(xray::ScreenBuffer* buf, ContentCursor cursor = {}) {
+	return grid(buf.cells, buf.width, buf.height, cursor);
+}
+
+// grid is canvas for a cell slice the caller allocated itself, `w` cells wide
+// and `h` tall.
+fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {}) {
+	Grid* g = mem::tnew(Grid);
+	*g = { .cells = cells, .w = w, .h = h, .cursor_at = cursor };
+	return xray::content_node(g);
 }
 
 // draw solves the tree against the whole terminal and paints it.
@@ -146,7 +191,7 @@ fn View draw(Node* root) {
 // draw_inline sizes the tree to its content height, so the painted block is
 // only as tall as the tree needs. The block is capped at the terminal height:
 // taller than that cannot be addressed relatively without scrolling.
-fn View draw_inline(Node* root) {
+fn View draw_inline(Node* root) @private {
 	sz w = screen_width();
 	if (root != null) root.set_layout_metrics(layout_metrics());
 	if (root != null && g_program != null && g_program.layout_metrics.pixels) {
@@ -166,7 +211,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
-	if (root == null || w < 1 || h < 1 || g_program == null) return view("");
+	if (root == null || w < 1 || h < 1 || g_program == null) return {};
 
 	xray::LayoutMetrics metrics = g_program.layout_metrics;
 	xray::Rect area = xray::new_rect(0, 0, w, h);
@@ -186,7 +231,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 
 	root.solve(area, metrics);
 	buf.record_paint = g_program.record_paint;
-	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, (long)time_ms());
+	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, frame_ms());
 
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear
 	// and refill every draw() so a click always lands against what is
@@ -212,19 +257,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 		if (res.cursor.color.len > 0) v = v.set_cursor_color(res.cursor.color);
 	}
 	// A node that animates asks to be painted again rather than making the
-	// app run a timer for it. Cancel first: view() runs every frame, so
-	// without it each frame would leave another timer behind. The buffer
-	// doubles as the owner token — one draw tree, one repaint timer.
-	cancel(buf);
-	if (res.repaint_ms > 0) {
-		// every(), not tick(): the deadline is snapped to the next multiple of
-		// the interval in absolute time, so the frame this arms lands on the
-		// same grid as the last one. tick() would wait the full interval from
-		// *now*, adding however long this frame took to every period — a rate
-		// that sags under load and drifts out of step with the terminal's own
-		// refresh. The repaint is re-armed from scratch each frame, so the
-		// snapping is what keeps successive frames evenly spaced.
-		every((sz)res.repaint_ms, &tick_msg, buf);
-	}
+	// app run a timer for it; the tree's soonest request becomes the view's.
+	v.repaint_ms = res.repaint_ms;
 	return v;
 }

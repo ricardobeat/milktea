@@ -15,13 +15,3 @@ fn String xray::Rect.render(self, glaze::Style style, String content) {
 fn String glaze::Style.render_in(self, xray::Rect rect, String content) {
 	return self.with_width(rect.w).with_height(rect.h).render(content);
 }
-
-// ScreenBuffer.view wraps the buffer's grid in a View, taking the width and
-// height from the buffer so a caller never restates them.
-fn View xray::ScreenBuffer.view(&self) {
-	return {
-		.cells        = self.cells,
-		.cells_width  = self.width,
-		.cells_height = self.height,
-	};
-}

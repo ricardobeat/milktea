@@ -19,9 +19,9 @@ fn milktea::Cmd VanishModel.update(VanishModel* self, milktea::Msg msg) @dynamic
 	return null;
 }
 
-fn milktea::View VanishModel.view(VanishModel* self) @dynamic {
-	if (self.quitting) return milktea::view("");
-	return milktea::view("Press any key to quit. Your terminal will be clean.");
+fn milktea::Node* VanishModel.view(VanishModel* self) @dynamic {
+	if (self.quitting) return milktea::text("");
+	return milktea::text("Press any key to quit. Your terminal will be clean.");
 }
 
 fn int main() {

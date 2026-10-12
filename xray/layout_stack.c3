@@ -8,8 +8,8 @@ import xray;
 fn xray::Constraint cells(sz n)     => xray::cells(n);
 fn xray::Constraint fill(sz weight) => xray::fill(weight);
 fn xray::Constraint percent(sz p)   => xray::percent(p);
-fn xray::Constraint min(sz n)       => xray::at_least(n);
-fn xray::Constraint max(sz n)       => xray::at_most(n);
+fn xray::Constraint min(sz n)       => xray::min(n);
+fn xray::Constraint max(sz n)       => xray::max(n);
 
 // screen returns a Rect covering the full terminal at (0,0).
 fn xray::Rect screen(sz w, sz h) => xray::new_rect(0, 0, w, h);
@@ -29,8 +29,8 @@ struct LayoutOptions {
 	sz gap;
 }
 
-// vstack solves constraints vertically and writes results into each slot.out.
-fn void vstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
+// vertical solves constraints vertically and writes results into each slot.out.
+fn void vertical(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
 	if (n > 64) n = 64;
@@ -45,8 +45,8 @@ fn void vstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	}
 }
 
-// hstack solves constraints horizontally and writes results into each slot.out.
-fn void hstack(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
+// horizontal solves constraints horizontally and writes results into each slot.out.
+fn void horizontal(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
 	if (n > 64) n = 64;

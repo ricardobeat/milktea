@@ -21,6 +21,10 @@ fn sz Node.layout_gap(&self) {
 
 fn Constraint Node.layout_constraint(&self, bool horizontal) {
 	Constraint c = horizontal ? self.size_w : self.size_h;
+	if (c.kind == ConstraintKind.CFIT && c.measure == null) {
+		c.measure = horizontal ? &node_measure_w : &node_measure_h;
+		c.ctx = self;
+	}
 	if (!self.layout_metrics.pixels) {
 		if (c.pixel_units) c.value = c.cell_fallback;
 		return c;
