@@ -10,6 +10,7 @@ EXAMPLES = {
     'inputbox': 'inputbox/inputbox.c3',
     'spinners': 'spinners/spinners.c3',
     'tabs': 'tabs/tabs.c3',
+    'progress': 'progress/progress.c3',
     'clock': 'clock/clock.c3',
     'nanobots': 'nanobots/nanobots.c3',
     'splash': 'splash/splash.c3',

@@ -13,7 +13,7 @@ try {
   assert.equal(await page.locator('#demos-title').textContent(),'Live examples');
   assert.match(await page.locator('.wasm-note').textContent(),/real milktea binary.*no terminal emulator involved/);
   assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
-    ['inputbox','spinners','tabs','clock','spotlight','nanobots','splash','doom-fire','doom-fire-overlay','avian-assault'].map(n=>`/build/${n}.wasm`));
+    ['inputbox','spinners','tabs','progress','clock','spotlight','nanobots','splash','doom-fire','doom-fire-overlay','avian-assault'].map(n=>`/build/${n}.wasm`));
   assert.equal(await page.locator('#demos milktea-view').evaluateAll(views=>views.every(v=>!v.engine)),true,'demos stay unloaded before entering view');
   assert.equal(await page.locator('#demos [role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
   assert.equal(await page.locator('.code-footer').count(),0,'tabs have no bottom bar');
@@ -85,7 +85,7 @@ try {
     assert.equal(await view.evaluate(v=>v.engine===window.tabbedEngine && v.shadowRoot.activeElement===v.canvas),true,`${id} preview keeps state and focuses canvas`);
     await page.waitForFunction(id=>!document.querySelector(`#${id} milktea-view`).engine.paused,id);
   }
-  for (const id of ['spinners','tabs','clock','spotlight','nanobots','splash','doom-fire','doom-fire-tea','avian-assault']) {
+  for (const id of ['spinners','tabs','progress','clock','spotlight','nanobots','splash','doom-fire','doom-fire-tea','avian-assault']) {
     const view=page.locator(`#${id} milktea-view`);
     await view.scrollIntoViewIfNeeded();
     await page.waitForFunction(id=>{const a=document.querySelector(`#${id} milktea-view`).engine;return a && a.wasm.mt_width()>0;},id);
@@ -108,7 +108,7 @@ try {
   }
   await page.screenshot({path:`/private/tmp/milktea-avian-${browserName}.png`});
   assert.equal(await input.evaluate(v=>v.engine.paused),true);
-  console.log('PASS all ten Code/Preview tabs, highlighted source, input focus and retained state');
+  console.log('PASS all eleven Code/Preview tabs, highlighted source, input focus and retained state');
   await page.locator('#spotlight').scrollIntoViewIfNeeded();
   await page.screenshot({path:`/private/tmp/milktea-site-demos-${browserName}.png`});
   if (browserName==='chromium') {

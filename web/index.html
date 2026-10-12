@@ -155,6 +155,19 @@
         <p>Switch between views with a styled tab bar.</p>
         <div class="demo-foot"><span><kbd>←</kbd> <kbd>→</kbd> switch tabs</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/tabs">View source ↗</a></div>
       </article>
+      <article class="demo demo-simple" id="progress">
+        <div class="demo-title"><h3>Progress</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>progress.c3</span><div class="counter-tabs" role="tablist" aria-label="progress example">
+          <button id="progress-code-tab" type="button" role="tab" aria-selected="false" aria-controls="progress-code" tabindex="-1">Code</button>
+          <button id="progress-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="progress-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="progress-code" class="demo-code" role="tabpanel" aria-labelledby="progress-code-tab" tabindex="0" data-code-src="./code/progress.html" hidden></div>
+        <div id="progress-preview" class="demo-preview" role="tabpanel" aria-labelledby="progress-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/progress.wasm" font-size="12" cols="80" rows="24" label="Progress bars: F speeds up, R restarts"></milktea-view><button class="restart" type="button" aria-label="Restart progress" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>Progress bars with different glyphs and colors.</p>
+        <div class="demo-foot"><span><kbd>F</kbd> faster <span>·</span> <kbd>R</kbd> restart</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/progress">View source ↗</a></div>
+      </article>
       <article class="demo demo-simple" id="clock">
         <div class="demo-title"><h3>Clock</h3></div>
         <div class="demo-browser code-window">
