@@ -118,9 +118,9 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .intro {padding-top:54px}
 .wasm-note {border-radius:0;background:#f6d987;border-color:#d7b458;color:#51401f}
 .site-footer .wordmark {font-family:var(--font-display);text-transform:uppercase;font-weight:400;font-size:24px;letter-spacing:0}
-.language-support {padding:28px 0;border-top:1px solid var(--line)}
-.language-support + .your-turn {margin-top:0;padding-top:24px}
-.language-support h2 {margin:0 0 18px;font-size:22px}
+.language-support,.language-support + .your-turn {padding:30px 0;margin-top:0;border-top:1px solid var(--line)}
+.language-support h2,.language-support + .your-turn h2 {font-size:42px}
+.language-support h2 {margin:0 0 24px}
 .language-buttons {display:flex;flex-wrap:wrap;gap:10px}
 .language-buttons a {display:inline-flex;align-items:center;justify-content:center;min-width:68px;padding:12px 20px;border:1px solid var(--line);border-radius:6px;color:var(--ink);font:14px/1.4 var(--font-mono);transition:background .15s,border-color .15s}
 .language-buttons a:hover,.language-buttons a:focus-visible {background:var(--ink);border-color:var(--ink);color:var(--paper);text-decoration:none}
@@ -132,6 +132,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
   .cell-caption {right:0;font-size:12px;padding:8px 12px}
 }
 @media(max-width:650px) {
+  .language-support h2,.language-support + .your-turn h2 {font-size:34px}
   .site-nav .site-header {padding-block:18px;flex-wrap:nowrap;gap:16px}
   .site-nav .wordmark {font-size:24px}
   .site-nav nav {width:auto;gap:14px;font-size:10px}
