@@ -1,0 +1,82 @@
+<pre class="ink"><span class="ink-s2">module</span> tabs;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">TabsModel</span> {
+	<span class="ink-s3">sz</span> active_tab;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">TabsModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">TabsModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">TabsModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">TabsModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'h') { <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>active_tab <span class="ink-s2">&gt;</span> 0) self<span class="ink-s2">.</span>active_tab<span class="ink-s2">--</span>; }
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'l') { <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>active_tab <span class="ink-s2">&lt;</span> 2) self<span class="ink-s2">.</span>active_tab<span class="ink-s2">++</span>; }
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>:  <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>active_tab <span class="ink-s2">&gt;</span> 0) self<span class="ink-s2">.</span>active_tab<span class="ink-s2">--</span>;
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RIGHT</span>: <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>active_tab <span class="ink-s2">&lt;</span> 2) self<span class="ink-s2">.</span>active_tab<span class="ink-s2">++</span>;
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[3] <span class="ink-s6">TAB_NAMES</span>    <span class="ink-s2">=</span> { <span class="ink-s9">&quot;Home&quot;</span>, <span class="ink-s9">&quot;About&quot;</span>, <span class="ink-s9">&quot;Settings&quot;</span> };
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[3] <span class="ink-s6">TAB_CONTENTS</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;Welcome to milktea!\n\nA TUI framework for C3.\nUse ← → or h/l to switch tabs.&quot;</span>,
+	<span class="ink-s9">&quot;milktea  event loop and TTY management\nglaze    styling and layout\nboba     reusable widgets&quot;</span>,
+	<span class="ink-s9">&quot;Theme     Default\nBorder    Rounded\nColors    True color&quot;</span>,
+};
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">TabsModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">TabsModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	glaze::<span class="ink-s3">Style</span> active_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ffffff&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">border_fg</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#874bfc&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 1, 0, 1)
+		<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+
+	glaze::<span class="ink-s3">Style</span> inactive_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#626262&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">border_fg</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#3c3c3c&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 1, 0, 1);
+
+	glaze::<span class="ink-s3">Style</span> content_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+		<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#dddddd&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)
+		<span class="ink-s2">.</span><span class="ink-s4">border_fg</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#874bfc&quot;</span>))
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 2, 1, 2)
+		<span class="ink-s2">.</span><span class="ink-s4">with_width</span>(50)
+		<span class="ink-s2">.</span><span class="ink-s4">with_height</span>(8)
+		<span class="ink-s2">.</span><span class="ink-s4">align</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">TOP</span>);
+
+	<span class="ink-s3">String</span>[3] tab_views;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> 3; i<span class="ink-s2">++</span>) {
+		tab_views[i] <span class="ink-s2">=</span> i <span class="ink-s2">==</span> self<span class="ink-s2">.</span>active_tab
+			<span class="ink-s2">?</span> active_style<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s6">TAB_NAMES</span>[i])
+			<span class="ink-s2">:</span> inactive_style<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s6">TAB_NAMES</span>[i]);
+	}
+
+	<span class="ink-s3">String</span> tabbar  <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_horizontal_arr</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">BOTTOM</span>, tab_views[<span class="ink-s2">..</span>], 0);
+	<span class="ink-s3">String</span> content <span class="ink-s2">=</span> content_style<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s6">TAB_CONTENTS</span>[self<span class="ink-s2">.</span>active_tab]);
+	<span class="ink-s3">String</span> hint    <span class="ink-s2">=</span> <span class="ink-s9">&quot;\n  ← → / h l  switch tabs    q  quit&quot;</span>;
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">root</span>()<span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(
+		glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, tabbar,
+			glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, hint)))
+		<span class="ink-s2">.</span><span class="ink-s4">place</span>(milktea::<span class="ink-s6">START</span>, milktea::<span class="ink-s6">ALIGN_CENTER</span>));
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">TabsModel</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m);
+}
+</pre>

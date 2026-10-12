@@ -1,0 +1,437 @@
+<pre class="ink"><span class="ink-s2">module</span> clock;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> std::io;
+
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">c3_time_ms_long</span>();
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">BLK</span>   <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xe2\x96\x88&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">HBLK</span>  <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xe2\x96\x80&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">LHB</span>   <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xe2\x96\x84&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">LSH</span>   <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xe2\x96\x91&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">STAR</span>  <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xc2\xb7&quot;</span>;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span> <span class="ink-s6">STAR2</span> <span class="ink-s2">=</span> <span class="ink-s9">&quot;\xe2\x98\x86&quot;</span>;
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">GLYPH_ROWS</span> <span class="ink-s2">=</span> 7;
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_1</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░████&quot;</span>,
+	<span class="ink-s9">&quot;   ░██&quot;</span>,
+	<span class="ink-s9">&quot;   ░██&quot;</span>,
+	<span class="ink-s9">&quot;   ░██&quot;</span>,
+	<span class="ink-s9">&quot;   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_2</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;  ░█████&quot;</span>,
+	<span class="ink-s9">&quot; ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██&quot;</span>,
+	<span class="ink-s9">&quot;░████████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_3</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;  ░█████&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_4</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;   ░████&quot;</span>,
+	<span class="ink-s9">&quot;  ░██ ██&quot;</span>,
+	<span class="ink-s9">&quot; ░██  ██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ██&quot;</span>,
+	<span class="ink-s9">&quot;░█████████&quot;</span>,
+	<span class="ink-s9">&quot;     ░██&quot;</span>,
+	<span class="ink-s9">&quot;     ░██&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_5</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;░████████&quot;</span>,
+	<span class="ink-s9">&quot;░██&quot;</span>,
+	<span class="ink-s9">&quot;░███████&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_6</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██&quot;</span>,
+	<span class="ink-s9">&quot;░███████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_7</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;░█████████&quot;</span>,
+	<span class="ink-s9">&quot;░██    ░██&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;     ░██&quot;</span>,
+	<span class="ink-s9">&quot;    ░██&quot;</span>,
+	<span class="ink-s9">&quot;    ░██&quot;</span>,
+	<span class="ink-s9">&quot;    ░██&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_8</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_9</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░███████&quot;</span>,
+	<span class="ink-s9">&quot;      ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██   ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">DIGIT_0</span> <span class="ink-s2">=</span> {
+	<span class="ink-s9">&quot;  ░████&quot;</span>,
+	<span class="ink-s9">&quot; ░██ ░██&quot;</span>,
+	<span class="ink-s9">&quot;░██ ░████&quot;</span>,
+	<span class="ink-s9">&quot;░██░██░██&quot;</span>,
+	<span class="ink-s9">&quot;░████ ░██&quot;</span>,
+	<span class="ink-s9">&quot; ░██ ░██&quot;</span>,
+	<span class="ink-s9">&quot;  ░████&quot;</span>,
+};
+
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s6">COLON</span> <span class="ink-s2">=</span> { <span class="ink-s9">&quot;&quot;</span>, <span class="ink-s9">&quot;&quot;</span>, <span class="ink-s9">&quot;&quot;</span>, <span class="ink-s9">&quot;░██&quot;</span>, <span class="ink-s9">&quot;&quot;</span>, <span class="ink-s9">&quot;&quot;</span>, <span class="ink-s9">&quot;░██&quot;</span>, };
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Cloud</span> {
+	<span class="ink-s3">sz</span> x;
+	<span class="ink-s3">sz</span> y;
+	<span class="ink-s3">sz</span> w;
+	<span class="ink-s3">sz</span> speed;
+	<span class="ink-s3">sz</span> phase;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">ClockModel</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas;
+	<span class="ink-s3">sz</span> w;
+	<span class="ink-s3">sz</span> h;
+	<span class="ink-s3">long</span> frame;
+	<span class="ink-s3">Cloud</span>[3] clouds;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] <span class="ink-s4">glyph</span>(<span class="ink-s3">char</span> c) {
+	<span class="ink-s2">if</span> (c <span class="ink-s2">&gt;=</span> '0' <span class="ink-s2">&amp;&amp;</span> c <span class="ink-s2">&lt;=</span> '9') {
+		<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)c <span class="ink-s2">-</span> (<span class="ink-s3">sz</span>)'0';
+		<span class="ink-s2">switch</span> (idx) {
+			<span class="ink-s2">case</span> 0: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_0</span>;
+			<span class="ink-s2">case</span> 1: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_1</span>;
+			<span class="ink-s2">case</span> 2: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_2</span>;
+			<span class="ink-s2">case</span> 3: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_3</span>;
+			<span class="ink-s2">case</span> 4: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_4</span>;
+			<span class="ink-s2">case</span> 5: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_5</span>;
+			<span class="ink-s2">case</span> 6: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_6</span>;
+			<span class="ink-s2">case</span> 7: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_7</span>;
+			<span class="ink-s2">case</span> 8: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_8</span>;
+			<span class="ink-s2">case</span> 9: <span class="ink-s2">return</span> <span class="ink-s6">DIGIT_9</span>;
+			<span class="ink-s2">default</span>:
+		}
+	}
+	<span class="ink-s2">if</span> (c <span class="ink-s2">==</span> ':') <span class="ink-s2">return</span> <span class="ink-s6">COLON</span>;
+	<span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] empty;
+	<span class="ink-s2">return</span> empty;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">draw_glyph</span>(
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> sb,
+	<span class="ink-s3">char</span> ch,
+	<span class="ink-s3">sz</span> dx,
+	<span class="ink-s3">sz</span> dy,
+	xray::<span class="ink-s3">Color</span> fg_color,
+	xray::<span class="ink-s3">Color</span> shadow_color
+) <span class="ink-s4">@local</span> {
+	<span class="ink-s3">String</span>[<span class="ink-s6">GLYPH_ROWS</span>] rows <span class="ink-s2">=</span> <span class="ink-s4">glyph</span>(ch);
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> 0; row <span class="ink-s2">&lt;</span> <span class="ink-s6">GLYPH_ROWS</span>; row<span class="ink-s2">++</span>) {
+		<span class="ink-s3">String</span> r <span class="ink-s2">=</span> rows[row];
+		<span class="ink-s3">sz</span> abs_y <span class="ink-s2">=</span> dy <span class="ink-s2">+</span> row;
+		<span class="ink-s2">if</span> (abs_y <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> (<span class="ink-s3">sz</span>)abs_y <span class="ink-s2">&gt;=</span> sb<span class="ink-s2">.</span>height) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0;
+		<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0;
+		<span class="ink-s2">while</span> (i <span class="ink-s2">&lt;</span> r<span class="ink-s2">.</span>len) {
+			<span class="ink-s2">if</span> (r[i] <span class="ink-s2">==</span> ' ') {
+				i<span class="ink-s2">++</span>;
+				col<span class="ink-s2">++</span>;
+				<span class="ink-s2">continue</span>;
+			}
+			<span class="ink-s2">if</span> (r[i] <span class="ink-s2">==</span> '\xe2' <span class="ink-s2">&amp;&amp;</span> i <span class="ink-s2">+</span> 2 <span class="ink-s2">&lt;</span> r<span class="ink-s2">.</span>len) {
+				xray::<span class="ink-s3">Color</span> fc <span class="ink-s2">=</span> fg_color;
+				<span class="ink-s2">if</span> (r[i <span class="ink-s2">+</span> 1] <span class="ink-s2">==</span> '\x96' <span class="ink-s2">&amp;&amp;</span> r[i <span class="ink-s2">+</span> 2] <span class="ink-s2">==</span> '\x91') fc <span class="ink-s2">=</span> shadow_color;
+				<span class="ink-s3">sz</span> abs_x <span class="ink-s2">=</span> dx <span class="ink-s2">+</span> col;
+				<span class="ink-s2">if</span> (abs_x <span class="ink-s2">&gt;=</span> 0 <span class="ink-s2">&amp;&amp;</span> (<span class="ink-s3">sz</span>)abs_x <span class="ink-s2">&lt;</span> sb<span class="ink-s2">.</span>width) {
+					xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(fc);
+					sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)abs_x, (<span class="ink-s3">sz</span>)abs_y, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">BLK</span>, 1, s));
+				}
+				col<span class="ink-s2">++</span>;
+				i <span class="ink-s2">+=</span> 3;
+				<span class="ink-s2">continue</span>;
+			}
+			i<span class="ink-s2">++</span>;
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">draw_cloud</span>(
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> sb,
+	<span class="ink-s3">Cloud</span><span class="ink-s2">*</span> c
+) <span class="ink-s4">@local</span> {
+	xray::<span class="ink-s3">Color</span> c_white <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 255, 255);
+	xray::<span class="ink-s3">Color</span> c_light <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(210, 218, 240);
+	xray::<span class="ink-s3">Color</span> c_mid   <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(160, 172, 210);
+
+	<span class="ink-s3">sz</span> n_bumps <span class="ink-s2">=</span> 5;
+	<span class="ink-s3">sz</span>[5] bro <span class="ink-s2">=</span> {
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 5 <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">%</span> 2),
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 4 <span class="ink-s2">+</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 3) <span class="ink-s2">%</span> 2),
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 5 <span class="ink-s2">+</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 5) <span class="ink-s2">%</span> 2),
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 4 <span class="ink-s2">+</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 7) <span class="ink-s2">%</span> 2),
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 5 <span class="ink-s2">+</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 11) <span class="ink-s2">%</span> 2),
+	};
+	<span class="ink-s3">sz</span>[5] bxo <span class="ink-s2">=</span> {
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> bro[0] <span class="ink-s2">*</span> 2) <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 2) <span class="ink-s2">%</span> 3,
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 6) <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 3) <span class="ink-s2">%</span> 4,
+		0 <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 5) <span class="ink-s2">%</span> 3,
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 6 <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 7) <span class="ink-s2">%</span> 3,
+		c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> bro[4] <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 11) <span class="ink-s2">%</span> 3,
+	};
+	<span class="ink-s3">sz</span>[5] byo <span class="ink-s2">=</span> {
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">*</span> 3 <span class="ink-s2">/</span> 20) <span class="ink-s2">-</span> (c<span class="ink-s2">.</span>phase <span class="ink-s2">%</span> 2),
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 5) <span class="ink-s2">-</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 3) <span class="ink-s2">%</span> 2),
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 4) <span class="ink-s2">-</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 5) <span class="ink-s2">%</span> 2),
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 5) <span class="ink-s2">-</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 7) <span class="ink-s2">%</span> 2),
+		<span class="ink-s2">-</span>(c<span class="ink-s2">.</span>w <span class="ink-s2">*</span> 3 <span class="ink-s2">/</span> 20) <span class="ink-s2">-</span> ((c<span class="ink-s2">.</span>phase <span class="ink-s2">*</span> 11) <span class="ink-s2">%</span> 2),
+	};
+
+	<span class="ink-s3">sz</span> cx <span class="ink-s2">=</span> c<span class="ink-s2">.</span>x;
+	<span class="ink-s3">sz</span> cy <span class="ink-s2">=</span> c<span class="ink-s2">.</span>y;
+	<span class="ink-s3">sz</span> sp_y <span class="ink-s2">=</span> cy <span class="ink-s2">*</span> 2;
+	<span class="ink-s3">sz</span> span_x0 <span class="ink-s2">=</span> cx <span class="ink-s2">-</span> c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2;
+	<span class="ink-s3">sz</span> span_x1 <span class="ink-s2">=</span> cx <span class="ink-s2">+</span> c<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2;
+
+	<span class="ink-s0">// Find vertical sub-pixel extent across all bumps</span>
+	<span class="ink-s3">sz</span> min_sy <span class="ink-s2">=</span> sp_y <span class="ink-s2">+</span> byo[0] <span class="ink-s2">-</span> bro[0];
+	<span class="ink-s3">sz</span> max_sy <span class="ink-s2">=</span> sp_y <span class="ink-s2">+</span> byo[0] <span class="ink-s2">+</span> bro[0];
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> b <span class="ink-s2">=</span> 1; b <span class="ink-s2">&lt;</span> n_bumps; b<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> lo <span class="ink-s2">=</span> sp_y <span class="ink-s2">+</span> byo[b] <span class="ink-s2">-</span> bro[b];
+		<span class="ink-s3">sz</span> hi <span class="ink-s2">=</span> sp_y <span class="ink-s2">+</span> byo[b] <span class="ink-s2">+</span> bro[b];
+		<span class="ink-s2">if</span> (lo <span class="ink-s2">&lt;</span> min_sy) min_sy <span class="ink-s2">=</span> lo;
+		<span class="ink-s2">if</span> (hi <span class="ink-s2">&gt;</span> max_sy) max_sy <span class="ink-s2">=</span> hi;
+	}
+
+	<span class="ink-s0">// Process pairs of sub-pixel rows → one terminal cell via half-blocks</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> sy <span class="ink-s2">=</span> min_sy; sy <span class="ink-s2">&lt;=</span> max_sy; sy <span class="ink-s2">+=</span> 2) {
+		<span class="ink-s3">sz</span> screen_row <span class="ink-s2">=</span> sy <span class="ink-s2">/</span> 2;
+		<span class="ink-s2">if</span> (screen_row <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> (<span class="ink-s3">sz</span>)screen_row <span class="ink-s2">&gt;=</span> sb<span class="ink-s2">.</span>height) <span class="ink-s2">continue</span>;
+
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> span_x0; x <span class="ink-s2">&lt;=</span> span_x1; x<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (x <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> (<span class="ink-s3">sz</span>)x <span class="ink-s2">&gt;=</span> sb<span class="ink-s2">.</span>width) <span class="ink-s2">continue</span>;
+
+			<span class="ink-s0">// Check circle membership for top (sy) and bot (sy+1) sub-rows</span>
+			<span class="ink-s3">bool</span> top_in <span class="ink-s2">=</span> false;
+			<span class="ink-s3">bool</span> bot_in <span class="ink-s2">=</span> false;
+			<span class="ink-s3">bool</span> prev_in <span class="ink-s2">=</span> false;
+			<span class="ink-s3">bool</span> next_in <span class="ink-s2">=</span> false;
+
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> b <span class="ink-s2">=</span> 0; b <span class="ink-s2">&lt;</span> n_bumps; b<span class="ink-s2">++</span>) {
+				<span class="ink-s3">sz</span> dx <span class="ink-s2">=</span> x <span class="ink-s2">-</span> (cx <span class="ink-s2">+</span> bxo[b]);
+				<span class="ink-s3">sz</span> dx2 <span class="ink-s2">=</span> dx <span class="ink-s2">*</span> dx;
+				<span class="ink-s3">sz</span> r2 <span class="ink-s2">=</span> bro[b] <span class="ink-s2">*</span> bro[b];
+				<span class="ink-s3">sz</span> base <span class="ink-s2">=</span> sp_y <span class="ink-s2">+</span> byo[b];
+				<span class="ink-s3">sz</span> d_prev <span class="ink-s2">=</span> (sy <span class="ink-s2">-</span> 1) <span class="ink-s2">-</span> base;
+				<span class="ink-s3">sz</span> d_top  <span class="ink-s2">=</span> sy <span class="ink-s2">-</span> base;
+				<span class="ink-s3">sz</span> d_bot  <span class="ink-s2">=</span> (sy <span class="ink-s2">+</span> 1) <span class="ink-s2">-</span> base;
+				<span class="ink-s3">sz</span> d_next <span class="ink-s2">=</span> (sy <span class="ink-s2">+</span> 2) <span class="ink-s2">-</span> base;
+				<span class="ink-s2">if</span> (dx2 <span class="ink-s2">+</span> d_prev <span class="ink-s2">*</span> d_prev <span class="ink-s2">&lt;=</span> r2) prev_in <span class="ink-s2">=</span> true;
+				<span class="ink-s2">if</span> (dx2 <span class="ink-s2">+</span> d_top <span class="ink-s2">*</span> d_top <span class="ink-s2">&lt;=</span> r2) top_in <span class="ink-s2">=</span> true;
+				<span class="ink-s2">if</span> (dx2 <span class="ink-s2">+</span> d_bot <span class="ink-s2">*</span> d_bot <span class="ink-s2">&lt;=</span> r2) bot_in <span class="ink-s2">=</span> true;
+				<span class="ink-s2">if</span> (dx2 <span class="ink-s2">+</span> d_next <span class="ink-s2">*</span> d_next <span class="ink-s2">&lt;=</span> r2) next_in <span class="ink-s2">=</span> true;
+				<span class="ink-s2">if</span> (top_in <span class="ink-s2">&amp;&amp;</span> bot_in <span class="ink-s2">&amp;&amp;</span> prev_in <span class="ink-s2">&amp;&amp;</span> next_in) <span class="ink-s2">break</span>;
+			}
+
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span>top_in <span class="ink-s2">&amp;&amp;</span> <span class="ink-s2">!</span>bot_in) <span class="ink-s2">continue</span>;
+
+			<span class="ink-s3">bool</span> top_edge <span class="ink-s2">=</span> top_in <span class="ink-s2">&amp;&amp;</span> <span class="ink-s2">!</span>prev_in;
+			<span class="ink-s3">bool</span> bot_edge <span class="ink-s2">=</span> bot_in <span class="ink-s2">&amp;&amp;</span> <span class="ink-s2">!</span>next_in;
+
+			xray::<span class="ink-s3">Color</span> tc;
+			<span class="ink-s2">if</span> (top_in) {
+				tc <span class="ink-s2">=</span> top_edge <span class="ink-s2">?</span> c_white <span class="ink-s2">:</span> c_light;
+			}
+			xray::<span class="ink-s3">Color</span> bc;
+			<span class="ink-s2">if</span> (bot_in) {
+				bc <span class="ink-s2">=</span> bot_edge <span class="ink-s2">?</span> c_mid <span class="ink-s2">:</span> c_light;
+			}
+
+			<span class="ink-s2">if</span> (top_in <span class="ink-s2">&amp;&amp;</span> bot_in) {
+				<span class="ink-s2">if</span> (tc<span class="ink-s2">.</span>r <span class="ink-s2">==</span> bc<span class="ink-s2">.</span>r <span class="ink-s2">&amp;&amp;</span> tc<span class="ink-s2">.</span>g <span class="ink-s2">==</span> bc<span class="ink-s2">.</span>g <span class="ink-s2">&amp;&amp;</span> tc<span class="ink-s2">.</span>b <span class="ink-s2">==</span> bc<span class="ink-s2">.</span>b) {
+					xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(tc);
+					sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)x, (<span class="ink-s3">sz</span>)screen_row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">BLK</span>, 1, s));
+				} <span class="ink-s2">else</span> {
+					xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(tc)<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(bc);
+					sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)x, (<span class="ink-s3">sz</span>)screen_row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">HBLK</span>, 1, s));
+				}
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (top_in) {
+				xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(tc)<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+				sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)x, (<span class="ink-s3">sz</span>)screen_row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">HBLK</span>, 1, s));
+			} <span class="ink-s2">else</span> {
+				xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(bc)<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+				sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)x, (<span class="ink-s3">sz</span>)screen_row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">LHB</span>, 1, s));
+			}
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">ClockModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">ClockModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>clouds[0] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>x <span class="ink-s2">=</span> 10, <span class="ink-s2">.</span>y <span class="ink-s2">=</span> 5, <span class="ink-s2">.</span>w <span class="ink-s2">=</span> 22, <span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 2, <span class="ink-s2">.</span>phase <span class="ink-s2">=</span> 3 };
+	self<span class="ink-s2">.</span>clouds[1] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>x <span class="ink-s2">=</span> 50, <span class="ink-s2">.</span>y <span class="ink-s2">=</span> 2, <span class="ink-s2">.</span>w <span class="ink-s2">=</span> 28, <span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 4, <span class="ink-s2">.</span>phase <span class="ink-s2">=</span> 11 };
+	self<span class="ink-s2">.</span>clouds[2] <span class="ink-s2">=</span> { <span class="ink-s2">.</span>x <span class="ink-s2">=</span> 30, <span class="ink-s2">.</span>y <span class="ink-s2">=</span> 8, <span class="ink-s2">.</span>w <span class="ink-s2">=</span> 18, <span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 1, <span class="ink-s2">.</span>phase <span class="ink-s2">=</span> 23 };
+	self<span class="ink-s2">.</span>frame <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(50);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">ClockModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">ClockModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+		self<span class="ink-s2">.</span>w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
+		self<span class="ink-s2">.</span>h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>canvas <span class="ink-s2">!=</span> <span class="ink-s6">null</span>) self<span class="ink-s2">.</span>canvas<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
+		self<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>w, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>h);
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		self<span class="ink-s2">.</span>frame<span class="ink-s2">++</span>;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> 3; i<span class="ink-s2">++</span>) {
+			<span class="ink-s3">Cloud</span><span class="ink-s2">*</span> c <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>clouds[i];
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">%</span> c<span class="ink-s2">.</span>speed <span class="ink-s2">==</span> 0) {
+				c<span class="ink-s2">.</span>x<span class="ink-s2">--</span>;
+				<span class="ink-s2">if</span> (c<span class="ink-s2">.</span>x <span class="ink-s2">+</span> c<span class="ink-s2">.</span>w <span class="ink-s2">&lt;</span> 0) {
+					<span class="ink-s3">long</span> fi <span class="ink-s2">=</span> (<span class="ink-s3">long</span>)self<span class="ink-s2">.</span>frame;
+					c<span class="ink-s2">.</span>x <span class="ink-s2">=</span> self<span class="ink-s2">.</span>w <span class="ink-s2">+</span> c<span class="ink-s2">.</span>w <span class="ink-s2">+</span> (<span class="ink-s3">sz</span>)(fi <span class="ink-s2">*</span> (<span class="ink-s3">long</span>)(i <span class="ink-s2">+</span> 7) <span class="ink-s2">%</span> 20);
+					c<span class="ink-s2">.</span>y <span class="ink-s2">=</span> 2 <span class="ink-s2">+</span> (<span class="ink-s3">sz</span>)((fi <span class="ink-s2">*</span> (<span class="ink-s3">long</span>)(i <span class="ink-s2">+</span> 1) <span class="ink-s2">+</span> (<span class="ink-s3">long</span>)(i <span class="ink-s2">*</span> 17)) <span class="ink-s2">%</span> (<span class="ink-s3">long</span>)(self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 12));
+					<span class="ink-s2">if</span> (c<span class="ink-s2">.</span>y <span class="ink-s2">&lt;</span> 2) c<span class="ink-s2">.</span>y <span class="ink-s2">=</span> 2;
+				}
+			}
+		}
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(50);
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">ClockModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">ClockModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> sb <span class="ink-s2">=</span> self<span class="ink-s2">.</span>canvas;
+	sb<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+
+	xray::<span class="ink-s3">Rect</span> full <span class="ink-s2">=</span> xray::<span class="ink-s4">new_rect</span>(0, 0, self<span class="ink-s2">.</span>w, self<span class="ink-s2">.</span>h);
+	sb<span class="ink-s2">.</span><span class="ink-s4">fill_gradient_v</span>(full, xray::<span class="ink-s4">color_rgb</span>(8, 8, 36), xray::<span class="ink-s4">color_rgb</span>(28, 18, 62));
+
+	xray::<span class="ink-s3">Style</span> star_s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(255, 255, 200))<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+	xray::<span class="ink-s3">Style</span> star_dim <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(180, 180, 220))
+		<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+	xray::<span class="ink-s3">Style</span> star_bright <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(255, 255, 255))
+		<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> 1; row <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>h; row<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0; col <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>w; col<span class="ink-s2">++</span>) {
+			<span class="ink-s3">uint</span> h  <span class="ink-s2">=</span> (<span class="ink-s3">uint</span>)(col <span class="ink-s2">*</span> 1103515245 <span class="ink-s2">+</span> row <span class="ink-s2">*</span> 12345);
+			<span class="ink-s3">sz</span> mod <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)(h <span class="ink-s2">%</span> 97);
+			<span class="ink-s2">if</span> (mod <span class="ink-s2">==</span> 0) {
+				<span class="ink-s2">if</span> ((self<span class="ink-s2">.</span>frame <span class="ink-s2">/</span> 8 <span class="ink-s2">+</span> (<span class="ink-s3">sz</span>)(h <span class="ink-s2">&gt;&gt;</span> 8)) <span class="ink-s2">%</span> 7 <span class="ink-s2">==</span> 0) {
+					sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)col, (<span class="ink-s3">sz</span>)row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">STAR2</span>, 1, star_bright));
+				} <span class="ink-s2">else</span> {
+					sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)col, (<span class="ink-s3">sz</span>)row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">STAR</span>, 1, star_s));
+				}
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (mod <span class="ink-s2">==</span> 3 <span class="ink-s2">||</span> mod <span class="ink-s2">==</span> 17) {
+				sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)col, (<span class="ink-s3">sz</span>)row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s6">STAR</span>, 1, star_dim));
+			}
+		}
+	}
+
+	<span class="ink-s3">sz</span> now  <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)<span class="ink-s4">c3_time_ms_long</span>();
+	<span class="ink-s3">sz</span> secs <span class="ink-s2">=</span> now <span class="ink-s2">/</span> 1000;
+	<span class="ink-s3">sz</span> h    <span class="ink-s2">=</span> (secs <span class="ink-s2">/</span> 3600) <span class="ink-s2">%</span> 24;
+	<span class="ink-s3">sz</span> m    <span class="ink-s2">=</span> (secs <span class="ink-s2">/</span> 60) <span class="ink-s2">%</span> 60;
+	<span class="ink-s3">sz</span> s    <span class="ink-s2">=</span> secs <span class="ink-s2">%</span> 60;
+
+	<span class="ink-s3">char</span> h0_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> h <span class="ink-s2">/</span> 10);
+	<span class="ink-s3">char</span> h1_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> h <span class="ink-s2">%</span> 10);
+	<span class="ink-s3">char</span> m0_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> m <span class="ink-s2">/</span> 10);
+	<span class="ink-s3">char</span> m1_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> m <span class="ink-s2">%</span> 10);
+	<span class="ink-s3">char</span> s0_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> s <span class="ink-s2">/</span> 10);
+	<span class="ink-s3">char</span> s1_c <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)('0' <span class="ink-s2">+</span> s <span class="ink-s2">%</span> 10);
+
+	<span class="ink-s3">sz</span> digit_w   <span class="ink-s2">=</span> 10;
+	<span class="ink-s3">sz</span> colon_w   <span class="ink-s2">=</span> 4;
+	<span class="ink-s3">sz</span> colon_gap <span class="ink-s2">=</span> 1;
+	<span class="ink-s3">sz</span> pair_gap  <span class="ink-s2">=</span> 2;
+	<span class="ink-s3">sz</span> total_w   <span class="ink-s2">=</span> digit_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_w <span class="ink-s2">+</span> colon_gap <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_w <span class="ink-s2">+</span> colon_gap <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 2;
+	total_w <span class="ink-s2">+=</span> pair_gap <span class="ink-s2">*</span> 2;
+
+	<span class="ink-s3">sz</span> time_x <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> total_w) <span class="ink-s2">/</span> 2;
+	<span class="ink-s3">sz</span> time_y <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> <span class="ink-s6">GLYPH_ROWS</span>) <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> 1;
+
+	xray::<span class="ink-s3">Color</span> fg_color     <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 255, 255);
+	xray::<span class="ink-s3">Color</span> shadow_color <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 90, 180);
+	xray::<span class="ink-s3">Color</span> colon_color  <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(255, 200, 100);
+
+	<span class="ink-s4">draw_glyph</span>(sb, h0_c, time_x, time_y, fg_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, h1_c, time_x <span class="ink-s2">+</span> digit_w, time_y, fg_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, ':', time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_gap, time_y, colon_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, m0_c, time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_w <span class="ink-s2">+</span> colon_gap, time_y, fg_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, m1_c, time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 3 <span class="ink-s2">+</span> colon_w <span class="ink-s2">+</span> colon_gap, time_y, fg_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, ':', time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 4 <span class="ink-s2">+</span> colon_w <span class="ink-s2">+</span> colon_gap <span class="ink-s2">+</span> pair_gap, time_y, colon_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, s0_c, time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 4 <span class="ink-s2">+</span> colon_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_gap <span class="ink-s2">+</span> pair_gap, time_y, fg_color, shadow_color);
+	<span class="ink-s4">draw_glyph</span>(sb, s1_c, time_x <span class="ink-s2">+</span> digit_w <span class="ink-s2">*</span> 5 <span class="ink-s2">+</span> colon_w <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> colon_gap <span class="ink-s2">+</span> pair_gap, time_y, fg_color, shadow_color);
+
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> 3; i<span class="ink-s2">++</span>) {
+		<span class="ink-s4">draw_cloud</span>(sb, <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>clouds[i]);
+	}
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(sb);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">ClockModel</span> m <span class="ink-s2">=</span> { };
+	m<span class="ink-s2">.</span>w <span class="ink-s2">=</span> 80;
+	m<span class="ink-s2">.</span>h <span class="ink-s2">=</span> 24;
+	m<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>(80, 24);
+	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true })) {
+		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
+		<span class="ink-s2">return</span> 1;
+	}
+	io::<span class="ink-s4">printn</span>(<span class="ink-s9">&quot;Goodbye!&quot;</span>);
+	<span class="ink-s2">return</span> 0;
+}
+</pre>

@@ -13,13 +13,14 @@ try {
   assert.equal(await page.locator('#demos-title').textContent(),'Live examples');
   assert.match(await page.locator('.wasm-note').textContent(),/real milktea binary.*no terminal emulator involved/);
   assert.deepEqual(await page.locator('#demos milktea-view').evaluateAll(views=>views.map(v=>new URL(v.getAttribute('src'),location.href).pathname)),
-    ['inputbox','spinners','timer','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`/build/${n}.wasm`));
+    ['inputbox','spinners','tabs','clock','nanobots','splash','doom-fire','doom-fire-overlay','spotlight','avian-assault'].map(n=>`/build/${n}.wasm`));
   assert.equal(await page.locator('#demos milktea-view').evaluateAll(views=>views.every(v=>!v.engine)),true,'demos stay unloaded before entering view');
   assert.equal(await page.locator('#demos [role=tab][aria-selected=true]').evaluateAll(tabs=>tabs.every(t=>t.textContent==='Preview')),true,'all demos start in Preview');
   assert.equal(await page.locator('.code-footer').count(),0,'tabs have no bottom bar');
   assert.equal(await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname.startsWith('/code/')).length),0,'source is lazy loaded');
   assert.equal(await page.locator('#counter-code-tab').getAttribute('aria-selected'),'true');
   await page.locator('#counter-preview-tab').click();
+  await page.locator('#counter-preview milktea-view').scrollIntoViewIfNeeded();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
   await page.waitForFunction(()=>{const v=document.querySelector('#counter-preview milktea-view');return v.shadowRoot.activeElement===v.canvas;});
   await page.keyboard.press('ArrowUp');
@@ -83,15 +84,15 @@ try {
     assert.equal(await view.evaluate(v=>v.engine===window.tabbedEngine && v.shadowRoot.activeElement===v.canvas),true,`${id} preview keeps state and focuses canvas`);
     await page.waitForFunction(id=>!document.querySelector(`#${id} milktea-view`).engine.paused,id);
   }
-  for (const id of ['spinners','timer','splash','doom-fire','doom-fire-tea','spotlight','avian-assault']) {
+  for (const id of ['spinners','tabs','clock','nanobots','splash','doom-fire','doom-fire-tea','spotlight','avian-assault']) {
     const view=page.locator(`#${id} milktea-view`);
     await view.scrollIntoViewIfNeeded();
     await page.waitForFunction(id=>{const a=document.querySelector(`#${id} milktea-view`).engine;return a && a.wasm.mt_width()>0;},id);
     assert.equal(await view.evaluate(v=>v.engine.stopped),false,`${id} runs`);
     await checkTabs(id);
-    if (id==='timer') {
-      await view.locator('canvas').focus();await page.keyboard.press('Space');
-      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#timer milktea-view').engine.wasm).includes('PAUSED');});
+    if (id==='tabs') {
+      await view.locator('canvas').focus();await page.keyboard.press('ArrowRight');
+      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#tabs milktea-view').engine.wasm).includes('TTY management');});
     }
     if (id==='doom-fire') {
       assert.deepEqual(await view.evaluate(v=>[v.engine.wasm.mt_width(),v.engine.wasm.mt_height()]),[100,30]);
@@ -106,7 +107,7 @@ try {
   }
   await page.screenshot({path:`/private/tmp/milktea-avian-${browserName}.png`});
   assert.equal(await input.evaluate(v=>v.engine.paused),true);
-  console.log('PASS all eight Code/Preview tabs, highlighted source, input focus and retained state');
+  console.log('PASS all ten Code/Preview tabs, highlighted source, input focus and retained state');
   await page.locator('#spotlight').scrollIntoViewIfNeeded();
   await page.screenshot({path:`/private/tmp/milktea-site-demos-${browserName}.png`});
   if (browserName==='chromium') {

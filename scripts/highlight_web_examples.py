@@ -9,7 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = {
     'inputbox': 'inputbox/inputbox.c3',
     'spinners': 'spinners/spinners.c3',
-    'timer': 'timer/timer.c3',
+    'tabs': 'tabs/tabs.c3',
+    'clock': 'clock/clock.c3',
+    'nanobots': 'nanobots/nanobots.c3',
     'splash': 'splash/splash.c3',
     'doom-fire': 'doom-fire/doom-fire.c3',
     'doom-fire-tea': 'doom-fire/doom-fire-overlay.c3',
