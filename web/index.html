@@ -99,8 +99,7 @@
     <span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 3, 1, 3)
     <span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
   <span class="ink-s3">String</span> text <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Counter: %d&quot;</span>, self<span class="ink-s2">.</span>value);
-  <span class="ink-s2">return</span> milktea::<span class="ink-s4">root</span>()
-    <span class="ink-s2">.</span><span class="ink-s4">add</span>(milktea::<span class="ink-s4">text</span>(text, style)<span class="ink-s2">.</span><span class="ink-s4">center</span>());
+  <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(text, style)<span class="ink-s2">.</span><span class="ink-s4">center</span>();
 }
 </pre>
       <!-- INTRO END -->

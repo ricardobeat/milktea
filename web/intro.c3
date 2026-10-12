@@ -18,6 +18,5 @@ fn milktea::Node* Counter.view(&self) @dynamic {
     .with_bold(true).padding(1, 3, 1, 3)
     .with_border(glaze::ROUNDED);
   String text = string::tformat("Counter: %d", self.value);
-  return milktea::root()
-    .add(milktea::text(text, style).center());
+  return milktea::text(text, style).center();
 }
