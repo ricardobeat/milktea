@@ -8,6 +8,7 @@ export class MilkteaView extends HTMLElement {
     this.attachShadow({mode: 'open'}).innerHTML = `
       <style>
         :host { display: inline-block; position: relative; width: 100%; height: 240px; vertical-align: middle; background: #111318; }
+        :host([hidden]) { display: none; }
         :host(:fullscreen) { width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; }
         .frame { position: relative; width: 100%; height: 100%; overflow: hidden; background: inherit; }
         canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; outline: none; }
@@ -29,6 +30,7 @@ export class MilkteaView extends HTMLElement {
     this.status = this.shadowRoot.querySelector('.status');
     this.button = this.shadowRoot.querySelector('button');
     this.generation = 0;
+    this.visibilityChanged = () => this.updatePlayback();
     this.button.addEventListener('click', () => this.toggleFullscreen().catch(error => this.reportError(error)));
     // Do not deliver Escape as QUIT to the example when leaving fullscreen.
     this.shadowRoot.addEventListener('keydown', event => {
@@ -57,9 +59,11 @@ export class MilkteaView extends HTMLElement {
   }
   connectedCallback() {
     this.ownerDocument.addEventListener('fullscreenchange', this.fullscreenChanged);
+    this.ownerDocument.addEventListener('visibilitychange', this.visibilityChanged);
     this.visible = false;
     this.observer = new IntersectionObserver(entries => {
-      this.visible = entries.at(-1).isIntersecting;
+      const entry = entries.at(-1);
+      this.visible = entry.isIntersecting && entry.intersectionRect.width > 0 && entry.intersectionRect.height > 0;
       if (this.visible || this.expanded) void this.ensureLoaded();
       this.updatePlayback();
     });
@@ -70,6 +74,7 @@ export class MilkteaView extends HTMLElement {
   disconnectedCallback() {
     this.observer?.disconnect();
     this.ownerDocument.removeEventListener('fullscreenchange', this.fullscreenChanged);
+    this.ownerDocument.removeEventListener('visibilitychange', this.visibilityChanged);
     this.release();
   }
   attributeChangedCallback(name, oldValue, newValue) {
@@ -129,7 +134,7 @@ export class MilkteaView extends HTMLElement {
       if (generation !== this.generation || !this.isConnected) return;
       const wasm = await instantiateMilktea(module);
       if (generation !== this.generation || !this.isConnected) return;
-      this.app = new MilkteaCanvas(this.canvas, wasm, {...this.options(),
+      this.app = new MilkteaCanvas(this.canvas, wasm, {...this.options(), autoStart: false,
         onQuit: () => { this.status.hidden = false; this.status.textContent = 'Stopped'; this.dispatchEvent(new Event('quit')); },
         onError: error => this.reportError(error)});
       this.status.hidden = true;
@@ -143,7 +148,11 @@ export class MilkteaView extends HTMLElement {
   }
   updatePlayback() {
     if (!this.app) return;
-    if (this.visible || this.expanded) this.app.resume(); else this.app.pause();
+    const doc = this.ownerDocument;
+    const fullscreen = doc.fullscreenElement;
+    const shown = this.isConnected && !doc.hidden && (this.visible || this.expanded) &&
+      (!fullscreen || fullscreen === this || fullscreen.contains(this));
+    if (shown) this.app.resume(); else this.app.pause();
   }
   async toggleFullscreen() {
     if (this.expanded) return this.ownerDocument.exitFullscreen();

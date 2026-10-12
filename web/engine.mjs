@@ -185,7 +185,8 @@ export class MilkteaCanvas {
     wasm.mt_boot();
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
-    this.resume();
+    this.paused = true;
+    if (options.autoStart !== false) this.resume();
   }
   static async load(canvas, url, options) {
     return new MilkteaCanvas(canvas, await instantiateMilktea(await loadMilkteaModule(url)), options);
@@ -204,6 +205,7 @@ export class MilkteaCanvas {
   pause() {
     this.paused = true;
     cancelAnimationFrame(this.raf);
+    this.raf = null;
   }
   resume() {
     if (this.stopped || this.paused === false) return;
