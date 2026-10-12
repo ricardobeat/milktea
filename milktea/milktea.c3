@@ -987,7 +987,11 @@ fn void? Program.run(Program* self) {
 				disable_mouse_pixels();
 				self.mouse_pixels = false;
 			}
-			disable_mouse();
+			// Mirror the frame-level transition: an all-motion program turned on
+			// mode 1003 rather than 1000/1002, so it needs the all-motion off
+			// sequence; otherwise the terminal keeps reporting every pointer
+			// move after the program exits.
+			disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
 			disable_bracketed_paste();
 			// Pop the key-events enhancement layer first (if it was pushed on top
 			// of the base layer), then pop the base kitty keyboard layer — restores

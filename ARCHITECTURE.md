@@ -80,8 +80,9 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
 ## Event-loop lifecycle (`Program.run`)
 
 1. **Setup** (skipped in test mode): enter raw mode, hide the cursor,
-   enable focus reporting, install `SIGWINCH`/`SIGINT`/`SIGTERM` handlers,
-   spawn the input reader thread (`thread::Thread.create`).
+   enable focus reporting, install the `SIGWINCH` handler and the fatal
+   crash/termination handlers (`setup_signals`), spawn the input reader
+   thread (`thread::Thread.create`).
 2. **Model init**: call `model.init()`; if it returns a `Cmd`, invoke it
    and dispatch the resulting `Msg` (can already quit). Call `on_mount()`.
 3. **Initial size**: from `with_window_size()` injection, a real
@@ -177,10 +178,22 @@ Shutdown is two-phase: `input_queue_close()` sets `closed = true` and
 broadcasts the condition variable, then `run()` joins the reader thread
 (`self.reader_thread.join()`), and only then calls
 `input_queue_destroy()` — the mutex is never destroyed while the reader
-might still hold it. `SIGINT`/`SIGTERM` are handled directly in
-`fatal_signal_handler` (`tty.c3`), which restores termios and alt-screen
-state synchronously before re-raising the signal — this bypasses the
-normal `defer` unwind since it can fire mid-render.
+might still hold it.
+
+Crash and termination signals are handled directly in
+`fatal_signal_handler` (`tty.c3`), which bypasses the normal `defer`
+unwind since it can fire mid-render. It restores termios, writes a
+prebuilt constant (`FATAL_MODE_RESET`) that turns off every terminal mode
+the loop can enable — mouse tracking (all variants plus SGR-pixels),
+bracketed paste, both kitty keyboard layers, focus reporting, cursor
+colour and pointer shape — and leaves the alt screen. This is what keeps
+a segfaulting fullscreen app from leaving the shell stuck in
+mouse-reporting mode. `setup_signals` covers the crash set
+(`SIGSEGV`/`SIGBUS`/`SIGABRT`/`SIGFPE`/`SIGILL`/`SIGTRAP`, the last because a
+C3 panic ends in `$$trap()`) plus `SIGHUP`/`SIGINT`/`SIGQUIT`/`SIGTERM`,
+capturing each signal's prior disposition via `sigaction` so the handler can
+chain to it: the C3 runtime's own `SIGSEGV`/`SIGBUS`/`SIGILL` backtrace
+handler still runs after the terminal is restored.
 
 **Capacity-drop diagnostics**: every fixed buffer that silently drops on
 overflow — the timer table, the send queue, the pending buffer, the input
