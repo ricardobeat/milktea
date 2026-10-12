@@ -13,11 +13,11 @@ fn milktea::Cmd Counter.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn milktea::Node* Counter.view(&self) @dynamic {
-  glaze::Style box = glaze::style()
+  glaze::Style style = glaze::style()
     .foreground(glaze::color_hex("#00d7ff"))
     .with_bold(true).padding(1, 3, 1, 3)
     .with_border(glaze::ROUNDED);
-  String content = string::tformat("Counter: %d", self.value);
+  String text = string::tformat("Counter: %d", self.value);
   return milktea::root()
-    .add(milktea::text(box.render(content)).center());
+    .add(milktea::text(text, style).center());
 }
