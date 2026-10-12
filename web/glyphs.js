@@ -48,16 +48,16 @@ const DIAGONALS = [
   [[0,0],[1,0],[1.0,0.666666667],[0.0,0.333333333]], // U+1FB67
  ];
 
-function fillPolygon(ctx, points, x, y, w, h) {
+function fillPolygon(ctx, points, x, y, w, h, snap) {
   ctx.beginPath();
   points.forEach(([px, py], i) => {
-    if (i === 0) ctx.moveTo(x + px * w, y + py * h);
-    else ctx.lineTo(x + px * w, y + py * h);
+    if (i === 0) ctx.moveTo(snap(x + px * w), snap(y + py * h));
+    else ctx.lineTo(snap(x + px * w), snap(y + py * h));
   });
   ctx.closePath(); ctx.fill();
 }
 
-export function drawLegacyGlyph(ctx, cp, x, y, w, h) {
+export function drawLegacyGlyph(ctx, cp, x, y, w, h, snap = value => value) {
   if (cp >= 0x1fb00 && cp <= 0x1fb3b) {
     // Sextants are numbered row-major. Left/right half and full blocks
     // already have older Unicode characters, so their masks are skipped.
@@ -65,10 +65,12 @@ export function drawLegacyGlyph(ctx, cp, x, y, w, h) {
     if (mask >= 21) mask++;
     if (mask >= 42) mask++;
     for (let i = 0; i < 6; i++) if (mask & (1 << i)) {
-      ctx.fillRect(x + (i % 2) * w / 2, y + Math.floor(i / 2) * h / 3, w / 2, h / 3);
+      const left = snap(x + (i % 2) * w / 2), top = snap(y + Math.floor(i / 2) * h / 3);
+      const right = snap(x + (i % 2 + 1) * w / 2), bottom = snap(y + (Math.floor(i / 2) + 1) * h / 3);
+      ctx.fillRect(left, top, right - left, bottom - top);
     }
   } else if (cp >= 0x1fb3c && cp <= 0x1fb67) {
-    fillPolygon(ctx, DIAGONALS[cp - 0x1fb3c], x, y, w, h);
+    fillPolygon(ctx, DIAGONALS[cp - 0x1fb3c], x, y, w, h, snap);
   } else if (cp >= 0x1fb68 && cp <= 0x1fb6f) {
     const sides = [
       [[0, 0], [0, 1], [.5, .5]], // left quarter
@@ -76,14 +78,14 @@ export function drawLegacyGlyph(ctx, cp, x, y, w, h) {
       [[1, 0], [1, 1], [.5, .5]], // right quarter
       [[0, 1], [1, 1], [.5, .5]], // lower quarter
     ];
-    if (cp >= 0x1fb6c) fillPolygon(ctx, sides[cp - 0x1fb6c], x, y, w, h);
+    if (cp >= 0x1fb6c) fillPolygon(ctx, sides[cp - 0x1fb6c], x, y, w, h, snap);
     else {
       // Three-quarter shapes are the cell minus the opposite quarter.
       const missing = [0, 1, 2, 3][cp - 0x1fb68];
       ctx.beginPath(); ctx.rect(x, y, w, h);
       sides[missing].forEach(([px, py], i) => {
-        if (i === 0) ctx.moveTo(x + px * w, y + py * h);
-        else ctx.lineTo(x + px * w, y + py * h);
+        if (i === 0) ctx.moveTo(snap(x + px * w), snap(y + py * h));
+        else ctx.lineTo(snap(x + px * w), snap(y + py * h));
       });
       ctx.closePath(); ctx.fill('evenodd');
     }

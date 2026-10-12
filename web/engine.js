@@ -97,7 +97,6 @@ export function cellColor(bytes, p, fallback) {
 }
 // Block glyphs are geometry so half-block games have no font gaps.
 function block(ctx, cp, x, y, w, h, fillRect) {
-  if (drawLegacyGlyph(ctx, cp, x, y, w, h)) return true;
   if (cp === 0x2580) fillRect(x, y, w, h / 2);
   else if (cp >= 0x2581 && cp <= 0x2588) { const size = (cp - 0x2580) / 8; fillRect(x, y + h * (1 - size), w, h * size); }
   else if (cp >= 0x2589 && cp <= 0x258f) fillRect(x, y, w * (0x2590 - cp) / 8, h);
@@ -392,7 +391,15 @@ export class MilkteaCanvas {
       ctx.globalAlpha = attrs & 2 ? .5 : 1;
       ctx.fillStyle = cellColor(g.bytes, s + (attrs & 32 ? g.colorSize : 0), attrs & 32 ? this.background : this.foreground);
       ctx.font = `${attrs & 4 ? 'italic ' : ''}${attrs & 1 ? 'bold ' : ''}${this.fontSize}px ${this.font}`;
-      if (!block(ctx, text.codePointAt(0), x, y, cw * width, ch, fillRect)) ctx.fillText(text, x, y + ch / 2, cw * width);
+      const cp = text.codePointAt(0);
+      if (cp >= 0x1fb00 && cp <= 0x1fb6f) {
+        // Legacy polygons/sextants share the same integer cell boundaries as
+        // backgrounds and clips. Logical-coordinate edges leave hairline gaps.
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        drawLegacyGlyph(ctx, cp, left, top, snap((x + cw * width) * sx + ox) - left,
+          snap((y + ch) * sy + oy) - top, snap);
+        ctx.setTransform(sx, 0, 0, sy, ox, oy);
+      } else if (!block(ctx, cp, x, y, cw * width, ch, fillRect)) ctx.fillText(text, x, y + ch / 2, cw * width);
       if (attrs & 8) ctx.fillRect(x, y + ch - 2, cw * width, 1);
       if (attrs & 64) ctx.fillRect(x, y + ch / 2, cw * width, 1);
       ctx.restore();
