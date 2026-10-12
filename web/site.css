@@ -92,7 +92,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 
 /* Orange poster, set in Molot, breaking into the paper below. */
 .poster {position:relative;isolation:isolate;overflow:hidden;background:var(--orange);color:var(--ink)}
-.poster::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:url("./art/grain.svg");mix-blend-mode:multiply;opacity:.28}
+.poster::before,.site-nav::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:url("./art/grain.svg");mix-blend-mode:multiply;opacity:.28}
 .poster .wrap,.site-nav .wrap {max-width:1600px;padding-inline:clamp(20px,4.6vw,76px)}
 .site-nav .site-header {padding-block:22px;border-bottom:1px solid #14271c55;gap:24px}
 .site-nav .wordmark {font:28px/.9 var(--font-display);letter-spacing:-.03em;text-transform:uppercase;gap:8px}
@@ -146,5 +146,5 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
   .intro {padding-top:38px}
 }
 
-.site-nav {position:sticky;top:0;z-index:20;background:var(--orange)}
+.site-nav {position:sticky;top:0;z-index:20;isolation:isolate;background:var(--orange);color:var(--ink)}
 .skip-link {z-index:30}
