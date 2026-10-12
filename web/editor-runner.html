@@ -2,9 +2,9 @@
 html,body {margin:0;width:100%;height:100%;overflow:hidden;background:#111318}
 canvas {display:block;width:100%;height:100%;outline:none}
 </style><canvas aria-label="Live milktea program"></canvas>
-<script type="importmap">{"imports":{"milktea":"./bindings.mjs"}}</script>
+<script type="importmap">{"imports":{"milktea":"./bindings.js"}}</script>
 <script type="module">
-import {mount} from './bindings.mjs';
+import {mount} from './bindings.js';
 let app, generation=0;
 const report=(type,detail)=>parent.postMessage({source:'milktea-editor',type,detail},location.origin);
 addEventListener('error',event=>report('error',event.error?.stack || event.message));

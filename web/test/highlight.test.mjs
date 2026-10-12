@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {highlightJavaScript} from '../highlight.mjs';
+import {highlightJavaScript} from '../highlight.js';
 
 test('highlighter colors JavaScript without interpreting HTML in editor text',()=>{
   const output=highlightJavaScript(`const x = '<script>alert("hi")</script>'; // <img src=x onerror=alert(1)>\nreturn 12;`);

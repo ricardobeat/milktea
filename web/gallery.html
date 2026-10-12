@@ -16,7 +16,7 @@
 <canvas aria-label="Interactive milktea example. Click to focus, then use keyboard or mouse."></canvas>
 <footer>Click the canvas to focus · keyboard, drag, wheel & paste · q quits most examples</footer>
 <script type="module">
-  import {MilkteaCanvas, instantiateMilktea} from './engine.mjs';
+  import {MilkteaCanvas, instantiateMilktea} from './engine.js';
   const select = document.querySelector('select'), canvas = document.querySelector('canvas'), status = document.querySelector('#status');
   let engine, generation = 0;
   const showError = error => { status.textContent = error.message; console.error(error); };

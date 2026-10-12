@@ -10,7 +10,7 @@ async function pageFor(body) {
   const page = await browser.newPage({viewport:{width:1100,height:800}, deviceScaleFactor:2});
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/embed-test.html', route => route.fulfill({contentType:'text/html', body:
-    `<html><head><script type="module" src="/embed.mjs"></script></head><body style="margin:0">${body}</body></html>`}));
+    `<html><head><script type="module" src="/embed.js"></script></head><body style="margin:0">${body}</body></html>`}));
   await page.goto(`${origin}/embed-test.html`);
   return page;
 }
@@ -29,7 +29,7 @@ try {
   await lazy.waitForFunction(() => document.querySelector('#one').engine && document.querySelector('#two').engine);
   assert.equal(requests.length, 1, 'same-source embeds should share a download and compiled module');
   assert.equal(await lazy.evaluate(async () => {
-    const {gridText} = await import('/engine.mjs');
+    const {gridText} = await import('/engine.js');
     const a = document.querySelector('#one').engine, b = document.querySelector('#two').engine;
     a.wasm.mt_key(6,0,0,0); a.wasm.mt_frame(); b.wasm.mt_frame();
     return a.wasm.memory !== b.wasm.memory && gridText(a.wasm).includes('Counter: 1') && gridText(b.wasm).includes('Counter: 0');
@@ -47,7 +47,7 @@ try {
   });
   await mouse.mouse.click(point.x, point.y);
   await mouse.waitForFunction(async () => {
-    const {gridText} = await import('/engine.mjs');
+    const {gridText} = await import('/engine.js');
     return gridText(document.querySelector('#view').engine.wasm).includes('Position: (12, 7)');
   });
   assert.equal(await mouse.$eval('#view', view => view.engine.canvas.width === view.engine.canvas.clientWidth * 2), true);
@@ -57,7 +57,7 @@ try {
   const fire = await pageFor('<milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:867px;height:523px"></milktea-view>');
   await fire.waitForFunction(() => !!document.querySelector('#view').engine);
   const seams = await fire.$eval('#view', async view => {
-    const {readGrid} = await import('/engine.mjs');
+    const {readGrid} = await import('/engine.js');
     const a = view.engine;
     a.pause();
     const g = readGrid(a.wasm);
@@ -111,12 +111,12 @@ try {
   await sizing.locator('#view').locator('canvas').click();
   await sizing.keyboard.press('ArrowUp');
   await sizing.waitForFunction(async () => {
-    const {gridText} = await import('/engine.mjs');
+    const {gridText} = await import('/engine.js');
     return gridText(document.querySelector('#view').engine.wasm).includes('Counter: 1');
   });
   await sizing.$eval('#view', v => {window.previousEngine=v.engine;v.restart();});
   await sizing.waitForFunction(async () => {
-    const {gridText}=await import('/engine.mjs');
+    const {gridText}=await import('/engine.js');
     const app=document.querySelector('#view').engine;
     return app && app!==window.previousEngine && gridText(app.wasm).includes('Counter: 0');
   });

@@ -9,7 +9,7 @@ try {
   for (const dpr of [1,1.25,2]) {
     const page=await browser.newPage({viewport:{width:1100,height:800},deviceScaleFactor:dpr});
     await page.route('**/seams-test.html',route=>route.fulfill({contentType:'text/html',body:
-      '<script type="module" src="/embed.mjs"></script><milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:756px;height:413px"></milktea-view>'}));
+      '<script type="module" src="/embed.js"></script><milktea-view id="view" src="/build/doom-fire.wasm" cols="80" rows="24" style="width:756px;height:413px"></milktea-view>'}));
     await page.goto(`${origin}/seams-test.html`);
     await page.waitForFunction(()=>!!document.querySelector('#view').engine);
     for (const name of ['doom-fire','dos-app','avian-assault']) {
@@ -19,7 +19,7 @@ try {
       }
       for (const [width,height] of [[756,413],[867,523],[317,197],[950,570],[1104,662.4]]) {
         const bad=await page.$eval('#view',async(view,{width,height,name})=>{
-          const {readGrid}=await import('/engine.mjs');
+          const {readGrid}=await import('/engine.js');
           view.style.width=width+'px';view.style.height=height+'px';
           const a=view.engine;a.pause();a.resize();a.wasm.mt_frame();
           const g=readGrid(a.wasm);

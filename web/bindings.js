@@ -1,4 +1,4 @@
-import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule} from './engine.mjs';
+import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule} from './engine.js';
 
 const encoder = new TextEncoder(), decoder = new TextDecoder();
 const keyNames = ['None','Rune','Enter','Backspace','Escape','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','Delete','PageUp','PageDown','Insert','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Ctrl+C'];

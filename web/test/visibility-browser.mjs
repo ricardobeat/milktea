@@ -7,7 +7,7 @@ const origin=process.env.MILKTEA_TEST_URL || 'http://127.0.0.1:8000';
 try {
   const page=await browser.newPage({viewport:{width:1000,height:700}});
   await page.route('**/visibility-test.html',route=>route.fulfill({contentType:'text/html',body:
-    '<script type="module" src="/embed.mjs"></script><milktea-view id="one" loading="eager" src="/build/spinners.wasm" style="width:400px;height:200px"></milktea-view><milktea-view id="two" loading="eager" src="/build/spinners.wasm" style="width:400px;height:200px"></milktea-view><div style="height:1600px"></div><milktea-view id="offscreen" loading="eager" src="/build/spinners.wasm"></milktea-view>'}));
+    '<script type="module" src="/embed.js"></script><milktea-view id="one" loading="eager" src="/build/spinners.wasm" style="width:400px;height:200px"></milktea-view><milktea-view id="two" loading="eager" src="/build/spinners.wasm" style="width:400px;height:200px"></milktea-view><div style="height:1600px"></div><milktea-view id="offscreen" loading="eager" src="/build/spinners.wasm"></milktea-view>'}));
   await page.goto(origin+'/visibility-test.html');
   await page.waitForFunction(()=>[...document.querySelectorAll('milktea-view')].every(v=>v.engine));
   assert.equal(await page.$eval('#offscreen',v=>v.engine.paused && v.engine.raf===null || v.engine.paused && v.engine.raf===undefined),true,'eager offscreen embed starts without RAF');

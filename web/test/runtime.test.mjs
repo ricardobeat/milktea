@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {instantiateMilktea, gridText, readGrid, translateKey, createRandom} from '../engine.mjs';
+import {instantiateMilktea, gridText, readGrid, translateKey, createRandom} from '../engine.js';
 const base = new URL('../build/', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('examples.json', base)));
 async function start(name, cols = 80, rows = 24) {

@@ -42,11 +42,11 @@ custom cursor colors currently use the default white inversion.
 ## Embed an example
 
 Try the [inline demo](http://localhost:8000/inline.html) after `just web-serve`.
-Serve `embed.mjs`, `engine.mjs`, `glyphs.mjs`, and the example's `.wasm` file
+Serve `embed.js`, `engine.js`, `glyphs.js`, and the example's `.wasm` file
 alongside your HTML. Import the component once, then add as many embeds as needed:
 
 ```html
-<script type="module" src="./embed.mjs"></script>
+<script type="module" src="./embed.js"></script>
 <milktea-view src="./build/nanobots.wasm" cols="80" rows="24"
   style="width:400px;max-width:100%;height:240px"
   label="Nanobots animation"></milktea-view>
@@ -87,7 +87,7 @@ For direct canvas control, import the lower-level engine instead:
 ```html
 <canvas id="app" style="width:100%;height:480px"></canvas>
 <script type="module">
-  import {MilkteaCanvas} from './engine.mjs';
+  import {MilkteaCanvas} from './engine.js';
   const app = await MilkteaCanvas.load(document.querySelector('#app'),
     './build/paint.wasm', {cellWidth: 10, cellHeight: 20, fontSize: 16});
   // app.setOptions({fontSize: 12, scale: 1.5});
@@ -107,14 +107,14 @@ positions finite beyond the freestanding library's small-angle paths.
 
 `just web-engine` compiles only `build/milktea.wasm`, with no example code.
 `just web-build` also builds this engine alongside the examples. The optimized
-engine is about 82 KB (37 KB with gzip). Serve it with `bindings.mjs`,
-`engine.mjs`, and `glyphs.mjs`. JavaScript owns your model; the WASM engine
+engine is about 82 KB (37 KB with gzip). Serve it with `bindings.js`,
+`engine.js`, and `glyphs.js`. JavaScript owns your model; the WASM engine
 runs milktea dispatch, timers, xray layout, glaze styling and click handling.
 
 ```html
 <canvas id="app" style="width:400px;height:240px"></canvas>
 <script type="module">
-  import {mount, text, vstack} from './bindings.mjs';
+  import {mount, text, vstack} from './bindings.js';
   const app = await mount(document.querySelector('#app'), {
     init: () => [{count: 0}],
     update: (msg, model) => [{count: model.count +

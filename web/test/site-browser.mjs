@@ -24,7 +24,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine?.wasm.mt_width()>0);
   await page.waitForFunction(()=>{const v=document.querySelector('#counter-preview milktea-view');return v.shadowRoot.activeElement===v.canvas;});
   await page.keyboard.press('ArrowUp');
-  await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#counter-preview milktea-view').engine.wasm).includes('Counter: 1');});
+  await page.waitForFunction(async()=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#counter-preview milktea-view').engine.wasm).includes('Counter: 1');});
   await page.locator('#counter-code-tab').click();
   await page.waitForFunction(()=>document.querySelector('#counter-preview milktea-view').engine.paused);
   await page.locator('#counter-code-tab').press('ArrowRight');
@@ -38,10 +38,10 @@ try {
   const input=page.locator('#inputbox milktea-view');
   await input.scrollIntoViewIfNeeded();
   await page.waitForFunction(()=>!!document.querySelector('#inputbox milktea-view').engine);
-  assert.match(await input.evaluate(async v=>{const {gridText}=await import('/engine.mjs');return gridText(v.engine.wasm);}),/Input test/);
+  assert.match(await input.evaluate(async v=>{const {gridText}=await import('/engine.js');return gridText(v.engine.wasm);}),/Input test/);
   await checkTabs('inputbox');
   await input.locator('canvas').click();await page.keyboard.type('hello milktea');await page.keyboard.press('Enter');
-  await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#inputbox milktea-view').engine.wasm).includes('>> hello milktea');});
+  await page.waitForFunction(async()=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#inputbox milktea-view').engine.wasm).includes('>> hello milktea');});
   await input.evaluate(v=>{window.oldInput=v.engine;});
   await page.locator('#inputbox .restart').click();
   await page.waitForFunction(()=>{const a=document.querySelector('#inputbox milktea-view').engine;return a && a!==window.oldInput && a.wasm.mt_width()>0;});
@@ -93,7 +93,7 @@ try {
     await checkTabs(id);
     if (id==='tabs') {
       await view.locator('canvas').focus();await page.keyboard.press('ArrowRight');
-      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#tabs milktea-view').engine.wasm).includes('TTY management');});
+      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#tabs milktea-view').engine.wasm).includes('TTY management');});
     }
     if (id==='color-swatches') {
       assert.deepEqual(await view.evaluate(v=>[v.engine.wasm.mt_width(),v.engine.wasm.mt_height()]),[100,30]);
@@ -103,12 +103,12 @@ try {
       assert.equal(await view.evaluate(v=>Math.abs(v.canvas.getBoundingClientRect().height-v.getBoundingClientRect().height)<1),true,'canvas stays inside the game viewport');
       assert.equal(await view.evaluate(v=>v.engine.viewport.scaleX===v.engine.viewport.scaleY && v.engine.cellHeight===v.engine.cellWidth*2),true,'half-block pixels remain square');
       await view.locator('canvas').focus();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
-      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
+      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
       await page.keyboard.press('Escape');
       async function clickGameButton(label) {
-        await page.waitForFunction(async label=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes(label);},label);
+        await page.waitForFunction(async label=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes(label);},label);
         const position=await view.evaluate(async(v,label)=>{
-          const {gridText}=await import('/engine.mjs'), a=v.engine;
+          const {gridText}=await import('/engine.js'), a=v.engine;
           const rows=gridText(a.wasm).split('\n'), row=rows.findIndex(r=>r.includes(label));
           const col=[...rows[row].slice(0,rows[row].indexOf(label))].length+1;
           return {x:a.viewport.offsetX+(col+.5)*a.cellWidth*a.viewport.scaleX,y:a.viewport.offsetY+(row+.5)*a.cellHeight*a.viewport.scaleY};
@@ -118,7 +118,7 @@ try {
       await clickGameButton('How to Play');
       await clickGameButton('Back to Menu');
       await clickGameButton('Play Game');
-      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.mjs');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
+      await page.waitForFunction(async()=>{const {gridText}=await import('/engine.js');return gridText(document.querySelector('#avian-assault milktea-view').engine.wasm).includes('Aim');});
     }
   }
   await page.screenshot({path:`/private/tmp/milktea-avian-${browserName}.png`});

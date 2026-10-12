@@ -12,13 +12,13 @@ try {
   await page.selectOption('#preset','counter');
   await preview.waitForFunction(()=>window.app?.model.count===0 && window.app.engine.wasm.mt_width()>0);
   const grid=()=>preview.evaluate(async()=>{
-    const {gridText}=await import('/engine.mjs');return gridText(window.app.engine.wasm);
+    const {gridText}=await import('/engine.js');return gridText(window.app.engine.wasm);
   });
   assert.match(await grid(),/Counter: 0/);
   await preview.locator('canvas').click();await page.keyboard.press('ArrowUp');
   await preview.waitForFunction(()=>window.app.model.count===1);
   const plus=await preview.evaluate(async()=>{
-    const {readGrid}=await import('/engine.mjs');const a=window.app.engine,g=readGrid(a.wasm),v=a.viewport;
+    const {readGrid}=await import('/engine.js');const a=window.app.engine,g=readGrid(a.wasm),v=a.viewport;
     for(let i=0;i<g.cols*g.rows;i++) if(g.bytes[g.ptr+i*g.stride]===43)
       return {x:v.offsetX+(i%g.cols+.5)*a.cellWidth*v.scaleX,
         y:v.offsetY+(Math.floor(i/g.cols)+.5)*a.cellHeight*v.scaleY};

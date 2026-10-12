@@ -1,4 +1,4 @@
-import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule, canvasOptions, canvasViewport, fullscreenGrid} from './engine.mjs';
+import {MilkteaCanvas, instantiateMilktea, loadMilkteaModule, canvasOptions, canvasViewport, fullscreenGrid} from './engine.js';
 
 // Import this module once, then place <milktea-view src="…wasm"> in any page.
 export class MilkteaView extends HTMLElement {

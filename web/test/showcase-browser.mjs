@@ -9,7 +9,7 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${origin}/editor.html`);
   const preview=page.frames().find(f=>f.url().endsWith('editor-runner.html'));
-  const grid=()=>preview.evaluate(async()=>{const {gridText}=await import('/engine.mjs');return gridText(window.app.engine.wasm);});
+  const grid=()=>preview.evaluate(async()=>{const {gridText}=await import('/engine.js');return gridText(window.app.engine.wasm);});
   const preset=async(name,ready)=>{
     await page.selectOption('#preset',name);await preview.waitForFunction(ready);
     await preview.waitForFunction(()=>window.app.engine.wasm.mt_width()>0);
@@ -45,9 +45,9 @@ try {
   console.log('PASS native slide/fade compositing completes with no modal ghost');
 
   await preset('styles',()=>window.app?.model.palette===0);
-  const colors=()=>preview.evaluate(async()=>{const {readGrid}=await import('/engine.mjs');const g=readGrid(window.app.engine.wasm);return [...g.bytes.slice(g.ptr,g.ptr+g.cols*g.rows*g.stride)].join(',');});
+  const colors=()=>preview.evaluate(async()=>{const {readGrid}=await import('/engine.js');const g=readGrid(window.app.engine.wasm);return [...g.bytes.slice(g.ptr,g.ptr+g.cols*g.rows*g.stride)].join(',');});
   const initial=await colors();
-  await preview.waitForFunction(async old=>{const {readGrid}=await import('/engine.mjs');const g=readGrid(window.app.engine.wasm);return [...g.bytes.slice(g.ptr,g.ptr+g.cols*g.rows*g.stride)].join(',')!==old;},initial);
+  await preview.waitForFunction(async old=>{const {readGrid}=await import('/engine.js');const g=readGrid(window.app.engine.wasm);return [...g.bytes.slice(g.ptr,g.ptr+g.cols*g.rows*g.stride)].join(',')!==old;},initial);
   assert.match(await grid(),/Rounded \/ rainbow/);
   await preview.locator('canvas').focus();await page.keyboard.press('Space');
   await preview.waitForFunction(()=>window.app.model.palette===1);

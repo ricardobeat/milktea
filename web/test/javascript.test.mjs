@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {instantiateMilktea,gridText,readGrid} from '../engine.mjs';
-import {text,vstack,hstack,tick,quit} from '../bindings.mjs';
+import {instantiateMilktea,gridText,readGrid} from '../engine.js';
+import {text,vstack,hstack,tick,quit} from '../bindings.js';
 
 test('standalone engine: JS callbacks, native layout/styles, timers, paste, clicks and teardown', async () => {
   let w, now=0, destroyed=0;

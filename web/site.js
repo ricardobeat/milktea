@@ -1,4 +1,4 @@
-import './embed.mjs';
+import './embed.js';
 
 // Canvas does not repaint automatically when a web font finishes loading.
 Promise.all([document.fonts.load('12px "Geist Mono"'), document.fonts.load('bold 12px "Geist Mono"')])

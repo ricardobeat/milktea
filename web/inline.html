@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>milktea · inline embeds</title>
-<script type="module" src="./embed.mjs"></script>
+<script type="module" src="./embed.js"></script>
 <style>
   :root { color-scheme: dark; background: #15151d; color: #dfdce5; font: 16px/1.6 system-ui, sans-serif; }
   body { max-width: 1040px; margin: 40px auto; padding: 0 24px 80px; }
@@ -43,7 +43,7 @@
 </div>
 <milktea-view id="playground" class="playground" src="./build/counter.wasm" cols="80" rows="24" style="width:600px" label="Embedding playground"></milktea-view>
 <p>With a fixed grid, the whole example scales to fit. Turn that off to let font size and zoom determine how many cells fit in the viewport.</p>
-<pre><code>&lt;script type="module" src="/milktea/embed.mjs"&gt;&lt;/script&gt;
+<pre><code>&lt;script type="module" src="/milktea/embed.js"&gt;&lt;/script&gt;
 &lt;milktea-view src="/milktea/build/nanobots.wasm"
   cols="80" rows="24" style="width:400px;height:240px"&gt;
 &lt;/milktea-view&gt;</code></pre>

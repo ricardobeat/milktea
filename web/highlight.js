@@ -1,4 +1,4 @@
-import highlight from './vendor/highlight-javascript.mjs';
+import highlight from './vendor/highlight-javascript.js';
 
 // The vendored build includes only Highlight.js core and its JavaScript grammar.
 // Keep the textarea overlay independent of the library's API and markup.

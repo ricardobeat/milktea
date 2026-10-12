@@ -1,5 +1,5 @@
-import {presets, presetNames} from './presets.mjs';
-import {highlightJavaScript} from './highlight.mjs';
+import {presets, presetNames} from './presets.js';
+import {highlightJavaScript} from './highlight.js';
 const code=document.querySelector('#code'), frame=document.querySelector('iframe');
 const preset=document.querySelector('#preset'), status=document.querySelector('#status'), output=document.querySelector('#output');
 for (const [id, label] of Object.entries(presetNames)) preset.add(new Option(label, id));

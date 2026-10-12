@@ -7,7 +7,7 @@ const {build}=require('esbuild');
 const core=require.resolve('highlight.js/lib/core');
 const javascript=require.resolve('highlight.js/lib/languages/javascript');
 const {version}=require('highlight.js/package.json');
-const bundle=fileURLToPath(new URL('../web/vendor/highlight-javascript.mjs',import.meta.url));
+const bundle=fileURLToPath(new URL('../web/vendor/highlight-javascript.js',import.meta.url));
 await build({
   stdin:{contents:`import hljs from ${JSON.stringify(core)};
 import javascript from ${JSON.stringify(javascript)};
@@ -19,7 +19,7 @@ export default source => hljs.highlight(source, {language:'javascript', ignoreIl
 });
 const license=require.resolve('highlight.js/package.json').replace(/package\.json$/, 'LICENSE');
 const {readFile}=await import('node:fs/promises');
-await writeFile(bundle.replace(/\.mjs$/,'.LICENSE'),await readFile(license));
+await writeFile(bundle.replace(/\.js$/,'.LICENSE'),await readFile(license));
 const {gzipSync}=await import('node:zlib');
 const data=await readFile(bundle);
 console.log(`Highlight.js ${version}: ${data.length} bytes, ${gzipSync(data).length} bytes gzip`);

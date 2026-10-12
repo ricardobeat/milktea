@@ -1,5 +1,5 @@
 // A small Canvas2D host for the C3 cell grid. No terminal emulator or bundler.
-import {drawLegacyGlyph} from './glyphs.mjs';
+import {drawLegacyGlyph} from './glyphs.js';
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 const modules = new Map();

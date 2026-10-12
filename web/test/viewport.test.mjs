@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {canvasOptions, canvasViewport, canvasPointer, fullscreenGrid} from '../engine.mjs';
+import {canvasOptions, canvasViewport, canvasPointer, fullscreenGrid} from '../engine.js';
 
 test('responsive embeds: font size and zoom determine cell counts', () => {
   let options = canvasOptions({fontSize: 12});
