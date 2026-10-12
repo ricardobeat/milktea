@@ -33,7 +33,7 @@ test('counter: arrow keys and quit', async () => {
     w.mt_frame(); assert.match(gridText(w), /Counter: 0/);
     w.mt_key(6, 0, 0, 0); w.mt_frame(); assert.match(gridText(w), /Counter: 1/);
     w.mt_key(7, 0, 0, 0); w.mt_frame(); assert.match(gridText(w), /Counter: 0/);
-    w.mt_key(1, 113, 0, 0); assert.equal(w.mt_frame(), 0);
+    w.mt_key(4, 0, 0, 0); assert.equal(w.mt_frame(), 0);
   } finally { w.mt_stop(); }
 });
 test('spinners: all six text variants render and keep animating in the browser',async()=>{
