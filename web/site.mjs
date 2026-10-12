@@ -37,6 +37,11 @@ for (const pane of document.querySelectorAll('#counter-code, .demo-code')) {
     if (performance.now() < releaseAt) {
       event.preventDefault();
       pane.scrollTop = delta > 0 ? max : 0;
+    } else {
+      // Explicitly hand off at the edge: browsers can retain the wheel
+      // gesture on the inner scroller after earlier events were canceled.
+      event.preventDefault();
+      window.scrollBy({top: delta, behavior: 'instant'});
     }
   }, {passive: false});
   pane.addEventListener('scroll', () => {
