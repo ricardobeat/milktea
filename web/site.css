@@ -118,6 +118,11 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .intro {padding-top:54px}
 .wasm-note {border-radius:0;background:#f6d987;border-color:#d7b458;color:#51401f}
 .site-footer .wordmark {font-family:var(--font-display);text-transform:uppercase;font-weight:400;font-size:24px;letter-spacing:0}
+.language-support {padding:28px 0 52px;border-top:1px solid var(--line)}
+.language-support h2 {margin:0 0 18px;font-size:22px}
+.language-buttons {display:flex;flex-wrap:wrap;gap:10px}
+.language-buttons a {display:inline-flex;align-items:center;justify-content:center;min-width:68px;padding:12px 20px;border:1px solid var(--line);border-radius:6px;color:var(--ink);font:14px/1.4 var(--font-mono);transition:background .15s,border-color .15s}
+.language-buttons a:hover,.language-buttons a:focus-visible {background:var(--ink);border-color:var(--ink);color:var(--paper);text-decoration:none}
 @media(max-width:900px) {
   .site-nav nav {gap:20px}
   .hero-bottom {gap:20px}
