@@ -17,13 +17,19 @@ import std::io;
 import std::os::env;
 import std::thread;
 
+alias GuiOverlayFn = fn void(void*);
+
 struct GuiOptions {
+	GuiOverlayFn draw_overlay;   // after cell paint, inside the active render target
+	GuiOverlayFn unload_overlay; // before the graphics context closes
+	void* overlay_ctx;
 	String title;
 	int cols;
 	int rows;
 	int cell_w;
 	int cell_h;
 	int font_size;
+	float font_height_ratio; // ascent-to-descent height / em; 0 keeps pixel-height sizing
 	bool undecorated;
 	float corner_radius; // pixels; 0 = square corners (default). Implies undecorated + a transparent framebuffer.
 	// When set, the first painted frame is written to this path as a PNG and
@@ -621,11 +627,11 @@ struct CellFit {
 	int dy;
 }
 
-fn CellFit cell_fit(rl::RLFont f, int font_size, int cell_w, int cell_h) @local {
+fn CellFit cell_fit(rl::RLFont f, int font_size, int cell_w, int cell_h, float height_ratio = 1.0f) @local {
 	rl::RLVector2 m = rl::measure_text_ex(f, (ZString)"M", (float)font_size, 0);
 	CellFit fit;
 	fit.dx = (int)(((float)cell_w - m.x) * 0.5f + 0.5f);
-	fit.dy = (cell_h - font_size) / 2;
+	fit.dy = (int)(((float)cell_h - (float)font_size * height_ratio) * 0.5f);
 	if (fit.dx < 0) fit.dx = 0;
 	if (fit.dy < 0) fit.dy = 0;
 	return fit;
@@ -647,15 +653,32 @@ fn void shapes_from_font(rl::RLFont font) @local {
 		{ (float)(int)(font.recs[i].x + w / 2), (float)(int)(font.recs[i].y + h / 2), 1, 1 });
 }
 
-fn rl::RLFont load_mono_font(int font_size) {
+String g_font_path @local;
+float g_font_height_ratio @local = 1.0f;
+
+// set_font copies the path and reloads the selected font on the next frame.
+fn void set_font(String path, int cell_w, int cell_h, int font_size, float height_ratio = 1.0f) {
+	if (cell_w < 1 || cell_h < 1 || font_size < 1) return;
+	String next = path.copy(mem);
+	if (g_font_path.ptr) mem::free(g_font_path);
+	g_font_path = next;
+	g_font_height_ratio = height_ratio > 0 ? height_ratio : 1.0f;
+	set_cell_size(cell_w, cell_h, font_size);
+}
+
+fn rl::RLFont load_mono_font(int font_size, float height_ratio = 1.0f) {
 	float dpi_scale = rl::get_window_scale_dpi().x;
 	if (dpi_scale < 1.0f) dpi_scale = 1.0f;
 	int atlas_size = (int)((float)font_size * dpi_scale);
 
 	int[] cps = build_codepoints();
-	foreach (path : font_candidates()) {
+	String[] paths = g_font_path.len ? { g_font_path } : font_candidates();
+	foreach (path : paths) {
 		if (file::exists(path)) {
-			rl::RLFont f = rl::load_font_ex((ZString)path.zstr_tcopy(), atlas_size, cps.ptr, (int)cps.len);
+			rl::RLFont f = rl::load_font_ex((ZString)path.zstr_tcopy(),
+				(int)((float)atlas_size * height_ratio + 0.5f), cps.ptr, (int)cps.len);
+			// DrawTextEx scales by base_size, so retain em sizing after rasterizing the full line height.
+			f.base_size = atlas_size;
 			if (f.glyph_count > 0) {
 				f.texture.set_filter(rl::RLTextureFilter.BILINEAR);
 				return f;
@@ -843,14 +866,15 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// The window has the system clipboard; milktea::set_clipboard and
 	// milktea::clipboard go through it rather than the terminal's ways.
 	milktea::use_clipboard(&gui_clipboard_write, &gui_clipboard_read);
-	rl::RLFont font = load_mono_font(opts.font_size);
+	if (opts.font_height_ratio > 0) g_font_height_ratio = opts.font_height_ratio;
+	rl::RLFont font = load_mono_font(opts.font_size, g_font_height_ratio);
 	shapes_from_font(font);
 	// A point size the app could not fit to its cell exactly leaves the rules
 	// to a second atlas at the cell's height. When the two agree — the usual
 	// case — there is nothing to load and both names point at one font.
 	bool split_atlas = opts.font_size != opts.cell_h;
 	rl::RLFont rule_font = split_atlas ? load_mono_font(opts.cell_h) : font;
-	CellFit text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h);
+	CellFit text_fit = cell_fit(font, opts.font_size, opts.cell_w, opts.cell_h, g_font_height_ratio);
 	CellFit rule_fit = split_atlas
 		? cell_fit(rule_font, opts.cell_h, opts.cell_w, opts.cell_h)
 		: text_fit;
@@ -1107,6 +1131,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		rl::unload_shader(lp.round_shader);
 		rl::unload_render_texture(lp.target);
 	}
+	if (lp.opts.unload_overlay != null) lp.opts.unload_overlay(lp.opts.overlay_ctx);
+	if (g_font_path.ptr) mem::free(g_font_path);
+	g_font_path = "";
+	g_font_height_ratio = 1.0f;
 	rl::close_window();
 
 	// Mirror image of Program.run()'s teardown of the send queue: stop
@@ -1174,11 +1202,11 @@ fn bool gui_frame(GuiLoop* l) @local {
 		l.opts.cell_w = g_req_cell_w;
 		l.opts.cell_h = g_req_cell_h;
 		l.opts.font_size = g_req_font_size;
-		l.font = load_mono_font(l.opts.font_size);
+		l.font = load_mono_font(l.opts.font_size, g_font_height_ratio);
 		shapes_from_font(l.font);
 		l.split_atlas = l.opts.font_size != l.opts.cell_h;
 		l.rule_font = l.split_atlas ? load_mono_font(l.opts.cell_h) : l.font;
-		l.text_fit = cell_fit(l.font, l.opts.font_size, l.opts.cell_w, l.opts.cell_h);
+		l.text_fit = cell_fit(l.font, l.opts.font_size, l.opts.cell_w, l.opts.cell_h, g_font_height_ratio);
 		l.rule_fit = l.split_atlas
 			? cell_fit(l.rule_font, l.opts.cell_h, l.opts.cell_w, l.opts.cell_h)
 			: l.text_fit;
@@ -1494,6 +1522,7 @@ fn bool gui_frame(GuiLoop* l) @local {
 		}
 	}
 
+	if (l.opts.draw_overlay != null) l.opts.draw_overlay(l.opts.overlay_ctx);
 	if (l.shot) {
 		rl::end_mode2d();
 		rl::end_texture_mode();

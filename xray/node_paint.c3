@@ -231,14 +231,14 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 }
 // paints reports whether a node puts anything on screen of its own, as
 // opposed to only laying out its children.
-fn bool Node.paints(&self) @local {
+fn bool Node.paints(&self) {
 	return self.content != null || self.decoration.kind != DecorationKind.NONE;
 }
 
 // covers_cell reports whether any part of the node's solved rect falls in the
 // grid cell (cx, cy). In a GUI the rect is in pixels and need not be aligned
 // to the grid, so a partial overlap counts.
-fn bool Node.covers_cell(&self, sz cx, sz cy) @local {
+fn bool Node.covers_cell(&self, sz cx, sz cy) {
 	Rect r = self.computed_rect;
 	sz uw = self.layout_metrics.unit_w();
 	sz uh = self.layout_metrics.unit_h();

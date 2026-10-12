@@ -4,8 +4,8 @@
 	"c-sources": ["tty_winsize.c"],
 	"dependencies": ["dye", "glaze", "xray"],
 	"targets": {
-		"macos-aarch64": {},
-		"macos-x64": {},
+		"macos-aarch64": { "cflags": "-mmacosx-version-min=11.0" },
+		"macos-x64": { "cflags": "-mmacosx-version-min=11.0" },
 		"linux-x64": {},
 		"linux-aarch64": {},
 		"freebsd-x64": {}
