@@ -69,11 +69,11 @@ fn milktea::Cmd SpinnersModel.init(SpinnersModel* self) @dynamic {
 }
 
 fn milktea::Msg on_spin() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
+	return { .kind = USER, .tag = MSG_SPIN };
 }
 
 fn milktea::Cmd SpinnersModel.update(SpinnersModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
+	if (msg.kind == USER && msg.tag == MSG_SPIN) {
 		self.frame++;
 		// Advances the animation clock, transmits pending glyphs once the
 		// alt screen is up, and reconciles placements.
@@ -83,15 +83,15 @@ fn milktea::Cmd SpinnersModel.update(SpinnersModel* self, milktea::Msg msg) @dyn
 		return milktea::tick(80, &on_spin);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return self.quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return self.quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return self.quit();
 		default:
 	}
@@ -178,7 +178,7 @@ fn milktea::Node* SpinnersModel.view(SpinnersModel* self) @dynamic {
 				string::tformat("%s Cube", self.cube.render())
 			};
 			gallery.add(milktea::text("kitty graphics protocol:", label).height(milktea::cells(1)));
-			gallery.add(milktea::text(glaze::join_horizontal_arr(glaze::Position.TOP, gfx_views[..], 3)));
+			gallery.add(milktea::text(glaze::join_horizontal_arr(TOP, gfx_views[..], 3)));
 			extra_rows = 4;
 		}
 	$endif

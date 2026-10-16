@@ -69,25 +69,25 @@ fn void SpaceModel.compute_colors(SpaceModel* self) {
 }
 
 fn milktea::Cmd SpaceModel.update(SpaceModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.compute_colors();
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 		return milktea::tick(16);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

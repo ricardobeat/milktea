@@ -17,7 +17,7 @@ struct PickerModel {
 }
 
 fn milktea::Msg on_clear_error() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_CLEAR_ERROR };
+	return { .kind = USER, .tag = MSG_CLEAR_ERROR };
 }
 
 fn milktea::Cmd show_error(PickerModel* self, String msg) {
@@ -33,26 +33,26 @@ fn milktea::Cmd PickerModel.init(PickerModel* self) @dynamic {
 }
 
 fn milktea::Cmd PickerModel.update(PickerModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.fp.width = self.width;
 		self.fp.height = self.height;
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_CLEAR_ERROR) {
+	if (msg.kind == USER && msg.tag == MSG_CLEAR_ERROR) {
 		self.has_error = false;
 		self.error_msg = "";
 		return null;
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

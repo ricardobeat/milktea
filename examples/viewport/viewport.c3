@@ -20,7 +20,7 @@ fn milktea::Cmd ViewportModel.init(ViewportModel* self) @dynamic {
 }
 
 fn milktea::Cmd ViewportModel.update(ViewportModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.vp.width = msg.window_size.width;
 		self.vp.height = msg.window_size.height - 6;
 		if (self.vp.height < 3) self.vp.height = 3;
@@ -28,19 +28,19 @@ fn milktea::Cmd ViewportModel.update(ViewportModel* self, milktea::Msg msg) @dyn
 		return null;
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	if (self.vp.handle_key(k)) return null;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') self.vp.scroll_down();
 			if (k.rune == 'k') self.vp.scroll_up();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}

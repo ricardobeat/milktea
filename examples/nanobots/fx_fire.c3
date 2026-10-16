@@ -103,7 +103,7 @@ fn void fire_setup(void* raw) {
 		c.noise_seed = rand_range(0.0f, 1000.0f);
 	}
 	self.fx_state = fs;
-	self.phase = Phase.FIRE;
+	self.phase = FIRE;
 	self.phase_frame = self.frame;
 }
 

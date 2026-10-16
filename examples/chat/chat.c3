@@ -31,18 +31,18 @@ fn milktea::Cmd ChatModel.init(ChatModel* self) @dynamic {
 
 
 fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
 		return milktea::tick(500);
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			if (self.input_len > 0 && self.msg_count < 64) {
 				self.messages[self.msg_count] = (String)self.input_buf[:self.input_len];
 				self.senders[self.msg_count] = "You";
@@ -50,7 +50,7 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 				self.input_len = 0;
 				self.input_cursor = 0;
 			}
-		case milktea::KeyCode.BACKSPACE:
+		case BACKSPACE:
 			if (self.input_cursor > 0) {
 				for (sz i = self.input_cursor; i < self.input_len; i++) {
 					self.input_buf[i - 1] = self.input_buf[i];
@@ -58,11 +58,11 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 				self.input_len--;
 				self.input_cursor--;
 			}
-		case milktea::KeyCode.LEFT:
+		case LEFT:
 			if (self.input_cursor > 0) self.input_cursor--;
-		case milktea::KeyCode.RIGHT:
+		case RIGHT:
 			if (self.input_cursor < self.input_len) self.input_cursor++;
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q' && self.input_len == 0) return milktea::quit();
 			// rune is a codepoint — encode as UTF-8 before inserting into the byte buffer
 			char[4] enc;

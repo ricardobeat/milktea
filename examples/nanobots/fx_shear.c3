@@ -32,7 +32,7 @@ fn void shear_setup(void* raw) {
 		p.wander_rate = rand_range(-0.30f, 0.30f);
 	}
 	self.fx_state = s;
-	self.phase = Phase.SHEAR;
+	self.phase = SHEAR;
 	self.phase_frame = self.frame;
 }
 

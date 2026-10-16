@@ -17,7 +17,7 @@ fn milktea::Cmd FullscreenModel.init(FullscreenModel* self) @dynamic {
 
 
 fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.countdown--;
 		if (self.countdown <= 0) {
 			return milktea::quit();
@@ -25,15 +25,15 @@ fn milktea::Cmd FullscreenModel.update(FullscreenModel* self, milktea::Msg msg) 
 		return milktea::tick(1000);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

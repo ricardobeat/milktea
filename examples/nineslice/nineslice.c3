@@ -310,7 +310,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Msg on_gfx() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_GFX };
+	return { .kind = USER, .tag = MSG_GFX };
 }
 
 // select rebuilds the two boxes whose border changes: the one gaining the
@@ -332,26 +332,26 @@ fn void Model.adjust_radius(Model* self, sz delta) {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_GFX) {
+	if (msg.kind == USER && msg.tag == MSG_GFX) {
 		if (self.tgp_ok) self.gfx.tick();
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.MOUSE) {
-		if (msg.mouse.action != milktea::MouseAction.MOUSE_PRESS) return null;
-		if (msg.mouse.button != milktea::MouseButton.MOUSE_LEFT) return null;
+	if (msg.kind == MOUSE) {
+		if (msg.mouse.action != MOUSE_PRESS) return null;
+		if (msg.mouse.button != MOUSE_LEFT) return null;
 		sz b = self.box_at(msg.mouse.col, msg.mouse.row);
 		if (b >= 0) self.select(b);
 		return milktea::tick(1, &on_gfx);
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return self.quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return self.quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return self.quit();
 			if (k.rune == 't') {
 				// Toggling graphics off leaves images on screen until the
@@ -365,16 +365,16 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			}
 			if (k.rune == '+' || k.rune == '=') { self.adjust_radius(1); return milktea::tick(1, &on_gfx); }
 			if (k.rune == '-') { self.adjust_radius(-1); return milktea::tick(1, &on_gfx); }
-		case milktea::KeyCode.RIGHT:
+		case RIGHT:
 			self.select((self.selected + 1) % BOX_COUNT);
 			return milktea::tick(1, &on_gfx);
-		case milktea::KeyCode.LEFT:
+		case LEFT:
 			self.select((self.selected + BOX_COUNT - 1) % BOX_COUNT);
 			return milktea::tick(1, &on_gfx);
-		case milktea::KeyCode.UP:
+		case UP:
 			self.select((self.selected + BOX_COUNT - COLS) % BOX_COUNT);
 			return milktea::tick(1, &on_gfx);
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			self.select((self.selected + COLS) % BOX_COUNT);
 			return milktea::tick(1, &on_gfx);
 		default:

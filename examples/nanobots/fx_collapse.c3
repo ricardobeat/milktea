@@ -29,7 +29,7 @@ fn void collapse_setup(void* raw) {
 		p.vy = rand_range(-2.0f, 1.0f);
 	}
 	self.fx_state = s;
-	self.phase = Phase.FALL;
+	self.phase = FALL;
 	self.phase_frame = self.frame;
 }
 

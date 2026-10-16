@@ -23,24 +23,24 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			if (self.input.len() > 0) {
 				self.output.append_char('\n');
 				self.output.append_string(">> ");
 				self.output.append_string(self.input.str_view());
 				self.input.clear();
 			}
-		case milktea::KeyCode.BACKSPACE:
+		case BACKSPACE:
 			sz l = self.input.len();
 			if (l > 0) self.input.chop(l - 1);
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q' && self.input.len() == 0) return milktea::quit();
 			// rune is a codepoint — encode as UTF-8 before appending
 			char[4] enc;

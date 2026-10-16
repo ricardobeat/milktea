@@ -198,17 +198,17 @@ fn milktea::Cmd SplitModel.init(SplitModel* self) @dynamic {
 
 
 fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.cursor_blink = 1 - self.cursor_blink;
 		return milktea::tick(500);
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.TAB:
+		case TAB:
 			if (k.shift) {
 				// Shift-Tab: previous pane
 				self.editors[self.focus].focused = false;
@@ -221,13 +221,13 @@ fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
 				self.focus = (self.focus + 1) % self.count;
 				self.editors[self.focus].focused = true;
 			}
-		case milktea::KeyCode.BACKSPACE:
+		case BACKSPACE:
 			self.editors[self.focus].backspace();
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			self.editors[self.focus].insert('\n');
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.ctrl) {
 				if (k.rune == 'n') {
 					// Ctrl+N - add editor

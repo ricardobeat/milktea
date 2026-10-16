@@ -85,7 +85,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		sz new_w = msg.window_size.width;
 		sz new_h = msg.window_size.height * 2;
 		if (new_w > FIRE_MAX_W) new_w = FIRE_MAX_W;
@@ -99,13 +99,13 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
-		if (k.code == milktea::KeyCode.CTRL_C || k.code == milktea::KeyCode.ESC) return milktea::quit();
-		if (k.code == milktea::KeyCode.RUNE && k.rune == 'q') return milktea::quit();
+		if (k.code == CTRL_C || k.code == ESC) return milktea::quit();
+		if (k.code == RUNE && k.rune == 'q') return milktea::quit();
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.tick++;
 
 		// Animate donut — rotate + wobble

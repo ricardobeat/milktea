@@ -21,7 +21,7 @@ fn milktea::Cmd PaginationModel.init(PaginationModel* self) @dynamic {
 }
 
 fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	if (self.pg.handle_key(k)) return null;
@@ -30,19 +30,19 @@ fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) 
 	sz page_end   = self.pg.page_end();
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.UP:
+		case UP:
 			if (self.cursor > page_start) self.cursor--;
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			if (self.cursor < page_end - 1) self.cursor++;
-		case milktea::KeyCode.HOME:
+		case HOME:
 			self.cursor = page_start;
-		case milktea::KeyCode.END:
+		case END:
 			self.cursor = page_end - 1;
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			self.selected[self.cursor] = !self.selected[self.cursor];
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < page_end - 1) self.cursor++;
@@ -50,7 +50,7 @@ fn milktea::Cmd PaginationModel.update(PaginationModel* self, milktea::Msg msg) 
 			if (k.rune == 'k') {
 				if (self.cursor > page_start) self.cursor--;
 			}
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}

@@ -14,13 +14,13 @@ fn milktea::Cmd CanvasModel.init(CanvasModel* self) @dynamic {
 }
 
 fn milktea::Cmd CanvasModel.update(CanvasModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			// Any other letter swaps too — C3 switches don't fall through,
 			// so the flip must happen here as well as in default.
@@ -39,9 +39,9 @@ fn milktea::Node* CanvasModel.view(CanvasModel* self) @dynamic {
 		.with_bold(true);
 
 	String a = card_style.render(
-		glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Hello"));
+		glaze::place_pos(16, 6, CENTER, CENTER, "Hello"));
 	String b = card_style.render(
-		glaze::place_pos(16, 6, glaze::Position.CENTER, glaze::Position.CENTER, "Goodbye"));
+		glaze::place_pos(16, 6, CENTER, CENTER, "Goodbye"));
 
 	glaze::Style footer_style = glaze::style().foreground(glaze::color_hex("#a0a0a0"));
 	sz last_row = milktea::screen_height() > 1 ? milktea::screen_height() - 1 : 0;

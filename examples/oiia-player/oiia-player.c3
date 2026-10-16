@@ -560,7 +560,7 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 }
 
 fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		if (self.model != null) {
@@ -578,7 +578,7 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 
 		if (self.mode == PLAYING && self.glb_loaded && self.model != null) {
@@ -599,9 +599,9 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 		return milktea::tick();
 	}
 
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
-		if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
+		if (k.code == CTRL_C || (k.code == RUNE && k.rune == 'q')) {
 			if (self.sound_pid > 0) kill(self.sound_pid, 15);
 			if (self.img_data != null) stb_image::stbi_image_free(self.img_data);
 			self.free_model();
@@ -616,8 +616,8 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 		}
 	}
 
-	if (msg.kind == milktea::MsgKind.MOUSE && msg.mouse.action == milktea::MouseAction.MOUSE_PRESS
-		&& msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+	if (msg.kind == MOUSE && msg.mouse.action == MOUSE_PRESS
+		&& msg.mouse.button == MOUSE_LEFT) {
 		if (self.mode == SHOWING_IMAGE) {
 			self.play_sound();
 			self.load_glb_model();
@@ -933,7 +933,7 @@ fn milktea::Node* App.view(App* self) @dynamic {
 
 fn int main() {
 	App* app = mem::new(App);
-	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

@@ -49,7 +49,7 @@ fn void implode_setup(void* raw) {
 		p.wander = rand_range(-0.35f, 0.35f);
 	}
 	self.fx_state = s;
-	self.phase = Phase.IMPLODE;
+	self.phase = IMPLODE;
 	self.phase_frame = self.frame;
 }
 

@@ -57,12 +57,12 @@ struct Counter { int value; }
 fn milktea::Cmd Counter.init(Counter* self) @dynamic => null;
 
 fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
-    if (msg.kind != milktea::MsgKind.KEY) return null;
+    if (msg.kind != KEY) return null;
     switch (msg.key.code) {
-        case milktea::KeyCode.UP:     self.value++;
-        case milktea::KeyCode.DOWN:   self.value--;
-        case milktea::KeyCode.CTRL_C: return milktea::quit();
-        case milktea::KeyCode.RUNE:
+        case UP:     self.value++;
+        case DOWN:   self.value--;
+        case CTRL_C: return milktea::quit();
+        case RUNE:
             if (msg.key.rune == 'q') return milktea::quit();
         default:
     }
@@ -102,7 +102,7 @@ The model is used through a pointer for the whole run. Do not copy it after
 Counter c = { };
 DString out = dstring::new();
 milktea::Program p = milktea::@test_program(&c, &out, 80, 24);
-p.send({ .kind = milktea::MsgKind.QUIT });
+p.send({ .kind = QUIT });
 p.run()!!;
 ```
 
@@ -220,7 +220,7 @@ A custom `Cmd` is just a function returning a `Msg`:
 
 ```c3
 const int MY_MSG = 1;
-fn milktea::Msg produce() => { .kind = milktea::MsgKind.USER, .tag = MY_MSG };
+fn milktea::Msg produce() => { .kind = USER, .tag = MY_MSG };
 // ...
 return milktea::tick(100, &produce);
 ```
@@ -358,7 +358,7 @@ change asks the runtime for frames until it arrives, so the model runs no
 timer for it.
 
 ```c3
-Tween t = milktea::tween(0, 300, Easing.EASE_OUT_CUBIC); // resting at 0
+Tween t = milktea::tween(0, 300, EASE_OUT_CUBIC); // resting at 0
 t.update(target);    // run to target from wherever it is now (in update())
 t.value();           // where it is now (in view())
 t.moving();          // false once it arrives

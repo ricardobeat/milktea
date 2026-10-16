@@ -61,29 +61,29 @@ fn void Dialog.show(&self) {
 }
 
 fn Pressed Dialog.handle_key(&self, milktea::KeyMsg k) {
-	if (!self.open) return Pressed.NOTHING;
+	if (!self.open) return NOTHING;
 
 	switch (k.code) {
-		case milktea::KeyCode.ESC:
+		case ESC:
 			self.open = false;
-			return Pressed.DISMISSED;
-		case milktea::KeyCode.LEFT:
-		case milktea::KeyCode.RIGHT:
-		case milktea::KeyCode.TAB:
+			return DISMISSED;
+		case LEFT:
+		case RIGHT:
+		case TAB:
 			self.focused = (self.focused + 1) % DIALOG_BUTTONS;
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			self.open = false;
-			return Pressed.CONFIRMED;
+			return CONFIRMED;
 		default:
 	}
-	return Pressed.NOTHING;
+	return NOTHING;
 }
 
 // take_pending returns and clears whatever a mouse click reported since the
 // last call — the click path's counterpart to handle_key's return value.
 fn Pressed Dialog.take_pending(&self) {
 	Pressed p = self.pending;
-	self.pending = Pressed.NOTHING;
+	self.pending = NOTHING;
 	return p;
 }
 
@@ -91,13 +91,13 @@ fn void button_clicked(void* ctx, sz col, sz row) @local {
 	ButtonSlot* slot = (ButtonSlot*)ctx;
 	slot.dialog.focused = slot.index;
 	slot.dialog.open = false;
-	slot.dialog.pending = slot.index == 0 ? Pressed.CONFIRMED : Pressed.DISMISSED;
+	slot.dialog.pending = slot.index == 0 ? CONFIRMED : DISMISSED;
 }
 
 fn void backdrop_dismissed(void* ctx, sz col, sz row) @local {
 	Dialog* d = (Dialog*)ctx;
 	d.open = false;
-	d.pending = Pressed.DISMISSED;
+	d.pending = DISMISSED;
 }
 
 // node returns the dialog, or null when it is closed, so the caller can add
@@ -130,14 +130,14 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	// carries the same bg as the panel. title_s stays a separate style baked
 	// into the string (render() below) since only the title is accented.
 	glaze::Style body_s = { .fg = th.text, .bg = th.panel };
-	String header = glaze::join_vertical_arr(glaze::Position.LEFT, {
+	String header = glaze::join_vertical_arr(LEFT, {
 		title_s.background(th.panel).render(self.title), "", body_s.render(self.body),
 	});
 	panel_node.add(milktea::text(header, body_s));
 
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)
-		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
+		.with_justify(JUSTIFY_CENTER)
 		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .dialog = self, .index = i };

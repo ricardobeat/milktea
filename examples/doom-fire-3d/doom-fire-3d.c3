@@ -253,7 +253,7 @@ fn milktea::Cmd Fire3DModel.init(Fire3DModel* self) @dynamic {
 }
 
 fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
@@ -265,7 +265,7 @@ fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 
 		// spawn new particles
@@ -283,12 +283,12 @@ fn milktea::Cmd Fire3DModel.update(Fire3DModel* self, milktea::Msg msg) @dynamic
 		return milktea::tick();
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

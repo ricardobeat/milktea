@@ -163,15 +163,15 @@ fn sz tree_hash(sz x, sz z) {
 fn void Minecraft.place_tree(Minecraft* self, sz tx, sz tz, sz base_y) {
 	// Trunk: 3 WOOD blocks above the grass surface
 	for (sz y = base_y + 1; y <= base_y + 3; y++) {
-		self.add_block_typed(tx, y, tz, BlockType.WOOD);
+		self.add_block_typed(tx, y, tz, WOOD);
 	}
 	// Canopy: two leaf layers at y = base_y+4 and base_y+5, radius ~2.2
 	for (sz ox = -2; ox <= 2; ox++) {
 		for (sz oz = -2; oz <= 2; oz++) {
 			float d = (float)math::sqrt((float)(ox * ox + oz * oz));
 			if (d > 2.2f) continue;
-			self.add_block_typed(tx + ox, base_y + 4, tz + oz, BlockType.LEAF);
-			self.add_block_typed(tx + ox, base_y + 5, tz + oz, BlockType.LEAF);
+			self.add_block_typed(tx + ox, base_y + 4, tz + oz, LEAF);
+			self.add_block_typed(tx + ox, base_y + 5, tz + oz, LEAF);
 		}
 	}
 }
@@ -211,12 +211,12 @@ fn void Minecraft.regen_world(Minecraft* self) {
 			sz h = terrain_height(x, z);
 
 			// Top layer: grass
-			if (!self.is_mined(x, h, z)) self.add_block_typed(x, h, z, BlockType.GRASS);
+			if (!self.is_mined(x, h, z)) self.add_block_typed(x, h, z, GRASS);
 			// Below grass: dirt
-			if (!self.is_mined(x, h - 1, z)) self.add_block_typed(x, h - 1, z, BlockType.DIRT);
+			if (!self.is_mined(x, h - 1, z)) self.add_block_typed(x, h - 1, z, DIRT);
 			// Stone one more down, only if column is tall enough (saves blocks)
 			if (h >= 2 && !self.is_mined(x, h - 2, z)) {
-				self.add_block_typed(x, h - 2, z, BlockType.STONE);
+				self.add_block_typed(x, h - 2, z, STONE);
 			}
 
 			// Deterministic sparse tree placement: only on a coarse 5x5 grid
@@ -244,7 +244,7 @@ fn void Minecraft.regen_world(Minecraft* self) {
 // normal index (0=+x,1=-x,2=+y,3=-y,4=+z,5=-z).
 macro void base_color_for_face(BlockType btype, sz face_idx, char* r, char* g, char* b) {
 	switch (btype) {
-		case BlockType.GRASS:
+		case GRASS:
 			// Top (+y) is grass green; bottom is dirt; sides are dirt with a
 			// thin green strip handled per-pixel via v coordinate.
 			if (face_idx == 2) {
@@ -257,9 +257,9 @@ macro void base_color_for_face(BlockType btype, sz face_idx, char* r, char* g, c
 				// sides: base dirt color; green strip added per-pixel
 				*r = 110; *g = 75; *b = 30;
 			}
-		case BlockType.DIRT:
+		case DIRT:
 			*r = 110; *g = 75; *b = 30;
-		case BlockType.WOOD:
+		case WOOD:
 			if (face_idx == 2 || face_idx == 3) {
 				// Top/bottom: wood rings (yellowish)
 				*r = 180; *g = 140; *b = 80;
@@ -267,9 +267,9 @@ macro void base_color_for_face(BlockType btype, sz face_idx, char* r, char* g, c
 				// Sides: bark brown
 				*r = 120; *g = 80; *b = 45;
 			}
-		case BlockType.LEAF:
+		case LEAF:
 			*r = 40; *g = 140; *b = 40;
-		case BlockType.STONE:
+		case STONE:
 			*r = 128; *g = 128; *b = 128;
 	}
 }
@@ -283,7 +283,7 @@ fn void Minecraft.add_block_typed(Minecraft* self, sz x, sz y, sz z, BlockType b
 
 fn void Minecraft.add_block(Minecraft* self, sz x, sz y, sz z, char r, char g, char b) {
 	if (self.block_count >= MAX_BLOCKS) return;
-	self.blocks[self.block_count++] = { x, y, z, r, g, b, true, BlockType.STONE };
+	self.blocks[self.block_count++] = { x, y, z, r, g, b, true, STONE };
 }
 
 // ── Tea Methods ──────────────────────────────────────────────────────────────
@@ -349,7 +349,7 @@ fn bool Minecraft.body_collides(Minecraft* self, float x, float y_eye, float z) 
 }
 
 fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
@@ -361,17 +361,17 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
-		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
+		if (k.code == ESC || (k.code == RUNE && k.rune == 'q')) return milktea::quit();
 
-		bool is_release = k.action == milktea::KeyAction.KEY_RELEASE;
+		bool is_release = k.action == KEY_RELEASE;
 
 		// Held-key state for w/a/s/d/space: PRESS/REPEAT mark the key held
 		// and stamp the current tick; RELEASE clears it immediately. On
 		// terminals that never send releases, a safety expiry in TICK
 		// clears keys that haven't been refreshed in a few ticks.
-		if (k.code == milktea::KeyCode.RUNE) {
+		if (k.code == RUNE) {
 			switch (k.rune) {
 				case 'w':
 					self.held_w = !is_release;
@@ -395,7 +395,7 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 		// Non-movement actions only fire on PRESS/REPEAT, never on RELEASE
 		// (a release of 'f' must not mine a second block).
 		if (!is_release) {
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				switch (k.rune) {
 					case 'f':
 						self.swing_frame = 10;
@@ -408,12 +408,12 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 			}
 			// Arrow keys: angular velocity for smooth rotation.
 			// damp=0.75 -> steady state = 0.015/0.25 = 0.06 rad/tick.
-			if (k.code == milktea::KeyCode.LEFT)  self.vel_yaw -= 0.015f;
-			if (k.code == milktea::KeyCode.RIGHT) self.vel_yaw += 0.015f;
+			if (k.code == LEFT)  self.vel_yaw -= 0.015f;
+			if (k.code == RIGHT) self.vel_yaw += 0.015f;
 		}
 	}
 
-	if (msg.kind == milktea::MsgKind.MOUSE) {
+	if (msg.kind == MOUSE) {
 		if (!self.mouse_init) {
 			self.mouse_x = msg.mouse.col;
 			self.mouse_y = msg.mouse.row;
@@ -421,7 +421,7 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 			self.mouse_py = msg.mouse.py;
 			self.mouse_init = true;
 		} else {
-			if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
+			if (msg.mouse.action == MOUSE_MOTION) {
 				// Prefer pixel-resolution deltas when the terminal reports them
 				// (SGR-Pixels, DEC mode 1016); pixels are square so no aspect
 				// correction is needed and both axes share one sensitivity.
@@ -455,16 +455,16 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 				self.mouse_py = msg.mouse.py;
 			}
 		}
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+		if (msg.mouse.action == MOUSE_PRESS && msg.mouse.button == MOUSE_LEFT) {
 			self.swing_frame = 10;
 			self.mine_block();
 		}
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_RIGHT) {
+		if (msg.mouse.action == MOUSE_PRESS && msg.mouse.button == MOUSE_RIGHT) {
 			self.place_block();
 		}
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.tick_count++;
 		self.frame++;
 		if (self.swing_frame > 0) self.swing_frame--;
@@ -742,7 +742,7 @@ fn void Minecraft.place_block(Minecraft* self) {
 	if (self.placed_count >= 512) return;
 
 	// Placed blocks are always stone.
-	self.add_block_typed(px, py, pz, BlockType.STONE);
+	self.add_block_typed(px, py, pz, STONE);
 	self.placed_blocks[self.placed_count][0] = px;
 	self.placed_blocks[self.placed_count][1] = py;
 	self.placed_blocks[self.placed_count][2] = pz;
@@ -1040,7 +1040,7 @@ fn milktea::Node* Minecraft.view(Minecraft* self) @dynamic {
 
 				// Per-block-type texture details at pixel level:
 				switch (f.btype) {
-					case BlockType.GRASS:
+					case GRASS:
 						// Side faces: green strip on the top edge (v near 1.0 = top of face)
 						if (f.face_idx != 2 && f.face_idx != 3) {
 							// v ranges -1 (bottom) to +1 (top); green strip above 0.6
@@ -1048,7 +1048,7 @@ fn milktea::Node* Minecraft.view(Minecraft* self) @dynamic {
 								base_r = 80; base_g = 160; base_b = 50;
 							}
 						}
-					case BlockType.WOOD:
+					case WOOD:
 						// Side faces: vertical stripe variation — hash on u cell only
 						if (f.face_idx != 2 && f.face_idx != 3) {
 							sz stripe_hash = tex_hash(f.bx, f.by, f.bz, f.face_idx, tu_cell, 0);
@@ -1056,7 +1056,7 @@ fn milktea::Node* Minecraft.view(Minecraft* self) @dynamic {
 							// Override jitter for stripe effect; r/g/b unchanged
 							jitter = stripe_jitter;
 						}
-					case BlockType.LEAF:
+					case LEAF:
 						// Punch occasional darker holes (transparency effect via darkening)
 						if (hash < 30) {
 							// Dark hole — strongly reduce brightness
@@ -1185,7 +1185,7 @@ fn int main(String[] args) {
 		.alt_screen = true,
 		// ALL_MOTION lets the runtime manage mouse tracking, so free-look
 		// works by moving the mouse without holding any button.
-		.mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION,
+		.mouse_mode = MOUSE_MODE_ALL_MOTION,
 		.mouse_pixels = true,
 		.report_key_events = true,
 	})) {

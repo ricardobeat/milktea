@@ -94,45 +94,45 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 	if (!self.open) return self.handle_bar_key(k);
 
 	switch (k.code) {
-		case milktea::KeyCode.ESC:
+		case ESC:
 			self.open = false;
-			return Chosen.DISMISSED;
-		case milktea::KeyCode.UP:
+			return DISMISSED;
+		case UP:
 			if (self.item > 0) self.item--;
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			if (self.item < MENU_ITEMS - 1) self.item++;
-		case milktea::KeyCode.LEFT:
+		case LEFT:
 			if (self.selected > 0) self.selected--;
 			self.item = 0;
-		case milktea::KeyCode.RIGHT:
+		case RIGHT:
 			if (self.selected < MENU_COLS - 1) self.selected++;
 			self.item = 0;
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			self.open = false;
-			return Chosen.PICKED;
+			return PICKED;
 		default:
 	}
-	return Chosen.NOTHING;
+	return NOTHING;
 }
 
 // handle_bar_key is the closed state: arrows move along the bar, and Enter or
 // Down opens the dropdown under the current title.
 fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
-		case milktea::KeyCode.LEFT:
+		case LEFT:
 			if (self.selected > 0) self.selected--;
-		case milktea::KeyCode.RIGHT:
+		case RIGHT:
 			if (self.selected < MENU_COLS - 1) self.selected++;
-		case milktea::KeyCode.DOWN:
-		case milktea::KeyCode.ENTER:
+		case DOWN:
+		case ENTER:
 			self.open = true;
 			self.item = 0;
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'h' && self.selected > 0) self.selected--;
 			if (k.rune == 'l' && self.selected < MENU_COLS - 1) self.selected++;
 		default:
 	}
-	return Chosen.NOTHING;
+	return NOTHING;
 }
 
 // dismiss closes the menu without picking anything — fired by a click
@@ -145,7 +145,7 @@ fn void Menu.dismiss(&self) {
 // last call — the click path's counterpart to handle_key's return value.
 fn Chosen Menu.take_pending(&self) {
 	Chosen p = self.pending;
-	self.pending = Chosen.NOTHING;
+	self.pending = NOTHING;
 	return p;
 }
 
@@ -167,13 +167,13 @@ fn void item_clicked(void* ctx, sz col, sz row) @local {
 	ItemSlot* slot = (ItemSlot*)ctx;
 	slot.menu.item = slot.index;
 	slot.menu.open = false;
-	slot.menu.pending = Chosen.PICKED;
+	slot.menu.pending = PICKED;
 }
 
 fn void dropdown_dismissed(void* ctx, sz col, sz row) @local {
 	Menu* m = (Menu*)ctx;
 	m.dismiss();
-	m.pending = Chosen.DISMISSED;
+	m.pending = DISMISSED;
 }
 
 // ── view ─────────────────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
 	xray::Node* bg = milktea::text("", base).height(milktea::cells(1));
 	xray::Node* row = xray::hstack()
-		.with_justify(xray::JustifyContent.JUSTIFY_SPACE_BETWEEN)
+		.with_justify(JUSTIFY_SPACE_BETWEEN)
 		.with_padding(0, ITEM_PAD, 0, ITEM_PAD);
 	// Both children need an explicit (shrink-to-content) width: hstack's
 	// default is fill, which would split the row 50/50 between them and

@@ -18,7 +18,7 @@ fn milktea::Cmd glb::GlbModel.init(glb::GlbModel* self) @dynamic {
 }
 
 fn milktea::Cmd glb::GlbModel.update(glb::GlbModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.resize(self.width, self.height);
@@ -209,7 +209,7 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 }
 
 fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		if (self.model != null) {
@@ -220,23 +220,23 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	}
 
 	if (self.mode == VIEWING) {
-		if (msg.kind == milktea::MsgKind.MOUSE) {
-			if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS) {
-				if (msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+		if (msg.kind == MOUSE) {
+			if (msg.mouse.action == MOUSE_PRESS) {
+				if (msg.mouse.button == MOUSE_LEFT) {
 					self.dragging = true;
 					self.drag_start_x = msg.mouse.col;
 					self.drag_start_y = msg.mouse.row;
 					self.drag_start_yaw = self.model_yaw;
 					self.drag_start_pitch = self.model_pitch;
 					self.auto_rotate = false;
-				} else if (msg.mouse.button == milktea::MouseButton.MOUSE_WHEEL_UP) {
+				} else if (msg.mouse.button == MOUSE_WHEEL_UP) {
 					float fwd_x =  (float)math::sin(self.cam_yaw) * (float)math::cos(self.cam_pitch);
 					float fwd_y = -(float)math::sin(self.cam_pitch);
 					float fwd_z =  (float)math::cos(self.cam_yaw) * (float)math::cos(self.cam_pitch);
 					self.cam_px += fwd_x * 0.2f;
 					self.cam_py += fwd_y * 0.2f;
 					self.cam_pz += fwd_z * 0.2f;
-				} else if (msg.mouse.button == milktea::MouseButton.MOUSE_WHEEL_DOWN) {
+				} else if (msg.mouse.button == MOUSE_WHEEL_DOWN) {
 					float fwd_x =  (float)math::sin(self.cam_yaw) * (float)math::cos(self.cam_pitch);
 					float fwd_y = -(float)math::sin(self.cam_pitch);
 					float fwd_z =  (float)math::cos(self.cam_yaw) * (float)math::cos(self.cam_pitch);
@@ -244,11 +244,11 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 					self.cam_py -= fwd_y * 0.2f;
 					self.cam_pz -= fwd_z * 0.2f;
 				}
-			} else if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
-				if (msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+			} else if (msg.mouse.action == MOUSE_RELEASE) {
+				if (msg.mouse.button == MOUSE_LEFT) {
 					self.dragging = false;
 				}
-			} else if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
+			} else if (msg.mouse.action == MOUSE_MOTION && self.dragging) {
 				sz total_dx = msg.mouse.col - self.drag_start_x;
 				sz total_dy = msg.mouse.row - self.drag_start_y;
 				self.model_yaw   = self.drag_start_yaw   + (float)total_dx / (float)self.width * 2.0f;
@@ -257,21 +257,21 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 				if (self.model_pitch < -1.4f) self.model_pitch = -1.4f;
 			}
 		}
-		if (msg.kind == milktea::MsgKind.KEY) {
+		if (msg.kind == KEY) {
 			milktea::KeyMsg k = msg.key;
-			if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'b')) {
+			if (k.code == ESC || (k.code == RUNE && k.rune == 'b')) {
 				self.mode = PICKING;
 				return null;
 			}
-			if (k.code == milktea::KeyCode.CTRL_C || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) {
+			if (k.code == CTRL_C || (k.code == RUNE && k.rune == 'q')) {
 				return milktea::quit();
 			}
-			if (k.code == milktea::KeyCode.RUNE && k.rune == ' ') {
+			if (k.code == RUNE && k.rune == ' ') {
 				self.auto_rotate = !self.auto_rotate;
 				if (self.auto_rotate) self.sync_bob_phase();
 				return null;
 			}
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				switch (k.rune) {
 					case 'w': self.key_w = self.tick_count; self.auto_rotate = false;
 					case 's': self.key_s = self.tick_count; self.auto_rotate = false;
@@ -280,12 +280,12 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 					default:
 				}
 			}
-			if (k.code == milktea::KeyCode.UP)   { self.key_up = self.tick_count;    self.auto_rotate = false; }
-			if (k.code == milktea::KeyCode.DOWN)  { self.key_down = self.tick_count;  self.auto_rotate = false; }
-			if (k.code == milktea::KeyCode.LEFT)  { self.key_left = self.tick_count;  self.auto_rotate = false; }
-			if (k.code == milktea::KeyCode.RIGHT) { self.key_right = self.tick_count; self.auto_rotate = false; }
+			if (k.code == UP)   { self.key_up = self.tick_count;    self.auto_rotate = false; }
+			if (k.code == DOWN)  { self.key_down = self.tick_count;  self.auto_rotate = false; }
+			if (k.code == LEFT)  { self.key_left = self.tick_count;  self.auto_rotate = false; }
+			if (k.code == RIGHT) { self.key_right = self.tick_count; self.auto_rotate = false; }
 		}
-		if (msg.kind == milktea::MsgKind.TICK) {
+		if (msg.kind == TICK) {
 			self.tick_count++;
 			sz held_thresh = self.tick_count - 2;
 			bool held_w     = self.key_w >= held_thresh;
@@ -355,14 +355,14 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 	}
 
 	// PICKING mode
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	sz visible = self.height - 3;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < self.file_count - 1) {
@@ -376,17 +376,17 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 					if (self.cursor < self.scroll) self.scroll--;
 				}
 			}
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			if (self.cursor < self.file_count - 1) {
 				self.cursor++;
 				if (self.cursor >= self.scroll + visible) self.scroll++;
 			}
-		case milktea::KeyCode.UP:
+		case UP:
 			if (self.cursor > 0) {
 				self.cursor--;
 				if (self.cursor < self.scroll) self.scroll--;
 			}
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			if (self.file_count > 0) {
 				self.load_file(self.files[self.cursor]);
 				if (self.mode == VIEWING) return milktea::tick();
@@ -458,7 +458,7 @@ fn int main(String[] args) {
 		}
 	}
 
-	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
+	if (catch err = milktea::@run_program(app, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

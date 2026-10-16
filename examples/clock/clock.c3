@@ -312,7 +312,7 @@ fn milktea::Cmd ClockModel.init(ClockModel* self) @dynamic {
 }
 
 fn milktea::Cmd ClockModel.update(ClockModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.w = msg.window_size.width;
 		self.h = msg.window_size.height;
 		if (self.canvas != null) self.canvas.destroy();
@@ -320,7 +320,7 @@ fn milktea::Cmd ClockModel.update(ClockModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 		for (sz i = 0; i < 3; i++) {
 			Cloud* c = &self.clouds[i];
@@ -337,14 +337,14 @@ fn milktea::Cmd ClockModel.update(ClockModel* self, milktea::Msg msg) @dynamic {
 		return milktea::tick(50);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C: return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case CTRL_C: return milktea::quit();
+		case RUNE:
 			if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
-		case milktea::KeyCode.ESC: return milktea::quit();
+		case ESC: return milktea::quit();
 		default:
 	}
 	return null;

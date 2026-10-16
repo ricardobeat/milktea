@@ -505,7 +505,7 @@ fn void Model.restart_cycle(Model* self) {
 	self.preview_at = 0;
 	self.next_emit_index = 0;
 	self.last_emit_frame = self.frame - EMIT_COOLDOWN;
-	self.phase = Phase.BUILD;
+	self.phase = BUILD;
 	self.phase_frame = self.frame;
 	self.rotate_corner();
 	self.emit_cloud();
@@ -523,7 +523,7 @@ fn void Model.update_physics(Model* self) {
 			p.vy = 0;
 			continue;
 		}
-		if (self.phase == Phase.BLOW) {
+		if (self.phase == BLOW) {
 			// No pull, no walls — coast outward until off screen, then retire.
 			p.vx *= decay(0.995f);
 			p.vy *= decay(0.995f);
@@ -618,7 +618,7 @@ fn void Model.update_physics(Model* self) {
 }
 
 fn glaze::Color to_glaze(xray::Color c) {
-	return { .kind = glaze::ColorKind.TRUECOLOR, .r = c.r, .g = c.g, .b = c.b };
+	return { .kind = TRUECOLOR, .r = c.r, .g = c.g, .b = c.b };
 }
 
 // Like gradient_color but samples at an arbitrary, wrapping offset — used
@@ -664,7 +664,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.h = 24;
 	self.frame = 0;
 	self.last_emit_frame = -EMIT_COOLDOWN;
-	self.phase = Phase.BUILD;
+	self.phase = BUILD;
 	self.phase_frame = 0;
 	self.cycle = 0;
 	self.next_emit_index = 0;
@@ -712,20 +712,20 @@ fn void Model.step(Model* self) {
 	}
 	self.update_physics();
 		switch (self.phase) {
-			case Phase.BUILD:
+			case BUILD:
 				if (self.next_emit_index < self.total
 						&& self.frame - self.last_emit_frame >= EMIT_COOLDOWN) {
 					self.rotate_corner();
 					self.emit_cloud();
 				} else if (self.all_settled()) {
-					self.phase = Phase.HOLD;
+					self.phase = HOLD;
 					self.phase_frame = self.frame;
 				} else if (self.frame - self.phase_frame > BUILD_TIMEOUT) {
 					self.snap_stragglers();
-					self.phase = Phase.HOLD;
+					self.phase = HOLD;
 					self.phase_frame = self.frame;
 				}
-			case Phase.HOLD:
+			case HOLD:
 				if (self.preview_at == 0
 						&& self.frame - self.phase_frame >= HOLD_DURATION) {
 					self.start_exit();
@@ -735,13 +735,13 @@ fn void Model.step(Model* self) {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.w = msg.window_size.width;
 		self.h = msg.window_size.height;
 		if (self.canvas != null) self.canvas.destroy();
 		self.canvas = xray::new_screen_buffer((sz)self.w, (sz)self.h);
 		self.alloc_half_buffers();
-		self.phase = Phase.BUILD;
+		self.phase = BUILD;
 		self.phase_frame = self.frame;
 		self.next_emit_index = 0;
 		self.parse_text();
@@ -751,7 +751,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return arm_tick(self);
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		// Holding space runs extra steps per frame rather than shortening the
 		// frame, so the frame rate stays put and only the sim speeds up.
 		sz steps = self.frame < self.turbo_until ? BASE_STEPS * 4 : BASE_STEPS;
@@ -759,11 +759,11 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return arm_tick(self);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C: return milktea::quit();
-		case milktea::KeyCode.TAB:
+		case CTRL_C: return milktea::quit();
+		case TAB:
 			// Step to the next effect. If a preview is already queued and
 			// waiting out its delay, step from *that* rather than from the
 			// last effect actually run — otherwise every TAB during the
@@ -773,7 +773,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			} else if (self.exit_previewed || self.has_last_exit) {
 				self.forced_exit = (Exit)(((sz)self.last_exit + 1) % EXIT_COUNT);
 			} else {
-				self.forced_exit = Exit.EXPLODE;
+				self.forced_exit = EXPLODE;
 			}
 			self.exit_forced = true;
 			self.exit_previewed = true;
@@ -790,12 +790,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			// enough to read the badge and see the word whole, without the
 			// full rebuild that would make the key useless for comparing.
 			self.snap_stragglers();
-			self.phase = Phase.HOLD;
+			self.phase = HOLD;
 			self.phase_frame = self.frame;
 			self.preview_at = self.frame + @dur(40);
 			self.badge_until = self.frame + BADGE_DURATION;
 			return null;
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
 			if (k.rune == 'r' || k.rune == 'R') {
 				self.restart_cycle();
@@ -809,12 +809,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 				return null;
 			}
 			if (k.rune == 'b' || k.rune == 'B') {
-				if (self.phase == Phase.BUILD || self.phase == Phase.HOLD) {
+				if (self.phase == BUILD || self.phase == HOLD) {
 					self.start_exit();
 				}
 				return null;
 			}
-		case milktea::KeyCode.ESC: return milktea::quit();
+		case ESC: return milktea::quit();
 		default:
 	}
 	return null;
@@ -822,19 +822,19 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 
 fn String exit_name(Exit e) {
 	switch (e) {
-		case Exit.EXPLODE: return "EXPLODE";
-		case Exit.COLLAPSE: return "COLLAPSE";
-		case Exit.SLICE: return "SLICE";
-		case Exit.VORTEX: return "VORTEX";
-		case Exit.DISSOLVE: return "DISSOLVE";
-		case Exit.SHEAR: return "SHEAR";
-		case Exit.TOPPLE: return "TOPPLE";
-		case Exit.IMPLODE: return "IMPLODE";
-		case Exit.SPLAT: return "SPLAT";
-		case Exit.FIRE: return "FIRE";
-		case Exit.SPHERES: return "SPHERES";
-		case Exit.RAINBOW: return "RAINBOW";
-		case Exit.GRADIENT: return "GRADIENT";
+		case EXPLODE: return "EXPLODE";
+		case COLLAPSE: return "COLLAPSE";
+		case SLICE: return "SLICE";
+		case VORTEX: return "VORTEX";
+		case DISSOLVE: return "DISSOLVE";
+		case SHEAR: return "SHEAR";
+		case TOPPLE: return "TOPPLE";
+		case IMPLODE: return "IMPLODE";
+		case SPLAT: return "SPLAT";
+		case FIRE: return "FIRE";
+		case SPHERES: return "SPHERES";
+		case RAINBOW: return "RAINBOW";
+		case GRADIENT: return "GRADIENT";
 		default: return "?";
 	}
 }

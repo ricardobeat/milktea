@@ -44,19 +44,19 @@ fn void Model.run_exit(Model* self, Exit e) {
 	// TAB mid-animation switches effects, so the old one has to let go.
 	if (self.fx_active && self.fx.teardown) self.fx.teardown(self);
 	switch (e) {
-		case Exit.EXPLODE: self.fx = explode_effect();
-		case Exit.COLLAPSE: self.fx = collapse_effect();
-		case Exit.SLICE: self.fx = slice_effect();
-		case Exit.VORTEX: self.fx = vortex_effect();
-		case Exit.DISSOLVE: self.fx = dissolve_effect();
-		case Exit.SHEAR: self.fx = shear_effect();
-		case Exit.TOPPLE: self.fx = topple_effect();
-		case Exit.IMPLODE: self.fx = implode_effect();
-		case Exit.SPLAT: self.fx = splat_effect();
-		case Exit.FIRE: self.fx = fire_effect();
-		case Exit.SPHERES: self.fx = spheres_effect();
-		case Exit.RAINBOW: self.fx = rainbow_effect();
-		case Exit.GRADIENT: self.fx = gradient_effect();
+		case EXPLODE: self.fx = explode_effect();
+		case COLLAPSE: self.fx = collapse_effect();
+		case SLICE: self.fx = slice_effect();
+		case VORTEX: self.fx = vortex_effect();
+		case DISSOLVE: self.fx = dissolve_effect();
+		case SHEAR: self.fx = shear_effect();
+		case TOPPLE: self.fx = topple_effect();
+		case IMPLODE: self.fx = implode_effect();
+		case SPLAT: self.fx = splat_effect();
+		case FIRE: self.fx = fire_effect();
+		case SPHERES: self.fx = spheres_effect();
+		case RAINBOW: self.fx = rainbow_effect();
+		case GRADIENT: self.fx = gradient_effect();
 	}
 	self.fx_active = true;
 	self.fx.setup(self);

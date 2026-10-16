@@ -221,7 +221,7 @@ fn void spread_pixel(FireModel* m, sz idx) {
 }
 
 fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		sz new_w = msg.window_size.width;
 		sz new_h = msg.window_size.height * 2;
 		if (new_w > MAX_W) new_w = MAX_W;
@@ -243,7 +243,7 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		for (sz x = 0; x < self.width; x++) {
 			for (sz y = 0; y < self.height; y++) {
 				spread_pixel(self, y * self.width + x);
@@ -252,13 +252,13 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		return milktea::tick();
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

@@ -71,39 +71,39 @@ fn void Picker.show(&self, sz current) {
 // on DISMISSED it has already been restored to what it was when the picker
 // opened, so a caller previewing the selection live needs no undo of its own.
 fn Pressed Picker.handle_key(&self, milktea::KeyMsg k) {
-	if (!self.open) return Pressed.NOTHING;
+	if (!self.open) return NOTHING;
 
 	switch (k.code) {
-		case milktea::KeyCode.ESC:
+		case ESC:
 			self.open = false;
 			self.selected = self.opening;
-			return Pressed.DISMISSED;
-		case milktea::KeyCode.UP:
+			return DISMISSED;
+		case UP:
 			if (self.selected > 0) self.selected--;
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			if (self.selected < self.count - 1) self.selected++;
-		case milktea::KeyCode.LEFT:
-		case milktea::KeyCode.RIGHT:
-		case milktea::KeyCode.TAB:
+		case LEFT:
+		case RIGHT:
+		case TAB:
 			self.focused_button = (self.focused_button + 1) % DIALOG_BUTTONS;
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			self.open = false;
 			// Button 1 is Cancel, which discards the highlight like ESC does.
 			if (self.focused_button == 1) {
 				self.selected = self.opening;
-				return Pressed.DISMISSED;
+				return DISMISSED;
 			}
-			return Pressed.CONFIRMED;
+			return CONFIRMED;
 		default:
 	}
-	return Pressed.NOTHING;
+	return NOTHING;
 }
 
 // take_pending returns and clears whatever a mouse click reported since the
 // last call — the click path's counterpart to handle_key's return value.
 fn Pressed Picker.take_pending(&self) {
 	Pressed p = self.pending;
-	self.pending = Pressed.NOTHING;
+	self.pending = NOTHING;
 	return p;
 }
 
@@ -121,9 +121,9 @@ fn void picker_button_clicked(void* ctx, sz col, sz row) @local {
 	p.open = false;
 	if (slot.index == 1) {
 		p.selected = p.opening;
-		p.pending = Pressed.DISMISSED;
+		p.pending = DISMISSED;
 	} else {
-		p.pending = Pressed.CONFIRMED;
+		p.pending = CONFIRMED;
 	}
 }
 
@@ -131,7 +131,7 @@ fn void picker_backdrop_dismissed(void* ctx, sz col, sz row) @local {
 	Picker* p = (Picker*)ctx;
 	p.open = false;
 	p.selected = p.opening;
-	p.pending = Pressed.DISMISSED;
+	p.pending = DISMISSED;
 }
 
 // node returns the picker, or null when it is closed.
@@ -161,10 +161,10 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));
 
 	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
-	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
+	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = LEFT };
 	glaze::Style current = {
 		.fg = th.ink, .bg = th.accent, .bold = true,
-		.pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT,
+		.pad_left = 1, .pad_right = 1, .align_h = LEFT,
 	};
 	for (sz i = 0; i < self.count; i++) {
 		self.choice_slots[i] = { .picker = self, .index = i };
@@ -178,7 +178,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 
 	xray::Node* buttons_row = xray::hstack()
 		.with_gap(2)
-		.with_justify(xray::JustifyContent.JUSTIFY_CENTER)
+		.with_justify(JUSTIFY_CENTER)
 		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };

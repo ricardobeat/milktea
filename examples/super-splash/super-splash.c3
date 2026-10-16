@@ -240,7 +240,7 @@ fn milktea::Cmd SuperSplashModel.init(SuperSplashModel* self) @dynamic {
 }
 
 fn milktea::Cmd SuperSplashModel.update(SuperSplashModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		sz total = (sz)(self.width * self.height);
@@ -258,14 +258,14 @@ fn milktea::Cmd SuperSplashModel.update(SuperSplashModel* self, milktea::Msg msg
 		self.alpha = mem::new_array(float, (sz)(self.width * self.height * 2));
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 		self.rotation_x = (float)math::sin((float)self.frame * 0.003) * 0.15f;
 		self.rotation_y = (float)self.frame * 0.01f;
 		self.rotation_z = 0.0f;
 		return milktea::tick();
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	return milktea::quit();
 }
 

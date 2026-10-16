@@ -40,11 +40,11 @@ fn milktea::Cmd SquiggleModel.init(SquiggleModel* self) @dynamic {
 }
 
 fn milktea::Msg on_spin() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
+	return { .kind = USER, .tag = MSG_SPIN };
 }
 
 fn milktea::Cmd SquiggleModel.update(SquiggleModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
+	if (msg.kind == USER && msg.tag == MSG_SPIN) {
 		// tick() transmits anything pending once the alt screen is up; images
 		// are tied to the screen they were sent on, so it defers until then.
 		if (self.kgp) self.gfx.tick();
@@ -52,15 +52,15 @@ fn milktea::Cmd SquiggleModel.update(SquiggleModel* self, milktea::Msg msg) @dyn
 		return milktea::tick(TICK_MS, &on_spin);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return self.quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return self.quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return self.quit();
 		default:
 	}

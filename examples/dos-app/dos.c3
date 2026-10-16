@@ -62,11 +62,11 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 	// .focused the same way handle_key does. All that's left here is reading
 	// what happened for the status-message side effects, via take_pending(),
 	// the same shape handle_key returns synchronously for the keyboard path.
-	if (msg.kind == milktea::MsgKind.MOUSE) return self.handle_mouse_result();
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind == MOUSE) return self.handle_mouse_result();
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
-	if (k.code == milktea::KeyCode.CTRL_C) return milktea::quit();
+	if (k.code == CTRL_C) return milktea::quit();
 
 	// Whichever layer is on top gets the key first. Only when nothing has one
 	// open do the app's own shortcuts apply.
@@ -78,29 +78,29 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 fn milktea::Cmd DosModel.handle_mouse_result(&self) {
 	switch (self.menu.take_pending()) {
-		case Chosen.PICKED:
+		case PICKED:
 			return self.run_menu_item(self.menu.current_item().label);
-		case Chosen.DISMISSED:
+		case DISMISSED:
 			self.status_msg = "Ready";
 			return null;
 		default:
 	}
 	switch (self.theme_picker.take_pending()) {
-		case Pressed.CONFIRMED:
+		case CONFIRMED:
 			self.themes.active = self.theme_picker.selected;
 			self.status_msg = string::tformat("Theme: %s", self.theme().name);
 			return null;
-		case Pressed.DISMISSED:
+		case DISMISSED:
 			self.themes.active = self.theme_picker.selected;
 			self.status_msg = "Ready";
 			return null;
 		default:
 	}
 	switch (self.about.take_pending()) {
-		case Pressed.CONFIRMED:
+		case CONFIRMED:
 			self.status_msg = "Confirmed";
 			return null;
-		case Pressed.DISMISSED:
+		case DISMISSED:
 			self.status_msg = "Cancelled";
 			return null;
 		default:
@@ -110,10 +110,10 @@ fn milktea::Cmd DosModel.handle_mouse_result(&self) {
 
 fn milktea::Cmd DosModel.handle_dialog(&self, milktea::KeyMsg k) {
 	switch (self.about.handle_key(k)) {
-		case Pressed.CONFIRMED:
+		case CONFIRMED:
 			// Button 0 is OK, 1 is Cancel.
 			self.status_msg = self.about.focused == 0 ? "Confirmed" : "Cancelled";
-		case Pressed.DISMISSED:
+		case DISMISSED:
 			self.status_msg = "Cancelled";
 		default:
 	}
@@ -129,9 +129,9 @@ fn milktea::Cmd DosModel.handle_theme_picker(&self, milktea::KeyMsg k) {
 	self.themes.active = self.theme_picker.selected;
 
 	switch (p) {
-		case Pressed.CONFIRMED:
+		case CONFIRMED:
 			self.status_msg = string::tformat("Theme: %s", self.theme().name);
-		case Pressed.DISMISSED:
+		case DISMISSED:
 			self.status_msg = "Ready";
 		default:
 	}
@@ -140,9 +140,9 @@ fn milktea::Cmd DosModel.handle_theme_picker(&self, milktea::KeyMsg k) {
 
 fn milktea::Cmd DosModel.handle_menu(&self, milktea::KeyMsg k) {
 	switch (self.menu.handle_key(k)) {
-		case Chosen.PICKED:
+		case PICKED:
 			return self.run_menu_item(self.menu.current_item().label);
-		case Chosen.DISMISSED:
+		case DISMISSED:
 			self.status_msg = "Ready";
 		default:
 	}
@@ -166,8 +166,8 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 }
 
 fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
-	if (k.code == milktea::KeyCode.ESC) return milktea::quit();
-	if (k.code == milktea::KeyCode.RUNE) {
+	if (k.code == ESC) return milktea::quit();
+	if (k.code == RUNE) {
 		if (k.rune == 'q') return milktea::quit();
 		if (k.rune >= '1' && k.rune <= '0' + TAB_COUNT) {
 			self.active_tab = (sz)(k.rune - '1');
@@ -213,7 +213,7 @@ fn xray::Node* DosModel.content(&self) {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
-	String inner = glaze::join_vertical(glaze::Position.LEFT,
+	String inner = glaze::join_vertical(LEFT,
 		title.render(tab_titles[self.active_tab]),
 		body.render(tab_bodies[self.active_tab]));
 
@@ -241,5 +241,5 @@ fn xray::Node* DosModel.statusbar(&self) {
 
 fn int main() {
 	DosModel m = { };
-	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION });
 }

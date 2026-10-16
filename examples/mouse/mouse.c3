@@ -20,30 +20,30 @@ struct Model {
 fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.mouse_row = 0;
 	self.mouse_col = 0;
-	self.last_button = milktea::MouseButton.MOUSE_NONE;
-	self.last_action = milktea::MouseAction.MOUSE_PRESS;
+	self.last_button = MOUSE_NONE;
+	self.last_action = MOUSE_PRESS;
 	self.dragging = false;
 	self.trail_count = 0;
 	return null;
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.MOUSE) {
+	if (msg.kind == MOUSE) {
 		self.mouse_row = msg.mouse.row;
 		self.mouse_col = msg.mouse.col;
 		self.last_button = msg.mouse.button;
 		self.last_action = msg.mouse.action;
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && msg.mouse.button == milktea::MouseButton.MOUSE_LEFT) {
+		if (msg.mouse.action == MOUSE_PRESS && msg.mouse.button == MOUSE_LEFT) {
 			self.dragging = true;
 			if (self.trail_count < self.trail.len) {
 				self.trail[self.trail_count] = string::format(mem, "(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
 			}
 		}
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
+		if (msg.mouse.action == MOUSE_RELEASE) {
 			self.dragging = false;
 		}
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.dragging) {
+		if (msg.mouse.action == MOUSE_MOTION && self.dragging) {
 			if (self.trail_count < self.trail.len) {
 				self.trail[self.trail_count] = string::format(mem, "(%d,%d)", msg.mouse.col, msg.mouse.row);
 				self.trail_count++;
@@ -52,13 +52,13 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'c') {
 				foreach (point : self.trail[:self.trail_count]) mem::free(point.ptr);
@@ -86,17 +86,17 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 
 	String button_name = "none";
 	switch (self.last_button) {
-		case milktea::MouseButton.MOUSE_LEFT: { button_name = "left"; }
-		case milktea::MouseButton.MOUSE_MIDDLE: { button_name = "middle"; }
-		case milktea::MouseButton.MOUSE_RIGHT: { button_name = "right"; }
+		case MOUSE_LEFT: { button_name = "left"; }
+		case MOUSE_MIDDLE: { button_name = "middle"; }
+		case MOUSE_RIGHT: { button_name = "right"; }
 		default: { }
 	}
 
 	String action_name = "press";
 	switch (self.last_action) {
-		case milktea::MouseAction.MOUSE_PRESS: { action_name = "press"; }
-		case milktea::MouseAction.MOUSE_RELEASE: { action_name = "release"; }
-		case milktea::MouseAction.MOUSE_MOTION: { action_name = "motion"; }
+		case MOUSE_PRESS: { action_name = "press"; }
+		case MOUSE_RELEASE: { action_name = "release"; }
+		case MOUSE_MOTION: { action_name = "motion"; }
 		default: { }
 	}
 
@@ -126,7 +126,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	if (catch err = milktea::@run_program(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION })) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

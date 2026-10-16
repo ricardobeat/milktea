@@ -13,16 +13,16 @@ fn milktea::Cmd TabsModel.init(TabsModel* self) @dynamic {
 }
 
 fn milktea::Cmd TabsModel.update(TabsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C: return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case CTRL_C: return milktea::quit();
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'h') { if (self.active_tab > 0) self.active_tab--; }
 			if (k.rune == 'l') { if (self.active_tab < 2) self.active_tab++; }
-		case milktea::KeyCode.LEFT:  if (self.active_tab > 0) self.active_tab--;
-		case milktea::KeyCode.RIGHT: if (self.active_tab < 2) self.active_tab++;
+		case LEFT:  if (self.active_tab > 0) self.active_tab--;
+		case RIGHT: if (self.active_tab < 2) self.active_tab++;
 		default:
 	}
 	return null;
@@ -56,7 +56,7 @@ fn milktea::Node* TabsModel.view(TabsModel* self) @dynamic {
 		.padding(1, 2, 1, 2)
 		.with_width(50)
 		.with_height(8)
-		.align(glaze::Position.LEFT, glaze::Position.TOP);
+		.align(LEFT, TOP);
 
 	String[3] tab_views;
 	for (sz i = 0; i < 3; i++) {
@@ -65,13 +65,13 @@ fn milktea::Node* TabsModel.view(TabsModel* self) @dynamic {
 			: inactive_style.render(TAB_NAMES[i]);
 	}
 
-	String tabbar  = glaze::join_horizontal_arr(glaze::Position.BOTTOM, tab_views[..], 0);
+	String tabbar  = glaze::join_horizontal_arr(BOTTOM, tab_views[..], 0);
 	String content = content_style.render(TAB_CONTENTS[self.active_tab]);
 	String hint    = "\n  ← → / h l  switch tabs    q  quit";
 
 	return milktea::root().add(milktea::text(
-		glaze::join_vertical(glaze::Position.LEFT, tabbar,
-			glaze::join_vertical(glaze::Position.LEFT, content, hint)))
+		glaze::join_vertical(LEFT, tabbar,
+			glaze::join_vertical(LEFT, content, hint)))
 		.place(milktea::START, milktea::ALIGN_CENTER));
 }
 

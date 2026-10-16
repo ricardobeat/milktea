@@ -25,7 +25,7 @@ fn milktea::Cmd SplashModel.init(SplashModel* self) @dynamic {
 
 
 fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		// Reallocate cell grid
@@ -35,11 +35,11 @@ fn milktea::Cmd SplashModel.update(SplashModel* self, milktea::Msg msg) @dynamic
 		self.view_cells = mem::new_array(xray::Cell, self.view_cells_len);
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 		return milktea::tick();
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	return milktea::quit();
 }
 

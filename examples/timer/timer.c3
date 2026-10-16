@@ -19,13 +19,13 @@ fn milktea::Cmd TimerModel.init(TimerModel* self) @dynamic {
 fn milktea::Cmd TimerModel.update(TimerModel* self, milktea::Msg msg) @dynamic {
 	self.timer.update(msg);
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == ' ') self.timer.toggle();
 			if (k.rune == 'r') {

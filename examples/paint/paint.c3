@@ -110,7 +110,7 @@ struct Model {
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
 	self.selected_color = 1;
-	self.tool = PaintTool.PAINT;
+	self.tool = PAINT;
 	self.stroke_width = 1;
 	self.eraser_width = 2;
 	self.was_pressing = false;
@@ -122,7 +122,7 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.term_width = msg.window_size.width;
 		self.term_height = msg.window_size.height;
 		// Row 0 = toolbar; remaining rows split into palette (5 wide) + canvas
@@ -135,7 +135,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.MOUSE) {
+	if (msg.kind == MOUSE) {
 		sz col = msg.mouse.col;
 		sz row = msg.mouse.row;
 
@@ -154,7 +154,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		// ── Toolbar (row 0) ──────────────────────────────────────────────────
 		if (row == 0) {
 			if (col >= 5 && col <= 13) {
-				self.tool = PaintTool.PAINT;
+				self.tool = PAINT;
 				return null;
 			}
 			if (col == 15) {
@@ -170,7 +170,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 				return null;
 			}
 			if (col >= 19 && col <= 28) {
-				self.tool = PaintTool.ERASER;
+				self.tool = ERASER;
 				return null;
 			}
 			if (col >= 30 && col <= 34) {
@@ -189,19 +189,19 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		sz crow       = (row - self.canvas_rect.y) * 2;
 		bool in_canvas = ccol >= 0 && ccol < self.canvas.width && crow >= 0 && crow < self.canvas.height;
 
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS && in_canvas) {
+		if (msg.mouse.action == MOUSE_PRESS && in_canvas) {
 			self.was_pressing = true;
-			sz radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-			sz color  = (self.tool == PaintTool.PAINT) ? (sz)self.selected_color : -1;
+			sz radius = (self.tool == PAINT) ? self.stroke_width : self.eraser_width;
+			sz color  = (self.tool == PAINT) ? (sz)self.selected_color : -1;
 			self.canvas.draw_circle(ccol, crow, radius, color);
 			self.last_draw_col = ccol;
 			self.last_draw_row = crow;
 			return null;
 		}
 
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION && self.was_pressing && in_canvas) {
-			sz radius = (self.tool == PaintTool.PAINT) ? self.stroke_width : self.eraser_width;
-			sz color  = (self.tool == PaintTool.PAINT) ? (sz)self.selected_color : -1;
+		if (msg.mouse.action == MOUSE_MOTION && self.was_pressing && in_canvas) {
+			sz radius = (self.tool == PAINT) ? self.stroke_width : self.eraser_width;
+			sz color  = (self.tool == PAINT) ? (sz)self.selected_color : -1;
 			if (self.last_draw_col >= 0 && self.last_draw_row >= 0) {
 				self.canvas.draw_line(self.last_draw_col, self.last_draw_row, ccol, crow, radius, color);
 			} else {
@@ -212,7 +212,7 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 			return null;
 		}
 
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_RELEASE) {
+		if (msg.mouse.action == MOUSE_RELEASE) {
 			self.was_pressing = false;
 			self.last_draw_col = -1;
 			self.last_draw_row = -1;
@@ -221,19 +221,19 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
 			if (k.rune == 'p' || k.rune == 'P') {
-				self.tool = PaintTool.PAINT;
+				self.tool = PAINT;
 			} else if (k.rune == 'e' || k.rune == 'E') {
-				self.tool = PaintTool.ERASER;
+				self.tool = ERASER;
 			} else if (k.rune == 'c' || k.rune == 'C') {
 				self.canvas.clear();
 			} else if (k.rune >= '1' && k.rune <= '8') {
@@ -283,16 +283,16 @@ fn String build_palette_column(Model* self) {
 fn String build_tools_toolbar(Model* self) {
 	DString out = dstring::temp();
 
-	out.append_string(self.tool == PaintTool.PAINT ? "[*Paint*]" : "[ Paint ]");
+	out.append_string(self.tool == PAINT ? "[*Paint*]" : "[ Paint ]");
 	out.append_string(" | ");
 	for (sz w = 1; w <= 3; w++) {
-		bool active = (self.tool == PaintTool.PAINT && w == self.stroke_width);
+		bool active = (self.tool == PAINT && w == self.stroke_width);
 		glaze::Style s = glaze::style().foreground(glaze::color_hex(active ? "#000000" : "#888888"))
 			.background(glaze::color_hex(active ? "#55ffff" : "#222222"));
 		out.append_string(s.render(string::tformat("%d", w)));
 	}
 	out.append_string(" | ");
-	out.append_string(self.tool == PaintTool.ERASER ? "[*Eraser*]" : "[ Eraser ]");
+	out.append_string(self.tool == ERASER ? "[*Eraser*]" : "[ Eraser ]");
 	out.append_string(" | ");
 	out.append_string("[Clr]");
 
@@ -370,7 +370,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	String palette      = build_palette_column(self);
 	String canvas_view  = build_canvas_view(&self.canvas);
 	String content_area = glaze::join_horizontal(palette, canvas_view, 0);
-	String content      = glaze::join_vertical(glaze::Position.LEFT, top_bar, content_area);
+	String content      = glaze::join_vertical(LEFT, top_bar, content_area);
 
 	return milktea::text(content);
 }
@@ -379,7 +379,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	if (catch err = milktea::@run_program(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
+	if (catch err = milktea::@run_program(&m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

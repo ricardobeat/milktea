@@ -170,7 +170,7 @@ fn void create_voxels(VoxelModel* self) {
 }
 
 fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		mem::free(self.cells.ptr);
@@ -182,7 +182,7 @@ fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.frame++;
 		self.rotation_x = (float)math::sin((float)self.frame * 0.003) * 0.15f;
 		self.rotation_y = (float)self.frame * 0.01f;
@@ -190,12 +190,12 @@ fn milktea::Cmd VoxelModel.update(VoxelModel* self, milktea::Msg msg) @dynamic {
 		return milktea::tick();
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

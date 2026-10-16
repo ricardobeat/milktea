@@ -206,17 +206,17 @@ fn void Wolf3D.allocate_buffers(Wolf3D* self) {
 }
 
 fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
 		self.allocate_buffers();
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
 		if (self.mode == WELCOME) {
-			if (k.code == milktea::KeyCode.ENTER && self.name_len > 0) {
+			if (k.code == ENTER && self.name_len > 0) {
 				self.mode = PLAYING;
 				self.name_buf[self.name_len] = '\0';
 				self.server_state.mutex.lock()!!;
@@ -239,29 +239,29 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 				self.server_state.mutex.unlock();
 				io::printfn("Player joined: %s", &self.name_buf[0]);
 			}
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
 				sz n = milktea::utf8_encode(k.rune, enc[..]);
 				if (self.name_len + n <= 31) {
 					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
-			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
+			} else if (k.code == BACKSPACE && self.name_len > 0) {
 				self.name_len--;
 			}
 			return null;
 		}
 		if (self.mode == ENTERING_NAME) {
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
 				sz n = milktea::utf8_encode(k.rune, enc[..]);
 				if (self.name_len + n <= 31) {
 					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
-			} else if (k.code == milktea::KeyCode.BACKSPACE && self.name_len > 0) {
+			} else if (k.code == BACKSPACE && self.name_len > 0) {
 				self.name_len--;
-			} else if (k.code == milktea::KeyCode.ENTER && self.name_len > 0) {
+			} else if (k.code == ENTER && self.name_len > 0) {
 				self.mode = PLAYING;
 				self.name_buf[self.name_len] = '\0';
 				self.server_state.mutex.lock()!!;
@@ -286,16 +286,16 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 			}
 			return null;
 		} else if (self.mode == TAG_INPUT) {
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
 				sz n = milktea::utf8_encode(k.rune, enc[..]);
 				if (self.tag_len + n <= 79) {
 					for (sz i = 0; i < n; i++) self.tag_buf[self.tag_len++] = enc[i];
 				}
-			} else if (k.code == milktea::KeyCode.BACKSPACE && self.tag_len > 0) {
+			} else if (k.code == BACKSPACE && self.tag_len > 0) {
 				self.tag_len--;
-			} else if (k.code == milktea::KeyCode.ENTER && self.tag_len > 0) {
+			} else if (k.code == ENTER && self.tag_len > 0) {
 				self.tag_buf[self.tag_len] = '\0';
 				self.server_state.mutex.lock()!!;
 				db_save_tag(
@@ -308,12 +308,12 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 				);
 				self.server_state.mutex.unlock();
 				self.mode = PLAYING;
-			} else if (k.code == milktea::KeyCode.ESC) {
+			} else if (k.code == ESC) {
 				self.mode = PLAYING;
 			}
 			return null;
 		} else {
-			if (k.code == milktea::KeyCode.RUNE) {
+			if (k.code == RUNE) {
 				if (k.rune == 't') {
 					float ray_dir_x    = self.dir_x;
 					float ray_dir_y    = self.dir_y;
@@ -369,11 +369,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 					}
 				}
 			}
-			if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
-			if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
+			if (k.code == LEFT) self.key_left = self.tick_count;
+			if (k.code == RIGHT) self.key_right = self.tick_count;
 		}
 	}
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.tick_count++;
 		if (self.mode == PLAYING) {
 			float move_speed = 0.25f;
@@ -754,7 +754,7 @@ fn milktea::Node* Wolf3D.view(Wolf3D* self) @dynamic {
 		for (sz dy = 0; dy < (sz)self.dialog.height; dy++) {
 			for (sz dx = 0; dx < (sz)self.dialog.width; dx++) {
 				xray::Cell c = *self.dialog.cell_at((sz)dx, (sz)dy);
-				if (c.content[0] != ' ' || c.style.bg.kind != xray::ColorKind.NONE) {
+				if (c.content[0] != ' ' || c.style.bg.kind != NONE) {
 					self.cells[dy * w + dx] = c;
 				}
 			}
@@ -797,7 +797,7 @@ fn milktea::Node* Wolf3D.view(Wolf3D* self) @dynamic {
 		for (sz dy = 0; dy < box_h && box.y + dy < h; dy++) {
 			for (sz dx = 0; dx < box_w && box.x + dx < w; dx++) {
 				xray::Cell c = *self.dialog.cell_at((sz)(box.x + dx), (sz)(box.y + dy));
-				if (c.content[0] != ' ' || c.style.bg.kind != xray::ColorKind.NONE) {
+				if (c.content[0] != ' ' || c.style.bg.kind != NONE) {
 					self.cells[(box.y + dy) * w + (box.x + dx)] = c;
 				}
 			}
@@ -937,7 +937,7 @@ fn void write_sgr(TcpSocket* s, xray::Color fg, xray::Color bg) {
 	buf[pos++] = '[';
 	buf[pos++] = '0';
 	buf[pos++] = 'm';
-	if (fg.kind == xray::ColorKind.TRUECOLOR) {
+	if (fg.kind == TRUECOLOR) {
 		buf[pos++] = '\x1b';
 		buf[pos++] = '[';
 		buf[pos++] = '3';
@@ -952,7 +952,7 @@ fn void write_sgr(TcpSocket* s, xray::Color fg, xray::Color bg) {
 		pos += byte_to_str(fg.b, &buf[pos]);
 		buf[pos++] = 'm';
 	}
-	if (bg.kind == xray::ColorKind.TRUECOLOR) {
+	if (bg.kind == TRUECOLOR) {
 		buf[pos++] = '\x1b';
 		buf[pos++] = '[';
 		buf[pos++] = '4';
@@ -1123,12 +1123,12 @@ fn int handle_client(void* arg) {
 							if (pr.consumed > 0) {
 								// Only quit on ESC/'q' when in PLAYING mode
 								// (input modes handle their own keys via update)
-								bool is_quit = (pr.key.code == milktea::KeyCode.ESC
-									|| (pr.key.code == milktea::KeyCode.RUNE && pr.key.rune == 'q'));
+								bool is_quit = (pr.key.code == ESC
+									|| (pr.key.code == RUNE && pr.key.rune == 'q'));
 								if (is_quit && app.mode == PLAYING) {
 									running = false;
 								} else {
-									app.update({ .kind = milktea::MsgKind.KEY, .key = pr.key });
+									app.update({ .kind = KEY, .key = pr.key });
 								}
 							}
 						}

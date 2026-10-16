@@ -11,22 +11,22 @@ struct Model {
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
-	self.anim = milktea::tween(0, 180, milktea::Easing.EASE_OUT_CUBIC);
+	self.anim = milktea::tween(0, 180, EASE_OUT_CUBIC);
 	return null;
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			// Turn around from wherever it is, so a half-open modal closes
 			// from half-way rather than jumping.
 			self.anim.update(0);
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == ' ') self.anim.update(self.anim.target == 0 ? 1 : 0);
 		default:
