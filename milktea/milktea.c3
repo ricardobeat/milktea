@@ -252,6 +252,7 @@ struct Program {
 	bool debug;
 	char[512] pending;
 	sz pending_len;
+	TerminalReply terminal_reply;
 	// When pending is stuck on a leading ESC, the wall-clock time (ms) at
 	// which the lone ESC is flushed as a real keypress. 0 = no hold active.
 	sz esc_deadline_ms;
@@ -925,6 +926,7 @@ fn void? Program.run(Program* self) {
 
 	g_program = self;
 	self.pending_len = 0;
+	self.terminal_reply = {};
 	self.in_alt_screen = false;
 	// No OSC 22 emitted yet, which is indistinguishable from having emitted
 	// the empty (reset) name — so a first frame with no cursor stays silent.
@@ -1359,6 +1361,19 @@ fn void? Program.run(Program* self) {
 
 			// ---- Normal key parsing (only when not in paste mode) ----
 			while (!self.in_paste && self.pending_len > 0) {
+				if (self.terminal_reply.active || (self.pending_len >= 2 &&
+					self.pending[0] == 0x1b && (self.pending[1] == ']' || self.pending[1] == '_'))) {
+					sz prefix = 0;
+					if (!self.terminal_reply.active) {
+						self.terminal_reply.begin(self.pending[1] == ']');
+						prefix = 2;
+					}
+					sz consumed = prefix + self.terminal_reply.consume(self.pending[prefix:self.pending_len-prefix]);
+					for (sz i = consumed; i < self.pending_len; i++) self.pending[i-consumed] = self.pending[i];
+					self.pending_len -= consumed;
+					if (self.terminal_reply.active) { stuck = true; break; }
+					continue;
+				}
 				ParseResult pr = parse_key(self.pending[:self.pending_len]);
 				if (pr.consumed == 0) {
 					stuck = true;

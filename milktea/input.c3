@@ -331,6 +331,15 @@ fn ParseResult parse_key(char[] buf) {
 
 		char second = buf[1];
 
+		// OSC/APC terminal replies are control strings, never Alt+key text.
+		// Program streams partial replies; direct callers wait for a full one.
+		if (second == ']' || second == '_') {
+			TerminalReply reply;
+			reply.begin(second == ']');
+			sz consumed = reply.consume(buf[2..]);
+			return make_key(NONE, 0, false, false, false, reply.active ? 0 : consumed + 2);
+		}
+
 		// ESC [ : CSI sequence
 		if (second == '[') {
 			// X10 mouse: ESC [ M followed by 3 bytes (button+32, col+32, row+32)

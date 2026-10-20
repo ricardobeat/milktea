@@ -250,6 +250,49 @@ fn void handle_probe_string(bool is_osc, char[] body) @local {
 	}
 }
 
+
+// Replies may arrive after startup probing, or span several reader chunks.
+// Keep only a bounded capability body, but drain the complete control string
+// before returning to key parsing. A split ST must not become an Escape key.
+struct TerminalReply @private {
+	bool active;
+	bool osc;
+	bool escape;
+	bool overflow;
+	char[256] body;
+	sz len;
+}
+
+fn void TerminalReply.begin(&self, bool osc) {
+	*self = { .active = true, .osc = osc };
+}
+
+fn void TerminalReply.append(&self, char byte) {
+	if (self.len < self.body.len) { self.body[self.len++] = byte; }
+	else { self.overflow = true; }
+}
+
+fn void TerminalReply.finish(&self) {
+	if (!self.overflow) handle_probe_string(self.osc, self.body[:self.len]);
+	self.active = false;
+}
+
+fn sz TerminalReply.consume(&self, char[] bytes) {
+	for (sz i = 0; i < bytes.len; i++) {
+		char byte = bytes[i];
+		// Interrupt remains usable even if a terminal sent a truncated reply.
+		if (byte == 0x03) { self.active = false; return i; }
+		if ((self.escape && byte == '\\') || (self.osc && byte == 0x07)) {
+			self.finish();
+			return i + 1;
+		}
+		if (self.escape) { self.append(0x1b); self.escape = false; }
+		if (byte == 0x1b) { self.escape = true; }
+		else { self.append(byte); }
+	}
+	return bytes.len;
+}
+
 // parse_probe_replies consumes complete escape-sequence replies from the front
 // of buf and returns the number of bytes consumed. Noise bytes (e.g. keys the
 // user typed during the probe) are skipped; an incomplete trailing sequence is
