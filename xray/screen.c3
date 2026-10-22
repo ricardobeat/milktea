@@ -713,12 +713,12 @@ fn void ScreenBuffer.render_ansi_string(
 					sz col_val = 0;
 					for (sz s = 0; s < semicolon; s++) {
 						if (params[s] >= '0' && params[s] <= '9') {
-							row_val = row_val * 10 + (sz)(sz)(params[s] - '0');
+							row_val = row_val * 10 + (sz)(params[s] - '0');
 						}
 					}
 					for (sz s = semicolon + 1; s < params.len; s++) {
 						if (params[s] >= '0' && params[s] <= '9') {
-							col_val = col_val * 10 + (sz)(sz)(params[s] - '0');
+							col_val = col_val * 10 + (sz)(params[s] - '0');
 						}
 					}
 					r = (row_val > 0) ? row_val - 1 : 0;
@@ -1226,21 +1226,21 @@ fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Col
 // (which holds an empty placeholder) emits nothing, preserving column
 // alignment so the output matches what the terminal would display.
 // Useful for writing render tests without a real terminal.
+// append_row_to writes one row into ds, emitting a wide cell's content once
+// and stepping over the placeholder slot that follows it.
+fn void ScreenBuffer.append_row_to(&self, sz row, DString* ds) @private {
+	sz col = 0;
+	while (col < self.width) {
+		Cell* cell = &self.cells[row * self.width + col];
+		ds.append_string(cell.content_str());
+		col += cell.width == 2 && col + 1 < self.width ? 2 : 1;
+	}
+}
+
 fn String ScreenBuffer.render_frame(&self) {
 	DString out = dstring::temp();
 	for (sz row = 0; row < self.height; row++) {
-		sz col = 0;
-		while (col < self.width) {
-			Cell* cell = &self.cells[row * self.width + col];
-			if (cell.width == 2 && col + 1 < self.width) {
-				// Wide cell: emit content, skip the placeholder slot
-				out.append_string(cell.content_str());
-				col += 2;
-			} else {
-				out.append_string(cell.content_str());
-				col++;
-			}
-		}
+		self.append_row_to(row, &out);
 		out.append_char('\n');
 	}
 	return out.str_view();
@@ -1249,18 +1249,8 @@ fn String ScreenBuffer.render_frame(&self) {
 // render_frame_row returns a plain-text snapshot of a single row.
 fn String ScreenBuffer.render_frame_row(&self, sz row) {
 	DString out = dstring::temp();
-	if (row >= self.height) return out.str_view();
-	sz col = 0;
-	while (col < self.width) {
-		Cell* cell = &self.cells[row * self.width + col];
-		if (cell.width == 2 && col + 1 < self.width) {
-			out.append_string(cell.content_str());
-			col += 2;
-		} else {
-			out.append_string(cell.content_str());
-			col++;
-		}
-	}
+	if (row < 0 || row >= self.height) return out.str_view();
+	self.append_row_to(row, &out);
 	return out.str_view();
 }
 
@@ -1334,17 +1324,35 @@ fn void ScreenBuffer.put_cells(&self, Cell[] src, sz src_w, sz src_h, Rect clip)
 	}
 }
 
-// blit_ansi parses an ANSI string into a temporary ScreenBuffer of size (w, h), then blits it onto self at (dst_x, dst_y).
+// blit_ansi parses an ANSI string into a buffer of size (w, h), then blits it
+// onto self at (dst_x, dst_y).
 // This is a convenience wrapper for the "render glaze → overlay on xray canvas" pattern.
-fn void ScreenBuffer.blit_ansi(&self, sz dst_x, sz dst_y, sz w, sz h, String ansi_text, bool transparent) {
-	// Allocate a temporary ScreenBuffer on the heap
-	ScreenBuffer* tmp = new_screen_buffer(w, h);
-	defer {
-		tmp.destroy();
-		mem::free(tmp);
+//
+// scratch is a spare buffer reused across calls, grown to fit and resized to
+// (w, h) when that differs; passing null allocates one for the duration of the
+// call. A caller that blits every frame should keep one and pass its address.
+fn void ScreenBuffer.blit_ansi(&self, sz dst_x, sz dst_y, sz w, sz h, String ansi_text, bool transparent, ScreenBuffer** scratch = null) {
+	ScreenBuffer* own = null;
+	defer if (own != null) {
+		own.destroy();
+		mem::free(own);
 	}
-	// Parse the ANSI string into the tmp buffer
+	ScreenBuffer* tmp = scratch != null ? *scratch : null;
+	if (tmp == null) {
+		tmp = new_screen_buffer(w, h);
+		if (scratch != null) {
+			*scratch = tmp;
+		} else {
+			own = tmp;
+		}
+	} else if (tmp.width != w || tmp.height != h) {
+		// blit walks the source at its own size, so the scratch has to be
+		// exactly the region being blitted.
+		tmp.resize(w, h);
+	}
+	// The scratch is shared across calls, so it has to start empty or a
+	// previous blit's leftover cells bleed through.
+	tmp.clear();
 	tmp.render_ansi_string(0, 0, ansi_text, default_style());
-	// Blit tmp onto self
 	self.blit(dst_x, dst_y, tmp, transparent);
 }

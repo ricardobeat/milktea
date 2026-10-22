@@ -253,14 +253,14 @@ fn char scale_opacity(char opacity, char alpha) @local {
 // characters beneath, as a translucent layer does; 0 paints nothing.
 fn void ScreenBuffer.overlay(&self, sz x, sz y, sz w, sz h, String s, char alpha = 255, bool transparent = false) {
 	if (alpha == 0 || w <= 0 || h <= 0) return;
-	if (alpha == 255) {
-		self.blit_ansi(x, y, w, h, s, transparent);
-		return;
-	}
 	ScreenBuffer* scratch = null;
 	defer if (scratch != null) {
 		scratch.destroy();
 		mem::free(scratch);
+	}
+	if (alpha == 255) {
+		self.blit_ansi(x, y, w, h, s, transparent, &scratch);
+		return;
 	}
 	self.paint_blended({ .x = x, .y = y, .w = w, .h = h }, s, alpha, &scratch);
 }
