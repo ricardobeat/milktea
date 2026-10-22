@@ -240,6 +240,7 @@ fn Cell empty_cell() {
 }
 
 fn Cell new_cell(String ch, char w, Style style) {
+	assert(ch.len <= CELL_MAX_BYTES, "Cell content longer than %d bytes", CELL_MAX_BYTES);
 	Cell c;
 	sz copy_len = ch.len;
 	if (copy_len > CELL_MAX_BYTES) copy_len = CELL_MAX_BYTES;
