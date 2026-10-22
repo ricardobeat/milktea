@@ -55,18 +55,19 @@ fn char Color.effective_alpha(&self) {
 	return self.a == 0 ? (char)255 : self.a;
 }
 
-// blend_over returns this color alpha-blended over dst. Both must be truecolor.
+// blend_over returns this color alpha-blended over dst.
+// Blending needs a known destination color. When dst is not truecolor the
+// background behind it is unknown, so this color is returned at full strength
+// instead of being darkened against an assumed black.
 fn Color Color.blend_over(&self, Color dst) {
+	if (self.kind != ColorKind.TRUECOLOR) return *self;
+	if (dst.kind != ColorKind.TRUECOLOR) return color_rgb(self.r, self.g, self.b);
 	int a = (int)self.effective_alpha();
 	int inv_a = 255 - a;
-	// For non-truecolor destinations, assume black (terminal default)
-	char dr = dst.kind == ColorKind.TRUECOLOR ? dst.r : (char)0;
-	char dg = dst.kind == ColorKind.TRUECOLOR ? dst.g : (char)0;
-	char db = dst.kind == ColorKind.TRUECOLOR ? dst.b : (char)0;
 	return color_rgb(
-		(char)(((int)self.r * a + (int)dr * inv_a) / 255),
-		(char)(((int)self.g * a + (int)dg * inv_a) / 255),
-		(char)(((int)self.b * a + (int)db * inv_a) / 255)
+		(char)(((int)self.r * a + (int)dst.r * inv_a) / 255),
+		(char)(((int)self.g * a + (int)dst.g * inv_a) / 255),
+		(char)(((int)self.b * a + (int)dst.b * inv_a) / 255)
 	);
 }
 
@@ -104,7 +105,8 @@ fn bool Color.eq(&self, Color other) {
 		case ColorKind.ANSI256:
 			return self.index == other.index;
 		case ColorKind.TRUECOLOR:
-			return self.r == other.r && self.g == other.g && self.b == other.b && self.a == other.a;
+			return self.r == other.r && self.g == other.g && self.b == other.b
+				&& self.effective_alpha() == other.effective_alpha();
 		default: return true;
 	}
 }
@@ -112,38 +114,31 @@ fn bool Color.eq(&self, Color other) {
 // SGR emission — foreground
 
 fn String Color.to_sgr_fg(&self) {
-	switch (self.kind) {
-		case ColorKind.NONE:
-			return "";
-		case ColorKind.ANSI:
-			if (self.index < 8) {
-				return string::tformat("\x1b[%dm", 30 + self.index);
-			}
-			return string::tformat("\x1b[%dm", 90 + (self.index - 8));
-		case ColorKind.ANSI256:
-			return string::tformat("\x1b[38;5;%dm", self.index);
-		case ColorKind.TRUECOLOR:
-			return string::tformat("\x1b[38;2;%d;%d;%dm", self.r, self.g, self.b);
-		default:
-			return "";
-	}
+	return self.to_sgr(false);
 }
 
 // SGR emission — background
 
 fn String Color.to_sgr_bg(&self) {
+	return self.to_sgr(true);
+}
+
+// to_sgr emits the escape sequence that selects this color. background picks
+// the background variant of each code.
+fn String Color.to_sgr(&self, bool background) {
 	switch (self.kind) {
 		case ColorKind.NONE:
 			return "";
-		case ColorKind.ANSI:
+		case ColorKind.ANSI: {
 			if (self.index < 8) {
-				return string::tformat("\x1b[%dm", 40 + self.index);
+				return string::tformat("\x1b[%dm", (background ? 40 : 30) + (int)self.index);
 			}
-			return string::tformat("\x1b[%dm", 100 + (self.index - 8));
+			return string::tformat("\x1b[%dm", (background ? 100 : 90) + (int)(self.index - 8));
+		}
 		case ColorKind.ANSI256:
-			return string::tformat("\x1b[48;5;%dm", self.index);
+			return string::tformat("\x1b[%d;5;%dm", background ? 48 : 38, (int)self.index);
 		case ColorKind.TRUECOLOR:
-			return string::tformat("\x1b[48;2;%d;%d;%dm", self.r, self.g, self.b);
+			return string::tformat("\x1b[%d;2;%d;%d;%dm", background ? 48 : 38, (int)self.r, (int)self.g, (int)self.b);
 		default:
 			return "";
 	}
@@ -153,81 +148,50 @@ fn String Color.to_sgr_bg(&self) {
 // PALETTE_256 — standard xterm 256-color palette as RGB values.
 // ============================================================
 
-Color[256] g_palette_256;
-bool g_palette_initialized = false;
+// The 16 base colors, as r,g,b triples.
+const char[48] ANSI_16_RGB = {
+	0, 0, 0,       128, 0, 0,     0, 128, 0,     128, 128, 0,
+	0, 0, 128,     128, 0, 128,   0, 128, 128,   192, 192, 192,
+	128, 128, 128, 255, 0, 0,     0, 255, 0,     255, 255, 0,
+	0, 0, 255,     255, 0, 255,   0, 255, 255,   255, 255, 255,
+};
 
-fn void init_palette() @local {
-	if (g_palette_initialized) return;
-	g_palette_initialized = true;
+// The 6 levels of the 6x6x6 color cube.
+const char[6] CUBE_LEVELS = { 0, 95, 135, 175, 215, 255 };
 
-	// 0-7: Standard ANSI colors
-	g_palette_256[0] = color_rgb(0, 0, 0);
-	g_palette_256[1] = color_rgb(128, 0, 0);
-	g_palette_256[2] = color_rgb(0, 128, 0);
-	g_palette_256[3] = color_rgb(128, 128, 0);
-	g_palette_256[4] = color_rgb(0, 0, 128);
-	g_palette_256[5] = color_rgb(128, 0, 128);
-	g_palette_256[6] = color_rgb(0, 128, 128);
-	g_palette_256[7] = color_rgb(192, 192, 192);
-
-	// 8-15: Bright ANSI colors
-	g_palette_256[8] = color_rgb(128, 128, 128);
-	g_palette_256[9] = color_rgb(255, 0, 0);
-	g_palette_256[10] = color_rgb(0, 255, 0);
-	g_palette_256[11] = color_rgb(255, 255, 0);
-	g_palette_256[12] = color_rgb(0, 0, 255);
-	g_palette_256[13] = color_rgb(255, 0, 255);
-	g_palette_256[14] = color_rgb(0, 255, 255);
-	g_palette_256[15] = color_rgb(255, 255, 255);
-
-	// 16-231: 6x6x6 color cube
-	char[6] cube_vals = { 0, 95, 135, 175, 215, 255 };
-	for (char ri = 0; ri < 6; ri++) {
-		for (char gi = 0; gi < 6; gi++) {
-			for (char bi = 0; bi < 6; bi++) {
-				g_palette_256[16 + ri * 36 + gi * 6 + bi] = color_rgb(cube_vals[ri], cube_vals[gi], cube_vals[bi]);
-			}
-		}
-	}
-
-	// 232-255: Grayscale ramp (8 to 238 in steps of 10)
-	for (char i = 0; i < 24; i++) {
-		char v = 8 + i * 10;
-		g_palette_256[232 + i] = color_rgb(v, v, v);
-	}
-}
-
+// palette_256 returns the xterm 256-color palette entry for idx.
+// The palette is computed on demand, so it is always complete and safe to
+// read from more than one thread.
 fn Color palette_256(char idx) {
-	init_palette();
-	return g_palette_256[idx];
+	int i = (int)idx;
+	if (i < 16) {
+		return color_rgb(ANSI_16_RGB[i * 3], ANSI_16_RGB[i * 3 + 1], ANSI_16_RGB[i * 3 + 2]);
+	}
+	if (i < 232) {
+		int n  = i - 16;
+		int ri = n / 36;
+		int gi = (n % 36) / 6;
+		int bi = n % 6;
+		return color_rgb(CUBE_LEVELS[ri], CUBE_LEVELS[gi], CUBE_LEVELS[bi]);
+	}
+	char v = (char)(8 + (i - 232) * 10);
+	return color_rgb(v, v, v);
 }
 
 // downsample_truecolor_to_256 maps an RGB value to the nearest
 // index in the 256-color palette using squared Euclidean distance.
 fn char downsample_truecolor_to_256(char r, char g, char b) {
-	init_palette();
 	char best     = 16;
 	int best_dist = 0x7fffffff;
-	for (char i = 16; i < 232; i++) {
-		Color c  = g_palette_256[i];
+	for (int i = 16; i < 256; i++) {
+		Color c  = palette_256((char)i);
 		int dr   = (int)r - (int)c.r;
 		int dg   = (int)g - (int)c.g;
 		int db   = (int)b - (int)c.b;
 		int dist = dr * dr + dg * dg + db * db;
 		if (dist < best_dist) {
 			best_dist = dist;
-			best = i;
-		}
-	}
-	for (char i = 232; i < 255; i++) {
-		Color c  = g_palette_256[i];
-		int dr   = (int)r - (int)c.r;
-		int dg   = (int)g - (int)c.g;
-		int db   = (int)b - (int)c.b;
-		int dist = dr * dr + dg * dg + db * db;
-		if (dist < best_dist) {
-			best_dist = dist;
-			best = i;
+			best = (char)i;
 		}
 	}
 	return best;
@@ -237,17 +201,15 @@ fn char downsample_truecolor_to_256(char r, char g, char b) {
 // basic ANSI color (0-15).
 fn char downsample_256_to_ansi(char idx) {
 	if (idx < 16) return idx;
-	init_palette();
-	Color c = g_palette_256[idx];
+	Color c = palette_256(idx);
 	return downsample_truecolor_to_ansi(c.r, c.g, c.b);
 }
 
 fn char downsample_truecolor_to_ansi(char r, char g, char b) {
-	init_palette();
 	char best     = 0;
 	int best_dist = 0x7fffffff;
 	for (char i = 0; i < 16; i++) {
-		Color c  = g_palette_256[i];
+		Color c  = palette_256(i);
 		int dr   = (int)r - (int)c.r;
 		int dg   = (int)g - (int)c.g;
 		int db   = (int)b - (int)c.b;
