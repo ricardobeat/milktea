@@ -49,7 +49,6 @@ const sz MAX_INSTANCES = 128;
 // image. 4096 is the protocol's recommended maximum.
 const sz CHUNK = 4096;
 const uint PLACEHOLDER_CP = 0x10EEEE;
-const sz B64_CHUNK = 3; // bytes per base64 group
 
 // DrawFn renders one animation frame into an RGBA8 buffer of
 // width*height*4 bytes. Set GlyphDef.draw for procedural glyphs.
@@ -67,7 +66,7 @@ struct GlyphDef {
 	sz width;
 	sz height;
 	// Animation rate in frames per second; 0 = static (frame 0 only).
-	int fps;
+	sz fps;
 	// Shown when the terminal has no kitty-graphics support.
 	String fallback;
 }
@@ -84,7 +83,7 @@ struct Glyph {
 	sz count;
 	sz width;
 	sz height;
-	int fps;
+	sz fps;
 	String fallback;
 }
 
@@ -119,6 +118,10 @@ struct Placement {
 	sz shown_cols;
 	sz shown_rows;
 	sz frame;
+	// Image id of the frame that is on screen. Kept here rather than read
+	// back from the glyph, so deleting a placement still works after the
+	// glyph's slot was released and handed to another glyph.
+	uint shown_id;
 	uint pid;
 }
 
@@ -285,9 +288,9 @@ fn void Session.tick(&self) {
 // glyph_frame derives the current frame of a glyph from the clock: a pure
 // function of elapsed time, so view() stays side-effect free and every
 // glyph drawn in one frame agrees on the frame index.
-fn sz glyph_frame(int fps, sz count, sz clock_ms) {
+fn sz glyph_frame(sz fps, sz count, sz clock_ms) {
 	if (fps <= 0 || count <= 0) return 0;
-	return (sz)((clock_ms * (sz)fps / 1000) % (sz)count);
+	return (clock_ms * fps / 1000) % count;
 }
 
 fn sz Session.frame_of(&self, Glyph g) {
@@ -616,17 +619,17 @@ fn void Session.sync(&self) {
 
 	for (sz p = 0; p < self.placement_count; p++) {
 		Placement place = self.placements[p];
-		Glyph g = self.glyphs[place.glyph];
-		sz frame = self.frame_of(g);
 
 		if (!place.active) {
 			if (place.shown) {
-				emit(string::tformat(
-					"\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", g.base_id + (uint)place.frame, place.pid));
+				emit(string::tformat("\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", place.shown_id, place.pid));
 				self.placements[p].shown = false;
 			}
 			continue;
 		}
+
+		Glyph g   = self.glyphs[place.glyph];
+		sz frame  = self.frame_of(g);
 
 		bool unchanged = place.shown && place.frame == frame
 			&& place.shown_col == place.col && place.shown_row == place.row
@@ -637,8 +640,7 @@ fn void Session.sync(&self) {
 		// Only a frame change needs the old placement gone: a same-image move
 		// is handled by replacement, which avoids a delete/put flicker.
 		if (place.shown && place.frame != frame) {
-			emit(string::tformat(
-				"\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", g.base_id + (uint)place.frame, place.pid));
+			emit(string::tformat("\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", place.shown_id, place.pid));
 		}
 		// Move the cursor to the target cell, then place there. c/r are
 		// omitted: the terminal then displays the image at its natural pixel
@@ -662,5 +664,6 @@ fn void Session.sync(&self) {
 		self.placements[p].shown_cols = place.cols;
 		self.placements[p].shown_rows = place.rows;
 		self.placements[p].frame = frame;
+		self.placements[p].shown_id = g.base_id + (uint)frame;
 	}
 }
