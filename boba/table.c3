@@ -11,6 +11,9 @@ import std::core::dstring;
 const sz MAX_TABLE_COLUMNS = 16;
 const sz MAX_TABLE_ROWS    = 64;
 
+// How many rows the header and its separator take above the body.
+const sz TABLE_CHROME_ROWS = 2;
+
 // TableColumn defines a column in a table.
 struct TableColumn {
 	String title;
@@ -94,8 +97,7 @@ fn void Table.add_row3(&self, String c0, String c1, String c2) {
 // handle_key processes table navigation keybindings.
 // Returns true if the key was consumed.
 fn bool Table.handle_key(&self, milktea::KeyMsg k) {
-	sz visible = self.height - 2;
-	if (visible < 1) visible = 1;
+	sz visible = self.visible_rows();
 
 	switch (k.code) {
 		case milktea::KeyCode.UP:
@@ -125,10 +127,34 @@ fn bool Table.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
+// visible_rows is how many rows fit in the table's height, leaving room for
+// the header and the separator under it.
+fn sz Table.visible_rows(&self) {
+	sz n = self.height - TABLE_CHROME_ROWS;
+	return n < 1 ? 1 : n;
+}
+
+// fit_cell pads or truncates a cell to width display columns. Measuring bytes
+// instead would split a multi-byte glyph and misalign every column after it.
+// Truncating can stop short of the width when a wide glyph does not fit, so
+// the result is padded again.
+fn String fit_cell(String cell, sz width) @local {
+	String s = cell;
+	sz w     = glaze::string_width(s);
+	if (w > width) {
+		s = glaze::truncate_to_width(s, width);
+		w = glaze::string_width(s);
+	}
+	if (w == width) return s;
+	DString padded = dstring::temp();
+	padded.append_string(s);
+	for (sz p = w; p < width; p++) padded.append_char(' ');
+	return padded.str_view();
+}
+
 // view returns the rendered table string.
 fn String Table.view(&self) {
-	sz visible = self.height - 2;
-	if (visible < 1) visible = 1;
+	sz visible = self.visible_rows();
 
 	// Adjust scroll
 	if (self.cursor < self.scroll_offset) self.scroll_offset = self.cursor;
@@ -139,19 +165,7 @@ fn String Table.view(&self) {
 	// Header
 	if (self.has_header) {
 		for (sz c = 0; c < self.col_count; c++) {
-			String cell = self.columns[c].title;
-			// Pad/truncate to width
-
-
-
-			if (cell.len < self.columns[c].width) {
-				DString padded = dstring::temp();
-				padded.append_string(cell);
-				for (sz p = (sz)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
-				cell = padded.str_view();
-			} else if (cell.len > self.columns[c].width) {
-				cell = (String)cell[:self.columns[c].width];
-			}
+			String cell = fit_cell(self.columns[c].title, self.columns[c].width);
 			out.append_string(self.header_style.render(cell));
 			if (c < self.col_count - 1) out.append_char(' ');
 		}
@@ -176,16 +190,7 @@ fn String Table.view(&self) {
 		for (sz c = 0; c < self.col_count; c++) {
 			String cell = "";
 			if (c < row.cell_count) cell = row.cells[c];
-
-			if (cell.len < self.columns[c].width) {
-				DString padded = dstring::temp();
-				padded.append_string(cell);
-				for (sz p = (sz)cell.len; p < self.columns[c].width; p++) padded.append_char(' ');
-				cell = padded.str_view();
-			} else if (cell.len > self.columns[c].width) {
-				cell = (String)cell[:self.columns[c].width];
-			}
-			out.append_string(rs.render(cell));
+			out.append_string(rs.render(fit_cell(cell, self.columns[c].width)));
 			if (c < self.col_count - 1) out.append_char(' ');
 		}
 		out.append_char('\n');

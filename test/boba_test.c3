@@ -3,6 +3,7 @@ module boba_test @test;
 import boba;
 import milktea;
 import xray;
+import glaze;
 
 // ============================================================
 // UTF-8 boundary helpers
@@ -292,4 +293,36 @@ fn void test_key_name_that_spells_the_modifier() @test {
 
 	milktea::KeyMsg ctrl_c = { .code = milktea::KeyCode.CTRL_C, .ctrl = true };
 	assert(km.match(ctrl_c) == "quit");
+}
+
+// ============================================================
+// Table
+// ============================================================
+
+fn void test_table_pads_by_display_columns() @test {
+	boba::Table t = boba::new_table();
+	t.add_column("name", 6);
+	// "你好" is two wide glyphs, four display columns and six bytes.
+	t.add_row("你好");
+	t.width = 20;
+	t.height = 5;
+
+	String out = t.view();
+	String[] rows = out.tsplit("\n");
+	// Header row, separator, then the body row.
+	String body = rows[2];
+	assert(glaze::string_width(body) == 6, "the cell fills its six columns, got %d", glaze::string_width(body));
+}
+
+fn void test_table_truncates_at_a_glyph_boundary() @test {
+	boba::Table t = boba::new_table();
+	t.add_column("name", 3);
+	t.add_row("你好");
+	t.width = 20;
+	t.height = 5;
+
+	String[] rows = t.view().tsplit("\n");
+	String body = rows[2];
+	assert(glaze::string_width(body) == 3, "the cell fits in three columns, got %d", glaze::string_width(body));
+	assert(body.contains("\xe4\xbd\xa0"), "the wide glyph survived whole");
 }
