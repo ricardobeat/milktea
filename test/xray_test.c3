@@ -50,6 +50,23 @@ fn void test_color_none_sgr() @test {
 	assert(c.to_sgr_bg() == "");
 }
 
+fn void test_color_underline_sgr() @test {
+	assert(color_rgb(1, 2, 3).to_sgr_underline() == "\x1b[58;2;1;2;3m");
+	assert(color_ansi(9).to_sgr_underline() == "\x1b[58;5;9m");
+	assert(color_256(196).to_sgr_underline() == "\x1b[58;5;196m");
+	assert(color_none().to_sgr_underline() == "");
+}
+
+fn void test_style_emits_underline_color() @test {
+	Style s = default_style().set_underline_color(color_rgb(1, 2, 3));
+	assert(!s.is_empty());
+	assert(s.to_sgr().ends_with("\x1b[58;2;1;2;3m"));
+
+	Style from = default_style().set_fg(color_rgb(0, 0, 0));
+	assert(s.diff_sgr(from).ends_with("\x1b[58;2;1;2;3m"));
+	assert(from.diff_sgr(s) != "");
+}
+
 fn void test_color_hex() @test {
 	Color c = color_hex("#ff8000");
 	assert(c.r == 255);

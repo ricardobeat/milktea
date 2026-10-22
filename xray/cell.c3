@@ -58,6 +58,12 @@ fn Style Style.set_bg(self, Color c) {
 	return s;
 }
 
+fn Style Style.set_underline_color(self, Color c) {
+	Style s = self;
+	s.underline_color = c;
+	return s;
+}
+
 fn Style Style.with_bold(self, bool on) {
 	Style s = self;
 	s.attrs.bold = on;
@@ -124,6 +130,9 @@ fn String Style.to_sgr(&self) {
 	if (!self.bg.is_none()) {
 		ds.append_string(self.bg.to_sgr_bg());
 	}
+	if (!self.underline_color.is_none()) {
+		ds.append_string(self.underline_color.to_sgr_underline());
+	}
 
 	return ds.str_view();
 }
@@ -138,19 +147,14 @@ fn String Style.diff_sgr(&self, Style prev) {
 	if (self.eq(prev)) return "";
 
 	DString ds      = dstring::temp();
-	bool need_reset = false;
 
 	// Check if we need a full reset: attributes changed, or colors changed.
-	bool attrs_changed = self.attrs.bold != prev.attrs.bold || self.attrs.dim != prev.attrs.dim
+	bool need_reset = self.attrs.bold != prev.attrs.bold || self.attrs.dim != prev.attrs.dim
 		|| self.attrs.italic != prev.attrs.italic
 		|| self.attrs.underline != prev.attrs.underline
 		|| self.attrs.blink != prev.attrs.blink
 		|| self.attrs.reverse != prev.attrs.reverse
 		|| self.attrs.strikethrough != prev.attrs.strikethrough;
-
-	if (attrs_changed) {
-		need_reset = true;
-	}
 
 	if (self.fg.kind != ColorKind.TRANSPARENT) {
 		if (!prev.fg.is_none() && (self.fg.is_none() || !self.fg.eq(prev.fg))) {
@@ -161,6 +165,10 @@ fn String Style.diff_sgr(&self, Style prev) {
 		if (!prev.bg.is_none() && (self.bg.is_none() || !self.bg.eq(prev.bg))) {
 			need_reset = true;
 		}
+	}
+	if (!prev.underline_color.is_none()
+		&& (self.underline_color.is_none() || !self.underline_color.eq(prev.underline_color))) {
+		need_reset = true;
 	}
 
 	if (need_reset) {
@@ -181,6 +189,9 @@ fn String Style.diff_sgr(&self, Style prev) {
 		if (!self.bg.is_none() && self.bg.kind != ColorKind.TRANSPARENT) {
 			ds.append_string(self.bg.to_sgr_bg());
 		}
+		if (!self.underline_color.is_none() && self.underline_color.kind != ColorKind.TRANSPARENT) {
+			ds.append_string(self.underline_color.to_sgr_underline());
+		}
 	} else {
 		// Only new attributes turned on (no attrs went off)
 		if (!prev.attrs.bold && self.attrs.bold) ds.append_string("\x1b[1m");
@@ -197,6 +208,10 @@ fn String Style.diff_sgr(&self, Style prev) {
 		}
 		if (self.bg.kind != ColorKind.TRANSPARENT && !self.bg.eq(prev.bg) && !self.bg.is_none()) {
 			ds.append_string(self.bg.to_sgr_bg());
+		}
+		if (self.underline_color.kind != ColorKind.TRANSPARENT
+			&& !self.underline_color.eq(prev.underline_color) && !self.underline_color.is_none()) {
+			ds.append_string(self.underline_color.to_sgr_underline());
 		}
 	}
 

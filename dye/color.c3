@@ -123,6 +123,21 @@ fn String Color.to_sgr_bg(&self) {
 	return self.to_sgr(true);
 }
 
+// to_sgr_underline emits the sequence that sets the underline colour. That
+// slot takes the extended forms only, so a basic ANSI colour is written as its
+// palette index.
+fn String Color.to_sgr_underline(&self) {
+	switch (self.kind) {
+		case ColorKind.ANSI:
+		case ColorKind.ANSI256:
+			return string::tformat("\x1b[58;5;%dm", (int)self.index);
+		case ColorKind.TRUECOLOR:
+			return string::tformat("\x1b[58;2;%d;%d;%dm", (int)self.r, (int)self.g, (int)self.b);
+		default:
+			return "";
+	}
+}
+
 // to_sgr emits the escape sequence that selects this color. background picks
 // the background variant of each code.
 fn String Color.to_sgr(&self, bool background) {
