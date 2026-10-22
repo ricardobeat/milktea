@@ -143,7 +143,7 @@ fn void _rgb_to_hsl(char ri, char gi, char bi, double* h, double* s, double* l) 
 }
 
 // blend_hsl interpolates between two TRUECOLOR Colors in HSL space.
-// Hue takes the shortest path around the wheel.
+// Hue takes the shortest path around the wheel, opacity is averaged with t.
 fn Color blend_hsl(Color a, Color b, double t) @export {
 	double h1, s1, l1;
 	double h2, s2, l2;
@@ -158,7 +158,9 @@ fn Color blend_hsl(Color a, Color b, double t) @export {
 	if (h < 0.0) h += 1.0;
 	if (h >= 1.0) h -= 1.0;
 
-	return hsl(h, s1 + t * (s2 - s1), l1 + t * (l2 - l1));
+	Color c = hsl(h, s1 + t * (s2 - s1), l1 + t * (l2 - l1));
+	c.a = blend_alpha(a, b, t);
+	return c;
 }
 
 // ── HCL (cylindrical LUV) ──────────────────────────────────────────────────
@@ -206,29 +208,14 @@ fn Color hcl(double h, double c, double l) @export {
 }
 
 // blend_hcl interpolates between two TRUECOLOR Colors in HCL space.
-// Hue takes the shortest path around the wheel.
+// Hue takes the shortest path around the wheel, opacity is averaged with t.
 fn Color blend_hcl(Color a, Color b, double t) @export {
-	// a → LUV → HCL
-	double ar = _linearize((double)a.r / 255.0);
-	double ag = _linearize((double)a.g / 255.0);
-	double ab = _linearize((double)a.b / 255.0);
-	double ax, ay, az;
-	_rgb_to_xyz(ar, ag, ab, &ax, &ay, &az);
-	double al, au, av;
-	_xyz_to_luv(ax, ay, az, &al, &au, &av);
+	Luv la = luv_of(a);
 	double ah, ac, acl;
-	_luv_to_hcl(al, au, av, &ah, &ac, &acl);
-
-	// b → LUV → HCL
-	double br = _linearize((double)b.r / 255.0);
-	double bg = _linearize((double)b.g / 255.0);
-	double bb = _linearize((double)b.b / 255.0);
-	double bx, by, bz;
-	_rgb_to_xyz(br, bg, bb, &bx, &by, &bz);
-	double bl, bu, bv;
-	_xyz_to_luv(bx, by, bz, &bl, &bu, &bv);
+	_luv_to_hcl(la.l, la.u, la.v, &ah, &ac, &acl);
+	Luv lb = luv_of(b);
 	double bh, bc, bcl;
-	_luv_to_hcl(bl, bu, bv, &bh, &bc, &bcl);
+	_luv_to_hcl(lb.l, lb.u, lb.v, &bh, &bc, &bcl);;
 
 	// Shortest-path hue
 	double dh = bh - ah;
@@ -238,71 +225,94 @@ fn Color blend_hcl(Color a, Color b, double t) @export {
 	if (h < 0.0) h += 360.0;
 	if (h >= 360.0) h -= 360.0;
 
-	return hcl(h, ac + t * (bc - ac), acl + t * (bcl - acl));
+	Color c = hcl(h, ac + t * (bc - ac), acl + t * (bcl - acl));
+	c.a = blend_alpha(a, b, t);
+	return c;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+// Luv is a colour in the CIE LUV space, the space blend_luv and color_ramp
+// work in.
+struct Luv {
+	double l;
+	double u;
+	double v;
+}
+
+// luv_of converts a TRUECOLOR Color to LUV.
+fn Luv luv_of(Color c) @local {
+	double r = _linearize((double)c.r / 255.0);
+	double g = _linearize((double)c.g / 255.0);
+	double b = _linearize((double)c.b / 255.0);
+	double x, y, z;
+	_rgb_to_xyz(r, g, b, &x, &y, &z);
+	double l, u, v;
+	_xyz_to_luv(x, y, z, &l, &u, &v);
+	return { .l = l, .u = u, .v = v };
+}
+
+// color_of converts LUV back to a TRUECOLOR Color, clipped to the sRGB gamut.
+fn Color color_of(Luv c) @local {
+	double x, y, z;
+	_luv_to_xyz(c.l, c.u, c.v, &x, &y, &z);
+	double r, g, b;
+	_xyz_to_rgb(x, y, z, &r, &g, &b);
+	if (r < 0.0) r = 0.0;
+	if (r > 1.0) r = 1.0;
+	if (g < 0.0) g = 0.0;
+	if (g > 1.0) g = 1.0;
+	if (b < 0.0) b = 0.0;
+	if (b > 1.0) b = 1.0;
+	return {
+		.kind = ColorKind.TRUECOLOR,
+		.r = (char)(int)(_delinearize(r) * 255.0 + 0.5),
+		.g = (char)(int)(_delinearize(g) * 255.0 + 0.5),
+		.b = (char)(int)(_delinearize(b) * 255.0 + 0.5),
+	};
+}
+
+// lerp_luv blends two LUV colours, t=0 gives a, t=1 gives b.
+fn Luv lerp_luv(Luv a, Luv b, double t) @local {
+	double s = 1.0 - t;
+	return { .l = s * a.l + t * b.l, .u = s * a.u + t * b.u, .v = s * a.v + t * b.v };
+}
+
+// blend_alpha interpolates the opacity of two colours. Color.a holds 0 for
+// opaque, so the interpolation runs on the effective values.
+fn char blend_alpha(Color a, Color b, double t) @local {
+	int ai = (int)a.effective_alpha();
+	int bi = (int)b.effective_alpha();
+	return (char)(ai + (int)(t * (double)(bi - ai)));
+}
+
 // blend_luv interpolates between two TRUECOLOR Colors in LUV space.
 // t=0 returns a, t=1 returns b. Works like colorful.BlendLuv in Go.
 fn Color blend_luv(Color a, Color b, double t) @export {
-	// Convert a to LUV
-	double ar   = _linearize((double)a.r / 255.0);
-	double ag   = _linearize((double)a.g / 255.0);
-	double ab_c = _linearize((double)a.b / 255.0);
-	double ax, ay, az;
-	_rgb_to_xyz(ar, ag, ab_c, &ax, &ay, &az);
-	double al, au, av;
-	_xyz_to_luv(ax, ay, az, &al, &au, &av);
-
-	// Convert b to LUV
-	double br   = _linearize((double)b.r / 255.0);
-	double bg   = _linearize((double)b.g / 255.0);
-	double bb_c = _linearize((double)b.b / 255.0);
-	double bx, by, bz;
-	_rgb_to_xyz(br, bg, bb_c, &bx, &by, &bz);
-	double bl, bu, bv;
-	_xyz_to_luv(bx, by, bz, &bl, &bu, &bv);
-
-	// Lerp in LUV
-	double s  = 1.0 - t;
-	double ml = s * al + t * bl;
-	double mu = s * au + t * bu;
-	double mv = s * av + t * bv;
-
-	// Back to sRGB
-	double mx, my, mz;
-	_luv_to_xyz(ml, mu, mv, &mx, &my, &mz);
-	double mr, mg, mb;
-	_xyz_to_rgb(mx, my, mz, &mr, &mg, &mb);
-
-	// Clamp and delinearize
-	if (mr < 0.0) mr = 0.0;
-	if (mr > 1.0) mr = 1.0;
-	if (mg < 0.0) mg = 0.0;
-	if (mg > 1.0) mg = 1.0;
-	if (mb < 0.0) mb = 0.0;
-	if (mb > 1.0) mb = 1.0;
-
-	return {
-		.kind = ColorKind.TRUECOLOR,
-		.r = (char)(int)(_delinearize(mr) * 255.0 + 0.5),
-		.g = (char)(int)(_delinearize(mg) * 255.0 + 0.5),
-		.b = (char)(int)(_delinearize(mb) * 255.0 + 0.5),
-	};
+	Color c = color_of(lerp_luv(luv_of(a), luv_of(b), t));
+	c.a = blend_alpha(a, b, t);
+	return c;
 }
 
 // color_ramp returns an array of n colors blended from a to b in LUV space.
 // Caller provides the output slice (length n).
 fn void color_ramp(Color a, Color b, Color[] out) {
-	int n = (int)out.len;
+	sz n = out.len;
 	if (n == 0) return;
 	if (n == 1) {
 		out[0] = a;
 		return;
 	}
-	for (int i = 0; i < n; i++) {
-		out[i] = blend_luv(a, b, (double)i / (double)(n - 1));
+	// Both endpoints are converted once here rather than once per step.
+	Luv la  = luv_of(a);
+	Luv lb  = luv_of(b);
+	int ai  = (int)a.effective_alpha();
+	int dai = (int)b.effective_alpha() - ai;
+	for (sz i = 0; i < n; i++) {
+		double t = (double)i / (double)(n - 1);
+		Color c  = color_of(lerp_luv(la, lb, t));
+		c.a = (char)(ai + (int)(t * (double)dai));
+		out[i] = c;
 	}
 }
 
