@@ -256,3 +256,40 @@ fn void test_toast_sits_centred_above_the_bottom_and_grows_upward() @test {
 	r = root.child_rect(0);
 	assert(r.h == boba::TOAST_H && r.y == 14, "three rows from y=14, got %d from y=%d", r.h, r.y);
 }
+
+// ============================================================
+// KeyMap
+// ============================================================
+
+fn void test_plain_binding_ignores_chords() @test {
+	boba::KeyMap km = boba::new_keymap();
+	km.bind("q", "quit");
+
+	milktea::KeyMsg plain = { .code = milktea::KeyCode.RUNE, .rune = 'q' };
+	assert(km.match(plain) == "quit");
+
+	milktea::KeyMsg ctrl_q = { .code = milktea::KeyCode.RUNE, .rune = 'q', .ctrl = true };
+	assert(km.match(ctrl_q) == "", "ctrl+q is not q");
+
+	milktea::KeyMsg alt_q = { .code = milktea::KeyCode.RUNE, .rune = 'q', .alt = true };
+	assert(km.match(alt_q) == "", "alt+q is not q");
+}
+
+fn void test_bind_mod_requires_its_modifier() @test {
+	boba::KeyMap km = boba::new_keymap();
+	km.bind_mod("q", "quit", false, true);
+
+	milktea::KeyMsg ctrl_q = { .code = milktea::KeyCode.RUNE, .rune = 'q', .ctrl = true };
+	assert(km.match(ctrl_q) == "quit");
+
+	milktea::KeyMsg plain = { .code = milktea::KeyCode.RUNE, .rune = 'q' };
+	assert(km.match(plain) == "", "plain q is not ctrl+q");
+}
+
+fn void test_key_name_that_spells_the_modifier() @test {
+	boba::KeyMap km = boba::new_keymap();
+	km.bind("ctrl+c", "quit");
+
+	milktea::KeyMsg ctrl_c = { .code = milktea::KeyCode.CTRL_C, .ctrl = true };
+	assert(km.match(ctrl_c) == "quit");
+}

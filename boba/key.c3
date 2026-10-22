@@ -13,9 +13,13 @@ struct KeyBinding {
 	bool ctrl; // requires Ctrl modifier
 }
 
+// MAX_KEY_BINDINGS is how many bindings a KeyMap holds. Adding more is a bug
+// in the caller, not a binding to drop.
+const sz MAX_KEY_BINDINGS = 32;
+
 // KeyMap holds a set of named key bindings.
 struct KeyMap {
-	KeyBinding[32] bindings;
+	KeyBinding[MAX_KEY_BINDINGS] bindings;
 	sz count;
 }
 
@@ -26,31 +30,39 @@ fn KeyMap new_keymap() {
 
 // bind adds a key binding to the map.
 fn void KeyMap.bind(&self, String key, String action) {
-	if (self.count >= 32) return;
+	assert(self.count < MAX_KEY_BINDINGS, "a KeyMap holds %d bindings", MAX_KEY_BINDINGS);
+	if (self.count >= MAX_KEY_BINDINGS) return;
 	self.bindings[self.count] = { .key = key, .action = action };
 	self.count++;
 }
 
 // bind_mod adds a key binding with modifier requirements.
 fn void KeyMap.bind_mod(&self, String key, String action, bool alt, bool ctrl) {
-	if (self.count >= 32) return;
+	assert(self.count < MAX_KEY_BINDINGS, "a KeyMap holds %d bindings", MAX_KEY_BINDINGS);
+	if (self.count >= MAX_KEY_BINDINGS) return;
 	self.bindings[self.count] = { .key = key, .action = action, .alt = alt, .ctrl = ctrl };
 	self.count++;
 }
 
 // match checks a KeyMsg against all bindings and returns the action name, or "" if none match.
 // Uses milktea::KeyMsg.code and milktea::KeyMsg.rune for matching.
+//
+// A binding without modifiers does not fire for a ctrl or alt chord: "q" is
+// not "ctrl+q". The exception is a key whose name already spells the modifier
+// out, since ctrl+c is a key code of its own.
 fn String KeyMap.match(&self, milktea::KeyMsg k) {
+	String matched = key_match_string(k);
+	if (matched.len == 0) return "";
+
+	bool key_has_ctrl = matched.len > 5 && matched[:5] == "ctrl+";
+	bool key_has_alt  = matched.len > 4 && matched[:4] == "alt+";
+
 	for (sz i = 0; i < self.count; i++) {
 		KeyBinding b = self.bindings[i];
-
-		// Check modifiers
-		if (b.alt && !k.alt) continue;
-		if (b.ctrl && !k.ctrl) continue;
-
-		// Match by key code
-		String matched = key_match_string(k);
-		if (matched == b.key) return b.action;
+		if (matched != b.key) continue;
+		if (!key_has_ctrl && b.ctrl != k.ctrl) continue;
+		if (!key_has_alt && b.alt != k.alt) continue;
+		return b.action;
 	}
 	return "";
 }
