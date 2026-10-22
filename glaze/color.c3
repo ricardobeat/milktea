@@ -35,6 +35,7 @@ fn void Color.write_sgr_params(self, DString* out, bool foreground) {
 	switch (self.kind) {
 		case NONE:
 		case TRANSPARENT:
+			break;
 		case ANSI:
 			if (self.index < 8) {
 				out.appendf(foreground ? "3%d" : "4%d", self.index);

@@ -57,6 +57,21 @@ fn void test_color_underline_sgr() @test {
 	assert(color_none().to_sgr_underline() == "");
 }
 
+fn void test_write_sgr_params_skips_unset_colors() @test {
+	DString out = dstring::temp();
+
+	glaze::color_none().write_sgr_params(&out, true);
+	assert(out.str_view() == "", "NONE writes nothing, got %s", out.str_view());
+
+	out.clear();
+	xray::color_transparent().write_sgr_params(&out, false);
+	assert(out.str_view() == "", "TRANSPARENT writes nothing, got %s", out.str_view());
+
+	out.clear();
+	glaze::color_ansi(1).write_sgr_params(&out, true);
+	assert(out.str_view() == "31");
+}
+
 fn void test_controls_have_no_width() @test {
 	assert(char_width(0x00) == 0, "NUL");
 	assert(char_width(0x07) == 0, "BEL advances no column");
