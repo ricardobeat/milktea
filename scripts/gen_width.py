@@ -45,6 +45,10 @@ EXPLICIT_ZERO |= set(range(0xFE00, 0xFE10))  # variation selectors 1-16
 EXPLICIT_ZERO |= set(range(0xE0100, 0xE01F0))  # variation selectors supplement
 EXPLICIT_ZERO |= set(range(0xE0020, 0xE0080))  # tag characters
 EXPLICIT_ZERO.add(0)  # NUL, by terminal convention
+# C0 controls, DEL and C1 print nothing, so they advance no columns. Left out,
+# a BEL in the middle of a line shifts everything after it by one column.
+EXPLICIT_ZERO |= set(range(0x01, 0x20))
+EXPLICIT_ZERO |= set(range(0x7F, 0xA0))
 
 # Soft hyphen is a format char but occupies a column when rendered.
 FORMAT_WITH_WIDTH = {0x00AD}
@@ -123,7 +127,7 @@ def emit(zero, wide, prefix: str) -> str:
             "\treturn false;",
             "}",
             "",
-            f"fn int {prefix.lower()}_lookup(uint cp) @local {{",
+            f"fn sz {prefix.lower()}_lookup(uint cp) @local {{",
             "\t// Fast path: ASCII is by far the most common input and is",
             "\t// entirely width 1 apart from NUL, which the zero table covers.",
             "\tif (cp >= 0x20 && cp < 0x7F) return 1;",

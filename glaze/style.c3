@@ -29,8 +29,9 @@ fn sz codepoint_width(uint cp) {
 // A half-open-free inclusive codepoint range, sorted ascending.
 struct CodepointRange { uint lo; uint hi; }
 
-const CodepointRange[357] GLAZE_WIDTH_ZERO_RANGES @local = {
-	{ 0x0000, 0x0000 },
+const CodepointRange[358] GLAZE_WIDTH_ZERO_RANGES @local = {
+	{ 0x0000, 0x001F },
+	{ 0x007F, 0x009F },
 	{ 0x0300, 0x036F },
 	{ 0x0483, 0x0489 },
 	{ 0x0591, 0x05BD },

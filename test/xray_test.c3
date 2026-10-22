@@ -57,6 +57,15 @@ fn void test_color_underline_sgr() @test {
 	assert(color_none().to_sgr_underline() == "");
 }
 
+fn void test_controls_have_no_width() @test {
+	assert(char_width(0x00) == 0, "NUL");
+	assert(char_width(0x07) == 0, "BEL advances no column");
+	assert(char_width(0x1b) == 0, "ESC advances no column");
+	assert(char_width(0x7f) == 0, "DEL advances no column");
+	assert(char_width(0x9b) == 0, "C1 CSI advances no column");
+	assert(char_width('a') == 1);
+}
+
 fn void test_pixel_buffer_in_bounds_checks_both_ends() @test {
 	PixelBuffer* pb = new_pixel_buffer(4, 3);
 	defer {
