@@ -10,9 +10,12 @@ import std::core::dstring;
 //   Renderer r = new_renderer(width, height, &write_stdout_fn);
 //   defer r.destroy();
 //   // Each frame:
-//   r.begin_frame();
 //   // ... write content to r.screen ...
 //   r.end_frame();  // diffs + flushes to terminal
+//
+// end_frame hides the cursor for the duration of the diff; showing it again
+// is the caller's decision, since only the caller knows whether anything on
+// screen wants the terminal cursor.
 // ============================================================
 
 // WriteFn is the signature for the terminal output function.
@@ -21,7 +24,6 @@ alias WriteFn = fn void(char[] bytes);
 const String SYNC_BEGIN      @private = "\x1b[?2026h";
 const String SYNC_END        @private = "\x1b[?2026l";
 const String HIDE_CURSOR_SEQ @private = "\x1b[?25l";
-const String SHOW_CURSOR_SEQ @private = "\x1b[?25h";
 
 struct Renderer {
 	ScreenBuffer* screen;
@@ -65,11 +67,6 @@ fn void Renderer.set_sync_supported(&self, bool supported) {
 // clear resets the screen buffer and forces a full redraw.
 fn void Renderer.clear(&self) {
 	self.screen.clear();
-}
-
-// begin_frame starts a new frame. Call before writing to the screen buffer.
-fn void Renderer.begin_frame(&self) {
-	// No-op: the screen buffer is written directly
 }
 
 // end_frame finishes the frame: diffs the screen buffer against the

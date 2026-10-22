@@ -1729,8 +1729,6 @@ fn void Program.render_current_view(Program* self) {
 					r.resize((sz)self.cached_ws.ws_col, (sz)self.cached_ws.ws_row);
 				}
 
-				r.begin_frame();
-
 				// Clear the screen buffer and write new content
 				if (v.cells.ptr != null) {
 					// Direct cell path — write cells straight into the screen buffer.
