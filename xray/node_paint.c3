@@ -120,10 +120,6 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		}
 	}
 
-	for (sz i = 0; i < n.child_count; i++) {
-		self.paint_node(n.children[i], res, scratch);
-	}
-
 	// Inner shadow sits over the node's own content but under its children,
 	// matching how a shadow inside a box darkens the box rather than what
 	// is stacked on it.
@@ -131,6 +127,10 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		InnerShadow is = n.layer_style.inner_shadow;
 		is.opacity = scale_opacity(is.opacity, n.alpha_value);
 		if (is.opacity > 0) self.render_inner_shadow(r.x, r.y, r.w, r.h, is);
+	}
+
+	for (sz i = 0; i < n.child_count; i++) {
+		self.paint_node(n.children[i], res, scratch);
 	}
 }
 
