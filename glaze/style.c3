@@ -996,6 +996,40 @@ fn String Style.render(self, String input) {
 		|| self.underline;
 	bool has_bg = self.bg.kind != ColorKind.NONE;
 
+	// The prefix that opens the content depends only on the style, so it is
+	// built once rather than rebuilt for every line.
+	String sgr_prefix = "";
+	if (has_attrs) {
+		DString prefix = dstring::temp();
+		prefix.append_string("\x1b[");
+		bool first = true;
+		if (self.bold) {
+			prefix.append_string("1");
+			first = false;
+		}
+		if (self.italic) {
+			if (!first) prefix.append_char(';');
+			prefix.append_string("3");
+			first = false;
+		}
+		if (self.underline) {
+			if (!first) prefix.append_char(';');
+			prefix.append_string("4");
+			first = false;
+		}
+		if (self.fg.kind != ColorKind.NONE) {
+			if (!first) prefix.append_char(';');
+			self.fg.write_sgr_params(&prefix, true);
+			first = false;
+		}
+		if (has_bg) {
+			if (!first) prefix.append_char(';');
+			self.bg.write_sgr_params(&prefix, false);
+		}
+		prefix.append_string("m");
+		sgr_prefix = prefix.str_view();
+	}
+
 	// Total line width = content + padding (border is applied after)
 	sz line_width = target_width + self.pad_left + self.pad_right;
 
@@ -1026,32 +1060,7 @@ fn String Style.render(self, String input) {
 
 		// Content (styled).
 		if (has_attrs) {
-			body.append_string("\x1b[");
-			bool first = true;
-			if (self.bold) {
-				body.append_string("1");
-				first = false;
-			}
-			if (self.italic) {
-				if (!first) body.append_char(';');
-				body.append_string("3");
-				first = false;
-			}
-			if (self.underline) {
-				if (!first) body.append_char(';');
-				body.append_string("4");
-				first = false;
-			}
-			if (self.fg.kind != ColorKind.NONE) {
-				if (!first) body.append_char(';');
-				self.fg.write_sgr_params(&body, true);
-				first = false;
-			}
-			if (has_bg) {
-				if (!first) body.append_char(';');
-				self.bg.write_sgr_params(&body, false);
-			}
-			body.append_string("m");
+			body.append_string(sgr_prefix);
 			// Write line content, re-applying outer style after any inner resets.
 			sz li = 0;
 			while (li < line.len) {
@@ -1248,15 +1257,14 @@ fn bool is_csi_final(char c) @local {
 // The caller's width/height should already account for border overhead.
 // Used by animated border rendering to separate content from border.
 fn String Style.render_content_only(self, String input) {
-	// Temporarily clear the border, render, then restore.
-	Style saved = self;
-	Style s     = self;
+	// self is a copy, so clearing the border here leaves the caller's style
+	// alone.
+	Style s = self;
 	s.border = { };
 	s.border_color = { };
 	s.corner_color = { };
 	s.border_gradient = { };
 	s.border_animation = BorderAnimation.NONE;
-	String result = s.render(input);
-	return result;
+	return s.render(input);
 }
 
