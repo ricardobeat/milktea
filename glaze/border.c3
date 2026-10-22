@@ -29,16 +29,10 @@ const Border NORMAL = {
 	.bottom_right = "┘"
 };
 
-const Border SQUARE = {
-	.top = "─",
-	.bottom = "─",
-	.left = "│",
-	.right = "│",
-	.top_left = "┌",
-	.top_right = "┐",
-	.bottom_left = "└",
-	.bottom_right = "┘"
-};
+// NORMAL and SQUARE draw the same box: rounded corners are the ones that
+// differ (see ROUNDED), so there is one set of square glyphs behind both
+// names.
+const Border SQUARE = NORMAL;
 
 const Border ROUNDED = {
 	.top = "─",
