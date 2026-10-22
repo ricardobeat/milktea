@@ -418,7 +418,7 @@ fn void test_centered_component_has_a_width() @test {
 	xray::Node* n = xray::content_node(&t).center();
 	xray::root().add(n).solve(xray::new_rect(0, 0, 40, 10));
 
-	assert(n.rect().h == 1, "one row tall");
+	assert(n.rect().h == 2, "both rows of the timer fit, got %d", n.rect().h);
 	assert(n.rect().w > 0, "and wide enough to show the clock");
 }
 

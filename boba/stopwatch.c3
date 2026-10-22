@@ -96,7 +96,8 @@ fn String Stopwatch.view(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Stopwatch.render(&self, xray::Rect r) @dynamic => self.view();
-fn sz Stopwatch.measure(&self, sz width) @dynamic => 1;
+// view renders the time and a state line under it.
+fn sz Stopwatch.measure(&self, sz width) @dynamic => 2;
 fn sz Stopwatch.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Stopwatch.node(&self) => xray::content_node(self);

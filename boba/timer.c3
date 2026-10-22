@@ -110,7 +110,8 @@ fn String Timer.view(&self) {
 // ── layout tree ──────────────────────────────────────────────────────────────
 
 fn String Timer.render(&self, xray::Rect r) @dynamic => self.view();
-fn sz Timer.measure(&self, sz width) @dynamic => 1;
+// view renders the time and a state line under it.
+fn sz Timer.measure(&self, sz width) @dynamic => 2;
 fn sz Timer.measure_width(&self, sz height) @dynamic => glaze::string_width(self.view());
 
 fn xray::Node* Timer.node(&self) => xray::content_node(self);
