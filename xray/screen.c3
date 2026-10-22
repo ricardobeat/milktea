@@ -964,8 +964,8 @@ fn void apply_sgr_code(Style* s, sz code, Style base) @local {
 		case 106: s.bg = color_ansi(14);
 		case 107: s.bg = color_ansi(15);
 		default:
-		// Ignore unrecognized codes (e.g., 38;5;N, 48;2;R;G;B are
-		// handled by a sub-parser below — TODO for future enhancement)
+		// Ignore unrecognized codes. The extended forms (38;5;N, 48;2;R;G;B)
+		// never reach this switch — apply_sgr consumes them itself.
 	}
 }
 

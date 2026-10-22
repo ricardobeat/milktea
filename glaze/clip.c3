@@ -7,7 +7,7 @@ import std::core::dstring;
 fn String clip_lines(String input, sz max_lines) {
 	if (max_lines <= 0) return "";
 
-	// Count newlines and find line starts
+	// Count newlines
 	sz total_lines = 1;
 	for (sz i = 0; i < input.len; i++) {
 		if (input[i] == '\n') total_lines++;

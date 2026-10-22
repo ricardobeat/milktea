@@ -130,7 +130,7 @@ fn bool is_csi_final(char c) @local {
 	return c >= 0x40 && c <= 0x7e;
 }
 
-// handle_probe_reply inspects one CSI reply body (bytes between "ESC [" and
+// handle_probe_csi inspects one CSI reply body (bytes between "ESC [" and
 // the final byte). Only XTWINOPS cell-size reports (param 6) are interpreted.
 fn void handle_probe_csi(char[] body) @local {
 	int[8] params;
@@ -154,10 +154,6 @@ fn void handle_probe_csi(char[] body) @local {
 	}
 }
 
-// handle_probe_string inspects one OSC/APC body. For OSC 1337 it parses
-// iTerm2's ReportCellSize=<height>;<width>; for APC ESC_G it records that the
-// terminal speaks the kitty graphics protocol (the a=q probe is answered with
-// OK or ERR — either way the protocol is implemented).
 // parse_hex_channel reads one `rgb:` channel — 1 to 4 hex digits — and scales
 // it to 8 bits, so `ff`, `ffff` and `f` all come back as 255.
 fn bool parse_hex_channel(char[] s, int* out) @local {
@@ -218,6 +214,10 @@ fn void parse_osc11_body(char[] body) @local {
 	report_term_bg_reply(r, g, b);
 }
 
+// handle_probe_string inspects one OSC/APC body. For OSC 1337 it parses
+// iTerm2's ReportCellSize=<height>;<width>; for APC ESC_G it records that the
+// terminal speaks the kitty graphics protocol (the a=q probe is answered with
+// OK or ERR — either way the protocol is implemented).
 fn void handle_probe_string(bool is_osc, char[] body) @local {
 	if (is_osc) {
 		if (body.len > 2 && body[0] == '1' && body[1] == '1' && body[2] == ';') {
@@ -402,10 +402,7 @@ Atomic{bool} g_win_resized;
 // g_saved_tty stores the pre-raw-mode terminal state so signal handlers can restore it.
 TtyState g_saved_tty;
 bool g_tty_saved = false;
-// g_in_alt_screen lets the signal handler exit alt screen if needed.
-
-
-
+// g_in_alt_screen_ptr lets the signal handler exit alt screen if needed.
 bool* g_in_alt_screen_ptr = null;
 
 // Fatal-signal numbers. POSIX fixes these on macOS and Linux with one exception:

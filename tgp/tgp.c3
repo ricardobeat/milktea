@@ -453,7 +453,7 @@ const uint[297] DIACRITICS = {
 	0x1D244,
 };
 
-// placeholder_cell encodes one cell of an image: the codepoint, then the
+// append_placeholder_cell encodes one cell of an image: the codepoint, then the
 // row and column of the cell within the image's c x r grid. The image id
 // travels in the foreground colour, which the caller sets around a run of
 // these.

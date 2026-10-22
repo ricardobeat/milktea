@@ -4,10 +4,10 @@ import milktea;
 import xray;
 import glaze;
 
-// Stopwatch is a count-up timer component.
-// Embed it in your model; call tick() on TICK messages, return view() in your View.
 const sz STOPWATCH_INTERVAL_MS = 10;
 
+// Stopwatch is a count-up timer component.
+// Embed it in your model; call tick() on TICK messages, return view() in your View.
 struct Stopwatch (xray::Content) {
 	sz elapsed_ms;
 	bool running;

@@ -55,7 +55,7 @@ fn char Color.effective_alpha(&self) {
 	return self.a == 0 ? (char)255 : self.a;
 }
 
-// blend returns this color alpha-blended over dst. Both must be truecolor.
+// blend_over returns this color alpha-blended over dst. Both must be truecolor.
 fn Color Color.blend_over(&self, Color dst) {
 	int a = (int)self.effective_alpha();
 	int inv_a = 255 - a;

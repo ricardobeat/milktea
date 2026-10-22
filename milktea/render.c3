@@ -50,8 +50,6 @@ fn String cursor_style_seq(CursorShape shape, bool blink) @private {
 	return string::tformat("\x1b[%d q", style);
 }
 
-// render_view_to writes the full rendered output for a View into [out].
-// Split from render_view so tests can inspect the buffer without touching stdout.
 // cells_to_string flattens a cell view into an ANSI string, one line per row.
 // The differential renderer normally consumes the grid directly; this is the
 // path for test mode and for any caller holding only a string sink.

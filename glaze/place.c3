@@ -51,7 +51,7 @@ fn sz max_line_width(LineSet* ls) @local {
 }
 
 // ============================================================
-// join_horizontal — join two strings side by line.
+// join_horizontal — join two strings side by side.
 // ============================================================
 
 fn String join_horizontal(String left, String right, sz gap) {

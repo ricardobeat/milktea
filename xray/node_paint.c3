@@ -65,9 +65,7 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, sz now_ms) {
 
 	String drawn = c.draw(c.x, c.y, blink, under);
 	// An empty return means "leave the cell alone", which is how a blinking
-
 	// cursor spends its off phase.
-
 	if (drawn.len == 0) return;
 	// overlay_char writes exactly one cell slot, so a wide glyph — an emoji,
 	// a katakana character — cannot displace its neighbour.
@@ -291,9 +289,7 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 			sz dx = (sz)r.x + cx;
 			sz dy = (sz)r.y + cy;
 			// sz is signed: a node scrolled off the top or left gives
-
 			// negative coordinates that would index before the buffer.
-
 			if (dx < 0 || dy < 0 || dx >= self.width || dy >= self.height) continue;
 
 			Cell src = tmp.cells[cy * tmp.width + cx];

@@ -196,7 +196,6 @@ fn BoxStyle style_of(sz b, bool selected = false) {
 	};
 }
 
-// Frame index of one tile: radius picks the block, tile_index the slot in it.
 // Interior rows left once the corner blocks take 2*ky of the box height. The
 // box height is fixed by layout; a radius never changes it.
 fn sz body_rows(sz ky) {
@@ -204,6 +203,7 @@ fn sz body_rows(sz ky) {
 	return n < 1 ? 1 : n;
 }
 
+// Frame index of one tile: radius picks the block, tile_index the slot in it.
 fn sz ring_frame(sz kx, sz ky, sz slot, sz ox, sz oy) {
 	return tile_index(kx, ky, slot, ox, oy);
 }
@@ -215,11 +215,6 @@ fn sz ring_row_frame(sz kx, sz ky, sz row, sz which) {
 
 fn bool Model.gfx_active(Model* self) => self.tgp_ok && self.tgp_on;
 
-// sync_ring makes box b's glyph match its current radius, building and
-// registering the tiles if it does not already hold them. The previous radius
-// is released, which deletes its images from the terminal and frees the
-// session slot -- without that, cycling through radii would exhaust
-// MAX_GLYPHS.
 // effective_radius is the radius a box can actually draw. Box height comes
 // from style and layout; the radius does not get to change it. The only real
 // constraint is that the top and bottom corner blocks must not overlap, so a
@@ -236,6 +231,11 @@ fn sz effective_radius(sz rad, sz box_h) {
 	return rad;
 }
 
+// sync_ring makes box b's glyph match its current radius, building and
+// registering the tiles if it does not already hold them. The previous radius
+// is released, which deletes its images from the terminal and frees the
+// session slot -- without that, cycling through radii would exhaust
+// MAX_GLYPHS.
 fn void Model.sync_ring(Model* self, sz b) {
 	if (!self.tgp_ok) return;
 	sz rad = effective_radius(self.radius[b], BOX_H);
@@ -431,10 +431,6 @@ fn String row_run(Model* m, sz b, sz kx, sz ky, sz row, sz which, sz n) {
 
 // ---- Emitting one box at an absolute rect ----
 
-// append_box_at writes a box into out, positioning each row with an absolute
-// cursor move. The placeholders bypass the node painter this way (it composes
-// through a cell grid that drops them), so the escapes reach the terminal
-// exactly as built.
 // append_shadow_at draws the drop shadow: one column right of the box, one row
 // below, and the corner. A separate pass, before the box, so the shadow is not
 // clipped by the box's own tiles -- which is what made it invisible when it
@@ -482,6 +478,10 @@ fn void append_shadow_at(DString* out, Model* m, sz b, xray::Rect rect) {
 	out.append_string(tgp::placeholder_string(base + (uint)shadow_corner(kx, ky)));
 }
 
+// append_box_at writes a box into out, positioning each row with an absolute
+// cursor move. The placeholders bypass the node painter this way (it composes
+// through a cell grid that drops them), so the escapes reach the terminal
+// exactly as built.
 fn void append_box_at(DString* out, Model* m, sz b, xray::Rect rect) {
 	BoxDef d = BOX_DEFS[b];
 	glaze::Color bg = glaze::color_hex(d.bg);

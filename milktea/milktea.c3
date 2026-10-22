@@ -854,13 +854,6 @@ fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	return null;
 }
 
-// every registers a timer that fires at the next clock boundary (wall-clock aligned).
-// Unlike tick(), the deadline is snapped to the next multiple of interval_ms,
-// so successive calls stay locked to absolute time regardless of drift.
-// Use for clock displays, countdowns, and periodic sync.
-// Default: 16ms (~60fps) sending a TICK message.
-// When all MAX_TIMERS slots are occupied the timer is silently dropped;
-// enable Program.debug to surface this in milktea-debug.log.
 // snap_delay returns how long to wait from `wall` to reach the next multiple
 // of `interval_ms`. Always in (0, interval_ms], so a timer re-armed exactly on
 // a boundary waits a full interval rather than firing again immediately.
@@ -870,6 +863,13 @@ fn sz snap_delay(sz wall, sz interval_ms) @private {
 	return elapsed == 0 ? interval_ms : interval_ms - elapsed;
 }
 
+// every registers a timer that fires at the next clock boundary (wall-clock aligned).
+// Unlike tick(), the deadline is snapped to the next multiple of interval_ms,
+// so successive calls stay locked to absolute time regardless of drift.
+// Use for clock displays, countdowns, and periodic sync.
+// Default: 16ms (~60fps) sending a TICK message.
+// When all MAX_TIMERS slots are occupied the timer is silently dropped;
+// enable Program.debug to surface this in milktea-debug.log.
 fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
 	if (g_program == null) return null;
 	// A zero interval would divide-by-zero on the modulo below; clamp to 1ms.

@@ -39,8 +39,8 @@ struct ThemeSet {
 
 fn Theme* ThemeSet.current(&self) => &self.themes[self.active];
 
-// load reads themes.json. A theme set that fails to load falls back to one
-// built-in scheme rather than leaving the app with no colors at all — the
+// load_themes reads themes.json. A theme set that fails to load falls back to
+// one built-in scheme rather than leaving the app with no colors at all — the
 // file is data, and a missing or malformed one should not stop the demo.
 fn ThemeSet load_themes() {
 	ThemeSet set;

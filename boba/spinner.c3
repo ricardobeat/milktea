@@ -74,7 +74,7 @@ fn String Spinner.view(&self) {
 	return s.render(frame_str);
 }
 
-// advance_frame advances the frame counter without scheduling a tick.
+// advance advances the frame counter without scheduling a tick.
 // Useful when the host already has its own tick loop (e.g. taro's 60fps loop).
 fn void Spinner.advance(&self) {
 	SpinnerFrames fs = spinner_frames(self.kind);

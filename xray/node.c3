@@ -240,7 +240,7 @@ fn Node* zstack() => new_node(NodeDirection.STACK);
 // knowing about it.
 fn Node* root() => new_node(NodeDirection.STACK);
 
-// node wraps content as a leaf. Callers normally reach this through a
+// content_node wraps content as a leaf. Callers normally reach this through a
 // higher-level constructor such as milktea::text.
 fn Node* content_node(Content c) {
 	Node* n = new_node(NodeDirection.COLUMN);

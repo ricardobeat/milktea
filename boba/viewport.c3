@@ -153,7 +153,7 @@ fn bool Viewport.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
-// view_line_range returns the visible line indices [start, end).
+// view_line_start and view_line_end give the visible line indices [start, end).
 fn sz Viewport.view_line_start(&self) {
 	return self.offset;
 }

@@ -5,11 +5,11 @@ import xray;
 import glaze;
 import std::core::dstring;
 
-// ListItem represents a single item in a list.
 // Rows the list reserves for its own chrome rather than items: a title row
 // and the pagination row beneath.
 const sz LIST_CHROME_ROWS = 2;
 
+// ListItem represents a single item in a list.
 struct ListItem {
 	String title;
 	String description;
@@ -102,7 +102,6 @@ fn bool List.handle_key(&self, milktea::KeyMsg k) {
 	}
 }
 
-// view returns the rendered list string.
 // visible_rows is how many items fit in the list's height, leaving room for
 // the chrome the view draws around them.
 fn sz List.visible_rows(&self) {
@@ -110,6 +109,7 @@ fn sz List.visible_rows(&self) {
 	return n < 1 ? 1 : n;
 }
 
+// view returns the rendered list string.
 fn String List.view(&self) {
 	sz available = self.visible_rows();
 

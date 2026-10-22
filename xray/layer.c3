@@ -265,12 +265,8 @@ fn void ScreenBuffer.render_shadow(&self, sz x, sz y, sz w, sz h, Shadow s) {
 	// the half-cell one (see Shadow).
 	sz sx = x + (s.half_blocks ? s.offset_x : s.offset_x * 2);
 	// The vertical offset is in half-rows. Whole rows move the shadow's rect; a
-
-
 	// leftover half-row is carried into the sampling below, the only place that
-
 	// can express it.
-
 	sz sy         = y + s.offset_y / 2;
 	sz extra_half = s.offset_y - (s.offset_y / 2) * 2;
 
