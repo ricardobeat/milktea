@@ -362,10 +362,12 @@ fn sz probe_terminal_caps(char[] leftover) @private {
 	sz len = 0;
 	sz out = 0;
 	sz deadline = time_ms() + PROBE_TIMEOUT_MS;
-	while (time_ms() < deadline) {
+	while (true) {
 		if (g_cell_px_known && g_tgp_replied && g_term_bg_known) break;
+		sz remaining = deadline - time_ms();
+		if (remaining <= 0) break;
 		char[128] chunk;
-		sz n = read_stdin_timeout(chunk[..], 30);
+		sz n = read_stdin_timeout(chunk[..], remaining < 30 ? remaining : 30);
 		if (n > 0) {
 			for (sz i = 0; i < n && len < acc.len; i++) {
 				acc[len++] = chunk[i];
