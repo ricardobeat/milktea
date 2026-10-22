@@ -286,7 +286,7 @@ struct Selection {
 	sz end_col;
 }
 
-fn Selection Viewport.selection(&self) @local {
+fn Selection Viewport.selection(&self) {
 	Selection s = {
 		.start_row = self.sel_start_row,
 		.start_col = self.sel_start_col,
