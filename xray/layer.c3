@@ -88,31 +88,12 @@ struct LayerStyle {
 	InnerShadow inner_shadow;
 }
 
-// Distance from point (col, row) to the edge of rect (rx, ry, rw, rh).
-// Returns 0 if inside, positive distance if outside.
-fn sz shadow_edge_dist(sz col, sz row, sz rx, sz ry, sz rw, sz rh) @private {
-	sz dx = 0;
-	if (col < rx) {
-		dx = rx - col;
-	} else if (col >= rx + rw) {
-		dx = col - (rx + rw) + 1;
-	}
-
-	sz dy = 0;
-	if (row < ry) {
-		dy = ry - row;
-	} else if (row >= ry + rh) {
-		dy = row - (ry + rh) + 1;
-	}
-
-	return dx > dy ? dx : dy;
-}
-
 // Upper half block. Its foreground paints the top half of the cell and its
 // background the bottom, giving a shadow two vertical samples per cell.
 const String HALF_BLOCK_UPPER @private = "▀";
 
-// shadow_edge_dist_half is shadow_edge_dist measured in half-rows vertically.
+// shadow_edge_dist_half measures a point's distance from the edge of a rect,
+// with the vertical axis in half-cells.
 // `half_row` counts half-cells from the top of the buffer (row*2, row*2+1), and
 // the rect's vertical bounds are doubled to match, so a vertical distance of 1
 // means half a cell rather than a whole one.
@@ -167,7 +148,7 @@ fn sz isqrt(sz n) @private {
 
 // shadow_alpha_at is the fringe falloff: full opacity inside the shadow's core,
 // fading to nothing over the blur radius. Distance is in half-cell units.
-fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) @private {
+fn sz shadow_alpha_at(sz dist_half, sz blur, sz opacity) @private {
 	if (dist_half <= 0) return opacity;
 	sz span = blur * 2;
 	if (dist_half > span) return 0;
@@ -176,7 +157,7 @@ fn int shadow_alpha_at(sz dist_half, sz blur, int opacity) @private {
 	// blend_over is linear in alpha, so this curve is the curve on screen.
 	sz t     = span - dist_half + 1;
 	sz range = span + 1;
-	return (int)((sz)opacity * t * t / (range * range));
+	return opacity * t * t / (range * range);
 }
 
 // shadow_half blends one half of a half-block cell over what is under it.
@@ -312,12 +293,12 @@ fn void ScreenBuffer.render_shadow(&self, sz x, sz y, sz w, sz h, Shadow s) {
 			// 
 			// A leftover half-row shifts the sample point up half a cell, which
 			// slides the shadow down by the same amount.
-			int top_a = shadow_alpha_at(
+			int top_a = (int)shadow_alpha_at(
 				shadow_edge_dist_half(col, row * 2 - extra_half, sx, sy, w, h),
 				blur,
 				(sz)s.opacity
 			);
-			int bot_a = shadow_alpha_at(
+			int bot_a = (int)shadow_alpha_at(
 				shadow_edge_dist_half(col, row * 2 + 1 - extra_half, sx, sy, w, h),
 				blur,
 				(sz)s.opacity
