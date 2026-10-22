@@ -118,9 +118,45 @@ fn void test_probe_parse_waits_for_every_partial_string_reply() @test {
 	};
 	foreach (reply : replies) {
 		for (sz n = 0; n < reply.len; n++) {
-			assert(parse_probe_replies((char[])reply[:n]) == 0, "partial reply of %d bytes must wait", n);
+			assert(parse_probe_replies((char[])reply[:n]).consumed == 0, "partial reply of %d bytes must wait", n);
 		}
 	}
+}
+
+fn void test_probe_preserves_keys_between_split_replies() @test {
+	bool saved_kgp = g_tgp_replied;
+	defer g_tgp_replied = saved_kgp;
+	String source = "q\x1b_Gi=31;OK\x1b\\\x1b[A\x1bqz";
+	String keys = "q\x1b[A\x1bqz";
+	for (sz split = 0; split <= source.len; split++) {
+		g_tgp_replied = false;
+		char[64] acc;
+		char[64] input;
+		mem::copy(acc[..].ptr, source.ptr, split);
+		ProbeParse first = parse_probe_replies(acc[:split], input[..]);
+		sz len = split - first.consumed;
+		for (sz i = 0; i < len; i++) acc[i] = acc[first.consumed + i];
+		mem::copy(&acc[len], source[split..].ptr, source.len - split);
+		len += source.len - split;
+		ProbeParse second = parse_probe_replies(acc[:len], input[first.input_len..]);
+		assert(second.consumed == len && g_tgp_replied);
+		assert((String)input[:first.input_len + second.input_len] == keys, "keys changed at split %d", split);
+	}
+}
+
+fn void test_probe_preserves_input_before_an_incomplete_reply() @test {
+	char[16] input;
+	String source = "q\x1b[A\x1b]11;rgb:02";
+	ProbeParse parsed = parse_probe_replies((char[])source, input[..]);
+	assert(parsed.consumed == 4 && parsed.input_len == 4);
+	assert((String)input[:parsed.input_len] == "q\x1b[A");
+}
+
+fn void test_probe_respects_the_input_output_slice() @test {
+	char[5] input = { '#', '#', '#', '#', '#' };
+	ProbeParse parsed = parse_probe_replies((char[])"abcdef", input[1:3]);
+	assert(parsed.consumed == 6 && parsed.input_len == 3);
+	assert((String)input[..] == "#abc#");
 }
 
 fn void test_probe_parse_split_reply() @test {
@@ -137,7 +173,7 @@ fn void test_probe_parse_split_reply() @test {
 	sz len = 0;
 	char[] part1 = "\x1b[6;20;10t\x1b]1337;ReportCellSize=20;10\x07\x1b_Gi=31;O";
 	foreach (b : part1) acc[len++] = b;
-	sz consumed = parse_probe_replies(acc[0:len]);
+	sz consumed = parse_probe_replies(acc[0:len]).consumed;
 	sz keep = len - consumed;
 	for (sz j = 0; j < keep; j++) acc[j] = acc[consumed + j];
 	len = keep;

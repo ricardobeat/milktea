@@ -133,7 +133,7 @@ fn bool is_csi_final(char c) @local {
 
 // handle_probe_csi inspects one CSI reply body (bytes between "ESC [" and
 // the final byte). Only XTWINOPS cell-size reports (param 6) are interpreted.
-fn void handle_probe_csi(char[] body) @local {
+fn bool handle_probe_csi(char[] body) @local {
 	int[8] params;
 	int count = 0;
 	int value = 0;
@@ -152,7 +152,9 @@ fn void handle_probe_csi(char[] body) @local {
 	if (have && count < 8) params[count++] = value;
 	if (count >= 3 && params[0] == 6) {
 		report_cell_size_reply(params[1], params[2]);
+		return true;
 	}
+	return false;
 }
 
 // parse_hex_channel reads one `rgb:` channel — 1 to 4 hex digits — and scales
@@ -294,41 +296,48 @@ fn sz TerminalReply.consume(&self, char[] bytes) {
 	return bytes.len;
 }
 
-// parse_probe_replies consumes complete escape-sequence replies from the front
-// of buf and returns the number of bytes consumed. Noise bytes (e.g. keys the
-// user typed during the probe) are skipped; an incomplete trailing sequence is
-// left in the buffer for the next round or returned to the input stream.
-fn sz parse_probe_replies(char[] buf) @private {
+struct ProbeParse @private {
+	sz consumed;
+	sz input_len;
+}
+
+// Consume complete replies and copy intervening keystrokes into input. An
+// incomplete trailing sequence stays in buf for the next read or the event
+// loop. input_len counts bytes copied, bounded by the caller's input slice.
+fn ProbeParse parse_probe_replies(char[] buf, char[] input = {}) @private {
 	sz pos = 0;
+	sz out = 0;
 	while (pos < buf.len) {
-		if (buf[pos] != 0x1b) {
-			pos++;
-			continue;
-		}
-		if (pos + 1 >= buf.len) break; // lone ESC at the end — wait for more
-		char second = buf[pos + 1];
-		if (second == '[') {
-			sz i = pos + 2;
-			while (i < buf.len && !is_csi_final(buf[i])) i++;
-			if (i >= buf.len) break; // incomplete
-			handle_probe_csi(buf[pos + 2..i]);
-			pos = i + 1;
-		} else if (second == ']' || second == '_') {
-			// OSC/APC: terminated by BEL (0x07) or ST (ESC \)
-			sz i = pos + 2;
-			while (i + 1 < buf.len && buf[i] != 0x07 && !(buf[i] == 0x1b && buf[i + 1] == '\\')) i++;
-			if (i >= buf.len || (i + 1 >= buf.len && buf[i] != 0x07)) break; // incomplete
-			sz next = (buf[i] == 0x07) ? i + 1 : i + 2;
-			// C3 ranges are end-inclusive: [pos+2 .. i-1] excludes the terminator.
-			if (i > pos + 2) {
-				handle_probe_string(second == ']', buf[pos + 2..i - 1]);
+		sz end = pos + 1;
+		bool reply = false;
+		if (buf[pos] == 0x1b) {
+			if (pos + 1 >= buf.len) break; // lone ESC at the end — wait for more
+			char second = buf[pos + 1];
+			if (second == '[') {
+				sz i = pos + 2;
+				while (i < buf.len && !is_csi_final(buf[i])) i++;
+				if (i >= buf.len) break; // incomplete
+				// Other CSI sequences are input (arrows, mouse, paste, etc.).
+				if (buf[i] == 't') reply = handle_probe_csi(buf[pos + 2:i - pos - 2]);
+				end = i + 1;
+			} else if (second == ']' || second == '_') {
+				// OSC/APC: terminated by BEL (0x07) or ST (ESC \)
+				sz i = pos + 2;
+				while (i + 1 < buf.len && buf[i] != 0x07 && !(buf[i] == 0x1b && buf[i + 1] == '\\')) i++;
+				if (i >= buf.len || (i + 1 >= buf.len && buf[i] != 0x07)) break; // incomplete
+				end = (buf[i] == 0x07) ? i + 1 : i + 2;
+				if (i > pos + 2) handle_probe_string(second == ']', buf[pos + 2:i - pos - 2]);
+				reply = true;
+			} else {
+				end = pos + 2; // preserve Alt keys and other two-byte escapes
 			}
-			pos = next;
-		} else {
-			pos += 2; // two-byte escape we don't care about
 		}
+		if (!reply) {
+			for (sz i = pos; i < end && out < input.len; i++) input[out++] = buf[i];
+		}
+		pos = end;
 	}
-	return pos;
+	return { .consumed = pos, .input_len = out };
 }
 
 // probe_terminal_caps sends the cell-size and kitty-graphics queries and
@@ -351,6 +360,7 @@ fn sz probe_terminal_caps(char[] leftover) @private {
 
 	char[256] acc;
 	sz len = 0;
+	sz out = 0;
 	sz deadline = time_ms() + PROBE_TIMEOUT_MS;
 	while (time_ms() < deadline) {
 		if (g_cell_px_known && g_tgp_replied && g_term_bg_known) break;
@@ -364,7 +374,9 @@ fn sz probe_terminal_caps(char[] leftover) @private {
 		// C3 slice ranges are end-inclusive, so acc[..len] would hand parse one
 		// byte of stack garbage past the data; consumed then exceeds len and the
 		// unsigned len underflows, wedging the probe. Use start:length instead.
-		sz consumed = parse_probe_replies(acc[0:len]);
+		ProbeParse parsed = parse_probe_replies(acc[0:len], leftover[out..]);
+		out += parsed.input_len;
+		sz consumed = parsed.consumed;
 		if (consumed > 0) {
 			for (sz i = consumed; i < len; i++) {
 				acc[i - consumed] = acc[i];
@@ -372,7 +384,6 @@ fn sz probe_terminal_caps(char[] leftover) @private {
 			len -= consumed;
 		}
 	}
-	sz out = 0;
 	for (sz i = 0; i < len && out < leftover.len; i++) {
 		leftover[out++] = acc[i];
 	}
