@@ -459,8 +459,7 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 				Cell cell = self.cells[row * self.width + col];
 
 				// Emit style diff
-				String sgr = cell.style.diff_sgr(*pen_style);
-				if (sgr.len > 0) out.append_string(sgr);
+				cell.style.diff_sgr_into(*pen_style, out);
 				// Update pen — skip TRANSPARENT channels so they don't
 				// overwrite the terminal's current state.
 				if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen_style.fg = cell.style.fg;
@@ -516,8 +515,7 @@ fn void ScreenBuffer.render_diff(&self, DString* out, Style* pen_style) {
 			Cell cell = self.cells[idx];
 
 			// Style diff
-			String sgr = cell.style.diff_sgr(*pen_style);
-			if (sgr.len > 0) out.append_string(sgr);
+			cell.style.diff_sgr_into(*pen_style, out);
 			// Update pen — skip TRANSPARENT channels
 			if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen_style.fg = cell.style.fg;
 			if (cell.style.bg.kind != ColorKind.TRANSPARENT) pen_style.bg = cell.style.bg;
@@ -551,8 +549,7 @@ fn String ScreenBuffer.render_ansi(&self) {
 		sz line_start = row * self.width;
 		for (sz col = 0; col < self.width; col++) {
 			Cell cell = self.cells[line_start + col];
-			String sgr = cell.style.diff_sgr(pen);
-			if (sgr.len > 0) out.append_string(sgr);
+			cell.style.diff_sgr_into(pen, &out);
 			// Update pen — skip TRANSPARENT channels
 			if (cell.style.fg.kind != ColorKind.TRANSPARENT) pen.fg = cell.style.fg;
 			if (cell.style.bg.kind != ColorKind.TRANSPARENT) pen.bg = cell.style.bg;

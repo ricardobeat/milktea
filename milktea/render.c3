@@ -69,8 +69,7 @@ fn String cells_to_string(View v) @private {
 		sz line_start = row * stride;
 		for (sz col = 0; col < stride; col++) {
 			xray::Cell cell = v.cells[line_start + col];
-			String sgr = cell.style.diff_sgr(pen);
-			if (sgr.len > 0) out.append_string(sgr);
+			cell.style.diff_sgr_into(pen, &out);
 			// TRANSPARENT leaves the channel as it was, so the pen keeps its
 			// previous color rather than adopting a non-color.
 			if (cell.style.fg.kind != xray::ColorKind.TRANSPARENT) pen.fg = cell.style.fg;

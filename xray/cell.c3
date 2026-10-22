@@ -144,9 +144,16 @@ fn String Style.to_sgr(&self) {
 // whatever the terminal currently has, so no SGR is emitted and
 // no reset is triggered for that channel.
 fn String Style.diff_sgr(&self, Style prev) {
-	if (self.eq(prev)) return "";
+	DString ds = dstring::temp();
+	self.diff_sgr_into(prev, &ds);
+	return ds.str_view();
+}
 
-	DString ds      = dstring::temp();
+// Style.diff_sgr_into appends the codes diff_sgr would produce to out, so a
+// renderer walking a grid can emit straight into its frame buffer instead of
+// allocating a string per cell.
+fn void Style.diff_sgr_into(&self, Style prev, DString* ds) {
+	if (self.eq(prev)) return;
 
 	// Check if we need a full reset: attributes changed, or colors changed.
 	bool need_reset = self.attrs.bold != prev.attrs.bold || self.attrs.dim != prev.attrs.dim
@@ -214,8 +221,6 @@ fn String Style.diff_sgr(&self, Style prev) {
 			ds.append_string(self.underline_color.to_sgr_underline());
 		}
 	}
-
-	return ds.str_view();
 }
 
 // ============================================================
