@@ -37,7 +37,7 @@ fn void PixelBuffer.destroy(&self) {
 
 // in_bounds reports whether (col, row) lies inside the grid.
 fn bool PixelBuffer.in_bounds(&self, sz col, sz row) {
-	return col < self.width && row < self.height;
+	return col >= 0 && row >= 0 && col < self.width && row < self.height;
 }
 
 // clear sets every pixel to the given color.

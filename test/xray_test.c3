@@ -57,6 +57,20 @@ fn void test_color_underline_sgr() @test {
 	assert(color_none().to_sgr_underline() == "");
 }
 
+fn void test_pixel_buffer_in_bounds_checks_both_ends() @test {
+	PixelBuffer* pb = new_pixel_buffer(4, 3);
+	defer {
+		pb.destroy();
+		mem::free(pb);
+	}
+	assert(pb.in_bounds(0, 0));
+	assert(pb.in_bounds(3, 2));
+	assert(!pb.in_bounds(-1, 0), "a negative column is outside the grid");
+	assert(!pb.in_bounds(0, -1), "a negative row is outside the grid");
+	assert(!pb.in_bounds(4, 0));
+	assert(!pb.in_bounds(0, 3));
+}
+
 fn void test_style_emits_underline_color() @test {
 	Style s = default_style().set_underline_color(color_rgb(1, 2, 3));
 	assert(!s.is_empty());
