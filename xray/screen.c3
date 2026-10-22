@@ -1228,7 +1228,7 @@ fn Rect ScreenBuffer.draw_gradient_border(&self, Rect r, Border b, Color c1, Col
 // Useful for writing render tests without a real terminal.
 // append_row_to writes one row into ds, emitting a wide cell's content once
 // and stepping over the placeholder slot that follows it.
-fn void ScreenBuffer.append_row_to(&self, sz row, DString* ds) @private {
+fn void ScreenBuffer.append_row_to(&self, sz row, DString* ds) {
 	sz col = 0;
 	while (col < self.width) {
 		Cell* cell = &self.cells[row * self.width + col];
