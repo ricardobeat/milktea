@@ -130,7 +130,7 @@ struct Placement {
 const sz Z_UNDER_TEXT = -1;
 // Z_UNDER_BG additionally puts it under cells that set their own background
 // colour (the protocol's INT32_MIN/2 threshold).
-const sz Z_UNDER_BG = -1073741825;
+const sz Z_UNDER_BG = -1073741824;
 
 struct Session {
 	uint next_id;
