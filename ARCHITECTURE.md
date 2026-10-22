@@ -68,8 +68,8 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
 - `Program` — all mutable state for one run: the `Model`, a fixed
   `TimerEntry[MAX_TIMERS=32]` array, alt-screen/mouse-mode flags, the
   pending input byte buffer (`char[512]`), a `send_queue`
-  (`Msg[MAX_BATCH=16]` ring buffer for `Program.send()`, guarded by the
-  `send_mu` mutex — initialized in `run()`, with `send_mu_init` gating
+  (a growable `Msg[]` ring buffer for `Program.send()`, guarded by the
+  `send_mu` mutex — initialized in `run()`, with `send_accepting` gating
   calls made before the program starts), the reader thread handle, and a
   pointer to the `xray::Renderer`. A single
   `Program* g_program` global is set for the duration of `run()` (cleared
@@ -196,7 +196,7 @@ chain to it: the C3 runtime's own `SIGSEGV`/`SIGBUS`/`SIGILL` backtrace
 handler still runs after the terminal is restored.
 
 **Capacity-drop diagnostics**: every fixed buffer that silently drops on
-overflow — the timer table, the send queue, the pending buffer, the input
+overflow — the timer table, the pending buffer, the input
 ring — reports the drop via `debug_warn()`, which appends a timestamped
 line to `milktea-debug.log` when `Program.debug` is set (never stdout or
 stderr, which belong to the rendering surface).
@@ -210,11 +210,15 @@ stderr, which belong to the rendering surface).
 - **Heap ownership**: `xray::new_screen_buffer` and `xray::new_renderer`
   return heap pointers the caller owns.
   `Program.run()` frees the renderer in its shutdown `defer`.
-- **Fixed-capacity buffers over dynamic allocation**: `Program.timers`
-  (32), `Program.send_queue` (16), `Program.pending` (512 bytes),
+- **Fixed-capacity buffers**: `Program.timers`
+  (32), `Program.pending` (512 bytes),
   and `InputQueue.buf` (4096 bytes) are fixed-size
   arrays scanned linearly or treated as ring buffers — no heap churn per
   event/frame on the hot path.
+- **Send queue**: starts with 16 slots and doubles when full, preserving FIFO
+  order. Streaming workers can post bursts without losing payloads or an
+  approval request. `run()` frees the storage after in-flight senders drain;
+  it does not own application payloads referenced by messages.
 
 ## Testing strategy
 

@@ -194,6 +194,7 @@ interface Model {
 
 // Constants
 const sz MAX_BATCH  @private = 16;
+const sz INITIAL_SEND_CAPACITY @private = 16;
 const sz MAX_TIMERS @private = 32;
 const sz MAX_CLICK_TARGETS @private = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
@@ -231,7 +232,7 @@ struct Program {
 	// rather than the app re-deriving widget geometry by hand. Fixed-size
 	// like the other per-frame buffers below — a screen with more than
 	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
-	// timers/send_queue/pending.
+	// timers/pending.
 	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
 	sz click_target_count;
 	// Cached window size (including pixel dimensions) used to convert
@@ -270,8 +271,9 @@ struct Program {
 	DString* output_buf;
 	char[] inject_input;
 	sz inject_input_pos;
-	// Ring buffer for Send()-injected messages.
-	Msg[MAX_BATCH] send_queue;
+	// Ring buffer for send()-injected messages; grows when a producer gets
+	// ahead of the event loop. Allocated and freed by run().
+	Msg[] send_queue;
 	sz send_head;
 	sz send_tail;
 	// Mutex protecting send_queue / send_head / send_tail.
@@ -708,9 +710,8 @@ fn void with_input(Program* self, char[] data) {
 // is what makes it safe; the other order would let a sender pass the check,
 // stall, and then lock a mutex that shutdown had already destroyed.
 //
-// In test mode, the message is placed in a ring buffer consumed by run().
-// When the ring is full the message is dropped; enable Program.debug to
-// surface this in milktea-debug.log.
+// The ring grows when full: a burst must not discard stream chunks,
+// completion messages, or requests whose producer is waiting for an answer.
 fn void Program.send(Program* self, Msg msg) {
 	self.send_inflight.add(1);
 	if (!self.send_accepting.load()) {
@@ -721,15 +722,22 @@ fn void Program.send(Program* self, Msg msg) {
 	defer self.send_inflight.sub(1);
 
 	self.send_mu.lock();
-	sz next = (self.send_head + 1) % (sz)MAX_BATCH;
-	bool dropped = next == self.send_tail;
-	if (!dropped) {
-		self.send_queue[self.send_head] = msg;
-		self.send_head = next;
+	sz capacity = self.send_queue.len;
+	sz next = (self.send_head + 1) % capacity;
+	if (next == self.send_tail) {
+		// Producers may use a different thread-local allocator from run().
+		Msg[] grown = alloc::new_array(&allocators::LIBC_ALLOCATOR, Msg, capacity * 2);
+		sz count = capacity - 1;
+		for (sz i = 0; i < count; i++) grown[i] = self.send_queue[(self.send_tail + i) % capacity];
+		alloc::free(&allocators::LIBC_ALLOCATOR, self.send_queue.ptr);
+		self.send_queue = grown;
+		self.send_tail = 0;
+		self.send_head = count;
+		next = count + 1;
 	}
+	self.send_queue[self.send_head] = msg;
+	self.send_head = next;
 	self.send_mu.unlock();
-	// Warn outside the locked region — debug_warn does file I/O.
-	if (dropped) debug_warn("send queue full; message dropped");
 }
 
 // send_recv dequeues a previously sent message. Returns true if a message
@@ -741,7 +749,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 		return false;
 	}
 	*out = self.send_queue[self.send_tail];
-	self.send_tail = (self.send_tail + 1) % (sz)MAX_BATCH;
+	self.send_tail = (self.send_tail + 1) % self.send_queue.len;
 	self.send_mu.unlock();
 	return true;
 }
@@ -939,6 +947,7 @@ fn void? Program.run(Program* self) {
 	// construction — every add(1) has a matching sub(1) — so it returns to 0
 	// on its own.
 	self.send_mu.init()!;
+	self.send_queue = alloc::new_array(&allocators::LIBC_ALLOCATOR, Msg, INITIAL_SEND_CAPACITY);
 	self.send_accepting.store(true);
 	defer {
 		// Mirror image of send()'s handshake: stop accepting, then wait for
@@ -955,6 +964,8 @@ fn void? Program.run(Program* self) {
 			thread::yield();
 		}
 		self.send_mu.destroy();
+		alloc::free(&allocators::LIBC_ALLOCATOR, self.send_queue.ptr);
+		self.send_queue = {};
 		g_program = null;
 	}
 
