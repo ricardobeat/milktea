@@ -111,6 +111,18 @@ fn void test_probe_parse_whole_reply() @test {
 	assert(g_tgp_replied);
 }
 
+fn void test_probe_parse_waits_for_every_partial_string_reply() @test {
+	String[4] replies = {
+		"\x1b]11;rgb:0202/0505/0303\x1b\\", "\x1b]11;rgb:02/05/03\x07",
+		"\x1b_Gi=31;OK\x1b\\", "\x1b]1337;ReportCellSize=16;8\x07"
+	};
+	foreach (reply : replies) {
+		for (sz n = 0; n < reply.len; n++) {
+			assert(parse_probe_replies((char[])reply[:n]) == 0, "partial reply of %d bytes must wait", n);
+		}
+	}
+}
+
 fn void test_probe_parse_split_reply() @test {
 	bool saved_cell = g_cell_px_known;
 	bool saved_kgp = g_tgp_replied;

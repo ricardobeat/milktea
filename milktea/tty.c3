@@ -317,7 +317,7 @@ fn sz parse_probe_replies(char[] buf) @private {
 			// OSC/APC: terminated by BEL (0x07) or ST (ESC \)
 			sz i = pos + 2;
 			while (i + 1 < buf.len && buf[i] != 0x07 && !(buf[i] == 0x1b && buf[i + 1] == '\\')) i++;
-			if (i + 1 >= buf.len && buf[i] != 0x07) break; // incomplete
+			if (i >= buf.len || (i + 1 >= buf.len && buf[i] != 0x07)) break; // incomplete
 			sz next = (buf[i] == 0x07) ? i + 1 : i + 2;
 			// C3 ranges are end-inclusive: [pos+2 .. i-1] excludes the terminator.
 			if (i > pos + 2) {
