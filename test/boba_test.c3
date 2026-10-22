@@ -326,3 +326,34 @@ fn void test_table_truncates_at_a_glyph_boundary() @test {
 	assert(glaze::string_width(body) == 3, "the cell fits in three columns, got %d", glaze::string_width(body));
 	assert(body.contains("\xe4\xbd\xa0"), "the wide glyph survived whole");
 }
+
+// ============================================================
+// TextInput
+// ============================================================
+
+fn void test_textinput_caret_measures_display_columns() @test {
+	boba::TextInput t = boba::new_text_input();
+	t.insert_rune(0xe9);   // é: two bytes, one column
+	t.insert_rune(0x4f60); // 你: three bytes, two columns
+
+	assert(t.cursor_col() == 3, "one column for the accent, two for the wide glyph, got %d", t.cursor_col());
+}
+
+fn void test_textinput_password_masks_per_codepoint() @test {
+	boba::TextInput t = boba::new_text_input().with_password();
+	t.insert_rune(0x4f60);
+	t.insert_rune(0x597d);
+
+	String shown = t.display_text();
+	assert(glaze::string_width(shown) == 2, "one dot per character, got %d columns", glaze::string_width(shown));
+	assert(t.cursor_col() == 2, "the caret sits after two dots, got %d", t.cursor_col());
+}
+
+fn void test_textinput_insert_string_keeps_sequences_whole() @test {
+	boba::TextInput t = boba::new_text_input();
+	t.insert_rune('a');
+	t.insert_string("\xe4\xbd\xa0\xe5\xa5\xbd"); // 你好
+
+	assert(t.text() == "a\xe4\xbd\xa0\xe5\xa5\xbd", "both characters landed whole");
+	assert(t.cursor_col() == 5, "one column then four, got %d", t.cursor_col());
+}

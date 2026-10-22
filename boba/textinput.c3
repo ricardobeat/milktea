@@ -89,10 +89,21 @@ fn void TextInput.insert_rune(&self, uint cp) {
 }
 
 // insert_string inserts a string at the cursor position.
+//
+// The whole string is checked and copied at once. Inserting byte by byte let
+// the per-byte bounds check stop in the middle of a sequence, leaving half a
+// character in the buffer.
 fn void TextInput.insert_string(&self, String s) {
-	for (sz i = 0; i < s.len; i++) {
-		self.insert(s[i]);
+	if (s.len == 0) return;
+	if (self.len + s.len >= self.buf.len) return;
+	for (sz i = self.len; i > self.cursor_pos; i--) {
+		self.buf[i + s.len - 1] = self.buf[i - 1];
 	}
+	for (sz i = 0; i < s.len; i++) {
+		self.buf[self.cursor_pos + i] = s[i];
+	}
+	self.len += s.len;
+	self.cursor_pos += s.len;
 }
 
 // backspace deletes the character before the cursor.
@@ -131,19 +142,29 @@ fn String TextInput.text(&self) {
 fn String TextInput.display_text(&self) {
 	if (self.len == 0) return self.placeholder;
 	if (self.is_password) {
+		// One bullet per codepoint, not per byte: masking a multi-byte
+		// character as several dots also gives away its length.
 		DString hidden = dstring::temp();
-		for (sz i = 0; i < self.len; i++) hidden.append_string("\xe2\x80\xa2"); // •
+		for (sz i = 0; i < self.len; i = utf8_next_boundary(self.buf[:self.len], i)) {
+			hidden.append_string("\xe2\x80\xa2"); // •
+		}
 		return hidden.str_view();
 	}
 	return self.text();
 }
 
-// cursor_col returns the column offset of the cursor within the input text.
+// cursor_col returns the display column the caret sits at, measured over the
+// text to its left. A byte offset puts the caret in the wrong place as soon as
+// the field holds anything multi-byte.
 fn sz TextInput.cursor_col(&self) {
-	if (self.len > 0 && self.cursor_pos < self.len) {
-		return (sz)self.cursor_pos;
+	sz end = self.cursor_pos < self.len ? self.cursor_pos : self.len;
+	if (self.is_password) {
+		// display_text draws one bullet per codepoint.
+		sz dots = 0;
+		for (sz i = 0; i < end; i = utf8_next_boundary(self.buf[:self.len], i)) dots++;
+		return dots;
 	}
-	return (sz)self.len;
+	return glaze::string_width((String)self.buf[:end]);
 }
 
 // handle_key processes a key message and returns true if the input consumed it.
