@@ -3,6 +3,7 @@ module node_test;
 
 import std::core::dstring;
 import std::core::mem;
+import glaze;
 import xray;
 import boba;
 
@@ -745,4 +746,24 @@ fn void test_shadow_corners_are_rounded() @test {
 	sz corner = 255 - (sz)sb.cell_at(15, 8).style.bg.r;
 	assert(below > 0, "the fringe reaches below the shadow, got %d", below);
 	assert(corner < below, "the corner fades faster than the edge: corner=%d edge=%d", corner, below);
+}
+
+fn void test_node_style_calls_compose() @test {
+	glaze::Style bg    = glaze::style().background(xray::color_rgb(1, 1, 1));
+	glaze::Style frame = glaze::style().with_border(glaze::ROUNDED).border_fg(xray::color_rgb(2, 2, 2));
+
+	xray::Node* n = xray::vstack().style(bg).style(frame);
+
+	assert(n.box.bg.eq(xray::color_rgb(1, 1, 1)), "the second style() kept the first one's background");
+	assert(n.box.border.top.len > 0, "the second style() set the border");
+	assert(n.box.border_color.eq(xray::color_rgb(2, 2, 2)));
+}
+
+fn void test_node_style_padding_adds_to_with_padding() @test {
+	xray::Node* n = xray::vstack()
+		.with_padding(1, 0, 0, 0)
+		.style(glaze::style().pad(2));
+
+	assert(n.pad_top == 1, "with_padding wrote its own padding, got %d", n.pad_top);
+	assert(n.box.pad_top == 2, "the style wrote box padding, got %d", n.box.pad_top);
 }

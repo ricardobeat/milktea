@@ -259,6 +259,7 @@ fn Node* content_node(Content c) {
 // should have a background or border.
 fn Node* Node.add(&self, Node* child) {
 	assert(child == null || !self.leaf, "a leaf node, such as text(), cannot hold children");
+	assert(child == null || self.child_count < MAX_NODE_CHILDREN, "a node can hold %d children", MAX_NODE_CHILDREN);
 	if (child != null && self.child_count < MAX_NODE_CHILDREN) {
 		self.children[self.child_count++] = child;
 	}
@@ -360,25 +361,27 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 // itself, and the node is sized with width() and height().
 // 
 // A translucent bg tints what is beneath the node and keeps its glyphs.
-// 
+//
 // Content and children go inside the border and then inside the padding. The
-// style's padding adds to whatever with_padding sets.
+// style's padding adds to whatever with_padding sets. A field the style leaves
+// unset is kept from an earlier style() call, so two calls can build one box.
 fn Node* Node.style(&self, glaze::Style s) {
-	self.box = {
-		.bg = s.bg,
-		.bg_gradient = s.bg_gradient,
-		.border = s.border,
-		.border_color = s.border_color,
-		.corner_color = s.corner_color,
-		.border_bg = s.border_bg,
-		.border_gradient = s.border_gradient,
-		.border_animation = s.border_animation,
-		.anim_speed_ms = s.anim_speed_ms,
-		.pad_top = s.pad_top,
-		.pad_right = s.pad_right,
-		.pad_bottom = s.pad_bottom,
-		.pad_left = s.pad_left,
-	};
+	glaze::Style* b = &self.box;
+	if (s.bg.kind != ColorKind.NONE) b.bg = s.bg;
+	if (s.bg_gradient.kind != ColorKind.NONE) b.bg_gradient = s.bg_gradient;
+	if (s.border.top.len > 0 || s.border.bottom.len > 0 || s.border.left.len > 0 || s.border.right.len > 0) {
+		b.border = s.border;
+	}
+	if (s.border_color.kind != ColorKind.NONE) b.border_color = s.border_color;
+	if (s.corner_color.kind != ColorKind.NONE) b.corner_color = s.corner_color;
+	if (s.border_bg.kind != ColorKind.NONE) b.border_bg = s.border_bg;
+	if (s.border_gradient.kind != ColorKind.NONE) b.border_gradient = s.border_gradient;
+	if (s.border_animation != glaze::BorderAnimation.NONE) b.border_animation = s.border_animation;
+	if (s.anim_speed_ms != 0) b.anim_speed_ms = s.anim_speed_ms;
+	b.pad_top    += s.pad_top;
+	b.pad_right  += s.pad_right;
+	b.pad_bottom += s.pad_bottom;
+	b.pad_left   += s.pad_left;
 	return self;
 }
 
