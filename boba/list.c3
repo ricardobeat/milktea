@@ -67,8 +67,7 @@ fn void List.set_size(&self, sz width, sz height) {
 // handle_key processes list navigation keybindings.
 // Returns true if the key was consumed.
 fn bool List.handle_key(&self, milktea::KeyMsg k) {
-	sz available = self.height - 2;
-	if (available < 1) available = 1;
+	sz available = self.visible_rows();
 
 	switch (k.code) {
 		case milktea::KeyCode.UP:
