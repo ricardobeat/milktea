@@ -833,24 +833,28 @@ fn void Program.apply_mouse_pixels(Program* self, MouseMsg* mouse) {
 	mouse.row = cell_row;
 }
 
-// tick registers a timer that fires after delay_ms.
-// Default: 16ms (~60fps) sending a TICK message.
-// When all MAX_TIMERS slots are occupied the timer is silently dropped;
-// enable Program.debug to surface this in milktea-debug.log.
-fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
-	if (g_program == null) return null;
-	sz deadline = time_ms() + delay_ms;
+// arm_timer stores a deadline in the first free timer slot. `what` names the
+// caller in the debug log when every slot is taken.
+fn void arm_timer(sz deadline, Cmd callback, void* owner, String what) @private {
 	for (sz i = 0; i < MAX_TIMERS; i++) {
 		if (!g_program.timers[i].active) {
 			g_program.timers[i].active = true;
 			g_program.timers[i].deadline_ms = deadline;
 			g_program.timers[i].callback = callback;
 			g_program.timers[i].owner = owner;
-			return null;
+			return;
 		}
 	}
-	// No free slot found — all MAX_TIMERS entries are active.
-	debug_warn("timer table full; tick dropped");
+	debug_warn(string::tformat("timer table full; %s dropped", what));
+}
+
+// tick registers a timer that fires after delay_ms.
+// Default: 16ms (~60fps) sending a TICK message.
+// When all MAX_TIMERS slots are occupied the timer is silently dropped;
+// enable Program.debug to surface this in milktea-debug.log.
+fn Cmd tick(sz delay_ms = 16, Cmd callback = &tick_msg, void* owner = null) {
+	if (g_program == null) return null;
+	arm_timer(time_ms() + delay_ms, callback, owner, "tick");
 	return null;
 }
 
@@ -882,17 +886,7 @@ fn Cmd every(sz interval_ms = 16, Cmd callback = &tick_msg, void* owner = null) 
 	// mixing the two clocks in one field would make every deadline wrong by
 	// the offset between them.
 	sz deadline = time_ms() + snap_delay(wall_time_ms(), interval_ms);
-	for (sz i = 0; i < MAX_TIMERS; i++) {
-		if (!g_program.timers[i].active) {
-			g_program.timers[i].active = true;
-			g_program.timers[i].deadline_ms = deadline;
-			g_program.timers[i].callback = callback;
-			g_program.timers[i].owner = owner;
-			return null;
-		}
-	}
-	// No free slot found — all MAX_TIMERS entries are active.
-	debug_warn("timer table full; every dropped");
+	arm_timer(deadline, callback, owner, "every");
 	return null;
 }
 
