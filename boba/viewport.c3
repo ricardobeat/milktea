@@ -274,66 +274,75 @@ fn void Viewport.scroll_by(&self, sz lines) {
 	}
 }
 
-fn String base64_encode(String input) {
-	const String B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	DString out = dstring::temp();
+// base64_encode lives in milktea, where the image writer can share it.
+alias base64_encode = milktea::base64_encode;
 
-	sz i = 0;
-	while (i < input.len) {
-		sz remaining = input.len - i;
-		sz b0 = (sz)input[i] & 0xff;
-		sz b1 = remaining > 1 ? ((sz)input[i + 1] & 0xff) : 0;
-		sz b2 = remaining > 2 ? ((sz)input[i + 2] & 0xff) : 0;
+// Selection is a selection range normalized so start comes before end in
+// reading order, whichever direction the drag went in.
+struct Selection {
+	sz start_row;
+	sz start_col;
+	sz end_row;
+	sz end_col;
+}
 
-		out.append_char(B64_CHARS[(b0 >> 2) & 0x3f]);
-		out.append_char(B64_CHARS[((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0f)]);
-		out.append_char(remaining > 1 ? B64_CHARS[((b1 & 0x0f) << 2) | ((b2 >> 6) & 0x03)] : '=');
-		out.append_char(remaining > 2 ? B64_CHARS[b2 & 0x3f] : '=');
-
-		i += 3;
+fn Selection Viewport.selection(&self) @local {
+	Selection s = {
+		.start_row = self.sel_start_row,
+		.start_col = self.sel_start_col,
+		.end_row   = self.sel_end_row,
+		.end_col   = self.sel_end_col,
+	};
+	if (s.start_row > s.end_row || (s.start_row == s.end_row && s.start_col > s.end_col)) {
+		sz tr = s.start_row;
+		sz tc = s.start_col;
+		s.start_row = s.end_row;
+		s.start_col = s.end_col;
+		s.end_row = tr;
+		s.end_col = tc;
 	}
+	return s;
+}
 
-	return out.str_view();
+// column_to_byte maps a display column to the byte index where that column
+// starts in line, clamped to its length. Selection columns come from mouse
+// positions and count display columns, so slicing a line by them directly
+// lands in the middle of a multi-byte or wide glyph.
+fn sz column_to_byte(String line, sz col) @local {
+	if (col <= 0) return 0;
+	sz w = 0;
+	sz i = 0;
+	while (i < line.len) {
+		sz next = utf8_next_boundary(line, i);
+		sz cw   = glaze::string_width(line[i:next - i]);
+		if (w + cw > col) break;
+		w += cw;
+		i = next;
+	}
+	return i;
 }
 
 // get_selected_text extracts the text between sel_start and sel_end (content coordinates).
 fn String Viewport.get_selected_text(&self) {
 	if (!self.has_selection) return "";
 
+	Selection sel = self.selection();
+	sz first      = sel.start_row < 0 ? 0 : sel.start_row;
+
 	DString out = dstring::temp();
-	sz start_row = self.sel_start_row;
-	sz start_col = self.sel_start_col;
-	sz end_row = self.sel_end_row;
-	sz end_col = self.sel_end_col;
+	for (sz row = first; row <= sel.end_row && row < self.total_lines; row++) {
+		String line  = self.lines[row];
+		sz col_start = row == sel.start_row ? column_to_byte(line, sel.start_col) : 0;
+		sz col_end   = row == sel.end_row ? column_to_byte(line, sel.end_col) : (sz)line.len;
 
-	// Normalize: ensure start <= end
-	if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
-		sz tr = start_row;
-		sz tc = start_col;
-		start_row = end_row;
-		start_col = end_col;
-		end_row = tr;
-		end_col = tc;
-	}
-
-	// Extract text line by line
-	for (sz row = start_row; row <= end_row && row < self.total_lines; row++) {
-		String line = self.lines[row];
-		sz line_len = (sz)line.len;
-
-		sz col_start = (row == start_row) ? start_col : 0;
-		sz col_end = (row == end_row) ? end_col : line_len;
-
-		if (col_start < 0) col_start = 0;
-		if (col_end > line_len) col_end = line_len;
-		if (col_start >= line_len) col_start = line_len;
+		if (col_end > (sz)line.len) col_end = (sz)line.len;
 		if (col_end < col_start) col_end = col_start;
 
 		if (col_end > col_start) {
-			out.append_string(line[(sz)col_start:(sz)(col_end - col_start)]);
+			out.append_string(line[col_start:col_end - col_start]);
 		}
 
-		if (row < end_row) out.append_char('\n');
+		if (row < sel.end_row) out.append_char('\n');
 	}
 
 	return out.str_view();
@@ -362,24 +371,11 @@ fn void Viewport.copy_to_clipboard(&self) {
 fn bool Viewport.is_in_selection(&self, sz row, sz col) {
 	if (!self.has_selection) return false;
 
-	sz start_row = self.sel_start_row;
-	sz start_col = self.sel_start_col;
-	sz end_row = self.sel_end_row;
-	sz end_col = self.sel_end_col;
+	Selection sel = self.selection();
 
-	// Normalize: ensure start <= end
-	if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
-		sz tr = start_row;
-		sz tc = start_col;
-		start_row = end_row;
-		start_col = end_col;
-		end_row = tr;
-		end_col = tc;
-	}
-
-	if (row < start_row || row > end_row) return false;
-	if (row == start_row && col < start_col) return false;
-	if (row == end_row && col >= end_col) return false;
+	if (row < sel.start_row || row > sel.end_row) return false;
+	if (row == sel.start_row && col < sel.start_col) return false;
+	if (row == sel.end_row && col >= sel.end_col) return false;
 
 	return true;
 }

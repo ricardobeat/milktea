@@ -357,3 +357,23 @@ fn void test_textinput_insert_string_keeps_sequences_whole() @test {
 	assert(t.text() == "a\xe4\xbd\xa0\xe5\xa5\xbd", "both characters landed whole");
 	assert(t.cursor_col() == 5, "one column then four, got %d", t.cursor_col());
 }
+
+// ============================================================
+// Viewport selection
+// ============================================================
+
+fn void test_viewport_selection_slices_by_display_column() @test {
+	boba::Viewport v = boba::new_viewport(20, 4);
+	defer v.free();
+	// "ab你好cd" is eight display columns, ten bytes.
+	v.add_line("ab\xe4\xbd\xa0\xe5\xa5\xbdcd");
+	v.sel_start_row = 0;
+	v.sel_start_col = 0;
+	v.sel_end_row = 0;
+	v.sel_end_col = 6;
+	v.has_selection = true;
+
+	String picked = v.get_selected_text();
+	// Columns 0..6 are a, b, 你, 好 — six columns, eight bytes.
+	assert(picked == "ab\xe4\xbd\xa0\xe5\xa5\xbd", "the selection ends on a glyph boundary, got [%s]", picked);
+}
