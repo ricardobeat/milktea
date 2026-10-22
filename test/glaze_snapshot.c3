@@ -601,3 +601,20 @@ fn void test_no_bg_gradient_leaves_the_background_flat() @test {
 
 	assert(!out.contains("48;2;255"), "no other background appears: %s", out);
 }
+
+// Line splitting has no ceiling: a document longer than the old 256-line
+// stack array keeps its tail.
+fn void test_join_vertical_keeps_every_line() @test {
+	sz lines = 400;
+	DString doc = dstring::temp();
+	for (sz i = 0; i < lines; i++) {
+		if (i > 0) doc.append_char('\n');
+		doc.appendf("line%d", i);
+	}
+
+	String out = glaze::join_vertical(glaze::Position.LEFT, doc.str_view(), "");
+
+	assert(out.contains("line255"), "the line at the old limit survives");
+	assert(out.contains("line256"), "the first line past the old limit survives");
+	assert(out.contains("line399"), "the last line survives");
+}

@@ -1,6 +1,7 @@
 module glaze;
 
 import std::core::dstring;
+import std::core::mem;
 
 // ============================================================
 // Position — alignment constants for layout functions.
@@ -18,22 +19,26 @@ enum Position : char {
 // Line splitting helper
 // ============================================================
 
-const sz MAX_LAYOUT_LINES = 256;
-
+// LineSet is a string split on newlines. The line array is temp-allocated, so
+// nothing has to free it and there is no ceiling on how many lines it holds.
 struct LineSet {
-	String[MAX_LAYOUT_LINES] lines;
+	String[] lines;
 	sz count;
 }
 
 fn LineSet split_lines(String s) @local {
+	sz n = 1;
+	for (sz i = 0; i < s.len; i++) {
+		if (s[i] == '\n') n++;
+	}
+
 	LineSet ls;
+	ls.lines = mem::talloc_array(String, n);
 	sz start = 0;
 	for (sz i = 0; i <= s.len; i++) {
 		if (i == s.len || s[i] == '\n') {
-			if (ls.count < MAX_LAYOUT_LINES) {
-				ls.lines[ls.count] = s[start:i - start];
-				ls.count++;
-			}
+			ls.lines[ls.count] = s[start:i - start];
+			ls.count++;
 			start = i + 1;
 			if (i == s.len) break;
 		}
