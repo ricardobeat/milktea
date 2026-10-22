@@ -10,8 +10,9 @@ const int TCSANOW       @private = 0;
 const short POLLIN      = 1;
 
 // TIOCGWINSZ is provided by <sys/ioctl.h> in tty_winsize.c — not needed here.
-// SIGWINCH is 28 on both macOS and Linux.
-const int SIGWINCH @private = 28;
+// SIGWINCH comes from libc, which is already imported for the extern
+// declarations below, so it does not have to be spelled out per platform.
+const int SIGWINCH @private = libc::SIGWINCH;
 
 extern fn int tcgetattr(int fd, char* termios_buf);
 extern fn int tcsetattr(int fd, int flags, char* termios_buf);
@@ -405,17 +406,16 @@ bool g_tty_saved = false;
 // g_in_alt_screen_ptr lets the signal handler exit alt screen if needed.
 bool* g_in_alt_screen_ptr = null;
 
-// Fatal-signal numbers. POSIX fixes these on macOS and Linux with one exception:
-// SIGBUS is 10 on the BSDs (macOS included) and 7 on Linux. SIGWINCH (28) is the
-// same on both. Kept inline rather than imported so this file's extern surface
-// stays self-contained.
+// Fatal-signal numbers. POSIX fixes these on macOS and Linux, so they are
+// spelled out rather than imported; SIGBUS is the one that differs between the
+// two families, and it comes from libc.
 const int SIGHUP  @private = 1;
 const int SIGINT  @private = 2;
 const int SIGQUIT @private = 3;
 const int SIGILL  @private = 4;
 const int SIGTRAP @private = 5;
 const int SIGABRT @private = 6;
-const int SIGBUS  @private = env::DARWIN ? 10 : 7;
+const int SIGBUS  @private = libc::SIGBUS;
 const int SIGFPE  @private = 8;
 const int SIGSEGV @private = 11;
 const int SIGTERM @private = 15;
