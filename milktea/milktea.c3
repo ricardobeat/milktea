@@ -1550,6 +1550,36 @@ fn sz view_content_rows(View v) @private {
 	return rows;
 }
 
+// skip_escape returns the index just past the escape sequence starting at
+// start, which must point at ESC. OSC, DCS and APC bodies run until BEL or ST
+// and contain letters of their own, so they are scanned separately from a CSI,
+// whose payload cannot contain anything above 0x7e.
+fn sz skip_escape(String s, sz start) @private {
+	sz i = start + 1; // past ESC
+	if (i >= s.len) return s.len;
+
+	char kind = s[i];
+	if (kind == ']' || kind == 'P' || kind == '_' || kind == '^' || kind == 'X') {
+		i++;
+		while (i < s.len) {
+			if (s[i] == 0x07) return i + 1; // BEL
+			if (s[i] == 0x1b && i + 1 < s.len && s[i + 1] == '\\') return i + 2; // ST
+			i++;
+		}
+		return s.len;
+	}
+	if (kind == '[') {
+		i++;
+		while (i < s.len) {
+			if (s[i] >= 0x40 && s[i] <= 0x7e) return i + 1;
+			i++;
+		}
+		return s.len;
+	}
+	// Two-byte escapes (ESC M, ESC 7, ...) and anything unrecognised.
+	return i + 1;
+}
+
 // view_content_cols returns the widest display column the view's content
 // reaches. Inline blocks are sized to this rather than the terminal width so
 // the renderer never paints trailing blanks over columns it does not own.
@@ -1557,25 +1587,39 @@ fn sz view_content_cols(View v) @private {
 	if (v.cells.ptr != null) return v.cells_width;
 	sz widest = 0;
 	sz cur = 0;
-	bool in_esc = false;
-	for (sz i = 0; i < v.content.len; i++) {
+	sz i = 0;
+	while (i < v.content.len) {
 		char c = v.content[i];
-		// Skip CSI/OSC escape sequences — they occupy no display columns.
-		if (in_esc) {
-			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '\\') in_esc = false;
+		// Escape sequences occupy no display columns.
+		if (c == 0x1b) {
+			i = skip_escape(v.content, i);
 			continue;
 		}
-		if (c == 0x1b) { in_esc = true; continue; }
 		if (c == '\n') {
 			if (cur > widest) widest = cur;
 			cur = 0;
+			i++;
 			continue;
 		}
-		if (c == '\r') { cur = 0; continue; }
-		// Count display columns, not bytes: skip UTF-8 continuation bytes and
-		// charge wide glyphs two columns.
-		if ((c & 0xc0) == 0x80) continue;
-		cur += 1;
+		if (c == '\r') {
+			cur = 0;
+			i++;
+			continue;
+		}
+		// A tab is counted as one column, as it was before widths were
+		// measured per codepoint. Its real advance depends on the current
+		// column, which this pass does not model.
+		if (c == '\t') {
+			cur += 1;
+			i++;
+			continue;
+		}
+		// Count display columns, not bytes: a wide glyph takes two.
+		uint cp;
+		sz n = xray::utf8_decode(v.content[i..], &cp);
+		if (n <= 0) n = 1;
+		cur += xray::char_width(cp);
+		i += n;
 	}
 	if (cur > widest) widest = cur;
 	return widest;
