@@ -114,18 +114,22 @@ fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation
 	sz total_perim = 2 * (cw + ch) + 4;
 	if (total_perim <= 0) total_perim = 1;
 
-	Color base = style.border_color.kind != ColorKind.NONE ? style.border_color : color_hex("#ffffff");
-	sz speed  = style.anim_speed_ms > 0 ? style.anim_speed_ms : 1000;
-	sz t      = time_ms % speed;
+	Color base  = style.border_color.kind != ColorKind.NONE ? style.border_color : color_hex("#ffffff");
+	// The same background and corner colour wrap_with_color gives an
+	// unanimated border, so switching an animation on does not lose them.
+	Color bbg    = style.border_bg.kind != ColorKind.NONE ? style.border_bg : style.bg;
+	Color corner = style.corner_color;
+	sz speed     = style.anim_speed_ms > 0 ? style.anim_speed_ms : 1000;
+	sz t         = time_ms % speed;
 
 	DString out = dstring::temp();
 
 	// ── Top row: pos 0 (TL corner) + 1..cw (top edge) + cw+1 (TR corner) ──
-	out.append_string(_border_cell_color(self.top_left, 0, total_perim, anim, base, t, speed));
+	out.append_string(_border_cell_color(self.top_left, 0, total_perim, anim, base, bbg, corner, true, t, speed));
 	for (sz i = 0; i < cw; i++) {
-		out.append_string(_border_cell_color(self.top, 1 + i, total_perim, anim, base, t, speed));
+		out.append_string(_border_cell_color(self.top, 1 + i, total_perim, anim, base, bbg, corner, false, t, speed));
 	}
-	out.append_string(_border_cell_color(self.top_right, cw + 1, total_perim, anim, base, t, speed));
+	out.append_string(_border_cell_color(self.top_right, cw + 1, total_perim, anim, base, bbg, corner, true, t, speed));
 	out.append_string("\x1b[0m\n");
 
 	// ── Body rows: left border rendered first, then content, then right ──
@@ -135,23 +139,23 @@ fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation
 	for (sz row = 0; row < ch; row++) {
 		sz left_pos  = total_perim - 1 - row; // clockwise: left edge going up
 		sz right_pos = cw + 2 + row;         // clockwise: right edge going down
-		out.append_string(_border_cell_color(self.left, left_pos, total_perim, anim, base, t, speed));
+		out.append_string(_border_cell_color(self.left, left_pos, total_perim, anim, base, bbg, corner, false, t, speed));
 		for (sz j = 0; j < cw; j++) out.append_char(' ');
-		out.append_string(_border_cell_color(self.right, right_pos, total_perim, anim, base, t, speed));
+		out.append_string(_border_cell_color(self.right, right_pos, total_perim, anim, base, bbg, corner, false, t, speed));
 		out.append_string("\x1b[0m\n");
 	}
 
 	// ── Bottom row: BL corner + bottom edge (right→left) + BR corner ────
 	// Clockwise: BR is at cw+2+ch, bottom edge is cw+3+ch..2*cw+2+ch, BL is 2*cw+3+ch.
 	// Rendered left-to-right on screen, so BL first, then bottom (reversed), then BR.
-	out.append_string(_border_cell_color(self.bottom_left, 2 * cw + 3 + ch, total_perim, anim, base, t, speed));
+	out.append_string(_border_cell_color(self.bottom_left, 2 * cw + 3 + ch, total_perim, anim, base, bbg, corner, true, t, speed));
 	for (sz i = 0; i < cw; i++) {
 		// bottom edge in clockwise order goes right→left, so screen column i
 		// corresponds to clockwise position (2*cw+2+ch - i).
 		sz pos = 2 * cw + 2 + ch - i;
-		out.append_string(_border_cell_color(self.bottom, pos, total_perim, anim, base, t, speed));
+		out.append_string(_border_cell_color(self.bottom, pos, total_perim, anim, base, bbg, corner, false, t, speed));
 	}
-	out.append_string(_border_cell_color(self.bottom_right, cw + 2 + ch, total_perim, anim, base, t, speed));
+	out.append_string(_border_cell_color(self.bottom_right, cw + 2 + ch, total_perim, anim, base, bbg, corner, true, t, speed));
 	out.append_string("\x1b[0m");
 
 	return out.copy_str(tmem);
@@ -159,31 +163,33 @@ fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation
 
 // _border_cell_color returns the ANSI string for a single border cell
 // (SGR open + character), with colour determined by the animation mode.
-fn String _border_cell_color(String ch, sz pos, sz total, BorderAnimation anim, Color base, sz t, sz speed) @local {
+// bg goes behind the cell; a corner takes corner_fg at its own fixed colour
+// instead of the animated one.
+fn String _border_cell_color(String ch, sz pos, sz total, BorderAnimation anim, Color base, Color bg, Color corner_fg, bool is_corner, sz t, sz speed) @local {
 	DString s = dstring::temp();
 
-	Color c;
-	switch (anim) {
-		case PULSE:
-
-			{
+	Color c = base;
+	if (is_corner && corner_fg.kind != ColorKind.NONE) {
+		c = corner_fg;
+	} else {
+		switch (anim) {
+			case PULSE: {
 				sz phase = t * 360 / speed;
 				sz wave  = _sin255(phase);
 				c = _color_lerp({ .kind = ColorKind.TRUECOLOR, .r = 0, .g = 0, .b = 0 }, base, wave);
 			}
-		case RAINBOW:
-
-			{
+			case RAINBOW: {
 				sz hue = ((pos * 255 / total) + (t * 255 / speed)) & 0xff;
 				c = _hsl(hue, 255, 140);
 			}
-		case RACE:
-
-			{
+			case RACE: {
 				sz head = t * total / speed;
 				sz dist = head - pos;
 				if (dist < 0) dist += total;
-				sz trail = 20;
+				// A quarter of the perimeter keeps the trail the same length
+				// relative to the box it runs around.
+				sz trail = total / 4;
+				if (trail < 4) trail = 4;
 				if (dist <= trail) {
 					sz bright = (trail - dist) * 255 / trail;
 					Color dim = {
@@ -202,11 +208,15 @@ fn String _border_cell_color(String ch, sz pos, sz total, BorderAnimation anim, 
 					};
 				}
 			}
-		default: { c = base; }
+			default: { c = base; }
+		}
 	}
 
 	s.append_string("\x1b[38;2;");
 	s.appendf("%d;%d;%d", (sz)c.r, (sz)c.g, (sz)c.b);
+	if (bg.kind == ColorKind.TRUECOLOR) {
+		s.appendf(";48;2;%d;%d;%d", (sz)bg.r, (sz)bg.g, (sz)bg.b);
+	}
 	s.append_char('m');
 	s.append_string(ch);
 	return s.str_view();
