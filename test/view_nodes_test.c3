@@ -165,6 +165,27 @@ fn void test_a_translucent_box_tints_what_is_beneath() @test {
 	assert(corner.style.bg.r / 10 == 4, "the border sits on the tint, bg=%d", corner.style.bg.r);
 }
 
+fn void test_a_faded_translucent_box_scales_its_border_background_once() @test {
+	// An inherited border background must match an explicitly identical one.
+	foreach (explicit_bg : (bool[]) { false, true }) {
+		xray::ScreenBuffer* sb = xray::new_screen_buffer(5, 3);
+		defer free_buffer(sb);
+		xray::ScreenBuffer* scratch = null;
+		defer if (scratch != null) free_buffer(scratch);
+		for (sz y = 0; y < 3; y++) {
+			sb.set_string(0, y, "     ", xray::default_style().set_bg(xray::color_rgb(100, 100, 100)));
+		}
+		glaze::Style tint = { .bg = xray::color_rgba(0, 0, 0, 128), .border = glaze::HIDDEN };
+		if (explicit_bg) tint.border_bg = tint.bg;
+		milktea::Node* box = milktea::vstack().style(tint).alpha(128);
+		box.solve(xray::new_rect(0, 0, 5, 3));
+		sb.paint(box, &scratch);
+
+		assert(sb.cell_at(2, 1).style.bg.eq(xray::color_rgb(74, 74, 74)));
+		assert(sb.cell_at(0, 0).style.bg.eq(xray::color_rgb(74, 74, 74)));
+	}
+}
+
 fn void test_a_transparent_border_bg_keeps_the_tint_off_the_border() @test {
 	xray::ScreenBuffer* frame = xray::new_screen_buffer(6, 3);
 	defer free_buffer(frame);

@@ -154,8 +154,11 @@ fn void ScreenBuffer.paint_translucent_box(&self, Rect r, glaze::Style box, char
 	Color tint = box.bg;
 	tint.a = scale_alpha(tint, alpha);
 	Color edge_bg = box.border_bg;
-	if (edge_bg.kind == ColorKind.NONE) edge_bg = tint;
-	if (edge_bg.kind == ColorKind.TRUECOLOR) edge_bg.a = scale_alpha(edge_bg, alpha);
+	if (edge_bg.kind == ColorKind.NONE) {
+		edge_bg = tint;
+	} else if (edge_bg.kind == ColorKind.TRUECOLOR) {
+		edge_bg.a = scale_alpha(edge_bg, alpha);
+	}
 
 	for (sz y = 0; y < r.h; y++) {
 		sz dy = r.y + y;
