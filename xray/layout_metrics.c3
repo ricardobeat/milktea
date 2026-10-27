@@ -6,6 +6,20 @@ struct LayoutMetrics {
 	sz cell_w, cell_h;
 }
 
+// PixelConstraintFn converts a node's cell constraint into logical pixels.
+// pixel_metrics installs it, so a terminal build, which never asks for pixel
+// metrics, links none of the pixel layout code.
+alias PixelConstraintFn = fn Constraint(Node* n, Constraint c, bool horizontal);
+
+PixelConstraintFn pixel_constraint_hook;
+
+// pixel_metrics returns metrics for laying a tree out in logical pixels, one
+// text cell being cell_w by cell_h of them.
+fn LayoutMetrics pixel_metrics(sz cell_w, sz cell_h) {
+	pixel_constraint_hook = &pixel_constraint;
+	return { .pixels = true, .cell_w = cell_w, .cell_h = cell_h };
+}
+
 fn sz LayoutMetrics.unit_w(self) => self.pixels && self.cell_w > 0 ? self.cell_w : 1;
 fn sz LayoutMetrics.unit_h(self) => self.pixels && self.cell_h > 0 ? self.cell_h : 1;
 
@@ -25,10 +39,14 @@ fn Constraint Node.layout_constraint(&self, bool horizontal) {
 		c.measure = horizontal ? &node_measure_w : &node_measure_h;
 		c.ctx = self;
 	}
-	if (!self.layout_metrics.pixels) {
+	if (!self.layout_metrics.pixels || !pixel_constraint_hook) {
 		if (c.pixel_units) c.value = c.cell_fallback;
 		return c;
 	}
+	return pixel_constraint_hook(self, c, horizontal);
+}
+
+fn Constraint pixel_constraint(Node* self, Constraint c, bool horizontal) @local {
 	sz unit = horizontal ? self.layout_metrics.unit_w() : self.layout_metrics.unit_h();
 	sz pad = horizontal ? self.decoration.pad_left + self.decoration.pad_right
 		: self.decoration.pad_top + self.decoration.pad_bottom;

@@ -1345,7 +1345,7 @@ fn void ScreenBuffer.put_cells(&self, Cell[] src, sz src_w, sz src_h, Rect clip)
 
 	for (sz y = y0; y < y1; y++) {
 		sz from = (y - clip.y) * src_w + (x0 - clip.x);
-		if (self.record_paint) {
+		if (self.recording()) {
 			for (sz x = x0; x < x1; x++) self.set_cell(x, y, src[from + x - x0]);
 		} else {
 			mem::copy(&self.cells[y * self.width + x0], &src[from], (usz)(x1 - x0) * Cell::size);

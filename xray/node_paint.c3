@@ -31,10 +31,7 @@ struct PaintResult {
 // hang one off something long-lived and pass its address. Passing null
 // disables blending: those nodes paint opaque.
 fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = null, sz now_ms = 0) {
-	if (self.record_paint) {
-		if (!self.paint_ops.is_initialized()) self.paint_ops.init(mem);
-		self.paint_ops.clear();
-	}
+	self.record_begin();
 	PaintResult res;
 	self.paint_metrics = root != null ? root.layout_metrics : (LayoutMetrics){};
 	self.paint_node(root, &res, scratch);
@@ -129,12 +126,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		self.paint_dy = content_area.y - r.y * h;
 	}
 
-	if (self.record_paint && n.decoration.kind != DecorationKind.NONE) {
-		Decoration d = n.decoration;
-		d.rect = n.computed_rect;
-		d.pixel_rect = n.layout_metrics.pixels;
-		self.paint_ops.push({ .kind = PaintKind.DECORATION, .decoration = d });
-	}
+	self.record_decoration(n);
 	self.decorated_content = n.decoration.kind != DecorationKind.NONE;
 	if (n.has_box() && r.w > 0 && r.h > 0) {
 		Color bg = n.box.bg;
@@ -284,7 +276,7 @@ fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuf
 		self.paint_blended(r, s, alpha, scratch);
 		return;
 	}
-	if (!self.record_paint && (r.x + r.w <= 0 || r.y + r.h <= 0)) return;
+	if (!self.recording() && (r.x + r.w <= 0 || r.y + r.h <= 0)) return;
 	// Clipped to the rect: a string is not always the size it was asked to
 	// be, and one that is not would spill into its neighbours.
 	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;

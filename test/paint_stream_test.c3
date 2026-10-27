@@ -10,10 +10,10 @@ fn void test_canvas_records_cells_at_the_pixel_origin() @test {
 		xray::new_cell("b", 1, xray::default_style()),
 	};
 	xray::Node* root = milktea::root().add(milktea::grid(cells[..], 2, 1).at(1, 1));
-	root.solve({ .w = 40, .h = 40 }, { .pixels = true, .cell_w = 10, .cell_h = 20 });
+	root.solve({ .w = 40, .h = 40 }, xray::pixel_metrics(10, 20));
 	xray::ScreenBuffer* buf = xray::new_screen_buffer(4, 2);
 	defer { buf.destroy(); mem::free(buf); }
-	buf.record_paint = true;
+	buf.record_paints();
 	buf.paint(root);
 	xray::PaintOp[] ops = buf.paint_ops.array_view();
 	assert(ops.len == 2);
@@ -36,7 +36,7 @@ fn void test_paint_stream_preserves_parent_child_sibling_order() @test {
 	root.solve(xray::new_rect(0, 0, 4, 2));
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(4, 2);
 	defer { sb.destroy(); mem::free(sb); }
-	sb.record_paint = true;
+	sb.record_paints();
 	sb.paint(root);
 	xray::PaintOp[] ops = sb.paint_ops.array_view();
 	assert(ops.len == 4);
@@ -57,7 +57,7 @@ fn void test_paint_stream_records_equal_overwrites_and_clips_to_screen() @test {
 	root.solve(xray::new_rect(0, 0, 4, 2));
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(4, 2);
 	defer { sb.destroy(); mem::free(sb); }
-	sb.record_paint = true;
+	sb.record_paints();
 	sb.paint(root);
 	xray::PaintOp[] ops = sb.paint_ops.array_view();
 	assert(ops.len == 2, "equal writes must still cover earlier decorations");
@@ -77,7 +77,7 @@ fn void test_paint_stream_does_not_change_terminal_cells() @test {
 	xray::ScreenBuffer* terminal = xray::new_screen_buffer(4, 2);
 	xray::ScreenBuffer* gui = xray::new_screen_buffer(4, 2);
 	defer { terminal.destroy(); mem::free(terminal); gui.destroy(); mem::free(gui); }
-	gui.record_paint = true;
+	gui.record_paints();
 	terminal.paint(root);
 	gui.paint(root);
 	assert(!terminal.paint_ops.is_initialized());
@@ -94,7 +94,7 @@ fn void test_shadow_stream_follows_tree_order() @test {
 	root.solve(xray::new_rect(0, 0, 4, 3));
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(4, 3);
 	defer { sb.destroy(); mem::free(sb); }
-	sb.record_paint = true;
+	sb.record_paints();
 	sb.paint(root);
 	xray::PaintOp[] ops = sb.paint_ops.array_view();
 	assert(ops.len == 3);

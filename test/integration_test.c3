@@ -713,3 +713,57 @@ fn void test_cell_view_overstated_stride_is_clamped() @test {
 		unreachable("renderer must clamp an overstated cell stride, got a fault");
 	}
 }
+
+// ============================================================
+// Scripted mouse events — test_click / test_pointer
+// ============================================================
+
+bool g_scripted_clicked;
+
+fn void scripted_click_handler(void* id, String id_str, sz col, sz row) {
+	g_scripted_clicked = true;
+}
+
+// ScriptedClickModel schedules a click and a pointer move from init, with
+// no input at all, so only the terminal loop's own firing can deliver them.
+struct ScriptedClickModel {
+	sz presses;
+	sz motions;
+	sz press_col;
+}
+
+fn milktea::Cmd ScriptedClickModel.init(ScriptedClickModel* self) @dynamic {
+	milktea::test_click(3, 0, 2);
+	milktea::test_pointer(1, 0, 1);
+	return null;
+}
+
+fn milktea::Cmd ScriptedClickModel.update(ScriptedClickModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind != milktea::MsgKind.MOUSE) return null;
+	if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS) {
+		self.presses++;
+		self.press_col = msg.mouse.col;
+	}
+	if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) self.motions++;
+	return null;
+}
+
+fn milktea::Node* ScriptedClickModel.view(ScriptedClickModel* self) @dynamic {
+	return milktea::text("click me").on_click(&scripted_click_handler);
+}
+
+// A terminal program fires test_click and test_pointer once their frames
+// come up, through the same dispatch a real mouse uses: the node's on_click
+// runs and update() sees the press, then the loop ends as usual.
+fn void test_scripted_mouse_events_fire_in_terminal() @test {
+	g_scripted_clicked = false;
+	ScriptedClickModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	p.run()!!;
+
+	assert(m.presses == 1);
+	assert(m.press_col == 3);
+	assert(m.motions == 1);
+	assert(g_scripted_clicked);
+}

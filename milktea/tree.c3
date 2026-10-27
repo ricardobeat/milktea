@@ -193,21 +193,14 @@ fn View draw(Node* root) {
 // taller than that cannot be addressed relatively without scrolling.
 fn View draw_inline(Node* root) @private {
 	sz w = screen_width();
-	if (root != null) root.set_layout_metrics(layout_metrics());
-	if (root != null && g_program != null && g_program.layout_metrics.pixels) {
-		xray::LayoutMetrics metrics = g_program.layout_metrics;
-		sz height = root.natural_height(g_program.layout_area.w);
-		if (height < 1) height = 1;
-		if (height > g_program.layout_area.h) height = g_program.layout_area.h;
-		return draw_in(root, w, (height + metrics.unit_h() - 1) / metrics.unit_h(), false, height);
-	}
+	if (g_program != null && g_program.pixel_area) return draw_in(root, w, 1, false);
 	sz h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
 	return draw_in(root, w, h, false);
 }
 
-fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
+fn View draw_in(Node* root, sz w, sz h, bool alt) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
@@ -215,9 +208,10 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 
 	xray::LayoutMetrics metrics = g_program.layout_metrics;
 	xray::Rect area = xray::new_rect(0, 0, w, h);
-	if (metrics.pixels) {
-		area = alt ? g_program.layout_area : xray::new_rect(0, 0,
-			g_program.layout_area.w, pixel_height > 0 ? pixel_height : h * metrics.unit_h());
+	// A backend laying out in pixels picks the area itself; the grid is then
+	// as many whole text cells as cover it.
+	if (g_program.pixel_area) {
+		area = g_program.pixel_area(root, alt);
 		w = (area.w + metrics.unit_w() - 1) / metrics.unit_w();
 		h = (area.h + metrics.unit_h() - 1) / metrics.unit_h();
 	}
@@ -237,14 +231,12 @@ fn View draw_in(Node* root, sz w, sz h, bool alt, sz pixel_height = 0) @local {
 	// and refill every draw() so a click always lands against what is
 	// actually on screen right now.
 	if (!g_program.click_targets.is_initialized()) g_program.click_targets.init(mem);
-	if (!g_program.drag_regions.is_initialized()) g_program.drag_regions.init(mem);
 	g_program.click_targets.clear();
 	xray::collect_click_targets(root, &g_program.click_targets);
-	g_program.drag_regions.clear();
-	xray::collect_drag_regions(root, &g_program.drag_regions);
+	if (g_program.on_draw) g_program.on_draw(root);
 
 	View v = {
-		.paint_ops = buf.record_paint ? buf.paint_ops.array_view() : {},
+		.paint_ops = buf.recording() ? buf.paint_ops.array_view() : {},
 		.cells        = buf.cells,
 		.cells_width  = (sz)w,
 		.cells_height = (sz)h,

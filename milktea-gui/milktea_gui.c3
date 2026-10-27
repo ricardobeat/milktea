@@ -16,6 +16,7 @@ import std::io::file;
 import std::io;
 import std::os::env;
 import std::thread;
+import std::collections::list;
 
 alias GuiOverlayFn = fn void(void*);
 
@@ -245,10 +246,31 @@ fn void pointer_pixel(GuiOptions opts, int* col, int* row) @local {
 // behaves correctly without the app restating its geometry here. chrome_rows
 // is the fallback for a view that marked nothing: the top N rows, all of
 // them, which is what a window with no title bar needs to stay movable.
+// g_drag_regions holds the rects the last drawn view offered as window drag
+// handles, in layout pixels; collect_drag_regions refills it after each draw.
+List{xray::Rect} g_drag_regions;
+
+fn void collect_drag_regions(xray::Node* root) @local {
+	if (!g_drag_regions.is_initialized()) g_drag_regions.init(mem);
+	g_drag_regions.clear();
+	xray::collect_drag_regions(root, &g_drag_regions);
+}
+
+// pixel_area is the area draw() lays a tree out in: the whole window, or for
+// an inline tree only as tall as its content, capped at the window.
+fn xray::Rect pixel_area(xray::Node* root, bool alt) @local {
+	milktea::Program* p = milktea::g_program;
+	if (alt) return p.layout_area;
+	root.set_layout_metrics(p.layout_metrics);
+	sz height = root.natural_height(p.layout_area.w);
+	if (height < 1) height = 1;
+	if (height > p.layout_area.h) height = p.layout_area.h;
+	return xray::new_rect(0, 0, p.layout_area.w, height);
+}
+
 fn bool is_drag_point(GuiOptions opts, int col, int row) @local {
-	xray::Rect[] regions = milktea::drag_regions();
-	if (regions.len > 0) {
-		foreach (r : regions) {
+	if (g_drag_regions.len() > 0) {
+		foreach (r : g_drag_regions) {
 			if (r.contains(col, row)) return true;
 		}
 		return false;
@@ -936,8 +958,11 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// used since the loop below drives init/update/view by hand instead of
 	// Program.run() (which assumes a real or test-mode TTY).
 	milktea::Program prog;
+	xray::enable_paint_recording();
 	prog.record_paint = true;
-	prog.layout_metrics = { .pixels = true, .cell_w = opts.cell_w, .cell_h = opts.cell_h };
+	prog.on_draw = &collect_drag_regions;
+	prog.pixel_area = &pixel_area;
+	prog.layout_metrics = xray::pixel_metrics(opts.cell_w, opts.cell_h);
 	prog.layout_area = { .w = (sz)opts.cols * opts.cell_w, .h = (sz)opts.rows * opts.cell_h };
 	prog.cached_ws.ws_col = (ushort)opts.cols;
 	prog.cached_ws.ws_row = (ushort)opts.rows;
@@ -1129,7 +1154,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 		lp.prog.draw_buf.paint_ops.free();
 	}
 	lp.prog.click_targets.free();
-	lp.prog.drag_regions.free();
+	g_drag_regions.free();
 	decor_shutdown();
 	if (lp.rounded) {
 		rl::unload_shader(lp.round_shader);
@@ -1229,7 +1254,7 @@ fn bool gui_frame(GuiLoop* l) @local {
 		g_dirty = true;
 	}
 
-	l.prog.layout_metrics = { .pixels = true, .cell_w = l.opts.cell_w, .cell_h = l.opts.cell_h };
+	l.prog.layout_metrics = xray::pixel_metrics(l.opts.cell_w, l.opts.cell_h);
 	l.prog.layout_area = { .w = l.shot ? (sz)l.opts.cols * l.opts.cell_w : rl::get_screen_width(),
 		.h = l.shot ? (sz)l.opts.rows * l.opts.cell_h : rl::get_screen_height() };
 

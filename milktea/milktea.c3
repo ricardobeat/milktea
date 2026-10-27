@@ -213,6 +213,11 @@ struct TimerEntry @private {
 	void* owner;
 }
 
+alias DrawHook = fn void(xray::Node* root);
+// PixelAreaFn returns the area, in layout pixels, to solve a tree in: the
+// whole window for the alt screen (alt), or only what an inline tree needs.
+alias PixelAreaFn = fn xray::Rect(xray::Node* root, bool alt);
+
 // Program holds all mutable runtime state for a running TUI.
 // Enables sequential multi-instance use and proper testability.
 struct Program {
@@ -244,10 +249,12 @@ struct Program {
 	sz hover_prev_col;
 	sz hover_prev_row;
 	bool hover_has_prev;
-	// Areas the app offered as drag handles for the OS window (xray::Node
-	// .window_drag), refilled by draw() from the same solved tree. Only a GUI
-	// build reads them; in a terminal there is no window to move.
-	List{xray::Rect} drag_regions;
+	// on_draw, when set, sees every tree draw() has just solved and painted.
+	// A backend reads what it needs from the frame here — the GUI collects
+	// its window drag handles — so the terminal links none of that.
+	DrawHook on_draw;
+	// pixel_area, when set, makes draw() lay out in layout_metrics' pixels.
+	PixelAreaFn pixel_area;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -527,7 +534,7 @@ fn xray::LayoutMetrics layout_metrics() {
 }
 
 fn xray::Rect layout_area() {
-	if (g_program != null && g_program.layout_metrics.pixels) return g_program.layout_area;
+	if (g_program != null && g_program.pixel_area) return g_program.layout_area;
 	return xray::new_rect(0, 0, screen_width(), screen_height());
 }
 
@@ -537,14 +544,6 @@ fn xray::Rect layout_area() {
 // model.update(), by dispatch() in the normal event loop and directly by any
 // backend (e.g. a GUI renderer) that drives a Model outside Program.run().
 // Dispatch coordinates use backend layout units; callbacks receive text cells.
-// drag_regions returns the rects the last drawn view offered as OS-window
-// drag handles, in backend layout coordinates. Empty unless the app marked a node with
-// xray::Node.window_drag.
-fn xray::Rect[] drag_regions() {
-	if (g_program == null) return {};
-	return g_program.drag_regions.array_view();
-}
-
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
 	xray::dispatch_click(g_program.click_targets.array_view(),
@@ -1221,7 +1220,6 @@ fn void? Program.run(Program* self) {
 			self.draw_scratch = null;
 		}
 		self.click_targets.free();
-		self.drag_regions.free();
 
 		if (self.renderer != null) {
 			self.renderer.destroy();
@@ -1594,6 +1592,10 @@ fn void? Program.run(Program* self) {
 			self.render_current_view();
 		}
 
+		// A scripted click or pointer move (test_click, test_pointer) waits a
+		// number of frames, so while one is armed every pass renders one.
+		if (self.test_armed() && self.fire_test_events()) return;
+
 
 		// In test mode there is no reader thread and no wall-clock waiting, so
 		// once the injected input is consumed, the pending buffer is drained
@@ -1601,7 +1603,7 @@ fn void? Program.run(Program* self) {
 		// Without this the loop spins at 100% CPU forever whenever a model
 		// under test doesn't return quit() — one bad test hangs the suite.
 		if (self.test_mode && self.inject_input_pos >= self.inject_input.len && self.pending_len == 0
-			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()) {
 			return;
 		}
 
@@ -1611,7 +1613,7 @@ fn void? Program.run(Program* self) {
 		// immediately once the queue is closed. Timers still keep the program
 		// alive, so an animation driven purely by tick() is unaffected.
 		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
-			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()) {
 			return;
 		}
 
@@ -1632,11 +1634,36 @@ fn void? Program.run(Program* self) {
 			}
 			// When stuck on incomplete data, cap wait to avoid long hangs
 			if (stuck && wait_ms > 100) wait_ms = 100;
+			if (self.test_armed()) wait_ms = 0;
 			if (wait_ms > 0) {
 				input_queue_wait(&g_input_queue, wait_ms);
 			}
 		}
 	}
+}
+
+fn bool Program.test_armed(Program* self) @inline => self.test_click_armed || self.test_pointer_armed;
+
+// fire_test_events sends whichever scripted click or pointer move has reached
+// its frame through dispatch(), as a real mouse event, then renders, which
+// also counts the frame the others are waiting for. Returns true on quit.
+fn bool Program.fire_test_events(Program* self) {
+	if (self.test_click_armed && self.frame_no >= self.test_pending_click_frame) {
+		self.test_click_armed = false;
+		Msg m = { .kind = MsgKind.MOUSE, .mouse = { .button = MouseButton.MOUSE_LEFT,
+			.action = MouseAction.MOUSE_PRESS, .row = self.test_pending_click_row,
+			.col = self.test_pending_click_col } };
+		if (dispatch(self, self.model, m)) return true;
+	}
+	if (self.test_pointer_armed && self.frame_no >= self.test_pending_pointer_frame) {
+		self.test_pointer_armed = false;
+		Msg m = { .kind = MsgKind.MOUSE, .mouse = { .button = MouseButton.MOUSE_NONE,
+			.action = MouseAction.MOUSE_MOTION, .row = self.test_pending_pointer_row,
+			.col = self.test_pending_pointer_col } };
+		if (dispatch(self, self.model, m)) return true;
+	}
+	self.render_current_view();
+	return false;
 }
 
 // has_active_timer reports whether any timer slot is armed.
