@@ -91,7 +91,8 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .chapter p {max-width:720px;margin:16px 0 0;color:var(--muted);font-size:14px;line-height:1.65}
 
 /* Orange poster, set in Molot, breaking into the paper below. */
-.poster {position:relative;isolation:isolate;overflow:hidden;background:var(--orange);color:var(--ink)}
+.poster {position:relative;isolation:isolate;overflow:hidden;color:var(--ink)}
+.block-field {position:absolute;inset:0;z-index:-2;width:100%;height:100%;pointer-events:none}
 .poster::before,.site-nav::before {content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:url("./art/grain.svg");mix-blend-mode:multiply;opacity:.28}
 .poster .wrap,.site-nav .wrap {max-width:1600px;padding-inline:clamp(20px,4.6vw,76px)}
 .site-nav .site-header {padding-block:22px;border-bottom:1px solid #14271c55;gap:24px}
@@ -113,7 +114,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .cell-art::before {content:"";position:absolute;inset:18% 2% 3% 6%;z-index:-1;border-radius:50%;background-color:#ffab48;background-image:radial-gradient(#14271c55 1px,transparent 1px);background-size:5px 5px;transform:rotate(-9deg)}
 .cell-cup {display:block;width:100%;height:auto;filter:drop-shadow(6px 6px 0 #f0e6ce)}
 .cell-caption {position:absolute;right:-4%;bottom:3%;padding:10px 18px;background:var(--paper);border:2px solid var(--ink);font:14px/1 var(--font-mono);transform:rotate(-16deg);box-shadow:3px 3px 0 var(--ink)}
-.poster-edge {height:120px;margin-top:-36px;background:url("./art/cell-edge.svg") repeat-x bottom;background-size:864px 120px;position:relative}
+.poster-edge {height:120px;margin-top:-36px;position:relative}
 .intro-strap {max-width:760px;margin:38px 0 0;font:16px/1.65 var(--font-mono);color:var(--ink)}
 .intro {padding-top:54px}
 .wasm-note {border-radius:0;background:#f6d987;border-color:#d7b458;color:#51401f}
@@ -147,7 +148,7 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
   .hero .button {padding:11px 14px;font-size:11px;gap:16px}
   .hero .text-link {font-size:11px}
   .cell-art {width:clamp(150px,min(48vw,24svh),210px);justify-self:end;margin:8px 8px -4px}
-  .poster-edge {height:84px;margin-top:-20px;background-size:605px 84px}
+  .poster-edge {height:84px;margin-top:-20px}
   .intro-strap {font-size:13px;margin-top:26px}
   .intro {padding-top:38px}
 }
