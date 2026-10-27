@@ -138,23 +138,55 @@ function mount(element) {
     }
   }
 
-  // Glimmer: cells near the cursor brighten and twinkle, each on its own
-  // phase, and settle back once the cursor moves on.
-  let drawCell = null, grid = null, pointer = null, frame = 0;
+  // Glimmer: every so often a streak of light dashes across the field from
+  // left to right, at a random height that favours the title lines. Cells it
+  // passes brighten and twinkle, each on its own phase, then settle back.
+  let drawCell = null, grid = null, dash = null, frame = 0, last = 0, wait = 800;
   const lit = new Set();
   const RADIUS = 150;
+  const STRETCH = 2.2; // the streak is longer than it is tall
+
+  let first = true;
+  function pickHeight() {
+    const box = element.getBoundingClientRect();
+    // The first streak after load runs right under the MILKTEA heading.
+    const heading = element.querySelector('h1');
+    if (first && heading) {
+      first = false;
+      return heading.getBoundingClientRect().bottom - box.top;
+    }
+    const titles = [...element.querySelectorAll('h1, h2')];
+    if (titles.length && Math.random() < .75) {
+      const title = titles[Math.floor(Math.random() * titles.length)].getBoundingClientRect();
+      return title.top - box.top + Math.random() * title.height;
+    }
+    return Math.random() * box.height;
+  }
 
   function glimmer(time) {
-    frame = 0;
+    frame = requestAnimationFrame(glimmer);
     if (!drawCell) return;
+    const dt = Math.min(64, time - (last || time));
+    last = time;
+    if (!dash) {
+      wait -= dt;
+      if (wait <= 0) dash = {x: -RADIUS * STRETCH, y: pickHeight(), speed: .9 + Math.random() * .8};
+    } else {
+      dash.x += dash.speed * dt;
+      if (dash.x > grid.columns * CELL_W + RADIUS * STRETCH) {
+        dash = null;
+        wait = 1500 + Math.random() * 3500;
+      }
+    }
     const next = new Set();
-    if (pointer) {
-      const c0 = Math.max(0, Math.floor((pointer.x - RADIUS) / CELL_W));
-      const c1 = Math.min(grid.columns - 1, Math.floor((pointer.x + RADIUS) / CELL_W));
-      const r0 = Math.max(0, Math.floor((pointer.y - RADIUS) / CELL_H));
-      const r1 = Math.min(grid.rows - 1, Math.floor((pointer.y + RADIUS) / CELL_H));
+    if (dash) {
+      const reach = RADIUS * STRETCH;
+      const c0 = Math.max(0, Math.floor((dash.x - reach) / CELL_W));
+      const c1 = Math.min(grid.columns - 1, Math.floor((dash.x + reach) / CELL_W));
+      const r0 = Math.max(0, Math.floor((dash.y - RADIUS) / CELL_H));
+      const r1 = Math.min(grid.rows - 1, Math.floor((dash.y + RADIUS) / CELL_H));
       for (let col = c0; col <= c1; col++) for (let row = r0; row <= r1; row++) {
-        const dx = (col + .5) * CELL_W - pointer.x, dy = (row + .5) * CELL_H - pointer.y;
+        const dx = ((col + .5) * CELL_W - dash.x) / STRETCH, dy = (row + .5) * CELL_H - dash.y;
         const falloff = 1 - Math.hypot(dx, dy) / RADIUS;
         if (falloff <= 0) continue;
         const twinkle = .5 + .5 * Math.sin(time / (180 + hash(col, row, 71) * 260) + hash(col, row, 72) * 6.283);
@@ -165,19 +197,11 @@ function mount(element) {
     for (const key of lit) if (!next.has(key)) drawCell(Math.floor(key / 65536), key % 65536);
     lit.clear();
     for (const key of next) lit.add(key);
-    if (pointer) frame = requestAnimationFrame(glimmer);
   }
 
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    element.addEventListener('pointermove', event => {
-      const box = element.getBoundingClientRect();
-      pointer = {x: event.clientX - box.left, y: event.clientY - box.top};
-      if (!frame) frame = requestAnimationFrame(glimmer);
-    });
-    element.addEventListener('pointerleave', () => {
-      pointer = null;
-      if (!frame) frame = requestAnimationFrame(glimmer);
-    });
+  // Only the poster gets the streak; the sticky nav stays still.
+  if (edge && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    frame = requestAnimationFrame(glimmer);
   }
 
   new ResizeObserver(paint).observe(element);
