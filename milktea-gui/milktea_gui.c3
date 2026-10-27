@@ -681,7 +681,7 @@ float g_font_height_ratio @local = 1.0f;
 // set_font copies the path and reloads the selected font on the next frame.
 fn void set_font(String path, int cell_w, int cell_h, int font_size, float height_ratio = 1.0f) {
 	if (cell_w < 1 || cell_h < 1 || font_size < 1) return;
-	String next = path.copy(mem);
+	String next = path.len ? path.copy(mem) : "";
 	if (g_font_path.ptr) mem::free(g_font_path);
 	g_font_path = next;
 	g_font_height_ratio = height_ratio > 0 ? height_ratio : 1.0f;
