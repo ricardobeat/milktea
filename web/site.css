@@ -108,15 +108,16 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .hero-statement span {color:var(--paper);text-shadow:3px 3px 0 var(--ink)}
 .hero .lead {max-width:375px;margin:24px 0 0;color:var(--ink);font:14px/1.65 var(--font-mono)}
 .hero .hero-links {margin-top:26px;gap:10px;flex-wrap:wrap}
-.hero .button {padding:10px 14px;gap:16px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);border-radius:0;font:11px/1.5 var(--font-mono);text-transform:uppercase;box-shadow:3px 3px 0 #14271c55}
-.hero .button:hover {color:var(--ink);background:var(--paper);text-decoration:none}
+.hero .button {padding:10px 14px;gap:16px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);border-radius:0;font:11px/1.5 var(--font-mono);text-transform:uppercase;box-shadow:3px 3px 0 #14271c55;transition:background-color .1s,color .1s}
+/* Every hero button turns the same orange on hover. */
+.hero .button:hover {text-decoration:none}
 .hero .button-start {background:var(--paper);color:var(--ink)}
 .hero .button-github {background:var(--mint);color:var(--ink)}
-.hero .button-start:hover,.hero .button-github:hover {background:var(--ink);color:var(--paper)}
+.hero .button.button:hover {background:#ff8a3d;color:var(--ink)}
 .hero .text-link {font:12px/1.5 var(--font-mono);color:var(--ink);border-color:var(--ink);text-transform:uppercase}
 .cell-art {position:relative;width:min(100%,clamp(180px,min(27vw,34svh),340px));justify-self:center;transform:translateY(-90px) rotate(9deg);margin:6px 0 12px}
 .cell-art::before {content:"";position:absolute;inset:18% 2% 3% 6%;z-index:-1;border-radius:50%;background-color:#ffab48;background-image:radial-gradient(#14271c55 1px,transparent 1px);background-size:5px 5px;transform:rotate(-9deg)}
-.cell-cup {display:block;width:100%;aspect-ratio:4/3;border:2px solid var(--ink);box-shadow:6px 6px 0 var(--paper)}
+.cell-cup {display:block;width:100%;aspect-ratio:4/3;border:2px solid var(--ink);box-shadow:4px 4px 0 #14271c55}
 .cell-caption {position:absolute;right:-4%;bottom:3%;padding:10px 18px;background:var(--paper);border:2px solid var(--ink);font:14px/1 var(--font-mono);transform:rotate(-16deg);box-shadow:3px 3px 0 var(--ink)}
 .poster-edge {height:120px;margin-top:-36px;position:relative}
 .intro-strap {max-width:760px;margin:38px 0 0;font:16px/1.65 var(--font-mono);color:var(--ink)}
