@@ -3,7 +3,7 @@
 @font-face {font-family:"Geist";src:url("./fonts/geist-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
 @font-face {font-family:"Geist Mono";src:url("./fonts/geist-mono.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 @font-face {font-family:"Geist Mono";src:url("./fonts/geist-mono-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
-:root { --font-sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme: light; --paper:#f0e6ce; --ink:#14271c; --muted:#666a56; --line:#c9c0a9; --accent:#c44819; --mint:#d4dfad; --orange:#f96a24; --font-display:"Molot",Impact,sans-serif; font:16px/1.65 var(--font-sans); background:var(--paper); color:var(--ink); }
+:root { --font-sans:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Consolas,monospace; color-scheme: light; --paper:#f1ede4; --ink:#14271c; --muted:#666a56; --line:#c9c0a9; --accent:#c44819; --mint:#d4dfad; --orange:#f96a24; --font-display:"Molot",Impact,sans-serif; font:16px/1.65 var(--font-sans); background:var(--paper); color:var(--ink); }
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; scroll-padding-top:90px; }
 body { margin:0; }
@@ -39,11 +39,12 @@ h2 { font-size:42px; }
 .step-number { font:12px/1.7 var(--font-mono); color:#999f92; padding-top:2px; }
 .steps strong { font-size:14px; font-weight:650; }.steps p { margin:2px 0 0; color:var(--muted); font-size:14px; }
 .intro-copy .fine-print { font-size:13px; }
-.code-window { min-width:0; align-self:start; border:0; border-radius:5px; overflow:hidden; background:#202a23; color:#d4dfd5; box-shadow:none; }
-.code-heading { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid #ffffff10; font:11px/1.4 var(--font-mono); color:#8f9d94; }
-.code-heading>span:first-child { display:flex; gap:5px; }.code-heading i { width:6px; height:6px; border-radius:50%; background:#5d6c60; }.code-lang { margin-left:auto; color:#b7cdbb; }
+.code-window { min-width:0; align-self:start; border:0; border-radius:5px; overflow:hidden; background:#1a1b26; color:#c0caf5; box-shadow:none; }
+.code-heading { display:flex; align-items:center; gap:20px; padding:14px 20px; border-bottom:1px solid #ffffff10; font:11px/1.4 var(--font-mono); color:#737aa2; }
+.code-heading>span:first-child { display:flex; gap:5px; }.code-heading i { width:6px; height:6px; border-radius:50%; background:#3b4261; }.code-lang { margin-left:auto; color:#a9b1d6; }
 .code-window pre { margin:0; padding:24px 22px; overflow:auto; font:12px/1.75 var(--font-mono); tab-size:2; }
-.code-window .ink { background:transparent; color:#d9e1d9; }.code-window .ink .ink-s2,.code-window .ink .ink-s7 {color:#d0a7ca;font-weight:400}.code-window .ink .ink-s3,.code-window .ink .ink-s6 {color:#9bbccb;font-weight:400}.code-window .ink .ink-s4,.code-window .ink .ink-s5 {color:#bed3ad;font-weight:400}.code-window .ink .ink-s8,.code-window .ink .ink-s10 {color:#e0c199;font-weight:400}.code-window .ink .ink-s9 {color:#a8d5ba}
+/* Tokyo Night everywhere (showcase, source panels, editor): cool blues that sit against the orange poster. :root outranks the Monokai <style> inkfmt emits. */
+:root .ink { background:#1a1b26; color:#c0caf5; }.code-window .ink { background:transparent; }:root .ink .ink-s0,:root .ink .ink-s1 {color:#565f89;font-style:italic;font-weight:400}:root .ink .ink-s2 {color:#bb9af7;font-weight:400}:root .ink .ink-s7 {color:#89ddff;font-weight:400}:root .ink .ink-s3 {color:#2ac3de;font-weight:400}:root .ink .ink-s6 {color:#7dcfff;font-weight:400}:root .ink .ink-s4,:root .ink .ink-s5 {color:#7aa2f7;font-weight:400}:root .ink .ink-s8,:root .ink .ink-s10 {color:#ff9e64;font-weight:400}:root .ink .ink-s9 {color:#9ece6a}:root .ink .ink-s11 {background:#292e42}
 .code-footer { padding:12px 20px; border-top:1px solid #ffffff10; color:#91a094; font-size:11px; display:flex; flex-wrap:wrap; gap:5px 16px; justify-content:space-between; }.code-footer a { color:#bfcfbe; }
 .section-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:30px; padding:30px 0; border-top:1px solid var(--line); }.section-heading .eyebrow { margin-bottom:12px; }.section-heading>p { margin:0 0 3px; font-size:14px; color:var(--muted); }
 .demo { min-width:0; }.simple-demos { margin-top:12px; }.demo-simple { display:grid; grid-template-columns:.8fr 1.25fr; gap:70px; align-items:center; margin-bottom:26px; }.demo-copy { padding-right:18px; }h3 { font-size:30px; letter-spacing:-.025em; margin:10px 0 12px; }.demo p { color:var(--muted); font-size:14px; line-height:1.65; }.demo-copy p { margin:0 0 14px; max-width:300px; }.controls-note { color:#8b8f82; font-size:12px; }.controls-note span,.demo-foot>span>span { margin-inline:6px; }
@@ -101,18 +102,21 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
 .site-nav nav {font:12px/1.4 var(--font-mono);text-transform:uppercase;gap:30px}
 .poster a:hover,.site-nav a:hover {color:var(--ink);text-decoration:underline;text-underline-offset:5px}
 .poster .hero {padding-top:clamp(20px,3svh,32px);padding-bottom:36px;border:0}
-.hero h1 {font:clamp(64px,min(25.5vw,30svh),360px)/.82 var(--font-display);letter-spacing:-.045em;white-space:nowrap;margin:0 0 20px -.018em}
+.hero h1 {font:clamp(32px,min(12.75vw,15svh),180px)/.82 var(--font-display);letter-spacing:-.045em;white-space:nowrap;margin:0 0 20px -.018em}
 .hero-bottom {display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:40px}
 .hero-statement {font-size:clamp(38px,5.1vw,76px);line-height:.94;letter-spacing:-.015em}
 .hero-statement span {color:var(--paper);text-shadow:3px 3px 0 var(--ink)}
 .hero .lead {max-width:375px;margin:24px 0 0;color:var(--ink);font:14px/1.65 var(--font-mono)}
-.hero .hero-links {margin-top:26px;gap:26px}
-.hero .button {padding:13px 18px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);border-radius:0;font:12px/1.5 var(--font-mono);text-transform:uppercase;box-shadow:4px 4px 0 #14271c55}
+.hero .hero-links {margin-top:26px;gap:10px;flex-wrap:wrap}
+.hero .button {padding:10px 14px;gap:16px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);border-radius:0;font:11px/1.5 var(--font-mono);text-transform:uppercase;box-shadow:3px 3px 0 #14271c55}
 .hero .button:hover {color:var(--ink);background:var(--paper);text-decoration:none}
+.hero .button-start {background:var(--paper);color:var(--ink)}
+.hero .button-github {background:var(--mint);color:var(--ink)}
+.hero .button-start:hover,.hero .button-github:hover {background:var(--ink);color:var(--paper)}
 .hero .text-link {font:12px/1.5 var(--font-mono);color:var(--ink);border-color:var(--ink);text-transform:uppercase}
-.cell-art {position:relative;width:min(100%,clamp(180px,min(27vw,34svh),340px));justify-self:center;transform:rotate(9deg);margin:6px 0 12px}
+.cell-art {position:relative;width:min(100%,clamp(180px,min(27vw,34svh),340px));justify-self:center;transform:translateY(-90px) rotate(9deg);margin:6px 0 12px}
 .cell-art::before {content:"";position:absolute;inset:18% 2% 3% 6%;z-index:-1;border-radius:50%;background-color:#ffab48;background-image:radial-gradient(#14271c55 1px,transparent 1px);background-size:5px 5px;transform:rotate(-9deg)}
-.cell-cup {display:block;width:100%;height:auto;filter:drop-shadow(6px 6px 0 #f0e6ce)}
+.cell-cup {display:block;width:100%;aspect-ratio:4/3;border:2px solid var(--ink);box-shadow:6px 6px 0 var(--paper)}
 .cell-caption {position:absolute;right:-4%;bottom:3%;padding:10px 18px;background:var(--paper);border:2px solid var(--ink);font:14px/1 var(--font-mono);transform:rotate(-16deg);box-shadow:3px 3px 0 var(--ink)}
 .poster-edge {height:120px;margin-top:-36px;position:relative}
 .intro-strap {max-width:760px;margin:38px 0 0;font:16px/1.65 var(--font-mono);color:var(--ink)}
@@ -139,13 +143,13 @@ milktea-view::part(expand-button) { width:28px; height:28px; background:#171c21d
   .site-nav nav {width:auto;gap:14px;font-size:10px}
   .site-nav nav a:first-child {display:none}
   .poster .hero {padding-top:24px;padding-bottom:30px}
-  .hero h1 {font-size:min(24.8vw,20svh);margin-bottom:24px}
+  .hero h1 {font-size:min(12.4vw,10svh);margin-bottom:24px}
   .hero-bottom {grid-template-columns:1fr;gap:8px}
   .hero-copy {position:relative;z-index:1}
   .hero-statement {font-size:clamp(38px,9.5vw,60px)}
   .hero .lead {max-width:300px;font-size:12px;margin-top:18px}
   .hero .hero-links {margin-top:22px;gap:20px}
-  .hero .button {padding:11px 14px;font-size:11px;gap:16px}
+  .hero .button {padding:9px 12px;font-size:10px;gap:12px}
   .hero .text-link {font-size:11px}
   .cell-art {width:clamp(150px,min(48vw,24svh),210px);justify-self:end;margin:8px 8px -4px}
   .poster-edge {height:84px;margin-top:-20px}

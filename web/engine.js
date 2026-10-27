@@ -56,7 +56,11 @@ export async function instantiateMilktea(bytes, {now, wall = Date.now, log = con
       srand: seed => { random = createRandom(seed); },
       rand: () => random(),
       // The component viewer's filesystem tab sees an empty directory.
-      c3_list_dir: () => 0},
+      c3_list_dir: () => 0,
+      // c3c 0.8.5's wasm32 stdlib links these Emscripten hooks; nothing calls
+      // them in the cell renderer, so they are no-ops.
+      emscripten_run_script: () => {}, emscripten_set_canvas_element_size: () => 0,
+      emscripten_request_pointerlock: () => 0, emscripten_exit_pointerlock: () => 0},
   };
   const module = bytes instanceof WebAssembly.Module ? bytes : await WebAssembly.compile(bytes);
   for (const {module: mod, name, kind} of WebAssembly.Module.imports(module)) {

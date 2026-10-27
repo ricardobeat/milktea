@@ -6,8 +6,6 @@
 const CELL_W = 12;
 const CELL_H = 24;
 
-const SHADE_FONT = '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-
 // Deterministic hash of a cell position, so resizing adds or removes cells
 // instead of reshuffling the whole field.
 function hash(x, y, salt = 0) {
@@ -37,10 +35,10 @@ function toHsl([r, g, b]) {
   return [hue, sat * 100, light * 100];
 }
 
-function shade([hue, sat, light], col, row) {
-  const h = hue + (hash(col, row, 1) - .5) * 3;
+function shade([hue, sat, light], col, row, glow = 0) {
+  const h = hue + (hash(col, row, 1) - .5) * 3 + glow * 6;
   const s = Math.min(100, Math.max(0, sat + (hash(col, row, 2) - .5) * 5));
-  const l = light + (hash(col, row, 3) - .5) * 10;
+  const l = Math.min(92, light + (hash(col, row, 3) - .5) * 10 + glow * 18);
   return `hsl(${h.toFixed(1)},${s.toFixed(1)}%,${l.toFixed(1)}%)`;
 }
 
@@ -79,53 +77,111 @@ function mount(element) {
       drops.push(drop, drop);
     }
 
-    // Shade characters are stretched to the cell, the way a terminal draws
-    // them: the full block sets the box, every other glyph shares its box.
-    ctx.font = `100px ${SHADE_FONT}`;
-    const box = ctx.measureText('█');
-    const scaleX = CELL_W / (box.actualBoundingBoxLeft + box.actualBoundingBoxRight);
-    const scaleY = CELL_H / (box.actualBoundingBoxAscent + box.actualBoundingBoxDescent);
-    const shadeGlyph = (character, x, y, color) => {
+    // ░ ▒ ▓ drawn the way a terminal font does: every pattern sits on the same
+    // grid of DOT-sized pixels, anchored at the cell origin, so neighbouring
+    // cells tile seamlessly whatever their shade. ░ is a staggered dot lattice on
+    // odd rows, ▓ the same lattice as holes on even rows, ▒ a checker: every
+    // shade reaches all four edges of the cell the same way.
+    const DOT = 2;
+    const pattern = [
+      (i, j) => j % 2 === 1 && (i + (j >> 1)) % 2 === 0,
+      (i, j) => (i + j) % 2 === 0,
+      (i, j) => !(j % 2 === 0 && (i + (j >> 1)) % 2 === 0),
+    ];
+    const shadeCell = (level, left, top, color) => {
       ctx.fillStyle = color;
-      ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr,
-        (x - box.actualBoundingBoxLeft * scaleX) * dpr,
-        (y + box.actualBoundingBoxAscent * scaleY) * dpr);
-      ctx.fillText(character, 0, 0);
+      for (let j = 0; j < CELL_H / DOT; j++) for (let i = 0; i < CELL_W / DOT; i++) {
+        if (pattern[level](i, j)) ctx.fillRect(left + i * DOT, top + j * DOT, DOT, DOT);
+      }
     };
+
+    // One cell, optionally brightened by the cursor glimmer (glow 0..1).
+    drawCell = (col, row, glow = 0) => {
+      const left = col * CELL_W;
+      const top = row * CELL_H;
+      const line = rows - drops[col];
+      ctx.clearRect(left, top, CELL_W, CELL_H);
+      if (row >= line) {
+        // Just below the ragged edge: a few stray ░ / ▒ left over from the
+        // field, never in the last row where they would hang off the poster.
+        if (edge && row === line && row < rows - 1 && hash(col, row, 63) < .5) {
+          shadeCell(hash(col, row, 64) < .3 ? 1 : 0, left, top, shade(orange, col, row, glow));
+        }
+        return;
+      }
+      // Toward the edge the solid blocks thin out: █ -> ▓ -> ▒ -> ░.
+      const depth = line - row;
+      const level = edge ? depth - 1 + (hash(col, row, 61) < .35 ? 1 : 0) - (hash(col, row, 62) < .25 ? 1 : 0) : 3;
+      if (level < 3) {
+        ctx.fillStyle = paper;
+        ctx.fillRect(left, top, CELL_W, CELL_H);
+        shadeCell(Math.max(0, level), left, top, shade(orange, col, row, glow));
+        return;
+      }
+      ctx.fillStyle = orangeCss;
+      ctx.fillRect(left, top, CELL_W, CELL_H);
+      ctx.fillStyle = shade(orange, col, row, glow);
+      const shape = hash(col, row, 7);
+      if (shape < .05) ctx.fillRect(left, top, CELL_W, CELL_H / 2);
+      else if (shape < .1) ctx.fillRect(left, top + CELL_H / 2, CELL_W, CELL_H / 2);
+      else if (shape < .13) ctx.fillRect(left, top, CELL_W / 2, CELL_H);
+      else if (shape < .16) ctx.fillRect(left + CELL_W / 2, top, CELL_W / 2, CELL_H);
+      else ctx.fillRect(left, top, CELL_W, CELL_H);
+    };
+    grid = {columns, rows};
+    lit.clear();
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     for (let col = 0; col < columns; col++) {
-      const left = col * CELL_W;
-      const line = rows - drops[col];
-      for (let row = 0; row < rows; row++) {
-        const top = row * CELL_H;
-        if (row >= line) {
-          if (edge && row < Math.min(rows, line + 2) && hash(col, row, 63) < (row === line ? .5 : .25)) {
-            shadeGlyph(hash(col, row, 64) < .3 ? '▒' : '░', left, top, orangeCss);
-          }
-          continue;
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.fillStyle = orangeCss;
-        ctx.fillRect(left, top, CELL_W, CELL_H);
-        ctx.fillStyle = shade(orange, col, row);
-        const shape = hash(col, row, 7);
-        if (shape < .05) ctx.fillRect(left, top, CELL_W, CELL_H / 2);
-        else if (shape < .1) ctx.fillRect(left, top + CELL_H / 2, CELL_W, CELL_H / 2);
-        else if (shape < .13) ctx.fillRect(left, top, CELL_W / 2, CELL_H);
-        else if (shape < .16) ctx.fillRect(left + CELL_W / 2, top, CELL_W / 2, CELL_H);
-        else ctx.fillRect(left, top, CELL_W, CELL_H);
-        if (edge && line - row <= 2 && hash(col, row, 61) < (line - row === 1 ? .45 : .25)) {
-          shadeGlyph(hash(col, row, 62) < .3 ? '▒' : '░', left, top, paper);
-        }
+      for (let row = 0; row < rows; row++) drawCell(col, row);
+    }
+  }
+
+  // Glimmer: cells near the cursor brighten and twinkle, each on its own
+  // phase, and settle back once the cursor moves on.
+  let drawCell = null, grid = null, pointer = null, frame = 0;
+  const lit = new Set();
+  const RADIUS = 150;
+
+  function glimmer(time) {
+    frame = 0;
+    if (!drawCell) return;
+    const next = new Set();
+    if (pointer) {
+      const c0 = Math.max(0, Math.floor((pointer.x - RADIUS) / CELL_W));
+      const c1 = Math.min(grid.columns - 1, Math.floor((pointer.x + RADIUS) / CELL_W));
+      const r0 = Math.max(0, Math.floor((pointer.y - RADIUS) / CELL_H));
+      const r1 = Math.min(grid.rows - 1, Math.floor((pointer.y + RADIUS) / CELL_H));
+      for (let col = c0; col <= c1; col++) for (let row = r0; row <= r1; row++) {
+        const dx = (col + .5) * CELL_W - pointer.x, dy = (row + .5) * CELL_H - pointer.y;
+        const falloff = 1 - Math.hypot(dx, dy) / RADIUS;
+        if (falloff <= 0) continue;
+        const twinkle = .5 + .5 * Math.sin(time / (180 + hash(col, row, 71) * 260) + hash(col, row, 72) * 6.283);
+        drawCell(col, row, falloff * falloff * twinkle);
+        next.add(col * 65536 + row);
       }
     }
+    for (const key of lit) if (!next.has(key)) drawCell(Math.floor(key / 65536), key % 65536);
+    lit.clear();
+    for (const key of next) lit.add(key);
+    if (pointer) frame = requestAnimationFrame(glimmer);
+  }
+
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    element.addEventListener('pointermove', event => {
+      const box = element.getBoundingClientRect();
+      pointer = {x: event.clientX - box.left, y: event.clientY - box.top};
+      if (!frame) frame = requestAnimationFrame(glimmer);
+    });
+    element.addEventListener('pointerleave', () => {
+      pointer = null;
+      if (!frame) frame = requestAnimationFrame(glimmer);
+    });
   }
 
   new ResizeObserver(paint).observe(element);
   paint();
-  if (document.fonts) document.fonts.ready.then(paint);
 }
 
 for (const element of document.querySelectorAll('.poster, .site-nav')) mount(element);

@@ -12,15 +12,15 @@ main {display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0}
 section {display:flex;flex-direction:column;min-width:0;min-height:0}
 section+section {border-left:1px solid #383240}
 .label {padding:9px 18px;color:#aaa;font-size:12px}
-.code-editor {flex:1;min-height:0;position:relative;overflow:hidden;background:#1b1a24}
+.code-editor {flex:1;min-height:0;position:relative;overflow:hidden;background:#1a1b26}
 .code-editor textarea,.code-editor pre {position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;max-height:none;border:0;padding:16px;margin:0;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2;white-space:pre;letter-spacing:normal;font-variant-ligatures:none}
-.code-editor textarea {resize:none;outline:none;background:transparent;color:transparent;caret-color:#f5edff;overflow:auto}
-.code-editor textarea::selection {background:#a979b755}
-.code-editor pre {pointer-events:none;overflow:hidden;background:transparent;color:#eee}
-.hljs-keyword {color:#d9acf4}.hljs-string {color:#a6dfbe}.hljs-number,.hljs-literal {color:#ffc98e}
-.hljs-comment,.hljs-doctag {color:#858499}.hljs-built_in,.hljs-title,.hljs-type {color:#86b8f9}
-.hljs-attr,.hljs-property,.hljs-attribute {color:#e4b2d6}.hljs-regexp {color:#efb593}
-.hljs-subst,.hljs-params {color:#dedce5}.hljs-variable,.hljs-symbol {color:#edc58c}
+.code-editor textarea {resize:none;outline:none;background:transparent;color:transparent;caret-color:#c0caf5;overflow:auto}
+.code-editor textarea::selection {background:#7aa2f755}
+.code-editor pre {pointer-events:none;overflow:hidden;background:transparent;color:#c0caf5}
+.hljs-keyword {color:#bb9af7}.hljs-string {color:#9ece6a}.hljs-number,.hljs-literal {color:#ff9e64}
+.hljs-comment,.hljs-doctag {color:#565f89;font-style:italic}.hljs-built_in,.hljs-type {color:#2ac3de}.hljs-title {color:#7aa2f7}
+.hljs-attr,.hljs-property,.hljs-attribute {color:#7dcfff}.hljs-regexp {color:#b4f9f8}
+.hljs-subst,.hljs-params {color:#c0caf5}.hljs-variable,.hljs-symbol {color:#e0af68}.hljs-operator,.hljs-punctuation {color:#89ddff}
 iframe {flex:1;min-height:0;width:100%;border:0;background:#111318}
 pre {margin:0;max-height:160px;overflow:auto;padding:10px 18px;font:12px/1.5 ui-monospace,monospace;background:#201e29;white-space:pre-wrap}
 pre:empty {display:none} #status {color:#aaa} footer {padding:9px 18px;color:#aaa;font-size:12px;border-top:1px solid #383240}

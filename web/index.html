@@ -10,7 +10,7 @@
   <link rel="preload" href="./fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="./fonts/geist-mono.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="./site.css">
-  <script type="module" src="./site.js"></script>
+  <script type="module" src="./site.js?v=14"></script>
   <script>
     // Keep old gallery links working after making the showcase the homepage.
     if (new URLSearchParams(location.search).has('example')) location.replace('./gallery.html' + location.search);
@@ -31,11 +31,11 @@
       <div class="hero-copy">
         <h2 class="hero-statement">Terminal UI<br>made <span>easy.</span></h2>
         <p class="lead">Milktea is a native TUI framework for making tiny, fast and refreshing terminal apps.</p>
-        <div class="hero-links"><a class="button" href="#demos">Live examples <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/ricardobeat/milktea#readme">Read the docs ↗</a></div>
+        <div class="hero-links"><a class="button" href="#demos">Live examples <span aria-hidden="true">↓</span></a><a class="button button-start" href="https://github.com/ricardobeat/milktea#readme">Get started <span aria-hidden="true">↗</span></a><a class="button button-github" href="https://github.com/ricardobeat/milktea">GitHub <span aria-hidden="true">↗</span></a></div>
       </div>
       <div class="cell-art" aria-hidden="true">
-        <img class="cell-cup" src="./art/cell-cup.svg" width="336" height="378" alt="">
-        <span class="cell-caption">made of cells</span>
+        <milktea-view class="cell-cup" font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" font-size="12" cols="48" rows="18" expandable="false" src="./build/nanobots.wasm" label="Animated particles assembling into text"></milktea-view>
+        <span class="cell-caption">(live render via WASM)</span>
       </div>
     </div>
   </section>

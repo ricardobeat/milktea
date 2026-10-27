@@ -8,8 +8,8 @@
 module nanobots;
 
 fn void Model.start_exit(Model* self) {
-	// Draw from the exits *other* than the last one used, so the same
-	// effect never runs twice in a row.
+	// Deal from a shuffled deck, so every effect plays once before any
+	// repeats, and never twice in a row.
 	Exit e;
 	if (self.exit_forced) {
 		// A TAB pick runs once and then clears, so the next cycle goes back
@@ -22,18 +22,32 @@ fn void Model.start_exit(Model* self) {
 		return;
 	}
 	self.exit_previewed = false; // a random draw, so the badge dims again
-	if (self.has_last_exit) {
-		sz pick = rand() % (EXIT_COUNT - 1);
-		// Shift past the excluded value: indices at or above it move up one,
-		// which maps the 3 remaining slots onto the 4 exits with no repeat.
-		if (pick >= (sz)self.last_exit) pick++;
-		e = (Exit)pick;
-	} else {
-		e = (Exit)(rand() % EXIT_COUNT);
-	}
+	e = self.deal_exit();
 	self.last_exit = e;
 	self.has_last_exit = true;
 	self.run_exit(e);
+}
+
+// Deal the next exit from the shuffled bag, refilling it with a Fisher-Yates
+// shuffle once it runs out. A fresh deck whose first card matches the exit
+// that just ran swaps it to the back, so a reshuffle never repeats.
+fn Exit Model.deal_exit(Model* self) {
+	if (self.exit_bag_left == 0) {
+		for (sz i = 0; i < EXIT_COUNT; i++) self.exit_bag[i] = (Exit)i;
+		for (sz i = EXIT_COUNT - 1; i > 0; i--) {
+			sz j = rand() % (i + 1);
+			Exit t = self.exit_bag[i];
+			self.exit_bag[i] = self.exit_bag[j];
+			self.exit_bag[j] = t;
+		}
+		// Cards are dealt from the end, so the first one out is the last slot.
+		if (self.has_last_exit && self.exit_bag[EXIT_COUNT - 1] == self.last_exit) {
+			self.exit_bag[EXIT_COUNT - 1] = self.exit_bag[0];
+			self.exit_bag[0] = self.last_exit;
+		}
+		self.exit_bag_left = EXIT_COUNT;
+	}
+	return self.exit_bag[--self.exit_bag_left];
 }
 
 // Attach the effect that implements `e` and hand it control. Each call swaps

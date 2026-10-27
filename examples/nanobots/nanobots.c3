@@ -44,8 +44,8 @@ fn float decay(float per_tick) {
 }
 
 const sz PARTICLES_PER_WAVE = 20; // 7 rounds of 20 = 140 blocks; user-tunable
-const sz EMIT_COOLDOWN = @dur(14);   // ticks between waves — release bots fast
-const sz HOLD_DURATION = @dur(60);   // ticks the finished word stays up (~3s)
+const sz EMIT_COOLDOWN = @dur(8);    // ticks between waves — release bots fast
+const sz HOLD_DURATION = @dur(21);   // ticks the finished word stays up (~1s)
 const sz BUILD_TIMEOUT = @dur(600);  // safety net: if a straggler somehow never
                                 // settles, snap it home rather than stall
 const float PULL_MAX = 0.9f;    // ceiling on the spring force, so a thrown
@@ -193,6 +193,8 @@ struct Model {
 	bool rows_ready;
 	Exit last_exit;            // previous cycle's exit, never picked twice
 	bool has_last_exit;        // false until the first exit has run
+	Exit[EXIT_COUNT] exit_bag; // shuffled deck of exits, dealt in order
+	sz exit_bag_left;          // exits not yet dealt; 0 reshuffles
 	bool exit_forced;          // TAB queued a specific exit for the next run.
 	                           // One-shot: consumed on use, so the cycle
 	                           // after a TAB preview is random again.
