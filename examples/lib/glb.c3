@@ -56,6 +56,7 @@ struct GlbModel {
 	Texture[] textures;
 	sz width;
 	sz height;
+	sz pixel_scale;
 	sz frame;
 	Pixel[] pixels;
 	float[] depth;
@@ -307,14 +308,14 @@ fn GlbModel*? load_glb(String path) {
 				sz b2 = pos_base + (sz)i2 * pos_stride;
 
 				float v0x = (read_f32(bin, b0) - center_x) * scale;
-				float v0y = (read_f32(bin, b0 + 8) - center_z) * scale;
-				float v0z = (read_f32(bin, b0 + 4) - center_y) * scale;
+				float v0y = (read_f32(bin, b0 + 4) - center_y) * scale;
+				float v0z = (read_f32(bin, b0 + 8) - center_z) * scale;
 				float v1x = (read_f32(bin, b1) - center_x) * scale;
-				float v1y = (read_f32(bin, b1 + 8) - center_z) * scale;
-				float v1z = (read_f32(bin, b1 + 4) - center_y) * scale;
+				float v1y = (read_f32(bin, b1 + 4) - center_y) * scale;
+				float v1z = (read_f32(bin, b1 + 8) - center_z) * scale;
 				float v2x = (read_f32(bin, b2) - center_x) * scale;
-				float v2y = (read_f32(bin, b2 + 8) - center_z) * scale;
-				float v2z = (read_f32(bin, b2 + 4) - center_y) * scale;
+				float v2y = (read_f32(bin, b2 + 4) - center_y) * scale;
+				float v2z = (read_f32(bin, b2 + 8) - center_z) * scale;
 
 				float e1x = v1x - v0x; float e1y = v1y - v0y; float e1z = v1z - v0z;
 				float e2x = v2x - v0x; float e2y = v2y - v0y; float e2z = v2z - v0z;
@@ -323,7 +324,6 @@ fn GlbModel*? load_glb(String path) {
 				float nz = e1x * e2y - e1y * e2x;
 				float nl = (float)math::sqrt(nx * nx + ny * ny + nz * nz);
 				if (nl > 0.0f) { nx /= nl; ny /= nl; nz /= nl; }
-				nx = -nx; ny = -ny; nz = -nz;
 
 				char cr = (char)180; char cg = (char)180; char cb = (char)200;
 				if (mat_idx >= 0 && mat_idx < MAX_MATERIALS && mat_present[mat_idx] != 0) {
@@ -363,6 +363,7 @@ fn GlbModel*? load_glb(String path) {
 		}
 	}
 
+	model.pixel_scale = 1;
 	model.width = 80;
 	model.height = 24;
 	model.pixels = mem::new_array(Pixel, (sz)(model.width * model.height * 2));
@@ -385,8 +386,8 @@ fn void GlbModel.resize(GlbModel* self, sz w, sz h) {
 	self.height = h;
 	mem::free(self.pixels.ptr);
 	mem::free(self.depth.ptr);
-	self.pixels = mem::new_array(Pixel, (sz)(w * h * 2));
-	self.depth  = mem::new_array(float, (sz)(w * h * 2));
+	self.pixels = mem::new_array(Pixel, (sz)(w * h * 2 * self.pixel_scale * self.pixel_scale));
+	self.depth  = mem::new_array(float, (sz)(w * h * 2 * self.pixel_scale * self.pixel_scale));
 }
 
 // ── Rasterizer ───────────────────────────────────────────────────────────────
@@ -460,8 +461,8 @@ fn void GlbModel.rasterize_tri(GlbModel* self, sz w, sz ph,
 // ── 3D rendering ─────────────────────────────────────────────────────────────
 
 fn void GlbModel.render(GlbModel* self) {
-	sz w  = self.width;
-	sz h  = self.height;
+	sz w  = self.width * self.pixel_scale;
+	sz h  = self.height * self.pixel_scale;
 	sz ph = h * 2;
 	sz ptotal = (sz)(w * ph);
 
@@ -470,7 +471,7 @@ fn void GlbModel.render(GlbModel* self) {
 		self.depth[i] = 1000.0f;
 	}
 
-	float fov = 30.0f;
+	float fov = 30.0f * (float)self.pixel_scale;
 	float cx  = (float)w / 2.0f;
 	float cy  = (float)ph / 2.0f;
 

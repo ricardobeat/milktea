@@ -32,9 +32,14 @@ fn milktea::Node* glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 
 	sz w  = self.width;
 	sz h  = self.height;
-	sz ph = h * 2;
+	sz pw = w * 2;
 
-	// Combine pixel buffer into half-block cells
+	// Braille dot bits, ordered by row then column.
+	char[8] dot_bits = { 1, 8, 2, 16, 4, 32, 64, 128 };
+	char[256] gamma;
+	for (sz i = 0; i < gamma.len; i++) {
+		gamma[i] = (char)(255.0f * math::pow((float)i / 255.0f, 1.0f / 2.2f) + 0.5f);
+	}
 	xray::Cell[] cells;
 	if (self.view_cells.len != (sz)(w * h)) {
 		if (self.view_cells.ptr != null) mem::free(self.view_cells.ptr);
@@ -45,18 +50,30 @@ fn milktea::Node* glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 	for (sz i = 0; i < (sz)(w * h); i++) cells[i] = xray::empty_cell();
 	for (sz ty = 0; ty < h; ty++) {
 		for (sz tx = 0; tx < w; tx++) {
-			sz top_idx = (sz)((ty * 2) * w + tx);
-			sz bot_idx = (sz)((ty * 2 + 1) * w + tx);
-			bool top_filled = self.depth[top_idx] < 999.0f;
-			bool bot_filled = self.depth[bot_idx] < 999.0f;
-			if (!top_filled && !bot_filled) continue;
-			glb::Pixel top = self.pixels[top_idx];
-			glb::Pixel bot = self.pixels[bot_idx];
-			sz cidx = (sz)(ty * w + tx);
-			xray::Color fg_col = top_filled ? xray::color_rgb(top.r, top.g, top.b) : xray::color_rgb(0, 0, 0);
-			xray::Color bg_col = bot_filled ? xray::color_rgb(bot.r, bot.g, bot.b) : xray::color_rgb(0, 0, 0);
-			xray::Style style = xray::default_style().set_fg(fg_col).set_bg(bg_col);
-			cells[cidx] = xray::new_cell("\xe2\x96\x80", 1, style);
+			uint mask = 0;
+			uint r = 0;
+			uint g = 0;
+			uint b = 0;
+			uint count = 0;
+			for (sz dy = 0; dy < 4; dy++) {
+				for (sz dx = 0; dx < 2; dx++) {
+					sz idx = (ty * 4 + dy) * pw + tx * 2 + dx;
+					if (self.depth[idx] >= 999.0f) continue;
+					mask |= dot_bits[dy * 2 + dx];
+					glb::Pixel pixel = self.pixels[idx];
+					r += pixel.r;
+					g += pixel.g;
+					b += pixel.b;
+					count++;
+				}
+			}
+			if (count == 0) continue;
+			xray::Style style = xray::default_style()
+				.set_fg(xray::color_rgb(gamma[r / count], gamma[g / count], gamma[b / count]))
+				.set_bg(xray::color_none());
+			char[4] glyph;
+			sz len = milktea::utf8_encode(0x2800 + mask, glyph[..]);
+			cells[ty * w + tx] = xray::new_cell((String)glyph[:len], 1, style);
 		}
 	}
 
@@ -138,6 +155,27 @@ fn void App.free_model(App* self) {
 	self.model = null;
 }
 
+fn void App.fit_camera(App* self) {
+	if (self.model == null || self.height <= 0) return;
+	// Projection uses a 60-pixel focal length at two pixels per terminal row.
+	float focal_ratio = 60.0f / (0.7f * (float)self.height);
+	float distance = 0.1f;
+	float sin_pitch = (float)math::sin(self.cam_pitch);
+	float cos_pitch = (float)math::cos(self.cam_pitch);
+	foreach (tri : self.model.triangles[:self.model.triangle_count]) {
+		glb::Vec3[3] vertices = { tri.v0, tri.v1, tri.v2 };
+		foreach (v : vertices) {
+			float y = cos_pitch * v.y + sin_pitch * v.z;
+			float z = -sin_pitch * v.y + cos_pitch * v.z;
+			float required = (float)math::abs(y) * focal_ratio - z;
+			if (required > distance) distance = required;
+			if (0.1f - z > distance) distance = 0.1f - z;
+		}
+	}
+	self.cam_py = distance * sin_pitch;
+	self.cam_pz = -distance * cos_pitch;
+}
+
 fn void App.load_file(App* self, String path) {
 	self.free_model();
 	self.error_msg = "";
@@ -147,15 +185,17 @@ fn void App.load_file(App* self, String path) {
 		return;
 	}
 	self.model = result;
+	self.model.pixel_scale = 2;
 	self.model.width = self.width;
 	self.model.height = self.height;
 	self.model.resize(self.width, self.height);
 	self.model.frame = 0;
 	self.cam_px = 0.0f;
 	self.cam_py = 0.0f;
-	self.cam_pz = -20.0f;
+	self.cam_pz = -12.0f;
 	self.cam_yaw = 0.0f;
-	self.cam_pitch = 0.0f;
+	self.cam_pitch = 0.3f;
+	self.fit_camera();
 	self.model_yaw = 0.0f;
 	self.model_pitch = 0.0f;
 	self.vel_fwd = 0.0f;
@@ -192,9 +232,10 @@ fn milktea::Cmd App.init(App* self) @dynamic {
 	self.error_msg = "";
 	self.cam_px = 0.0f;
 	self.cam_py = 0.0f;
-	self.cam_pz = -20.0f;
+	self.cam_pz = -12.0f;
 	self.cam_yaw = 0.0f;
-	self.cam_pitch = 0.0f;
+	self.cam_pitch = 0.3f;
+	self.fit_camera();
 	self.model_yaw = 0.0f;
 	self.model_pitch = 0.0f;
 	self.vel_fwd = 0.0f;
@@ -215,6 +256,7 @@ fn milktea::Cmd App.update(App* self, milktea::Msg msg) @dynamic {
 		if (self.model != null) {
 			milktea::Msg resize = msg;
 			self.model.update(resize);
+			if (self.auto_rotate) self.fit_camera();
 		}
 		return null;
 	}
