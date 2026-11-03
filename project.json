@@ -171,13 +171,6 @@
       "opt": "Os",
       "strip-unused": true
     },
-    "examples/canvas": {
-      "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/canvas/**"],
-      "c-sources": ["milktea/tty_winsize.c"],
-      "opt": "Os",
-      "strip-unused": true
-    },
     "examples/vanish": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "dye/**", "examples/vanish/**"],
@@ -407,6 +400,13 @@
     "examples/spotlight": {
       "type": "executable",
       "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/spotlight/**"],
+      "c-sources": ["milktea/tty_winsize.c"],
+      "opt": "Os",
+      "strip-unused": true
+    },
+    "examples/layers": {
+      "type": "executable",
+      "sources": ["milktea/**", "glaze/**", "dye/**", "xray/**", "examples/layers/**"],
       "c-sources": ["milktea/tty_winsize.c"],
       "opt": "Os",
       "strip-unused": true

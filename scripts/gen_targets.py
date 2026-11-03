@@ -60,7 +60,7 @@ OVERRIDES = {
         "optsize": "tiny",
         "linked_libraries": ["curl"],
     },
-    "canvas": {"extra_dirs": ["xray"]},
+    "layers": {"extra_dirs": ["xray"]},
     "component-viewer": {"extra_dirs": ["boba", "xray"]},
     "modal": {"extra_dirs": ["xray"]},
     "paste": {"extra_dirs": ["boba", "xray"]},
