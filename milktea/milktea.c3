@@ -1000,14 +1000,6 @@ fn void? Program.run(Program* self) {
 			// move after the program exits.
 			disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
 			disable_bracketed_paste();
-			// Pop the key-events enhancement layer first (if it was pushed on top
-			// of the base layer), then pop the base kitty keyboard layer — restores
-			// the terminal's previous mode.
-			if (self.report_key_events) {
-				disable_kitty_key_events();
-				self.report_key_events = false;
-			}
-			disable_kitty_keyboard();
 			disable_focus();
 			show_cursor();
 			// Registered cleanups (e.g. kitty-graphics tile deletion) run while
@@ -1035,9 +1027,6 @@ fn void? Program.run(Program* self) {
 		hide_cursor();
 		enable_focus();
 		enable_bracketed_paste();
-		// Push kitty keyboard protocol flag 1 (disambiguate escape codes).
-		// Terminals that don't support it ignore the sequence — safe to push always.
-		enable_kitty_keyboard();
 
 		// Probe cell pixel size + kitty graphics support. Runs before the
 		// reader thread so it owns stdin; keystrokes typed during the probe
@@ -1097,6 +1086,14 @@ fn void? Program.run(Program* self) {
 		if (&self.model.on_destroy) self.model.on_destroy();
 	}
 	defer {
+		// Kitty keyboard stacks belong to the active screen, so pop before leaving it.
+		if (!self.test_mode) {
+			if (self.report_key_events) {
+				disable_kitty_key_events();
+				self.report_key_events = false;
+			}
+			disable_kitty_keyboard();
+		}
 		if (self.in_alt_screen) {
 			if (self.test_mode) {
 				if (self.output_buf != null) {
@@ -1116,6 +1113,8 @@ fn void? Program.run(Program* self) {
 		self.emit_sgr(SGR_ALT_ON);
 		self.in_alt_screen = true;
 	}
+
+	if (!self.test_mode) enable_kitty_keyboard();
 
 	set_mouse_mode(self.options.mouse_mode);
 	set_mouse_pixels(self.options.mouse_pixels);
