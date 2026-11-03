@@ -1,6 +1,7 @@
 module glb;
 
 import stb_json;
+import stb_image;
 import std::io;
 import std::math;
 import std::os;
@@ -24,7 +25,19 @@ struct Pixel {
 	char b;
 }
 
+struct Uv { float u; float v; }
+
+struct Texture {
+	char* data;
+	int width;
+	int height;
+	int wrap_s;
+	int wrap_t;
+}
+
 struct Triangle {
+	Uv[3] uv;
+	sz texture_index;
 	Vec3 v0;
 	Vec3 v1;
 	Vec3 v2;
@@ -40,6 +53,7 @@ const sz MAX_MATERIALS = 128;
 struct GlbModel {
 	Triangle[MAX_TRIANGLES] triangles;
 	sz triangle_count;
+	Texture[] textures;
 	sz width;
 	sz height;
 	sz frame;
@@ -124,10 +138,44 @@ fn GlbModel*? load_glb(String path) {
 	stb_json::Cursor accessors = stb_json::stbj_move_cursor_name(&root, "accessors");
 	stb_json::Cursor bvs       = stb_json::stbj_move_cursor_name(&root, "bufferViews");
 
+	GlbModel* model = mem::new(GlbModel);
+	stb_json::Cursor textures = stb_json::stbj_move_cursor_name(&root, "textures");
+	stb_json::Cursor images = stb_json::stbj_move_cursor_name(&root, "images");
+	stb_json::Cursor samplers = stb_json::stbj_move_cursor_name(&root, "samplers");
+	sz texture_count = stb_json::stbj_any_error(&textures) == 0 ? stb_json::stbj_count_values(&textures) : 0;
+	model.textures = mem::new_array(Texture, texture_count);
+	foreach (ti, &texture : model.textures) {
+		stb_json::Cursor tex = stb_json::stbj_move_cursor_index(&textures, (int)ti);
+		int source = stb_json::stbj_read_int_name(&tex, "source", -1);
+		if (source < 0) continue;
+		stb_json::Cursor image = stb_json::stbj_move_cursor_index(&images, source);
+		int bv_index = stb_json::stbj_read_int_name(&image, "bufferView", -1);
+		if (bv_index < 0) continue;
+		BufferViewInfo bv;
+		parse_bufview(&bvs, bv_index, &bv);
+		if (bv.byte_offset < 0 || bv.byte_length <= 0 || bv.byte_length > 0x7fffffff ||
+			bin_chunk_start + 8 + bv.byte_offset + bv.byte_length > data.len) continue;
+		int channels;
+		texture.data = stb_image::stbi_load_from_memory(bin + bv.byte_offset,
+			(int)bv.byte_length, &texture.width, &texture.height, &channels, 3);
+		int sampler_index = stb_json::stbj_read_int_name(&tex, "sampler", -1);
+		texture.wrap_s = 10497;
+		texture.wrap_t = 10497;
+		if (sampler_index >= 0) {
+			stb_json::Cursor sampler = stb_json::stbj_move_cursor_index(&samplers, sampler_index);
+			texture.wrap_s = stb_json::stbj_read_int_name(&sampler, "wrapS", 10497);
+			texture.wrap_t = stb_json::stbj_read_int_name(&sampler, "wrapT", 10497);
+		}
+	}
+
 	// Parse materials
+	sz[MAX_MATERIALS] mat_texture;
 	char[MAX_MATERIALS * 3] mat_color;
 	char[MAX_MATERIALS] mat_present;
-	for (sz mi = 0; mi < MAX_MATERIALS; mi++) mat_present[mi] = (char)0;
+	for (sz mi = 0; mi < MAX_MATERIALS; mi++) {
+		mat_present[mi] = (char)0;
+		mat_texture[mi] = -1;
+	}
 	stb_json::Cursor materials = stb_json::stbj_move_cursor_name(&root, "materials");
 	sz mat_count = stb_json::stbj_count_values(&materials);
 	if (mat_count > MAX_MATERIALS) mat_count = MAX_MATERIALS;
@@ -140,6 +188,11 @@ fn GlbModel*? load_glb(String path) {
 			mat_color[mi * 3 + 2] = (char)255;
 			mat_present[mi] = (char)1;
 			continue;
+		}
+		stb_json::Cursor base_tex = stb_json::stbj_move_cursor_name(&pbr, "baseColorTexture");
+		if (stb_json::stbj_any_error(&base_tex) == 0 &&
+			stb_json::stbj_read_int_name(&base_tex, "texCoord", 0) == 0) {
+			mat_texture[mi] = stb_json::stbj_read_int_name(&base_tex, "index", -1);
 		}
 		stb_json::Cursor bcf = stb_json::stbj_move_cursor_name(&pbr, "baseColorFactor");
 		if (stb_json::stbj_any_error(&bcf) != 0) {
@@ -199,7 +252,6 @@ fn GlbModel*? load_glb(String path) {
 	float scale = (max_span > 0.0f) ? (10.0f / max_span) : 1.0f;
 
 	// Second pass: load triangles
-	GlbModel* model = mem::new(GlbModel);
 	model.triangle_count = 0;
 
 	for (sz mi = 0; mi < mesh_count; mi++) {
@@ -289,7 +341,18 @@ fn GlbModel*? load_glb(String path) {
 					cb = (char)(200.0f + t * 30.0f);
 				}
 
+				Uv[3] uv;
+				sz texture_index = -1;
+				if (has_uv && mat_idx >= 0 && mat_idx < mat_count) {
+					texture_index = mat_texture[mat_idx];
+					sz[3] indices = { i0, i1, i2 };
+					foreach (vi, index : indices) {
+						uv[vi].u = read_f32(bin, uv_base + index * uv_stride);
+						uv[vi].v = read_f32(bin, uv_base + index * uv_stride + 4);
+					}
+				}
 				model.triangles[model.triangle_count++] = {
+					.uv = uv, .texture_index = texture_index,
 					.v0 = vec3(v0x, v0y, v0z),
 					.v1 = vec3(v1x, v1y, v1z),
 					.v2 = vec3(v2x, v2y, v2z),
@@ -308,6 +371,10 @@ fn GlbModel*? load_glb(String path) {
 }
 
 fn void GlbModel.free(GlbModel* self) {
+	foreach (texture : self.textures) {
+		if (texture.data != null) stb_image::stbi_image_free(texture.data);
+	}
+	mem::free(self.textures.ptr);
 	mem::free(self.pixels.ptr);
 	mem::free(self.depth.ptr);
 	mem::free(self.view_cells.ptr);
@@ -330,12 +397,14 @@ fn float edge_fn(float ax, float ay, float bx, float by, float px, float py) {
 
 fn void GlbModel.rasterize_tri(GlbModel* self, sz w, sz ph,
 		float ax, float ay, float bbx, float bby, float ccx, float ccy,
-		float depth_z, Pixel col) {
+		float[3] depths, Uv[3] uv, Texture* texture, Pixel col) {
 	float area = edge_fn(ax, ay, bbx, bby, ccx, ccy);
 	if (area == 0.0f) return;
 	if (area < 0.0f) {
 		float tx = bbx; bbx = ccx; ccx = tx;
 		float ty = bby; bby = ccy; ccy = ty;
+		float tz = depths[1]; depths[1] = depths[2]; depths[2] = tz;
+		Uv tuv = uv[1]; uv[1] = uv[2]; uv[2] = tuv;
 		area = -area;
 	}
 
@@ -364,10 +433,25 @@ fn void GlbModel.rasterize_tri(GlbModel* self, sz w, sz ph,
 			if (edge_fn(ax, ay, bbx, bby, pcx, pcy) + bias_ab < 0.0f) continue;
 			if (edge_fn(bbx, bby, ccx, ccy, pcx, pcy) + bias_bc < 0.0f) continue;
 			if (edge_fn(ccx, ccy, ax, ay, pcx, pcy) + bias_ca < 0.0f) continue;
+			float a = edge_fn(bbx, bby, ccx, ccy, pcx, pcy) / area / depths[0];
+			float b = edge_fn(ccx, ccy, ax, ay, pcx, pcy) / area / depths[1];
+			float c = edge_fn(ax, ay, bbx, bby, pcx, pcy) / area / depths[2];
+			float depth_z = 1.0f / (a + b + c);
 			sz idx = (sz)(py * w + px);
 			if (depth_z < self.depth[idx]) {
 				self.depth[idx] = depth_z;
-				self.pixels[idx] = col;
+				Pixel pixel = col;
+				if (texture != null && texture.data != null) {
+					float u = (a * uv[0].u + b * uv[1].u + c * uv[2].u) * depth_z;
+					float v = (a * uv[0].v + b * uv[1].v + c * uv[2].v) * depth_z;
+					sz x = texture_coord(u, texture.width, texture.wrap_s);
+					sz y = texture_coord(v, texture.height, texture.wrap_t);
+					sz offset = (y * texture.width + x) * 3;
+					pixel.r = (char)((uint)col.r * texture.data[offset] / 255);
+					pixel.g = (char)((uint)col.g * texture.data[offset + 1] / 255);
+					pixel.b = (char)((uint)col.b * texture.data[offset + 2] / 255);
+				}
+				self.pixels[idx] = pixel;
 			}
 		}
 	}
@@ -493,7 +577,23 @@ fn void GlbModel.render(GlbModel* self) {
 		float scx2 = (fov / cz2) * cx2 * 2.0f;
 		float scy2 = (fov / cz2) * -cy2 * 2.0f;
 
-		float avg_z = (cz0 + cz1 + cz2) / 3.0f;
-		self.rasterize_tri(w, ph, scx0 + cx, scy0 + cy, scx1 + cx, scy1 + cy, scx2 + cx, scy2 + cy, avg_z, col);
+		Texture* texture = null;
+		if (tri.texture_index >= 0 && tri.texture_index < self.textures.len) {
+			texture = &self.textures[tri.texture_index];
+		}
+		self.rasterize_tri(w, ph, scx0 + cx, scy0 + cy, scx1 + cx, scy1 + cy, scx2 + cx, scy2 + cy, { cz0, cz1, cz2 }, tri.uv, texture, col);
 	}
+}
+
+fn sz texture_coord(float value, sz size, int wrap) {
+	if (wrap == 33071) {
+		value = math::clamp(value, 0.0f, 1.0f);
+	} else if (wrap == 33648) {
+		value -= (float)math::floor(value / 2.0f) * 2.0f;
+		if (value > 1.0f) value = 2.0f - value;
+	} else {
+		value -= (float)math::floor(value);
+	}
+	sz coord = (sz)(value * (float)size);
+	return coord < size ? coord : size - 1;
 }

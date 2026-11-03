@@ -115,10 +115,11 @@ OVERRIDES = {
             "glaze/**",
             "dye/**",
             "examples/lib/glb.c3",
+            "examples/lib/stb_image.c3",
             "examples/doom-fire-donut/**",
             "examples/lib/stb_json.c3",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
     },
     "glb-viewer": {
         "sources": [
@@ -126,10 +127,11 @@ OVERRIDES = {
             "glaze/**",
             "dye/**",
             "examples/lib/glb.c3",
+            "examples/lib/stb_image.c3",
             "examples/lib/stb_json.c3",
             "examples/glb-viewer/**",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
     },
     "oiia-player": {
         "sources": [

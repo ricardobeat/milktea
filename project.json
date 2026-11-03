@@ -159,8 +159,8 @@
     },
     "examples/doom-fire-donut": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/lib/glb.c3", "examples/doom-fire-donut/**", "examples/lib/stb_json.c3"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/lib/glb.c3", "examples/lib/stb_image.c3", "examples/doom-fire-donut/**", "examples/lib/stb_json.c3"],
+      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
       "opt": "Os",
       "strip-unused": true
     },
@@ -278,8 +278,8 @@
     },
     "examples/glb-viewer": {
       "type": "executable",
-      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/lib/glb.c3", "examples/lib/stb_json.c3", "examples/glb-viewer/**"],
-      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c"],
+      "sources": ["milktea/**", "glaze/**", "dye/**", "examples/lib/glb.c3", "examples/lib/stb_image.c3", "examples/lib/stb_json.c3", "examples/glb-viewer/**"],
+      "c-sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
       "opt": "Os",
       "strip-unused": true
     },
