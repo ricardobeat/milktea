@@ -2,16 +2,9 @@
 
 A terminal UI library for [C3](https://c3-lang.org), built on the Elm Architecture. Write your app as a data model, an update function, and a view — milktea handles the event loop, rendering, and terminal management.
 
-```
-╭──────────────────────────────────────╮
-│   Counter: 3                         │
-│   Use ^/v to change, q to quit       │
-╰──────────────────────────────────────╯
-```
-
 ## Getting started
 
-Milktea is part of a small family of libraries:
+These modules provide:
 
 | Module | Role |
 |--------|------|
@@ -39,7 +32,7 @@ struct Counter {
 }
 ```
 
-Your struct is your entire application state. Keep it flat and boring — no callbacks, no shared mutable state, no surprises.
+Store application state in the model.
 
 ## init
 
@@ -83,7 +76,7 @@ Messages come in several kinds:
 
 ## view
 
-`view` turns the model into something to display. It runs after every `update`, and returns a tree of nodes; a screen built as one glaze string is a tree of one.
+`view` runs after every `update` and returns a node.
 
 ```c3
 fn milktea::Node* Counter.view(Counter* self) @dynamic {
@@ -98,9 +91,19 @@ fn milktea::Node* Counter.view(Counter* self) @dynamic {
 }
 ```
 
-## main
+A view can return any of these node types:
 
-Wire it up and run:
+| Node | Content |
+|------|---------|
+| `milktea::text(s)` | A string, styled with glaze |
+| `milktea::canvas(buf)` | The grid inside an `xray::ScreenBuffer` |
+| `milktea::grid(cells, w, h)` | A cell grid you own |
+| `milktea::vstack()`, `root()`, … | A tree of any of these |
+
+`canvas` and `grid` take an optional `milktea::ContentCursor`, relative to the
+grid's top left, to position the terminal cursor.
+
+## main
 
 ```c3
 fn int main() {
@@ -109,7 +112,7 @@ fn int main() {
 }
 ```
 
-That's the whole app. `@run` handles errors by printing to stderr and returning 1. If you need to do something after the program exits (print a message, free heap memory), write the boilerplate by hand instead.
+`@run` handles errors by printing to stderr and returning 1. If you need to do something after the program exits (print a message, free heap memory), write the boilerplate by hand instead.
 
 ---
 
@@ -176,7 +179,7 @@ glaze::Style s = {
 
 ### Joining strings
 
-Glaze knows how to stack strings that might already contain ANSI codes:
+Join strings containing ANSI codes:
 
 ```c3
 // Place b below a, aligned left
@@ -284,9 +287,14 @@ so the terminal cursor follows the layout rather than a hand-counted row.
 
 ### Inline mode
 
-A program run with `.alt_screen = true` fills the terminal with its tree.
-Without it the program runs inline: the tree is measured and claims only as
-many rows as it needs, leaving the scrollback alone.
+Set `.alt_screen = true` for a full-screen UI:
+
+```c3
+return milktea::@run(&model, { .alt_screen = true });
+```
+
+Omit it for inline output. The tree uses only as many rows as it needs,
+leaving the scrollback intact.
 
 ### Solving to rects instead
 
@@ -309,10 +317,8 @@ String doc = glaze::join_vertical(glaze::Position.LEFT,
 
 `layout::screen(w, h)` is shorthand for `xray::new_rect(0, 0, w, h)`.
 
-Use `rect.render(style, content)` to fill a solved rect; `style.render_in(rect,
-content)` is the same thing style-first. Both live in `milktea`, which is what
-keeps `glaze` and `xray` independent — `glaze` styles, `xray` measures, and
-`milktea` joins them.
+Use `rect.render(style, content)` to fill a solved rect, or
+`style.render_in(rect, content)`. Both methods live in `milktea`.
 
 Note that joining strings discards the coordinates the solver computed, so
 pieces land in argument order and cannot overlap. Reach for the tree when a
@@ -356,20 +362,18 @@ return milktea::tick(100, &produce_msg);
 
 ## Window size
 
-The runtime tracks the terminal size for you. Read it anywhere inside `init`, `update`, `view` or `on_mount`:
+Read the current terminal dimensions from `init`, `update`, `view` or `on_mount`:
 
 ```c3
 int w = milktea::screen_width();
 int h = milktea::screen_height();
 ```
 
-The size is set before your first `view` and refreshed on every resize, so there is no startup gap to guard against. Outside a running program the accessors return `80x24`. They read unsynchronized state, so call them from the main thread only.
-
-You do **not** need to store the size in your model to read it back.
+The dimensions are available before the first `view` and refreshed on every resize. Call these accessors from the main thread only. Outside a running program they return `80x24`.
 
 ### Reacting to a resize
 
-`WINDOW_SIZE` is still delivered, for models that must do work when the size *changes* — reallocate a cell grid, resize a canvas, reflow cached text:
+Handle `WINDOW_SIZE` when a resize requires work, such as reallocating a grid or reflowing cached text:
 
 ```c3
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
@@ -381,11 +385,9 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 ```
 
-If all you do in that handler is copy the size into two fields, delete it and call the accessors instead.
-
 ### Cell pixel size
 
-Some rendering needs to know how many *pixels* one character cell occupies — images are the obvious case. Milktea probes this at startup (`CSI 16 t`, with iTerm2's `ReportCellSize` as a fallback) and keeps it current on resizes:
+For image sizing, read the pixel dimensions of a character cell. Milktea probes them at startup (`CSI 16 t`, with iTerm2's `ReportCellSize` as a fallback) and updates them on resize:
 
 ```c3
 if (milktea::cell_size_known()) {
@@ -408,13 +410,16 @@ milktea::emit("\x1b_Ga=d,d=A,q=2\x1b\\"); // kitty graphics: delete all
 
 Never mix in `io::print` for escape sequences — it buffers independently and interleaves badly with frame output.
 
-Call `milktea::in_alt_screen()` to check whether the alternate screen is currently showing. For a program run with `.alt_screen = true` it is already `true` when `init()` runs, so screen-tied writes — graphics images die on a screen switch — are safe from the first frame.
+Call `milktea::in_alt_screen()` to check whether the alternate screen is active. With `.alt_screen = true`, it is active before `init()` runs. Transmit graphics after entering it, since switching screens deletes images.
 
 ---
 
 ## Images with tgp
 
-The `tgp` module wraps the [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). Register a *glyph* (an animated RGBA image, drawn procedurally or supplied as pre-rendered frames), then draw it inline in text or place it at absolute coordinates:
+The `tgp` module wraps the [kitty graphics protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/). Register a *glyph* (an animated RGBA image, drawn procedurally or supplied as pre-rendered frames), then draw it inline in text or place it at absolute coordinates.
+
+Do not copy the model after `init()`: registered glyphs retain a pointer to
+its session.
 
 ```c3
 struct Model {
@@ -443,13 +448,10 @@ fn milktea::Node* Model.view(&self) @dynamic {
 }
 ```
 
-Design notes:
+Advance the session clock with `gfx.tick()` in `update`; glyphs do not own timers.
 
-- **Capability is probed, never sniffed.** `a=q` runs during startup; on unsupported terminals `placeholder` returns the glyph's `fallback` string and `place` becomes a no-op. No `TERM_PROGRAM` branching in your code.
-- **Animation is declarative.** Glyphs do not own timers; the frame index is derived from a session clock you advance with `gfx.tick()` in `update`. Every glyph drawn in one frame agrees on the frame index, and `view` stays side-effect free.
-- **Glyphs render themselves.** A `Glyph` is bound to the session that registered it (registration captures the session pointer), so `spinner.render()` and `spinner.place(col, row)` need no session at the call site. The flip side of that borrow: don't copy the model after `init()` — milktea models are used via pointer, so this holds naturally.
-- **Transmission is lazy.** Frames are sent on the first `tick`/`placeholder`/`place` after the alt screen is active — ordering against `1049h` is handled for you.
-- **Cleanup is automatic.** Image ids are unique per run, and a blanket delete runs on normal teardown *and* fatal signals, so tiles never outlive the app.
+On unsupported terminals, `placeholder` returns the glyph's fallback string and
+`place` does nothing. Images are deleted on normal teardown and fatal signals.
 
 Terminal support: placements work in kitty, WezTerm, Ghostty, Konsole, iTerm2 and Warp; everything else (foot, GNOME Terminal, Windows Terminal, tmux, alacritty) shows the fallback character. Cell pixel size answers on kitty, Ghostty, WezTerm, foot, Konsole, mintty, Windows Terminal and xterm; tmux answers approximately from its own geometry.
 
@@ -482,7 +484,7 @@ if (msg.kind == milktea::MsgKind.MOUSE) {
 
 ## Paste support
 
-Bracketed paste mode (terminal mode 2004) is enabled automatically when your program starts. When the user pastes text, the terminal wraps it in `ESC[200~` … `ESC[201~` markers. milktea accumulates the raw bytes and delivers them as a single `MsgKind.PASTE` message — no matter how many characters, and regardless of embedded escape sequences.
+Pasted text arrives as a single `MsgKind.PASTE` message, including any embedded escape sequences. `msg.paste` is valid only during the current `update` call; copy it to keep it. Bracketed paste mode is enabled automatically.
 
 ```c3
 if (msg.kind == milktea::MsgKind.PASTE) {
@@ -504,33 +506,10 @@ case milktea::MsgKind.PASTE:
 
 ## Keyboard protocol
 
-milktea automatically pushes the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/) (progressive enhancement flag 1, "disambiguate escape codes") when your program starts, and pops it on exit. On supporting terminals (kitty, ghostty, WezTerm, and others) this disambiguates previously-ambiguous key sequences — most notably, a bare `ESC` keypress arrives instantly as a distinct event instead of being held for 50ms to rule out an escape sequence. All other terminals silently ignore the push/pop sequences, so the protocol degrades gracefully with no capability query needed.
+On terminals supporting the [kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/), a bare Escape keypress arrives immediately as a distinct event. Other terminals use legacy escape-sequence parsing, which waits 50ms to distinguish Escape from the start of a sequence.
 
----
-
-## What view returns
-
-`view` returns a node. Whether it lands on the alternate screen is a program
-option, not a property of the view.
-
-| Node | Content |
-|----------|---------|
-| `milktea::text(s)` | A string, styled with glaze |
-| `milktea::canvas(buf)` | The grid inside an `xray::ScreenBuffer` |
-| `milktea::grid(cells, w, h)` | A cell grid you own |
-| `milktea::vstack()`, `root()`, … | A tree of any of these |
-
-`canvas` and `grid` take an optional `milktea::ContentCursor`, relative to the
-grid's top left, for where the terminal cursor goes.
-
-Run full-screen by passing the option to `@run`:
-
-```c3
-return milktea::@run(&model, { .alt_screen = true });
-```
-
-Most real apps want that. Leave it off for one-shot tools that should print
-inline and leave the scrollback intact.
+milktea enables the protocol's disambiguation flag at startup and restores the
+previous mode on exit.
 
 ---
 
