@@ -37,11 +37,11 @@ fn milktea::Node* Counter.view(Counter* self) @dynamic {
 	String label   = string::tformat("Counter: %d", self.value);
 	String hint    = "\nUse ↑↓ to change, q to quit";
 	String content = string::tformat("%s%s", label, hint);
-	return milktea::text(box.render(content));
+	return milktea::root().add(milktea::text(box.render(content)).center());
 }
 
 fn int main() {
 	Counter c = { };
-	milktea::@run(&c);
+	milktea::@run(&c, { .alt_screen = true });
 	return 0;
 }
