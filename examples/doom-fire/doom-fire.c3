@@ -126,7 +126,8 @@ fn void spread_pixel(FireModel* m, sz idx) {
 fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
 		sz new_w = msg.window_size.width;
-		sz new_h = msg.window_size.height * 2;
+		// Keep the heat source four rows below the viewport so the flames sit lower.
+		sz new_h = (msg.window_size.height + 4) * 2;
 		if (new_w > MAX_W) new_w = MAX_W;
 		if (new_h > MAX_H) new_h = MAX_H;
 		self.width = new_w;
@@ -191,7 +192,9 @@ fn milktea::Node* FireModel.view(FireModel* self) @dynamic {
 		}
 	}
 
-	return milktea::grid(self.view_cells, view_w, view_h);
+	sz y = milktea::screen_height() - view_h;
+	if (y < 0) y = 0;
+	return milktea::root().add(milktea::grid(self.view_cells, view_w, view_h).at(0, y));
 }
 
 fn int main() {
