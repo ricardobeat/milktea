@@ -291,12 +291,11 @@ fn void Minecraft.add_block(Minecraft* self, sz x, sz y, sz z, char r, char g, c
 fn milktea::Cmd Minecraft.init(Minecraft* self) @dynamic {
 	self.width = 80;
 	self.height = 24;
-	self.cam_x = 0;
+	self.cam_x = -3;
+	self.cam_z = -15;
 	// Eye is 1.6 above feet; feet start at terrain surface top + 0.5,
 	// then spawn slightly higher so gravity settles the player naturally.
-	// Use (0, -12) to match the actual spawn column (cam_x=0, cam_z=-12).
-	self.cam_y = (float)(terrain_height(0, -12)) + 0.5f + 1.6f + 0.5f;
-	self.cam_z = -12;
+	self.cam_y = (float)(terrain_height(-3, -15)) + 0.5f + 1.6f + 0.5f;
 	self.yaw = 0;
 	self.pitch = 0;
 	self.vel_x = 0;
@@ -579,9 +578,9 @@ fn milktea::Cmd Minecraft.update(Minecraft* self, milktea::Msg msg) @dynamic {
 			// Death plane: falling below the world respawns the player at the
 			// fixed spawn point (full position reset, not just height).
 			if (self.cam_y < -20.0f) {
-				self.cam_x = 0;
-				self.cam_z = -12;
-				self.cam_y = (float)(terrain_height(0, -12)) + 0.5f + 1.6f + 0.5f;
+				self.cam_x = -3;
+				self.cam_z = -15;
+				self.cam_y = (float)(terrain_height(-3, -15)) + 0.5f + 1.6f + 0.5f;
 				self.vel_x = 0.0f;
 				self.vel_y = 0.0f;
 				self.vel_z = 0.0f;
