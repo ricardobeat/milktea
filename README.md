@@ -2,6 +2,8 @@
 
 A terminal UI library for [C3](https://c3-lang.org), built on the Elm Architecture. Write your app as a data model, an update function, and a view — milktea handles the event loop, rendering, and terminal management.
 
+https://github.com/user-attachments/assets/e5172168-f86b-45c9-bc93-a06d6992c308
+
 ## Getting started
 
 These modules provide:
