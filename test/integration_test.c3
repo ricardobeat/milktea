@@ -17,10 +17,6 @@ struct TestModel {
 	bool destroyed;
 }
 
-fn milktea::Cmd TestModel.init(TestModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd TestModel.update(TestModel* self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
 		case milktea::MsgKind.WINDOW_SIZE:
@@ -144,10 +140,6 @@ fn void test_send_quit() @test {
 struct SizeTrackerModel {
 	sz last_w;
 	sz last_h;
-}
-
-fn milktea::Cmd SizeTrackerModel.init(SizeTrackerModel* self) @dynamic {
-	return null;
 }
 
 fn milktea::Cmd SizeTrackerModel.update(SizeTrackerModel* self, milktea::Msg msg) @dynamic {
@@ -351,10 +343,6 @@ struct NeverQuitsModel {
 	sz updates;
 }
 
-fn milktea::Cmd NeverQuitsModel.init(NeverQuitsModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd NeverQuitsModel.update(NeverQuitsModel* self, milktea::Msg msg) @dynamic {
 	self.updates++;
 	return null;
@@ -395,10 +383,6 @@ struct NegativeOverlayModel {
 	sz frames;
 }
 
-fn milktea::Cmd NegativeOverlayModel.init(NegativeOverlayModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd NegativeOverlayModel.update(NegativeOverlayModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.KEY) return milktea::quit();
 	return null;
@@ -433,10 +417,6 @@ fn void test_overlay_with_negative_origin_is_clipped() @test {
 // the sender threads below are still hammering send().
 struct SendRaceModel {
 	sz updates;
-}
-
-fn milktea::Cmd SendRaceModel.init(SendRaceModel* self) @dynamic {
-	return null;
 }
 
 fn milktea::Cmd SendRaceModel.update(SendRaceModel* self, milktea::Msg msg) @dynamic {
@@ -498,10 +478,6 @@ struct ScreenSizeModel {
 	sz h_in_update;
 	sz w_in_view;
 	sz h_in_view;
-}
-
-fn milktea::Cmd ScreenSizeModel.init(ScreenSizeModel* self) @dynamic {
-	return null;
 }
 
 fn milktea::Cmd ScreenSizeModel.update(ScreenSizeModel* self, milktea::Msg msg) @dynamic {

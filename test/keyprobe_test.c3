@@ -12,10 +12,6 @@ struct KeyProbeModel {
 	bool quit_seen;
 }
 
-fn milktea::Cmd KeyProbeModel.init(KeyProbeModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd KeyProbeModel.update(KeyProbeModel* self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
 		case milktea::MsgKind.KEY:
@@ -146,10 +142,6 @@ fn void test_esc_bracket_a_delivers_single_up() @test {
 struct DispatchProbeModel {
 	sz[16] msg_kinds;
 	sz msg_count;
-}
-
-fn milktea::Cmd DispatchProbeModel.init(DispatchProbeModel* self) @dynamic {
-	return null;
 }
 
 fn milktea::Cmd DispatchProbeModel.update(DispatchProbeModel* self, milktea::Msg msg) @dynamic {

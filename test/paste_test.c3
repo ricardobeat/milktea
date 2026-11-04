@@ -16,10 +16,6 @@ struct PasteProbeModel {
 	sz last_paste_len;
 }
 
-fn milktea::Cmd PasteProbeModel.init(PasteProbeModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd PasteProbeModel.update(PasteProbeModel* self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
 		case milktea::MsgKind.PASTE:
@@ -180,10 +176,6 @@ struct PasteThenKeyModel {
 	sz key_count;
 	char[64] last_paste_buf;
 	sz last_paste_len;
-}
-
-fn milktea::Cmd PasteThenKeyModel.init(PasteThenKeyModel* self) @dynamic {
-	return null;
 }
 
 fn milktea::Cmd PasteThenKeyModel.update(PasteThenKeyModel* self, milktea::Msg msg) @dynamic {
