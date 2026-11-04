@@ -3,6 +3,8 @@ module boba_test @test;
 import boba;
 import milktea;
 import xray;
+import std::core::dstring;
+import std::core::string;
 import glaze;
 
 // ============================================================
@@ -229,9 +231,153 @@ fn void test_viewport_selection_uses_display_columns() @test {
 }
 
 // ============================================================
-// Toast
+// Textarea — press mapping
 // ============================================================
+//
+// The three tests below each build their own textarea — three lines with the
+// middle one wider than the content area, so it wraps — because everything in
+// a @test module has to be a test function itself.
 
+fn void test_textarea_press_counts_wrapped_rows() @test {
+	// The view draws a line wider than the content area across several rows,
+	// so a press names a row rather than a line: reading the row as a line
+	// number put the caret on whichever line happened to be that far down.
+	DString body = dstring::temp();
+	body.append_string("first\n");
+	for (sz i = 0; i < 120; i++) body.append_char('A');
+	body.append_string("\nthird");
+	boba::Textarea ta = boba::new_textarea(40, 10);
+	ta.handle_paste(body.str_view());
+	ta.width = 40;
+	ta.height = 10;
+	ta.scroll_offset = 0;
+
+	sz content_w = 40 - ta.text_offset();
+	assert(content_w == 37);
+
+	// Line 1 is one row, so rows 1..4 are line 2's four chunks: row 2 is its
+	// second chunk, and a column inside it counts from where that chunk starts.
+	sz row = -1;
+	sz col = -1;
+	ta.text_pos_at(2, 10, &row, &col);
+	assert(row == 1);
+	assert(col == content_w + (10 - ta.text_offset()));
+
+	// The chunk after the last one is the next line.
+	ta.text_pos_at(5, 5, &row, &col);
+	assert(row == 2);
+	assert(col == 5 - ta.text_offset());
+
+	// A press past the end of the text belongs at the end of the buffer.
+	ta.text_pos_at(9, 3, &row, &col);
+	assert(row == 2);
+	assert(col == 5);
+}
+
+fn void test_textarea_press_reads_from_the_scrolled_top() @test {
+	// The render starts at scroll_offset, so screen row 0 is that line — not
+	// line 0, which is where a press used to land.
+	DString body = dstring::temp();
+	body.append_string("first\nsecond\nthird");
+	boba::Textarea ta = boba::new_textarea(40, 10);
+	ta.handle_paste(body.str_view());
+	ta.width = 40;
+	ta.height = 10;
+	ta.scroll_offset = 2;
+
+	sz row = -1;
+	sz col = -1;
+	ta.text_pos_at(0, 5, &row, &col);
+	assert(row == 2);
+	assert(col == 5 - ta.text_offset());
+}
+
+fn void test_textarea_set_cursor_leaves_an_onscreen_view_alone() @test {
+	// A press always lands inside the view, so resolving one to a caret must
+	// not scroll. The rule this replaced compared line numbers against the
+	// view height, which jumps once wrapping puts fewer lines on screen.
+	DString body = dstring::temp();
+	for (sz i = 1; i <= 25; i++) body.append_string(string::tformat("line %d\n", i));
+	boba::Textarea ta = boba::new_textarea(40, 10);
+	ta.handle_paste(body.str_view());
+	ta.width = 40;
+	ta.height = 10;
+	ta.scroll_offset = 5;
+
+	ta.set_cursor(8, 0);
+	assert(ta.cursor_row == 8);
+	assert(ta.scroll_offset == 5);
+
+	// A caret that is genuinely off the bottom still comes into view.
+	ta.set_cursor(24, 0);
+	assert(ta.cursor_row == 24);
+	assert(ta.scroll_offset == 24);
+}
+
+fn void test_textarea_cursor_sits_on_the_wrapped_chunk() @test {
+	// The terminal cursor is placed from the same row count the grid uses, so
+	// a wrapped line above the caret has to move it down with the text.
+	DString body = dstring::temp();
+	body.append_string("first\n");
+	for (sz i = 0; i < 120; i++) body.append_char('A');
+	body.append_string("\nthird");
+	boba::Textarea ta = boba::new_textarea(40, 10);
+	ta.handle_paste(body.str_view());
+	ta.width = 40;
+	ta.height = 10;
+	ta.scroll_offset = 0;
+	ta.focused = true;
+	ta.set_cursor(1, 40);
+
+	sz content_w = 40 - ta.text_offset();
+	xray::ContentCursor c = ta.cursor(xray::new_rect(0, 0, 40, 10));
+	assert(c.has_cursor);
+	assert(c.y == 2); // line 1's second chunk
+	assert(c.x == ta.text_offset() + 40 % content_w);
+}
+
+fn void test_textarea_caret_visual_pos_clamps_to_the_last_chunk() @test {
+	// A caret one whole chunk wide belongs at the end of the line it is on,
+	// not on the row after it, which that line does not have. The render puts
+	// it on the last chunk; the row count has to agree or the cursor and the
+	// view disagree by a row.
+	boba::Textarea ta = boba::new_textarea(40, 10);
+	DString body = dstring::temp();
+	for (sz i = 0; i < 37; i++) body.append_char('A');
+	body.append_string("\nbb");
+	ta.handle_paste(body.str_view());
+	ta.width = 40;
+	ta.height = 10;
+	ta.scroll_offset = 0;
+
+	sz content_w = 40 - ta.text_offset();
+	assert(content_w == 37);
+	ta.set_cursor(0, content_w);
+
+	sz row = -1;
+	sz col = -1;
+	ta.caret_visual_pos(&row, &col);
+	assert(row == 0);
+	assert(col == content_w);
+}
+
+fn void test_textarea_draws_highlight_spans() @test {
+	boba::Textarea t = boba::new_textarea(20, 3);
+	t.show_line_numbers = false;
+	t.focused_style = {};
+	t.blurred_style = {};
+	foreach (c : "fn main\nx fn") t.insert(c);
+	boba::HighlightSpan[2] spans = {
+		{ .start = 0, .len = 2, .style = { .bold = true } },
+		{ .start = 10, .len = 2, .style = { .italic = true } },
+	};
+	t.highlights = spans[..];
+	String v = t.view();
+	assert(v.starts_with("\x1b[1mfn\x1b[0m main\n"), "first span bold, the rest plain");
+	assert(v.ends_with("x \x1b[3mfn\x1b[0m"), "a span on the second line lands on its bytes");
+}
+
+// Toast
 fn void test_hidden_toast_has_no_node() @test {
 	boba::Toast t = boba::new_toast();
 	assert(t.node() == null);

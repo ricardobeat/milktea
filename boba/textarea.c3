@@ -4,6 +4,7 @@ import milktea;
 import xray;
 import glaze;
 import std::core::dstring;
+import std::core::mem;
 
 // Textarea is a multi-line text input component.
 struct Textarea (xray::Content) {
@@ -33,7 +34,36 @@ struct Textarea (xray::Content) {
 	glaze::Style placeholder_style;
 	glaze::Style line_number_style;
 	glaze::Style prompt_style;
+	// Press callback, fired when a mouse press lands inside the textarea's
+	// rect. The callback receives the cell row/col (already adjusted for the
+	// gutter, prompt, and scroll — i.e. text coordinates, not screen), and
+	// is the hook the app uses to focus the editor and move the caret. ctx
+	// is whatever the app registered; the textarea stores the address, and
+	// the owning component outlasts the node tree.
+	TextareaPressFn on_press_fn;
+	void* on_press_ctx;
+	// Byte ranges of the text drawn in their own style over the field's —
+	// syntax highlighting, search matches. Sorted by start and not
+	// overlapping; the owner keeps the slice alive and in step with the text.
+	HighlightSpan[] highlights;
 }
+
+// HighlightSpan styles len bytes of the text from start. Its foreground and
+// bold/italic/underline go over the field's own style; the background stays
+// the field's, so a highlight never punches a hole in the editor.
+struct HighlightSpan {
+	sz start;
+	sz len;
+	glaze::Style style;
+}
+
+// TextareaPressFn fires when a mouse press lands inside the textarea. row
+// and col are the position in the textarea's own coordinates — the space
+// set_cursor takes, already past the gutter and prompt and with the wrap and
+// the scroll resolved — so the callback can hand them straight back to
+// set_cursor without knowing how the text is laid out. id is the per-call
+// ctx the app registered through on_press.
+alias TextareaPressFn = fn void(void* id, sz row, sz col);
 
 // new_textarea creates a textarea with the given dimensions.
 fn Textarea new_textarea(sz width, sz height) {
@@ -90,6 +120,168 @@ fn void Textarea.clear(&self) {
 	self.cursor_pos = 0;
 	self.cursor_row = 0;
 	self.cursor_col = 0;
+}
+
+// set_cursor places the caret at the given text-coordinate row/col. row and
+// col are in the same space the textarea paints — col 0 is the first cell of
+// the line, not counting the gutter or prompt — and out-of-range values are
+// clamped to the buffer. The textarea updates scroll_offset so the new
+// caret position is visible.
+//
+// This is the hook a click handler uses to move the caret without driving
+// the keyboard path: a press inside the editor reports (row, col) text
+// coordinates (already adjusted for the gutter, prompt and scroll) and the
+// app forwards them straight to set_cursor.
+fn void Textarea.set_cursor(&self, sz row, sz col) {
+	if (self.len == 0) {
+		self.cursor_pos = 0;
+		self.cursor_row = 0;
+		self.cursor_col = 0;
+		return;
+	}
+	sz lc = self.line_count();
+	if (row < 0) row = 0;
+	if (row >= lc) row = lc - 1;
+	// Find the byte position at the start of row-th line and walk forward
+	// by `col` cells (not bytes — multi-byte runes are skipped whole).
+	sz pos = 0;
+	sz r = 0;
+	while (r < row && pos < self.len) {
+		if (self.buf[pos] == '\n') r++;
+		pos++;
+	}
+	// pos now points at the first byte of row `row`. Walk forward by col
+	// runes, stopping at the newline or buffer end.
+	sz walked = 0;
+	while (walked < col && pos < self.len && self.buf[pos] != '\n') {
+		sz next = utf8_next_boundary(self.buf[:self.len], pos);
+		if (next <= pos) break;
+		pos = next;
+		walked++;
+	}
+	self.cursor_pos = pos;
+	self.cursor_row = row;
+	self.cursor_col = walked;
+	self.scroll_to_caret();
+}
+
+// rows_for is how many rows the view spends on a line of len bytes. A line
+// wider than the content area is wrapped, so this is the count of chunks the
+// render draws — at least one, since even an empty line is a row.
+fn sz rows_for(sz len, sz width) @local {
+	if (len <= 0) return 1;
+	return (sz)((len + (sz)width - 1) / (sz)width);
+}
+
+// caret_visual_pos gives the caret's row from the top of the view and its
+// column inside the chunk it sits in — the two numbers the drawn cursor and
+// the scroll check both need, and both counted the way the render counts
+// them: a wrapped line above the caret adds rows to that distance, so
+// counting lines instead draws the cursor over a line that merely happens to
+// be that far down, and scrolls for a caret that was on screen all along.
+//
+// The chunk is clamped to the caret line's own last one, so a caret at a
+// column that is a whole number of chunks wide sits at the end of the text
+// rather than on a row the line does not have.
+fn void Textarea.caret_visual_pos(&self, sz* out_row, sz* out_col) {
+	sz width = self.width - self.text_offset();
+	if (width < 1) width = 1;
+
+	sz rows = 0;
+	sz pos = 0;
+	for (sz r = 0; r < self.cursor_row && pos < self.len; r++) {
+		sz line_end = pos;
+		while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
+		if (r >= self.scroll_offset) rows += rows_for(line_end - pos, width);
+		pos = line_end < self.len ? line_end + 1 : line_end;
+	}
+
+	// pos is the start of the caret's own line now.
+	sz line_end = pos;
+	while (line_end < self.len && self.buf[line_end] != '\n') line_end++;
+	sz chunks = rows_for(line_end - pos, width);
+	sz chunk = self.cursor_col / width;
+	if (chunk > chunks - 1) chunk = chunks - 1;
+	if (chunk < 0) chunk = 0;
+
+	*out_row = rows + chunk;
+	*out_col = self.cursor_col - chunk * width;
+}
+
+// scroll_to_caret brings the caret back into the view after set_cursor moved
+// it. A click lands inside the view by definition, so it never moves for one;
+// a position placed from elsewhere ends up on the view's first row.
+fn void Textarea.scroll_to_caret(&self) {
+	if (self.cursor_row < self.scroll_offset) {
+		self.scroll_offset = self.cursor_row;
+		return;
+	}
+	sz vis = self.height;
+	if (vis < 1) vis = 1;
+	sz row;
+	sz col;
+	self.caret_visual_pos(&row, &col);
+	if (row >= vis) self.scroll_offset = self.cursor_row;
+	if (self.scroll_offset < 0) self.scroll_offset = 0;
+}
+
+// text_pos_at converts a press at (row, col) in the component's own cells —
+// the space xray reports a click in — into the (row, col) set_cursor takes.
+//
+// The two only agree while the view sits at the top of the buffer and no line
+// wraps. The render starts at scroll_offset and breaks a line wider than the
+// content area into several rows, so a screen row is neither a line number
+// nor a fixed distance from one: counting rows through the same wrap the
+// render walks is what puts the caret on the row the click named, and the
+// column is then counted only inside the chunk it landed in.
+//
+// A press past the end of the text answers with the end of the buffer, which
+// is where a click under the last line belongs.
+fn void Textarea.text_pos_at(&self, sz row, sz col, sz* out_row, sz* out_col) {
+	if (row < 0) row = 0;
+	sz width = self.width - self.text_offset();
+	if (width < 1) width = 1;
+
+	sz lc = self.line_count();
+	sz first = self.scroll_offset;
+	if (first < 0) first = 0;
+	if (first >= lc) first = lc - 1;
+
+	// Walk to the line the view draws first; rows are counted from there,
+	// since that line is row 0 on screen.
+	sz pos = 0;
+	for (sz r = 0; r < first && pos < self.len; r++) {
+		while (pos < self.len && self.buf[pos] != '\n') pos++;
+		if (pos < self.len) pos++;
+	}
+
+	sz visual = 0;
+	sz last_row = first;
+	sz last_col = 0;
+	for (sz r = first; r < lc; r++) {
+		sz line_start = pos;
+		while (pos < self.len && self.buf[pos] != '\n') pos++;
+		sz line_len = pos - line_start;
+		last_row = r;
+		last_col = (sz)line_len;
+		sz chunks = rows_for(line_len, width);
+		if (row < visual + chunks) {
+			sz chunk_start = (sz)(row - visual) * (sz)width;
+			if (chunk_start > line_len) chunk_start = line_len;
+			sz text_col = (sz)chunk_start + (col - self.text_offset());
+			if (text_col < (sz)chunk_start) text_col = (sz)chunk_start;
+			sz chunk_end = chunk_start + (sz)width;
+			if (chunk_end > line_len) chunk_end = line_len;
+			if (text_col > (sz)chunk_end) text_col = (sz)chunk_end;
+			*out_row = r;
+			*out_col = text_col;
+			return;
+		}
+		visual += chunks;
+		pos = pos < self.len ? pos + 1 : pos;
+	}
+	*out_row = last_row;
+	*out_col = last_col;
 }
 
 // insert inserts a character at the cursor position.
@@ -355,6 +547,48 @@ fn sz Textarea.text_offset(&self) {
 	return (gutter > 0 ? gutter + 1 : 0) + (sz)self.prompt.len;
 }
 
+// blank_span returns a run of spaces, for padding a styled run out to a
+// fixed width.
+fn String blank_span(sz width) @local {
+	DString out = dstring::temp_with_capacity(width);
+	for (sz i = 0; i < width; i++) out.append_char(' ');
+	return out.str_view();
+}
+
+// append_text renders text, which starts at byte `at` of the buffer, in
+// base, switching to each highlight span's colors where one covers it.
+fn void Textarea.append_text(&self, DString* out, glaze::Style base, sz at, String text) {
+	if (self.highlights.len == 0) {
+		out.append_string(base.render(text));
+		return;
+	}
+	sz i = 0;
+	while (i < text.len) {
+		sz pos = at + i;
+		// The last span starting at or before pos, by binary search.
+		sz lo = 0;
+		sz hi = self.highlights.len;
+		while (lo < hi) {
+			sz mid = (lo + hi) / 2;
+			if (self.highlights[mid].start <= pos) { lo = mid + 1; } else { hi = mid; }
+		}
+		glaze::Style s = base;
+		sz end = at + text.len;
+		if (lo > 0 && pos < self.highlights[lo - 1].start + self.highlights[lo - 1].len) {
+			HighlightSpan* h = &self.highlights[lo - 1];
+			if (h.style.fg.kind != glaze::ColorKind.NONE) s.fg = h.style.fg;
+			s.bold = s.bold || h.style.bold;
+			s.italic = s.italic || h.style.italic;
+			s.underline = s.underline || h.style.underline;
+			if (h.start + h.len < end) end = h.start + h.len;
+		} else if (lo < self.highlights.len && self.highlights[lo].start < end) {
+			end = self.highlights[lo].start;
+		}
+		out.append_string(s.render(text[i:end - pos]));
+		i = end - at;
+	}
+}
+
 fn String Textarea.view(&self) {
 	DString out = dstring::temp();
 	sz lc      = self.line_count();
@@ -461,8 +695,10 @@ fn String Textarea.view(&self) {
 					String num = string::tformat(string::tformat("%%%dd ", gutter_width), r + 1);
 					out.append_string(self.line_number_style.render(num));
 				} else {
-					// Continuation line: blank gutter of same width
-					for (sz g = 0; g < gutter_visual; g++) out.append_char(' ');
+					// Continuation row: the gutter is blank, but it still has to carry
+					// the gutter style. Unstyled spaces would drop whatever background
+					// the gutter shares with the text and punch a hole in the line.
+					out.append_string(self.line_number_style.render(blank_span(gutter_visual)));
 				}
 			}
 
@@ -470,8 +706,9 @@ fn String Textarea.view(&self) {
 			if (chunk_idx == 0 && self.prompt.len > 0) {
 				out.append_string(self.prompt_style.render(self.prompt));
 			} else if (chunk_idx > 0 && self.prompt.len > 0) {
-				// Blank prompt space on continuation lines
-				for (sz p = 0; p < prompt_visual; p++) out.append_char(' ');
+				// Blank prompt space on continuation lines, styled for the same
+				// reason as the blank gutter above.
+				out.append_string(self.prompt_style.render(blank_span(prompt_visual)));
 			}
 
 			String chunk_text = line_text[chunk_start:chunk_end - chunk_start];
@@ -492,7 +729,7 @@ fn String Textarea.view(&self) {
 				// before-cursor segment
 				if (chunk_cursor_col > 0) {
 					sz blen = chunk_cursor_col < chunk_len ? chunk_cursor_col : chunk_len;
-					out.append_string(content_style.render(chunk_text[:blen]));
+					self.append_text(&out, content_style, line_start + chunk_start, chunk_text[:blen]);
 				}
 				// cursor character or space if at end
 				if (chunk_cursor_col < chunk_len) {
@@ -500,14 +737,15 @@ fn String Textarea.view(&self) {
 					out.append_string(self.cursor_style.render(((ZString)&ch_buf).str_view()));
 					// after-cursor segment
 					if (chunk_cursor_col + 1 < chunk_len) {
-						out.append_string(content_style.render(chunk_text[chunk_cursor_col + 1:chunk_len - chunk_cursor_col - 1]));
+						self.append_text(&out, content_style, line_start + chunk_start + chunk_cursor_col + 1,
+							chunk_text[chunk_cursor_col + 1:chunk_len - chunk_cursor_col - 1]);
 					}
 				} else {
 					// Cursor past end of chunk text — highlighted space
 					out.append_string(self.cursor_style.render(" "));
 				}
 			} else {
-				out.append_string(content_style.render(chunk_text));
+				self.append_text(&out, content_style, line_start + chunk_start, chunk_text);
 			}
 
 			out.append_char('\n');
@@ -544,13 +782,59 @@ fn sz Textarea.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 	if (!self.focused) return {};
-	// scroll_offset is the first visible line, so the caret's row on screen is
-	// its distance from there; text_offset() is the gutter and prompt drawn
-	// before the text itself.
+	// The caret's row on screen is its visual row within the view, and its
+	// column is its place inside the chunk it is in, past the gutter and
+	// prompt the text is drawn after — see caret_visual_pos.
+	sz row;
+	sz col;
+	self.caret_visual_pos(&row, &col);
 	return milktea::place_cursor(r,
-		self.text_offset() + self.cursor_col,
-		self.cursor_row - self.scroll_offset,
+		self.text_offset() + col,
+		row,
 		self.caret);
 }
 
-fn xray::Node* Textarea.node(&self) => xray::content_node(self);
+fn xray::Node* Textarea.node(&self) {
+	xray::Node* n = xray::content_node(self);
+	if (self.on_press_fn != null) {
+		PressCtx* pc = mem::tnew(PressCtx);
+		pc.t = self;
+		n.id_with(pc).on_click(&textarea_press);
+	}
+	return n;
+}
+
+// on_press registers a handler that fires when a mouse press lands inside
+// the textarea's rect. The textarea takes care of converting the press cell
+// into a (row, col) pair in text coordinates — adjusted for the gutter, the
+// prompt and the scroll offset — so the app can move the caret directly
+// without any layout math.
+//
+// ctx is the value the callback receives as its first parameter; typically
+// &self of the owning editor. The textarea keeps the address, and since the
+// textarea itself outlives the per-frame node tree, the pointer stays valid.
+fn void Textarea.on_press(&self, TextareaPressFn cb, void* ctx) {
+	self.on_press_fn = cb;
+	self.on_press_ctx = ctx;
+}
+
+// textarea_press is the bridge between xray's click system (which reports
+// rect-relative cell positions) and the textarea's own coordinate system.
+// The id pointer the framework forwards carries a fresh PressCtx on tmem
+// that holds &self; the static handler does the cast and the conversion.
+struct PressCtx { Textarea* t; }
+
+fn void textarea_press(void* id, String id_str, sz col, sz row) @local {
+	PressCtx* pc = (PressCtx*)id;
+	Textarea* t = pc.t;
+	if (t.on_press_fn == null) return;
+	// col / row arrive rect-local (the framework subtracts rect.x / rect.y
+	// for us) but still in screen cells. The textarea turns them into the
+	// text position the caret belongs at — see text_pos_at — so the app can
+	// hand them straight to set_cursor without knowing how the view wraps or
+	// where it is scrolled to.
+	sz text_row;
+	sz text_col;
+	t.text_pos_at(row, col, &text_row, &text_col);
+	t.on_press_fn(t.on_press_ctx, text_row, text_col);
+}
