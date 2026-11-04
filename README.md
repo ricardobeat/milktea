@@ -584,6 +584,35 @@ c3c run
 
 ---
 
+## Running in a window
+
+The same model runs in a native window instead of a terminal through
+`milktea_gui` (macOS for now). It draws on the GPU: text from the system's
+font rasteriser, and decorations (fills, gradients, borders, shadows) worked
+out per pixel. List it next to milktea:
+
+```json
+"dependency-search-paths": ["path/to/milktea/lib"],
+"dependencies": ["milktea", "milktea_gui"]
+```
+
+and call it from `main` in place of `milktea::@run`:
+
+```c3
+milktea_gui::run(&model, {
+    .title = "my app",
+    .cols = 80, .rows = 24,
+    .cell_w = 10, .cell_h = 19, .font_size = 17,
+});
+```
+
+`MILKTEA_FONT` picks the font (a file or a font name). `MILKTEA_GUI_SHOT=out.png`
+draws one frame offscreen, with no window, and writes it out, which is how
+`examples/dos-app-gui` and `scripts/gui-paint-test` are checked. See
+`gui/gui.c3` for the rest of `GuiOptions`.
+
+---
+
 ## Testing
 
 All tests live in `test/` — unit and integration tests plus snapshot tests for each module. Run them with:

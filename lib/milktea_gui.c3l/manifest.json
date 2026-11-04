@@ -1,0 +1,10 @@
+{
+	"provides": "milktea_gui",
+	"sources": ["../../gui/**"],
+	"c-sources": ["../../gui/backend.m", "../../gui/platform_macos.m"],
+	"c-include-dirs": ["../../vendor/sokol"],
+	"targets": {
+		"macos-aarch64": { "cflags": "-mmacosx-version-min=11.0" },
+		"macos-x64": { "cflags": "-mmacosx-version-min=11.0" }
+	}
+}

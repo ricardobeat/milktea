@@ -383,6 +383,22 @@
       "sources": ["xray/**", "examples/layers/**"],
       "opt": "Os",
       "strip-unused": true
+    },
+    "examples/doom-fire-gui": {
+      "type": "executable",
+      "sources": ["gui/**", "examples/doom-fire-gui/**"],
+      "opt": "Os",
+      "c-sources": ["gui/backend.m", "gui/platform_macos.m"],
+      "strip-unused": true,
+      "c-include-dirs": ["vendor/sokol"]
+    },
+    "examples/dos-app-gui": {
+      "type": "executable",
+      "sources": ["gui/**", "examples/dos-app/button.c3", "examples/dos-app/dialog.c3", "examples/dos-app/menu.c3", "examples/dos-app/picker.c3", "examples/dos-app/theme.c3", "examples/dos-app-gui/**"],
+      "opt": "Os",
+      "c-sources": ["gui/backend.m", "gui/platform_macos.m"],
+      "strip-unused": true,
+      "c-include-dirs": ["vendor/sokol"]
     }
   }
 }

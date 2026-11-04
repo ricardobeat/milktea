@@ -1,0 +1,14 @@
+{
+  "langrev": "1",
+  "dependency-search-paths": ["../../lib"],
+  "dependencies": ["milktea"],
+  "targets": {
+    "paint-test": {
+      "type": "executable",
+      "sources": ["main.c3", "../../gui/**", "../../examples/lib/stb_image.c3"],
+      "c-sources": ["../../gui/backend.m", "../../gui/platform_macos.m", "../../examples/lib/stb_image_impl.c"],
+      "c-include-dirs": ["../../vendor/sokol"],
+      "opt": "Os"
+    }
+  }
+}

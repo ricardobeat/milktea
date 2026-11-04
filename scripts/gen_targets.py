@@ -49,6 +49,10 @@ QUICKJS_C_SOURCES = [
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
 #   dependencies         - value for "dependencies" (e.g. ["raylib6"])
+# The GUI backend (gui/): sokol on Metal, and the macOS platform layer.
+GUI_C_SOURCES = ["gui/backend.m", "gui/platform_macos.m"]
+GUI_INCLUDE_DIRS = ["vendor/sokol"]
+
 OVERRIDES = {
     "ai-harness": {
         "sources": ["examples/ai-harness/**"],
@@ -133,6 +137,24 @@ OVERRIDES = {
         "c_sources": QUICKJS_C_SOURCES,
         "linked_libraries": ["curl"],
         "strip_unused": False,
+    },
+    "dos-app-gui": {
+        "sources": [
+            "gui/**",
+            "examples/dos-app/button.c3",
+            "examples/dos-app/dialog.c3",
+            "examples/dos-app/menu.c3",
+            "examples/dos-app/picker.c3",
+            "examples/dos-app/theme.c3",
+            "examples/dos-app-gui/**",
+        ],
+        "c_sources": GUI_C_SOURCES,
+        "c_include_dirs": GUI_INCLUDE_DIRS,
+    },
+    "doom-fire-gui": {
+        "extra_dirs": ["gui"],
+        "c_sources": GUI_C_SOURCES,
+        "c_include_dirs": GUI_INCLUDE_DIRS,
     },
 }
 

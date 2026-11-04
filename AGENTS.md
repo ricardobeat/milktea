@@ -1,11 +1,15 @@
 # milktea — agent guide
 
-Four modules. Each has one job.
+Five modules. Each has one job.
 
 - **milktea** — Elm-style runtime loop (model/update/view, timers, input)
 - **glaze** — styling; builds ANSI-escaped strings
 - **xray** — geometry: layout constraints + the cell grid
 - **tgp** — kitty-graphics images: glyphs, placeholders, placements
+- **milktea_gui** (`gui/`) — runs a model in a window: sokol on Metal, CoreText
+  glyphs. All sokol use is in `gui/backend.m`; C3 sees only the flat API bound
+  in `gui/backend.c3`. Check it with `MILKTEA_GUI_SHOT=out.png` and
+  `scripts/gui-paint-test`.
 
 User-facing docs cover the API in depth — this file only adds what they don't:
 
