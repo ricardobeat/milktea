@@ -20,7 +20,7 @@ You only need to import what you use. A simple app needs just `milktea` and `gla
 
 ## The model
 
-Every milktea program is a struct that implements three methods: `init`, `update`, and `view`. This is the [Elm Architecture](https://guide.elm-lang.org/architecture/) — also known as TEA.
+Every milktea program is a struct that implements `update` and `view`, plus an optional `init`. This is the [Elm Architecture](https://guide.elm-lang.org/architecture/) — also known as TEA.
 
 ```c3
 module counter;
@@ -38,7 +38,7 @@ Store application state in the model.
 
 ## init
 
-`init` runs once when the program starts. Return a `Cmd` to kick off background work (timers, ticks, async IO), or `null` to do nothing.
+`init` is optional. If defined, it runs once when the program starts. Return a `Cmd` to kick off background work (timers, ticks, async IO), or `null` to do nothing.
 
 ```c3
 fn milktea::Cmd Counter.init(Counter* self) @dynamic {

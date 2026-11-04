@@ -10,10 +10,6 @@ struct LayersModel {
 	sz[3] order;
 }
 
-fn milktea::Cmd LayersModel.init(LayersModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd LayersModel.update(LayersModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;

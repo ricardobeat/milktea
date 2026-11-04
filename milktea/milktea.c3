@@ -183,7 +183,7 @@ struct Options {
 }
 
 interface Model {
-	fn Cmd init();
+	fn Cmd init() @optional;
 	fn Cmd update(Msg msg);
 	fn Node* view();
 	fn void on_mount() @optional;
@@ -1122,7 +1122,8 @@ fn void? Program.run(Program* self) {
 	set_mouse_cursor(self.options.mouse_cursor);
 
 	self.stamp_now();
-	Cmd c0 = self.model.init();
+	Cmd c0 = null;
+	if (&self.model.init) c0 = self.model.init();
 	if (c0 != null) {
 		Msg m0 = c0();
 		if (m0.kind != MsgKind.NONE && dispatch(self, self.model, m0)) return;

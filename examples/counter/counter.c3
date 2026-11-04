@@ -8,10 +8,6 @@ struct Counter {
 	sz value;
 }
 
-fn milktea::Cmd Counter.init(Counter* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;

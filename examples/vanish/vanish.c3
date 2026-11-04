@@ -7,10 +7,6 @@ struct VanishModel {
 	bool quitting;
 }
 
-fn milktea::Cmd VanishModel.init(VanishModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd VanishModel.update(VanishModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind == milktea::MsgKind.KEY) {
 		self.quitting = true;

@@ -8,10 +8,6 @@ struct TabsModel {
 	sz active_tab;
 }
 
-fn milktea::Cmd TabsModel.init(TabsModel* self) @dynamic {
-	return null;
-}
-
 fn milktea::Cmd TabsModel.update(TabsModel* self, milktea::Msg msg) @dynamic {
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
