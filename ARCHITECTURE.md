@@ -21,7 +21,7 @@ taro    — QuickJS bridge (JS models drive milktea from taro.js)  (depends on m
 standalone. `glaze` produces ANSI-styled strings; `xray` owns the persistent
 cell grid and the diffing renderer. `milktea` composites the two: a model's
 view is an xray node tree whose leaves are glaze strings (parsed by xray's
-ANSI parser) or `Cell[]` grids copied in whole. Package manifests (`*/manifest.json`) encode this same order.
+ANSI parser) or `Cell[]` grids copied in whole. The `dye`, `glaze` and `xray` manifests encode this same order.
 
 `dye` sits under both. It owns the one `Color` type, its constructors, the
 xterm-256 palette and the downsampling between colour depths, plus the

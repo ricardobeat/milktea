@@ -1,0 +1,19 @@
+{
+	"provides": "milktea",
+	"sources": [
+		"../../milktea/**",
+		"../../glaze/**",
+		"../../xray/**",
+		"../../dye/**",
+		"../../tgp/**",
+		"../../boba/**"
+	],
+	"c-sources": ["../../milktea/tty_winsize.c"],
+	"targets": {
+		"macos-aarch64": { "cflags": "-mmacosx-version-min=11.0" },
+		"macos-x64": { "cflags": "-mmacosx-version-min=11.0" },
+		"linux-x64": {},
+		"linux-aarch64": {},
+		"freebsd-x64": {}
+	}
+}

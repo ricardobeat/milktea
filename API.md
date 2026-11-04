@@ -15,9 +15,19 @@ narrative introduction read `README.md`; for a step-by-step build read
 | `boba` | all of the above | Ready-made widgets (list, table, text input, …) |
 | `tgp` | `milktea` | Kitty-graphics images |
 
-Each has a `manifest.json` and can be consumed as a C3 library. `dye`, `glaze`
-and `xray` also build for `windows-x64`; the modules that touch the tty
-(`milktea`, `boba`, `tgp`) are macOS/Linux/FreeBSD only.
+`lib/` holds the C3 libraries. `milktea.c3l` is all six modules in one
+library, so an app lists a single dependency:
+
+```json
+"dependency-search-paths": ["path/to/milktea/lib"],
+"dependencies": ["milktea"]
+```
+
+`dye.c3l`, `glaze.c3l` and `xray.c3l` are also there for code that wants only
+those. c3c does not pull in a library's own dependencies, so list them too
+(`"dependencies": ["xray", "glaze", "dye"]`), and don't combine them with
+`milktea`, which already contains them. `dye`, `glaze` and `xray` also build
+for `windows-x64`; `milktea` is macOS/Linux/FreeBSD only.
 
 ---
 
