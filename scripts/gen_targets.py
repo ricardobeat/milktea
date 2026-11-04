@@ -17,10 +17,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_JSON = os.path.join(PROJECT_ROOT, "project.json")
 EXAMPLES_DIR = os.path.join(PROJECT_ROOT, "examples")
 
-DEFAULT_C_SOURCES = ["milktea/tty_winsize.c"]
+DEFAULT_C_SOURCES = []
 
 QUICKJS_C_SOURCES = [
-    "milktea/tty_winsize.c",
     "taro/taro.c",
     "vendor/quickjs/quickjs.c",
     "vendor/quickjs/cutils.c",
@@ -36,7 +35,10 @@ QUICKJS_C_SOURCES = [
 #
 # Recognized keys:
 #   extra_dirs   - extra top-level source dirs prepended before the example's
-#                  own dir, e.g. ["xray"] -> "xray/**"
+#                  own dir, e.g. ["xray"] -> "xray/**". "milktea", "glaze",
+#                  "boba", "xray", "src" are already in the global sources, so
+#                  do not list them here unless you need them explicitly for
+#                  clarity (the script will not strip them if you do).
 #   sources      - full explicit `sources` list, overrides everything else
 #                  (used for targets with per-file sources, e.g. doom-fire)
 #   c_sources    - full explicit `c-sources` list (default: tty_winsize.c only)
@@ -46,17 +48,11 @@ QUICKJS_C_SOURCES = [
 #                  False to omit the key entirely, as cursors/inputbox do)
 #   linked_libraries     - value for "linked-libraries"
 #   linker_search_paths  - value for "linker-search-paths"
+#   dependencies         - value for "dependencies" (e.g. ["raylib6"])
 OVERRIDES = {
     "ai-harness": {
-        "sources": [
-            "milktea/**",
-            "glaze/**",
-            "dye/**",
-            "boba/**",
-            "xray/**",
-            "examples/ai-harness/**",
-        ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/ai-harness/http_shim.c"],
+        "sources": ["examples/ai-harness/**"],
+        "c_sources": ["examples/ai-harness/http_shim.c"],
         "optsize": "tiny",
         "linked_libraries": ["curl"],
     },
@@ -88,68 +84,52 @@ OVERRIDES = {
     "minecraft": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d": {"extra_dirs": ["boba", "xray", "taro", "src"]},
     "wolf3d-server": {
-        "sources": ["src/**", "examples/wolf3d-server/**"],
+        "sources": ["examples/wolf3d-server/**"],
         "linked_libraries": ["sqlite3"],
         "linker_search_paths": ["/opt/homebrew/lib"],
     },
-    "cursors": {"extra_dirs": ["boba", "xray"], "opt": "O0", "strip_unused": False},
-    "inputbox": {"extra_dirs": ["xray"], "opt": "O0", "strip_unused": False},
+    "cursors": {"opt": "O0", "strip_unused": False},
+    "inputbox": {"opt": "O0", "strip_unused": False},
     "doom-fire": {
-        "sources": ["milktea/**", "glaze/**", "dye/**", "examples/doom-fire/doom-fire.c3"],
+        "sources": ["examples/doom-fire/doom-fire.c3"],
     },
     "doom-fire-milktea": {
-        "sources": ["milktea/**", "glaze/**", "dye/**", "examples/doom-fire/doom-fire-milktea.c3"],
+        "sources": ["examples/doom-fire/doom-fire-milktea.c3"],
     },
     "doom-fire-overlay": {
-        "sources": [
-            "milktea/**",
-            "glaze/**",
-            "dye/**",
-            "xray/**",
-            "examples/doom-fire/doom-fire-overlay.c3",
-        ],
+        "sources": ["examples/doom-fire/doom-fire-overlay.c3"],
     },
     "doom-fire-donut": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
-            "dye/**",
             "examples/lib/glb.c3",
             "examples/lib/stb_image.c3",
             "examples/doom-fire-donut/**",
             "examples/lib/stb_json.c3",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
+        "c_sources": ["examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
     },
     "glb-viewer": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
-            "dye/**",
             "examples/lib/glb.c3",
             "examples/lib/stb_image.c3",
             "examples/lib/stb_json.c3",
             "examples/glb-viewer/**",
         ],
-        "c_sources": ["milktea/tty_winsize.c", "examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
+        "c_sources": ["examples/lib/stb_json_impl.c", "examples/lib/stb_image_impl.c"],
     },
     "oiia-player": {
         "sources": [
-            "milktea/**",
-            "glaze/**",
-            "dye/**",
             "examples/oiia-player/**",
             "examples/lib/stb_image.c3",
             "examples/lib/stb_json.c3",
         ],
         "c_sources": [
-            "milktea/tty_winsize.c",
             "examples/lib/stb_image_impl.c",
             "examples/lib/stb_json_impl.c",
         ],
     },
     "taro": {
-        "extra_dirs": ["xray", "boba", "taro"],
+        "extra_dirs": ["taro"],
         "c_sources": QUICKJS_C_SOURCES,
         "linked_libraries": ["curl"],
         "strip_unused": False,
@@ -215,16 +195,21 @@ def build_target(name):
         sources = override["sources"]
     else:
         extra_dirs = override.get("extra_dirs", [])
-        sources = ["milktea/**", "glaze/**", "dye/**"]
-        sources.extend(f"{d}/**" for d in extra_dirs)
+        sources = [f"{d}/**" for d in extra_dirs]
         sources.append(f"examples/{name}/**")
 
     target = {
         "type": "executable",
         "sources": sources,
-        "c-sources": override.get("c_sources", list(DEFAULT_C_SOURCES)),
         "opt": override.get("opt", "Os"),
     }
+    # Only emit c-sources when the target adds C files beyond the default
+    # `milktea/tty_winsize.c` (which is declared at the top of project.json
+    # and inherited by every target). Targets whose c-sources list is exactly
+    # the default omit the key to avoid duplication.
+    c_sources = override.get("c_sources", DEFAULT_C_SOURCES)
+    if c_sources != DEFAULT_C_SOURCES:
+        target["c-sources"] = c_sources
     if "optsize" in override:
         target["optsize"] = override["optsize"]
     if override.get("strip_unused", True):
@@ -233,6 +218,12 @@ def build_target(name):
         target["linked-libraries"] = override["linked_libraries"]
     if "linker_search_paths" in override:
         target["linker-search-paths"] = override["linker_search_paths"]
+    if "c_include_dirs" in override:
+        target["c-include-dirs"] = override["c_include_dirs"]
+    if "cflags" in override:
+        target["cflags"] = override["cflags"]
+    if "dependencies" in override:
+        target["dependencies"] = override["dependencies"]
     return target
 
 
