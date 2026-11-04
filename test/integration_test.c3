@@ -588,6 +588,19 @@ fn void test_draw_inline_sizes_the_block_to_its_content() @test {
 	assert(!contains(s, "\x1b[?1049h"));
 }
 
+fn void test_text_style_box_frames_children() @test {
+	glaze::Style box = { .border = glaze::ROUNDED, .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2 };
+	xray::Node* child = milktea::text("hi", {});
+	xray::Node* panel = milktea::vstack().style(box).add(child).center();
+	xray::Node* r = xray::root().add(panel);
+	r.solve(xray::new_rect(0, 0, 40, 20));
+
+	assert(panel.rect().w == 2 + 2 + 2 + 2, "text + padding + border");
+	assert(panel.rect().h == 1 + 2 + 2, "one line + padding + border");
+	assert(child.rect().x == panel.rect().x + 3, "child clears border and padding");
+	assert(child.rect().y == panel.rect().y + 2, "child clears border and padding");
+}
+
 // Program.run() owns the alt screen. Entering it manually beforehand leaves
 // in_alt_screen false, so the exit path never pops back to the normal buffer
 // and the terminal is stranded in the alt screen after quit. run() must reject
@@ -675,4 +688,58 @@ fn void test_cell_view_overstated_stride_is_clamped() @test {
 	if (catch err = p.run()) {
 		unreachable("renderer must clamp an overstated cell stride, got a fault");
 	}
+}
+
+// ============================================================
+// Scripted mouse events — test_click / test_pointer
+// ============================================================
+
+bool g_scripted_clicked;
+
+fn void scripted_click_handler(void* id, String id_str, sz col, sz row) {
+	g_scripted_clicked = true;
+}
+
+// ScriptedClickModel schedules a click and a pointer move from init, with
+// no input at all, so only the terminal loop's own firing can deliver them.
+struct ScriptedClickModel {
+	sz presses;
+	sz motions;
+	sz press_col;
+}
+
+fn milktea::Cmd ScriptedClickModel.init(ScriptedClickModel* self) @dynamic {
+	milktea::test_click(3, 0, 2);
+	milktea::test_pointer(1, 0, 1);
+	return null;
+}
+
+fn milktea::Cmd ScriptedClickModel.update(ScriptedClickModel* self, milktea::Msg msg) @dynamic {
+	if (msg.kind != milktea::MsgKind.MOUSE) return null;
+	if (msg.mouse.action == milktea::MouseAction.MOUSE_PRESS) {
+		self.presses++;
+		self.press_col = msg.mouse.col;
+	}
+	if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) self.motions++;
+	return null;
+}
+
+fn milktea::Node* ScriptedClickModel.view(ScriptedClickModel* self) @dynamic {
+	return milktea::text("click me").on_click(&scripted_click_handler);
+}
+
+// A terminal program fires test_click and test_pointer once their frames
+// come up, through the same dispatch a real mouse uses: the node's on_click
+// runs and update() sees the press, then the loop ends as usual.
+fn void test_scripted_mouse_events_fire_in_terminal() @test {
+	g_scripted_clicked = false;
+	ScriptedClickModel m;
+	DString out = dstring::temp();
+	milktea::Program p = milktea::@test_program(&m, &out, 80, 24);
+	p.run()!!;
+
+	assert(m.presses == 1);
+	assert(m.press_col == 3);
+	assert(m.motions == 1);
+	assert(g_scripted_clicked);
 }

@@ -37,12 +37,12 @@ fn sz constraint_natural(Constraint c, sz other, sz fallback) @local {
 
 // natural_width is how wide this node wants to be, given the height available.
 fn sz Node.natural_width(&self, sz height) {
-	return constraint_natural(self.size_w, height, self.content_width(height));
+	return constraint_natural(self.layout_constraint(true), height, self.content_width(height));
 }
 
 // natural_height is how tall this node wants to be, given the width available.
 fn sz Node.natural_height(&self, sz width) {
-	return constraint_natural(self.size_h, width, self.content_height(width));
+	return constraint_natural(self.layout_constraint(false), width, self.content_height(width));
 }
 
 // frame is the space between a node's edge and what goes inside it: its
@@ -50,10 +50,14 @@ fn sz Node.natural_height(&self, sz width) {
 fn Insets Node.frame(&self) {
 	glaze::Style b = self.box;
 	return {
-		.top    = self.pad_top    + b.pad_top    + (b.border.top.len > 0 ? 1 : 0),
-		.right  = self.pad_right  + b.pad_right  + (b.border.right.len > 0 ? 1 : 0),
-		.bottom = self.pad_bottom + b.pad_bottom + (b.border.bottom.len > 0 ? 1 : 0),
-		.left   = self.pad_left   + b.pad_left   + (b.border.left.len > 0 ? 1 : 0),
+		.top    = (self.pad_top    + b.pad_top    + (b.border.top.len > 0 ? 1 : 0)) * self.layout_metrics.unit_h()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_top : 0),
+		.right  = (self.pad_right  + b.pad_right  + (b.border.right.len > 0 ? 1 : 0)) * self.layout_metrics.unit_w()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_right : 0),
+		.bottom = (self.pad_bottom + b.pad_bottom + (b.border.bottom.len > 0 ? 1 : 0)) * self.layout_metrics.unit_h()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_bottom : 0),
+		.left   = (self.pad_left   + b.pad_left   + (b.border.left.len > 0 ? 1 : 0)) * self.layout_metrics.unit_w()
+			+ (self.layout_metrics.pixels ? self.decoration.pad_left : 0),
 	};
 }
 
@@ -68,7 +72,7 @@ fn sz Node.content_width(&self, sz height) {
 	if (self.child_count == 0) {
 		sz n = 0;
 		if (self.content != null && &self.content.measure_width) {
-			n = self.content.measure_width(inner_h);
+			n = self.content.measure_width(inner_h / self.layout_metrics.unit_h()) * self.layout_metrics.unit_w();
 		}
 		return n + pad_x;
 	}
@@ -79,7 +83,7 @@ fn sz Node.content_width(&self, sz height) {
 		for (sz i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_width(inner_h);
 		}
-		if (self.child_count > 1) total += self.gap * (self.child_count - 1);
+		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Stacked or layered: as wide as the widest child.
 		for (sz i = 0; i < self.child_count; i++) {
@@ -101,7 +105,7 @@ fn sz Node.content_height(&self, sz width) {
 	if (self.child_count == 0) {
 		sz n = 0;
 		if (self.content != null && &self.content.measure) {
-			n = self.content.measure(inner_w);
+			n = self.content.measure(inner_w / self.layout_metrics.unit_w()) * self.layout_metrics.unit_h();
 		}
 		return n + pad_y;
 	}
@@ -112,7 +116,7 @@ fn sz Node.content_height(&self, sz width) {
 		for (sz i = 0; i < self.child_count; i++) {
 			total += self.children[i].natural_height(inner_w);
 		}
-		if (self.child_count > 1) total += self.gap * (self.child_count - 1);
+		if (self.child_count > 1) total += self.layout_gap() * (self.child_count - 1);
 	} else {
 		// Side by side or layered: as tall as the tallest child.
 		for (sz i = 0; i < self.child_count; i++) {
@@ -134,7 +138,12 @@ fn sz node_measure_h(void* ctx, sz width) @private {
 }
 
 // solve assigns every node in the tree a rect inside area.
-fn void Node.solve(&self, Rect area) {
+fn void Node.solve(&self, Rect area, LayoutMetrics metrics = {}) {
+	self.set_layout_metrics(metrics);
+	self.solve_layout(area);
+}
+
+fn void Node.solve_layout(&self, Rect area) {
 	self.computed_rect = area;
 
 	if (self.child_count == 0) return;
@@ -147,7 +156,7 @@ fn void Node.solve(&self, Rect area) {
 	// modal ends up sized to its content in the middle of the screen.
 	if (self.direction == NodeDirection.STACK) {
 		for (sz i = 0; i < self.child_count; i++) {
-			self.children[i].solve(self.stack_child_rect(inner, self.children[i]));
+			self.children[i].solve_layout(self.stack_child_rect(inner, self.children[i]));
 		}
 		return;
 	}
@@ -163,16 +172,18 @@ fn void Node.solve(&self, Rect area) {
 	// big as its content along it.
 	for (sz i = 0; i < cc; i++) {
 		Node* child = self.children[i];
-		constraints[i] = row ? child.size_w : child.size_h;
+		constraints[i] = child.layout_constraint(row);
 		if (constraints[i].kind == ConstraintKind.CAUTO) {
-			constraints[i] = row ? measured(&node_measure_w, child) : measured(&node_measure_h, child);
+			constraints[i].kind = ConstraintKind.CFIT;
+			constraints[i].measure = row ? &node_measure_w : &node_measure_h;
+			constraints[i].ctx = child;
 		}
 	}
 
 	if (row) {
-		layout_h_gap(inner, constraints[0:cc], self.gap, child_rects[0:cc]);
+		layout_h_gap(inner, constraints[0:cc], self.layout_gap(), child_rects[0:cc]);
 	} else {
-		layout_v_gap(inner, constraints[0:cc], self.gap, child_rects[0:cc]);
+		layout_v_gap(inner, constraints[0:cc], self.layout_gap(), child_rects[0:cc]);
 	}
 
 	// Main-axis justification: shift the solved rects within whatever space
@@ -181,7 +192,7 @@ fn void Node.solve(&self, Rect area) {
 	for (sz i = 0; i < cc; i++) {
 		content_size += row ? child_rects[i].w : child_rects[i].h;
 	}
-	if (cc > 1) content_size += self.gap * (cc - 1);
+	if (cc > 1) content_size += self.layout_gap() * (cc - 1);
 
 	sz spare = (row ? inner.w : inner.h) - content_size;
 	if (spare < 0) spare = 0;
@@ -200,9 +211,9 @@ fn void Node.solve(&self, Rect area) {
 	sz cross_origin = row ? inner.y : inner.x;
 
 	for (sz i = 0; i < cc; i++) {
-		Node* child     = self.children[i];
-		Constraint cross = row ? child.size_h : child.size_w;
-		sz main_size    = row ? child_rects[i].w : child_rects[i].h;
+		Node* child = self.children[i];
+		Constraint cross = child.layout_constraint(!row);
+		sz main_size = row ? child_rects[i].w : child_rects[i].h;
 
 		// With no cross size of its own a child stretches, as in CSS; under
 		// any other alignment it is as big as its content instead.
@@ -238,14 +249,14 @@ fn void Node.solve(&self, Rect area) {
 
 	// offset() displaces a child from where the row/column put it, after both
 	// axes are settled, so an animated child does not disturb its siblings'
-	// positions the way changing its size would.
+	// positions the way changing its size would. The shift is in cells.
 	for (sz i = 0; i < cc; i++) {
-		child_rects[i].x += self.children[i].shift_x;
-		child_rects[i].y += self.children[i].shift_y;
+		child_rects[i].x += self.children[i].shift_x * self.layout_metrics.unit_w();
+		child_rects[i].y += self.children[i].shift_y * self.layout_metrics.unit_h();
 	}
 
 	for (sz i = 0; i < cc; i++) {
-		self.children[i].solve(child_rects[i]);
+		self.children[i].solve_layout(child_rects[i]);
 	}
 }
 
@@ -254,22 +265,28 @@ fn void Node.solve(&self, Rect area) {
 // axis gets that size, positioned by its own justify (horizontally) and align
 // (vertically) — which is what place() sets both of.
 fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
-	sz w = resolve_axis(child.size_w, area.w, area.h);
-	sz h = resolve_axis(child.size_h, area.h, area.w);
+	sz w = resolve_axis(child.layout_constraint(true), area.w, area.h);
 	if (w > area.w) w = area.w;
-	if (h > area.h) h = area.h;
 	if (w < 0) w = 0;
+	// Height is measured at the width just settled on, not the area's:
+	// content that wraps is taller in a narrower box.
+	sz h = resolve_axis(child.layout_constraint(false), area.h, w);
+	if (h > area.h) h = area.h;
 	if (h < 0) h = 0;
 
 	// A pinned child names its own offset; everything else is placed by its
 	// justify and align within the space it did not fill.
-	sz x = child.pinned ? child.offset_x : justify_offset(child.justify, area.w - w, 0, 1);
-	sz y = child.pinned ? child.offset_y : align_offset(child.align, area.h - h);
+	sz x = child.pinned
+		? child.offset_x * self.layout_metrics.unit_w()
+		: justify_offset(child.justify, area.w - w, 0, 1);
+	sz y = child.pinned
+		? child.offset_y * self.layout_metrics.unit_h()
+		: align_offset(child.align, area.h - h);
 
 	// offset() displaces the child from wherever it landed, pinned or placed,
-	// without having resized it.
-	x += child.shift_x;
-	y += child.shift_y;
+	// without having resized it. The shift is in cells.
+	x += child.shift_x * self.layout_metrics.unit_w();
+	y += child.shift_y * self.layout_metrics.unit_h();
 
 	return { .x = area.x + x, .y = area.y + y, .w = w, .h = h };
 }

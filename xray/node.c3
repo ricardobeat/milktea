@@ -4,7 +4,9 @@ import std::core::mem;
 import glaze;
 
 // Content is anything that can fill a solved rect with text.
-// 
+//
+// Content rects remain in text cells in both backends. GUI painting retains
+// the exact pixel origin separately from these whole-cell coordinates.
 // render is called after layout, so the rect it receives is the size the
 // solver chose. Implementations return a string sized to that rect; it may
 // carry ANSI escapes, which paint decodes with render_ansi_string. xray does
@@ -13,7 +15,7 @@ import glaze;
 // Content that already holds cells, such as a game's frame, implements paint
 // instead: it writes straight into the buffer, inside r, and render is not
 // called.
-// 
+//
 // measure reports how tall the content wants to be at a given width, and
 // measure_width how wide it wants to be at a given height. Both are consulted
 // only when nothing else fixes that axis — CFIT sizing, which is what place()
@@ -21,7 +23,7 @@ import glaze;
 // leave either unimplemented; an unimplemented axis measures 0, which for a
 // leaf under center() means it collapses on that axis, so implement the ones
 // that matter.
-// 
+//
 // cursor reports where the terminal cursor belongs, in screen coordinates,
 // given the rect the content was painted in. Content that does not own a
 // cursor leaves it unimplemented. Content that owns one only when focused
@@ -35,7 +37,7 @@ interface Content {
 	fn ContentCursor cursor(Rect r) @optional;
 }
 
-// Insets holds a size in cells for each side of a rect.
+// Insets holds a size in layout units for each side of a rect.
 struct Insets {
 	sz top, right, bottom, left;
 }
@@ -45,20 +47,30 @@ struct Insets {
 // the character already at that cell — a crosshair or a matrix rain effect
 // can show it through rather than hiding it. Returning an empty string
 // leaves the cell as it was.
-// 
+//
 // blink alternates on the interval the cursor asked for; a callback that
 // animates on its own clock can ignore it.
 alias DrawCursorFn = fn String(sz x, sz y, bool blink, String under);
 
 // ClickFn fires when a mouse press lands inside (on_click) or outside
-// (on_click_outside) the node's solved rect. ctx is whatever the caller
-// passed to .on_click()/.on_click_outside() — typically `self` from the
-// component that built the node, cast back on the way in.
-alias ClickFn = fn void(void* ctx, sz col, sz row);
+// (on_click_outside) the node's solved rect, and when the pointer crosses the
+// node's edges (on_hover_in / on_hover_out).
+//
+// id is whatever the node was tagged with via .id(...): for a string id it is
+// a pointer to the framework-owned copy (id_str below holds the value); for an
+// sz id it is the value as a void*; for a pointer id it is the pointer. Most
+// callers inspect id_str first and fall through to id_ptr.
+//
+// ctx was kept on the per-call site as a separate parameter historically; the
+// node's id now plays that role, so on_click / on_click_outside / on_hover_*
+// no longer take their own ctx — the id IS the ctx. col and row are the press
+// position in cells, useful only when a node spans a region it does not want
+// to divide into sub-targets.
+alias ClickFn = fn void(void* id, String id_str, sz col, sz row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
 // is a node's rect less whatever frame its content draws around itself.
-// 
+//
 // col and row are relative to the text, so content passes its own caret
 // position and the layout supplies the origin. A caret scrolled out of view
 // reports no cursor rather than one clamped to the edge, which would sit on a
@@ -80,7 +92,7 @@ fn ContentCursor place_cursor(Rect text, sz col, sz row, CursorStyle cs = { }) {
 // CursorStyle is how a caret looks. Leaving draw null gives the terminal's own
 // cursor with the given shape, blink and color; setting it paints the cursor
 // into the grid instead, and the terminal cursor stays hidden.
-// 
+//
 // shape is an index into whatever shapes the host defines
 // (milktea::CursorShape); xray does not name them.
 struct CursorStyle {
@@ -93,7 +105,7 @@ struct CursorStyle {
 
 // ContentCursor is what Content.cursor returns. x and y are absolute screen
 // coordinates. has_cursor = false means "not mine this frame".
-// 
+//
 // Leaving draw null gives the real terminal cursor at that position, with
 // the given shape and blink. Setting it paints the cursor into the grid
 // instead, and the terminal cursor stays hidden.
@@ -146,7 +158,7 @@ const sz MAX_NODE_CHILDREN @private = 32;
 // the content and the children go inside its border and padding. A node with
 // both content and children paints the content first and the children on
 // top of it.
-// 
+//
 // Nodes are temp-allocated: a tree lives for one frame and is rebuilt by the
 // next view() call. Do not store a Node* across frames.
 struct Node {
@@ -201,16 +213,38 @@ struct Node {
 	sz repaint_ms;
 
 	Rect computed_rect;
+	LayoutMetrics layout_metrics;
 
 	// Mouse hit-testing, collected into Program.click_targets after solve()
 	// (see xray::collect_click_targets / milktea's draw_in). Each hook keeps
 	// its own ctx — a node that sets both (a button that also wants to know
 	// about clicks elsewhere) would otherwise have the second call silently
 	// clobber the first's context.
+	//
+	// id_str / id_ptr are the per-node identity the click and hover callbacks
+	// receive; .id(String) and .id(...) populate them. id_str takes precedence
+	// when non-empty — a node with both set delivers the string.
+	String id_str;
+	void* id_ptr;
 	ClickFn on_click_fn;
-	void* on_click_ctx;
 	ClickFn on_click_outside_fn;
-	void* on_click_outside_ctx;
+	ClickFn on_hover_in_fn;
+	ClickFn on_hover_out_fn;
+
+	// Marks this node's area as a place to drag the OS window from, the way
+	// a title bar is. Collected after solve() alongside the click targets
+	// (see collect_drag_regions); a terminal build has no window to move and
+	// ignores it.
+	bool window_drag_area;
+
+	// The node covers what is beneath it for the pointer, as a modal does:
+	// clicks inside it stop at it, and nodes painted before it get no hover
+	// while the pointer is over it. See block_pointer.
+	bool blocks_pointer;
+
+	// A vector background emitted before this node's glyphs and children in
+	// the GUI paint stream. Terminal cell backgrounds are unchanged.
+	Decoration decoration;
 }
 
 fn Node* new_node(NodeDirection dir) @local {
@@ -250,10 +284,10 @@ fn Node* content_node(Content c) {
 
 // add appends a child and returns this node, so the chained and statement
 // forms are the same call.
-// 
+//
 // A null child is ignored, which lets content that is sometimes hidden return
 // null from its node() and be added unconditionally.
-// 
+//
 // Adding a child to a leaf, such as a text node, is a programming error. Put
 // the text and the child in a vstack instead, and style the vstack if it
 // should have a background or border.
@@ -312,14 +346,52 @@ fn Node* Node.fit(&self) {
 // uses) and only falls back to n when that comes out smaller. Meant for a
 // panel whose natural size should usually win but that would look cramped
 // below some width — a modal with a one-word body, say.
+//
+// On a node already fitted to its content with bounds — a milktea::text whose
+// style set a max_width, say — it replaces only the floor and keeps the cap.
 fn Node* Node.min_width(&self, sz n) {
-	self.size_w = min_measured(n, &node_measure_w, self);
+	self.size_w = bounded_fit(self.size_w, n, -1, &node_measure_w, self);
 	return self;
 }
 
 fn Node* Node.min_height(&self, sz n) {
-	self.size_h = min_measured(n, &node_measure_h, self);
+	self.size_h = bounded_fit(self.size_h, n, -1, &node_measure_h, self);
 	return self;
+}
+
+// max_width is the mirror of min_width: the node hugs its content but never
+// grows past n — a modal that should not stretch across the whole window.
+// Like min_width, it keeps a floor already set and replaces only the cap.
+fn Node* Node.max_width(&self, sz n) {
+	self.size_w = bounded_fit(self.size_w, -1, n, &node_measure_w, self);
+	return self;
+}
+
+fn Node* Node.max_height(&self, sz n) {
+	self.size_h = bounded_fit(self.size_h, -1, n, &node_measure_h, self);
+	return self;
+}
+
+// fit_width and fit_height size one axis to the node's content, the way a CSS
+// block's height is auto: a paragraph in a column takes the lines it needs
+// rather than a share of the column's leftover space.
+fn Node* Node.fit_width(&self) {
+	self.size_w = measured(&node_measure_w, self);
+	return self;
+}
+
+fn Node* Node.fit_height(&self) {
+	self.size_h = measured(&node_measure_h, self);
+	return self;
+}
+
+// bounded_fit fits an axis to its content, setting whichever of lo and hi is
+// not -1 and keeping the other from c when c already fits to content.
+fn Constraint bounded_fit(Constraint c, sz lo, sz hi, MeasureFn measure, Node* n) @local {
+	if (c.kind != ConstraintKind.CFIT) c = measured(measure, n);
+	if (lo >= 0) c.fit_min = lo;
+	if (hi >= 0) c.fit_max = hi;
+	return c;
 }
 
 // fill gives this node a share of whatever space is left over on its parent's
@@ -359,7 +431,7 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 // corner_color, border_bg, border_animation, anim_speed_ms and pad_*. The
 // other fields are ignored, so text colour and attributes are set on the text
 // itself, and the node is sized with width() and height().
-// 
+//
 // A translucent bg tints what is beneath the node and keeps its glyphs.
 //
 // Content and children go inside the border and then inside the padding. The
@@ -411,7 +483,7 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 // unless a width or height was given. It is for content whose position is
 // known rather than solved — a dropdown under the menu title that opened it,
 // a tooltip beside its anchor.
-// 
+//
 // Only meaningful in a stack, where every child gets the parent's whole rect
 // to place itself in; a row or column decides its children's offsets itself.
 fn Node* Node.at(&self, sz x, sz y) {
@@ -431,14 +503,14 @@ fn Node* Node.center(&self) {
 // offset displaces this node by (dx, dy) from wherever it was placed, without
 // resizing it. It composes with placement rather than replacing it, so a node
 // can stay centred on one axis while being displaced on the other:
-// 
+//
 //     panel.center().offset(0, -4)   // centred, then lifted four rows
-// 
+//
 // That is the difference from at(), which names an absolute position and
 // discards justify/align entirely, and from padding, which grows the node so
 // its background paints over the displaced area. Sliding a node is a matter of
 // animating this, which is what milktea's Node.transition does.
-// 
+//
 // The displacement is applied after the child's rect is solved, so it can push
 // a node past its parent's edge; the painter clips whatever lands outside.
 fn Node* Node.offset(&self, sz dx, sz dy) {
@@ -480,22 +552,89 @@ fn Node* Node.animate(&self, sz fps = 60) {
 	return self;
 }
 
-// on_click fires fn(ctx, col, row) when a mouse press lands inside this
-// node's solved rect. Hit-testing picks the topmost (last-painted) node
-// whose rect contains the click, so a button inside a dialog gets the
-// click rather than the dialog panel behind it.
-fn Node* Node.on_click(&self, ClickFn handler, void* ctx) {
-	self.on_click_fn = handler;
-	self.on_click_ctx = ctx;
+// id attaches a name to this node that the click and hover callbacks receive
+// as id_str. Useful for a small static layout — a chrome row, a fixed button
+// — where the callback can switch on the name without an app-side slot table.
+// Strings live as long as the node does: a copy is made here on tmem, freed
+// when the tree is torn down at the end of the frame.
+fn Node* Node.id(&self, String name) {
+	self.id_str = name.tcopy();
+	self.id_with(null);
 	return self;
 }
 
-// on_click_outside fires handler(ctx, col, row) when a mouse press lands
-// anywhere outside this node's solved rect — the standard "dismiss on
+// id_ptr attaches an opaque pointer as the node's identity. Used for ints
+// (boxed as void*) and for app-side structs (cast back on the way in). When
+// the node already has an id_str, it is cleared so id_ptr is the only id.
+fn Node* Node.id_with(&self, void* p) {
+	self.id_str = "";
+	self.id_ptr = p;
+	return self;
+}
+
+// id_int is sugar for id_with on a (void*)(uptr) cast — the common case for
+// a static row index. The framework hands it back as a void* that the app
+// recovers with (sz)(uptr).
+fn Node* Node.id_int(&self, sz i) => self.id_with((void*)(uptr)i);
+
+// on_click fires fn(id, id_str, col, row) when a mouse press lands inside this
+// node's solved rect. Hit-testing picks the topmost (last-painted) node whose
+// rect contains the click, so a button inside a dialog gets the click rather
+// than the dialog panel behind it.
+fn Node* Node.on_click(&self, ClickFn handler) {
+	self.on_click_fn = handler;
+	return self;
+}
+
+// on_click_outside fires handler(id, id_str, col, row) when a mouse press
+// lands anywhere outside this node's solved rect — the standard "dismiss on
 // outside click" behavior for a dropdown or modal backdrop.
-fn Node* Node.on_click_outside(&self, ClickFn handler, void* ctx) {
+fn Node* Node.on_click_outside(&self, ClickFn handler) {
 	self.on_click_outside_fn = handler;
-	self.on_click_outside_ctx = ctx;
+	return self;
+}
+
+// on_hover_in fires when the pointer enters this node's rect. The framework
+// only fires it on a real edge crossing — moving the mouse while it is
+// already inside does not re-fire it. The dedicated handler means a hover
+// effect (highlight, tooltip) can be wired without sharing a callback with
+// click and getting it called on every press.
+fn Node* Node.on_hover_in(&self, ClickFn handler) {
+	self.on_hover_in_fn = handler;
+	return self;
+}
+
+// on_hover_out fires when the pointer leaves this node's rect after having
+// been inside (see on_hover_in).
+fn Node* Node.on_hover_out(&self, ClickFn handler) {
+	self.on_hover_out_fn = handler;
+	return self;
+}
+
+// window_drag marks this node as a drag handle for the OS window: a press
+// inside its solved rect that then moves drags the window, the way a title
+// bar does. The press still reaches the node's own on_click, so a node can be
+// both a drag handle and clickable. Only a GUI build acts on it.
+fn Node* Node.window_drag(&self, bool on = true) {
+	self.window_drag_area = on;
+	return self;
+}
+
+// block_pointer makes the node cover what is beneath it for the pointer: a
+// click inside it never reaches a node painted before it, and those nodes do
+// not hover while the pointer is over it. A modal's backdrop is the use: the
+// panel takes the clicks, and the screen behind it stops reacting.
+fn Node* Node.block_pointer(&self, bool on = true) {
+	self.blocks_pointer = on;
+	return self;
+}
+
+// decorate gives this node a vector background for a GUI build to paint (see
+// xray::Decoration): rounded corners, a gradient fill, a border, a drop shadow.
+// A terminal build ignores it and the node's cells paint as they always did, so
+// the same view renders in both — only the GUI shows the decoration.
+fn Node* Node.decorate(&self, Decoration d) {
+	self.decoration = d;
 	return self;
 }
 

@@ -107,15 +107,15 @@ fn Pressed Picker.take_pending(&self) {
 	return p;
 }
 
-fn void picker_choice_clicked(void* ctx, sz col, sz row) @local {
-	ChoiceSlot* slot = (ChoiceSlot*)ctx;
+fn void picker_choice_clicked(void* id, String id_str, sz col, sz row) @local {
+	ChoiceSlot* slot = (ChoiceSlot*)id;
 	// A click on a choice previews it, same as arrowing to it — it does not
 	// confirm on its own, matching how Up/Down behave for the keyboard path.
 	slot.picker.selected = slot.index;
 }
 
-fn void picker_button_clicked(void* ctx, sz col, sz row) @local {
-	PickerButtonSlot* slot = (PickerButtonSlot*)ctx;
+fn void picker_button_clicked(void* id, String id_str, sz col, sz row) @local {
+	PickerButtonSlot* slot = (PickerButtonSlot*)id;
 	Picker* p = slot.picker;
 	p.focused_button = slot.index;
 	p.open = false;
@@ -127,8 +127,8 @@ fn void picker_button_clicked(void* ctx, sz col, sz row) @local {
 	}
 }
 
-fn void picker_backdrop_dismissed(void* ctx, sz col, sz row) @local {
-	Picker* p = (Picker*)ctx;
+fn void picker_backdrop_dismissed(void* id, String id_str, sz col, sz row) @local {
+	Picker* p = (Picker*)id;
 	p.open = false;
 	p.selected = p.opening;
 	p.pending = Pressed.DISMISSED;
@@ -136,22 +136,21 @@ fn void picker_backdrop_dismissed(void* ctx, sz col, sz row) @local {
 
 // node returns the picker, or null when it is closed.
 //
-// Same shape as Dialog.node(): the panel is a real container sized by the
-// solver from its children (min_width().center()) — the choice rows and the
-// button row are individually clickable nodes, and each choice row stretches
-// to the panel's own content width (ALIGN_STRETCH, the vstack default)
-// instead of a widest-choice width computed by hand ahead of layout.
+// Same shape as Dialog.node(): a styled box that hugs its children — the
+// choice rows and the button row, each individually clickable. Each choice
+// row stretches to the panel's own content width (ALIGN_STRETCH, the vstack
+// default) instead of a widest-choice width computed by hand ahead of layout.
 fn xray::Node* Picker.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
 	xray::Node* panel_node = modal_panel(th, self.min_cols);
-	panel_node.on_click_outside(&picker_backdrop_dismissed, self);
+	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
 
 	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));
 
-	xray::Node* list_node = xray::vstack().height(milktea::cells(self.count));
+	xray::Node* list_node = xray::vstack().fit_height();
 	glaze::Style row = { .fg = th.text, .bg = th.panel, .pad_left = 1, .pad_right = 1, .align_h = glaze::Position.LEFT };
 	glaze::Style current = {
 		.fg = th.ink, .bg = th.accent, .bold = true,
@@ -162,7 +161,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
 		xray::Node* choice_node = milktea::text(label, on ? current : row).height(milktea::cells(1));
-		choice_node.on_click(&picker_choice_clicked, &self.choice_slots[i]);
+		choice_node.id_with(&self.choice_slots[i]).on_click(&picker_choice_clicked);
 		list_node.add(choice_node);
 	}
 	panel_node.add(list_node);
@@ -175,7 +174,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		self.button_slots[i] = { .picker = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
 		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.on_click(&picker_button_clicked, &self.button_slots[i]);
+		btn.id_with(&self.button_slots[i]).on_click(&picker_button_clicked);
 		buttons_row.add(btn);
 	}
 	panel_node.add(buttons_row);

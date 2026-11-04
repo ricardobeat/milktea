@@ -62,10 +62,18 @@ struct Constraint {
 	// whose meaning silently changes with `kind`.
 	sz fit_min;
 	sz fit_max;
+	bool pixel_units;
+	sz cell_fallback;
 }
 
 fn Constraint cells(sz n) {
 	return { .kind = ConstraintKind.CLEN, .value = n };
+}
+
+// Fixed logical pixels for node layout, with an explicit terminal cell size.
+fn Constraint pixels(sz n, sz terminal_cells = 0) {
+	return { .kind = ConstraintKind.CLEN, .value = n,
+		.pixel_units = true, .cell_fallback = terminal_cells };
 }
 
 fn Constraint min(sz n) {

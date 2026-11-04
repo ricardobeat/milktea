@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::mem;
+import std::collections::list;
 import glaze;
 import xray;
 
@@ -76,19 +77,20 @@ struct StyledText (xray::Content) @private {
 }
 
 fn String StyledText.render(&self, xray::Rect r) @dynamic {
-	if (self.plain) return self.text;
+	if (self.text.len == 0 || self.plain) return self.text;
 	return self.style.with_width(r.w).with_height(r.h).render(self.text);
 }
 
 // measure and measure_width report what the text needs before layout has
 // picked a size, not counting the node's frame. They are consulted for a
 // centered modal and under draw_inline, where nothing else fixes that axis.
-// 
+//
 // A style carrying an explicit size names the answer outright: render() sizes
 // the box to it, so measuring the text instead would hand the node a rect
 // smaller than what it paints.
 fn sz StyledText.measure(&self, sz width) @dynamic {
 	if (self.fixed_h >= 0) return self.fixed_h;
+	if (!self.plain && !self.style.nowrap) return glaze::wrapped_line_count(self.text, width);
 	sz lines = 1;
 	foreach (c : self.text) if (c == '\n') lines++;
 	return lines;
@@ -182,8 +184,8 @@ fn Node* grid(xray::Cell[] cells, sz w, sz h, ContentCursor cursor = {}) {
 }
 
 // draw solves the tree against the whole terminal and paints it.
-fn View draw(Node* root) @private {
-	return draw_in(root, screen_width(), screen_height());
+fn View draw(Node* root) {
+	return draw_in(root, screen_width(), screen_height(), true);
 }
 
 // draw_inline sizes the tree to its content height, so the painted block is
@@ -191,18 +193,28 @@ fn View draw(Node* root) @private {
 // taller than that cannot be addressed relatively without scrolling.
 fn View draw_inline(Node* root) @private {
 	sz w = screen_width();
+	if (g_program != null && g_program.pixel_area) return draw_in(root, w, 1, false);
 	sz h = root != null ? root.natural_height(w) : 0;
 	if (h < 1) h = 1;
 	if (h > screen_height()) h = screen_height();
-	return draw_in(root, w, h);
+	return draw_in(root, w, h, false);
 }
 
-fn View draw_in(Node* root, sz w, sz h) @local {
+fn View draw_in(Node* root, sz w, sz h, bool alt) @local {
 	// The painted grid lives on the Program so it can be reused across frames
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
-	if (root == null || w < 1 || h < 1 || g_program == null) return view("");
+	if (root == null || w < 1 || h < 1 || g_program == null) return {};
 
+	xray::LayoutMetrics metrics = g_program.layout_metrics;
+	xray::Rect area = xray::new_rect(0, 0, w, h);
+	// A backend laying out in pixels picks the area itself; the grid is then
+	// as many whole text cells as cover it.
+	if (g_program.pixel_area) {
+		area = g_program.pixel_area(root, alt);
+		w = (area.w + metrics.unit_w() - 1) / metrics.unit_w();
+		h = (area.h + metrics.unit_h() - 1) / metrics.unit_h();
+	}
 	if (g_program.draw_buf == null) {
 		g_program.draw_buf = xray::new_screen_buffer((sz)w, (sz)h);
 	} else if (g_program.draw_buf.width != (sz)w || g_program.draw_buf.height != (sz)h) {
@@ -211,16 +223,20 @@ fn View draw_in(Node* root, sz w, sz h) @local {
 	xray::ScreenBuffer* buf = g_program.draw_buf;
 	buf.clear();
 
-	root.solve(xray::new_rect(0, 0, w, h));
+	root.solve(area, metrics);
+	buf.record_paint = g_program.record_paint;
 	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, frame_ms());
 
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear
 	// and refill every draw() so a click always lands against what is
 	// actually on screen right now.
-	g_program.click_target_count = 0;
-	xray::collect_click_targets(root, g_program.click_targets[..], &g_program.click_target_count);
+	if (!g_program.click_targets.is_initialized()) g_program.click_targets.init(mem);
+	g_program.click_targets.clear();
+	xray::collect_click_targets(root, &g_program.click_targets);
+	if (g_program.on_draw) g_program.on_draw(root);
 
 	View v = {
+		.paint_ops = buf.recording() ? buf.paint_ops.array_view() : {},
 		.cells        = buf.cells,
 		.cells_width  = (sz)w,
 		.cells_height = (sz)h,

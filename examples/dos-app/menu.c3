@@ -19,6 +19,8 @@ struct MenuItem {
 
 // Cells of padding on each side of a dropdown item, inside its highlight.
 const sz ITEM_PAD = 1;
+// Least space between an item's label and its key.
+const sz ITEM_GAP = 2;
 
 const sz MENU_COLS  = 4;
 const sz MENU_ITEMS = 4;
@@ -50,7 +52,7 @@ struct Menu {
 	sz item;          // which item within the open dropdown
 	bool open;
 
-	// Width of an item's text, before the padding around it.
+	// Narrowest a dropdown gets, border included; longer items widen it.
 	sz item_width;
 
 	TitleSlot[MENU_COLS] title_slots;
@@ -71,7 +73,7 @@ enum Chosen {
 	PICKED,
 }
 
-fn Menu new_menu(String[MENU_COLS] titles, sz item_width = 20) {
+fn Menu new_menu(String[MENU_COLS] titles, sz item_width = 24) {
 	Menu m = { .titles = titles, .item_width = item_width };
 	// Titles sit end to end from the left edge, each as wide as its own text.
 	sz x = 0;
@@ -152,26 +154,26 @@ fn Chosen Menu.take_pending(&self) {
 // ── mouse ────────────────────────────────────────────────────────────────────
 
 // title_clicked/item_clicked/dropdown_dismissed adapt Menu's own state
-// transitions to xray::ClickFn's (ctx, col, row) shape. ctx is a TitleSlot*/
-// ItemSlot*/Menu* — see the slot fields on Menu for why these addresses stay
-// valid across the frame boundary where the node tree that registered them
-// does not.
-fn void title_clicked(void* ctx, sz col, sz row) @local {
-	TitleSlot* slot = (TitleSlot*)ctx;
+// transitions to xray::ClickFn's (id, id_str, col, row) shape. id carries a
+// TitleSlot*/ItemSlot*/Menu* set via .id_with(&slot) at registration time —
+// the slot addresses stay valid because they live on Menu itself, which
+// outlives the node tree that registered them.
+fn void title_clicked(void* id, String id_str, sz col, sz row) @local {
+	TitleSlot* slot = (TitleSlot*)id;
 	slot.menu.selected = slot.index;
 	slot.menu.open = true;
 	slot.menu.item = 0;
 }
 
-fn void item_clicked(void* ctx, sz col, sz row) @local {
-	ItemSlot* slot = (ItemSlot*)ctx;
+fn void item_clicked(void* id, String id_str, sz col, sz row) @local {
+	ItemSlot* slot = (ItemSlot*)id;
 	slot.menu.item = slot.index;
 	slot.menu.open = false;
 	slot.menu.pending = Chosen.PICKED;
 }
 
-fn void dropdown_dismissed(void* ctx, sz col, sz row) @local {
-	Menu* m = (Menu*)ctx;
+fn void dropdown_dismissed(void* id, String id_str, sz col, sz row) @local {
+	Menu* m = (Menu*)id;
 	m.dismiss();
 	m.pending = Chosen.DISMISSED;
 }
@@ -188,7 +190,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 		String label = (i == self.selected ? active : bar).render(self.titles[i]);
 		xray::Node* title_node = milktea::text(label, bar)
 			.width(milktea::cells(glaze::string_width(self.titles[i])));
-		title_node.on_click(&title_clicked, &self.title_slots[i]);
+		title_node.id_with(&self.title_slots[i]).on_click(&title_clicked);
 		row.add(title_node);
 	}
 	return row;
@@ -211,14 +213,14 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 		.width(milktea::cells(self.item_width + ITEM_PAD * 2 + 2))
 		.height(milktea::cells(MENU_ITEMS + 2))
 		.at(self.title_x[self.selected], below)
-		.shadow(milktea::shadow(1, 1).with_color(th.shadow));
-	panel_node.on_click_outside(&dropdown_dismissed, self);
+		.shadow(milktea::shadow(2, 1).with_color(th.shadow));
+	panel_node.id_with(self).on_click_outside(&dropdown_dismissed);
 
 	for (sz i = 0; i < MENU_ITEMS; i++) {
 		self.item_slots[i] = { .menu = self, .index = i };
 		glaze::Style s = i == self.item ? selected : item;
 		xray::Node* row_node = self.item_row(self.items[self.selected][i], s);
-		row_node.on_click(&item_clicked, &self.item_slots[i]);
+		row_node.id_with(&self.item_slots[i]).on_click(&item_clicked);
 		panel_node.add(row_node);
 	}
 	return panel_node;

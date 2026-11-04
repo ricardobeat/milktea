@@ -50,6 +50,9 @@ struct KeyMsg {
 	bool alt;
 	bool shift;
 	KeyAction action;
+	// Cmd on macOS, the Windows or Super key elsewhere. Only the GUI backend
+	// sets it: a terminal keeps those shortcuts for itself.
+	bool super;
 }
 
 enum MouseAction : int {
@@ -252,7 +255,7 @@ fn KeyAction decode_kitty_event(CSIParse csi, sz idx) @private {
 fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) @private {
 	return {
 		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift, KEY_PRESS },
+		{ code, rune, ctrl, alt, shift, KEY_PRESS, false },
 		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
 		consumed
 	};
@@ -264,7 +267,7 @@ fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift
 fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, KeyAction action, sz consumed) @private {
 	return {
 		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift, action },
+		{ code, rune, ctrl, alt, shift, action, false },
 		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
 		consumed
 	};
@@ -282,7 +285,7 @@ fn ParseResult make_mouse(
 ) @private {
 	return {
 		MsgKind.MOUSE,
-		{ NONE, 0, false, false, false, KEY_PRESS },
+		{ NONE, 0, false, false, false, KEY_PRESS, false },
 		{ button, action, row, col, shift, alt, ctrl, 0, 0 },
 		consumed
 	};
@@ -351,8 +354,8 @@ fn ParseResult parse_key(char[] buf) {
 				}
 				// X10 mouse: ESC [ M b x y  (3 bytes after M)
 				sz cb = (sz)(buf[3]) - 32;
-				sz cx = (sz)(buf[4]) - 32;
-				sz cy = (sz)(buf[5]) - 32;
+				sz cx = (sz)(buf[4]) - 32 - 1;
+				sz cy = (sz)(buf[5]) - 32 - 1;
 
 				// X10 encodes a coordinate as byte-32, so anything past column
 				// 223 wraps around and decodes negative. Nothing downstream
@@ -415,8 +418,14 @@ fn ParseResult parse_key(char[] buf) {
 			if (csi.private_prefix == '<' && (fb == 'M' || fb == 'm')) {
 				if (csi.param_count == 3) {
 					sz btn_code = csi.params[0];
-					sz col      = csi.params[1];
-					sz row      = csi.params[2];
+					// SGR mouse reports the cell the cursor is in as 1-based
+					// (col=1,row=1 for the top-left). Every other consumer
+					// — the GUI's pixel-to-cell division, xray's Rect.contains,
+					// app code indexing a grid — wants 0-based. Subtract here
+					// so the rest of the library and the app see the same
+					// coordinate system the cursor is over.
+					sz col      = csi.params[1] - 1;
+					sz row      = csi.params[2] - 1;
 
 					MouseButton button = MOUSE_NONE;
 					// Wheel buttons (64-67) must be checked before the low-2-bits mask
@@ -485,7 +494,7 @@ fn ParseResult parse_key(char[] buf) {
 			if (fb == 'I' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = FOCUS;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
 				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
@@ -493,7 +502,7 @@ fn ParseResult parse_key(char[] buf) {
 			if (fb == 'O' && csi.param_count == 0 && csi.private_prefix == 0) {
 				ParseResult pr;
 				pr.kind = BLUR;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS };
+				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
 				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 				pr.consumed = total;
 				return pr;
@@ -529,7 +538,7 @@ fn ParseResult parse_key(char[] buf) {
 					case 200: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_START;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
 						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;
@@ -537,7 +546,7 @@ fn ParseResult parse_key(char[] buf) {
 					case 201: {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_END;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS };
+						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
 						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
 						pr.consumed = total;
 						return pr;

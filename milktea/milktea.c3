@@ -2,6 +2,7 @@ module milktea;
 
 import std::core::dstring;
 import std::core::mem;
+import std::collections::list;
 import std::core::mem::allocators;
 import std::thread;
 import std::atomic;
@@ -26,7 +27,7 @@ enum MouseMode : int {
 // Cursor represents a cursor on the terminal screen.
 // x, y are 0-indexed relative to the top-left corner of the View content.
 // color is an optional hex color string (e.g. "#ff6600"). Empty = terminal default.
-struct Cursor @private {
+struct Cursor {
 	sz x;
 	sz y;
 	CursorShape shape;
@@ -36,7 +37,8 @@ struct Cursor @private {
 
 // View is one painted frame, as the renderer takes it: a cell grid or a
 // string, and where the terminal cursor goes.
-struct View @private {
+struct View {
+	xray::PaintOp[] paint_ops;
 	String content;
 	Cursor cursor;
 	bool has_cursor;
@@ -193,10 +195,9 @@ interface Model {
 }
 
 // Constants
-const sz MAX_BATCH  @private = 16;
+const sz MAX_BATCH  = 16;
 const sz INITIAL_SEND_CAPACITY @private = 16;
-const sz MAX_TIMERS @private = 32;
-const sz MAX_CLICK_TARGETS @private = 32;
+const sz MAX_TIMERS = 32;
 // How long to hold a lone leading ESC before flushing it as a keypress,
 // giving the rest of a split escape sequence time to arrive.
 const sz ESC_HOLD_MS @private = 50;
@@ -213,9 +214,17 @@ struct TimerEntry @private {
 	void* owner;
 }
 
+alias DrawHook = fn void(xray::Node* root);
+// PixelAreaFn returns the area, in layout pixels, to solve a tree in: the
+// whole window for the alt screen (alt), or only what an inline tree needs.
+alias PixelAreaFn = fn xray::Rect(xray::Node* root, bool alt);
+
 // Program holds all mutable runtime state for a running TUI.
 // Enables sequential multi-instance use and proper testability.
 struct Program {
+	bool record_paint;
+	xray::LayoutMetrics layout_metrics;
+	xray::Rect layout_area;
 	Model model;
 	Options options;
 	TimerEntry[MAX_TIMERS] timers;
@@ -229,12 +238,24 @@ struct Program {
 	// Mouse hit-testing: repopulated by draw() every frame from the just-
 	// solved tree (xray::collect_click_targets), so a MOUSE_PRESS is matched
 	// against the layout that was actually on screen when the click landed
-	// rather than the app re-deriving widget geometry by hand. Fixed-size
-	// like the other per-frame buffers below — a screen with more than
-	// MAX_CLICK_TARGETS clickable nodes drops the excess, silently, same as
-	// timers/pending.
-	xray::ClickTarget[MAX_CLICK_TARGETS] click_targets;
-	sz click_target_count;
+	// rather than the app re-deriving widget geometry by hand. It grows as
+	// needed: a fixed cap dropped the last targets of a busy screen, which
+	// are the topmost ones (a dialog's buttons over a long list).
+	List{xray::ClickTarget} click_targets;
+	// Last pointer position and last hovered targets, used by dispatch_hover
+	// to fire on_hover_in / on_hover_out only on real edge crossings. Targets
+	// themselves are not stored — the same click_targets list is filtered each
+	// frame, so a frame that rebuilt the tree invalidates the comparison and
+	// every previously-hovered target gets on_hover_out + on_hover_in again.
+	sz hover_prev_col;
+	sz hover_prev_row;
+	bool hover_has_prev;
+	// on_draw, when set, sees every tree draw() has just solved and painted.
+	// A backend reads what it needs from the frame here — the GUI collects
+	// its window drag handles — so the terminal links none of that.
+	DrawHook on_draw;
+	// pixel_area, when set, makes draw() lay out in layout_metrics' pixels.
+	PixelAreaFn pixel_area;
 	// Cached window size (including pixel dimensions) used to convert
 	// SGR-Pixels (mode 1016) mouse coordinates to cell coordinates without
 	// an ioctl per mouse event. Refreshed on init and on WINDOW_SIZE changes.
@@ -251,6 +272,28 @@ struct Program {
 	char[MAX_MOUSE_CURSOR_LEN] want_mouse_cursor_buf;
 	sz want_mouse_cursor_len;
 	bool debug;
+	// debug_mouse turns on the framework's mouse-event tracing: every click
+	// dispatch prints its target list, every hover edge print which targets
+	// gained or lost hover. Both the GUI backend and xray::node_click read
+	// this — one source of truth instead of separate env-var checks per
+	// file. Set with milktea::set_debug_mouse().
+	bool debug_mouse;
+	// frame_no increments once per view() call. Test scripts use it to
+	// schedule fake clicks / pointer moves at a deterministic frame; the
+	// GUI backend exposes the same number internally for the same purpose.
+	long frame_no;
+	// test_click / test_pointer pending state. Each is armed with a target
+	// frame, and the running backend fires the synthetic event when its
+	// own frame counter reaches that point. After firing, the slot is
+	// disarmed so the event does not re-fire every subsequent frame.
+	bool test_click_armed;
+	sz test_pending_click_col;
+	sz test_pending_click_row;
+	long test_pending_click_frame;
+	bool test_pointer_armed;
+	sz test_pending_pointer_col;
+	sz test_pending_pointer_row;
+	long test_pending_pointer_frame;
 	char[512] pending;
 	sz pending_len;
 	TerminalReply terminal_reply;
@@ -487,14 +530,97 @@ fn sz screen_height() {
 	return (sz)g_program.cached_ws.ws_row;
 }
 
+// Layout geometry is in logical pixels in GUI programs and cells in terminals.
+// screen_width/screen_height continue to report whole text columns and rows.
+fn xray::LayoutMetrics layout_metrics() {
+	return g_program != null ? g_program.layout_metrics : (xray::LayoutMetrics){};
+}
+
+fn xray::Rect layout_area() {
+	if (g_program != null && g_program.pixel_area) return g_program.layout_area;
+	return xray::new_rect(0, 0, screen_width(), screen_height());
+}
+
 // dispatch_click fires on_click/on_click_outside hooks (see xray::Node.on_click,
 // .on_click_outside) against the click targets collected from the last drawn
 // frame — called for every MOUSE_PRESS before the raw MouseMsg reaches
 // model.update(), by dispatch() in the normal event loop and directly by any
 // backend (e.g. a GUI renderer) that drives a Model outside Program.run().
+// Dispatch coordinates use backend layout units; callbacks receive text cells.
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
-	xray::dispatch_click(g_program.click_targets[:g_program.click_target_count], col, row);
+	xray::dispatch_click(g_program.click_targets.array_view(),
+		col, row, g_program.debug_mouse);
+}
+
+// dispatch_hover walks the last drawn frame's click targets and fires
+// on_hover_in / on_hover_out on targets whose rect changed side relative to
+// the last pointer event. A press at (col, row) also counts as motion for
+// the purposes of hover tracking — the press location becomes the new
+// pointer position. (-1, -1) on the first call skips every prior target.
+fn void dispatch_hover(sz col, sz row) {
+	if (g_program == null) return;
+	xray::ClickTarget[] targs = g_program.click_targets.array_view();
+	if (g_program.hover_has_prev) {
+		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
+			g_program.hover_prev_col, g_program.hover_prev_row,
+			g_program.debug_mouse);
+	} else {
+		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
+			-1, -1, g_program.debug_mouse);
+	}
+	g_program.hover_prev_col = col;
+	g_program.hover_prev_row = row;
+	g_program.hover_has_prev = true;
+}
+
+// set_debug_mouse turns mouse-event tracing on or off for the running
+// program. When on, both the GUI backend and xray::node_click print every
+// dispatch_hover / dispatch_click's target list to stderr. Apps usually set
+// it from a CLI flag or env var at startup; tests toggle it per assertion.
+fn void set_debug_mouse(bool on) {
+	if (g_program == null) return;
+	g_program.debug_mouse = on;
+}
+
+// debug_mouse reports whether mouse tracing is currently on. Useful for
+// conditional logging in app code that wants to be quiet in production.
+fn bool debug_mouse() => g_program != null && g_program.debug_mouse;
+
+// frame_no returns how many times the running program has rendered the
+// model's view. Tests use it to schedule fake clicks / pointer moves at a
+// deterministic point in the loop, and the GUI backend keeps a parallel
+// counter for the same purpose.
+fn long frame_no() => g_program != null ? g_program.frame_no : 0;
+
+// test_click schedules a synthetic left-button press at (col, row) to fire
+// after the next `after_frame` render calls complete. after_frame=0 means
+// "next frame"; the GUI and terminal backends both honour it through their
+// own fake-click paths. The press fires through the same dispatch_click
+// the real mouse uses, so target lookup, id forwarding, and the resulting
+// on_click / on_hover_in chains all behave exactly as they would in a
+// real session — the only thing missing is the pixel the pointer was at.
+//
+// Test scripts prefer this over MILKTEA_DEBUG_CLICK_AT: it is deterministic,
+// has a programmatic return value, and does not depend on the env-var
+// parsing happening to produce a valid cell.
+fn void test_click(sz col, sz row, long after_frame) {
+	if (g_program == null) return;
+	g_program.test_pending_click_col = col;
+	g_program.test_pending_click_row = row;
+	g_program.test_pending_click_frame = g_program.frame_no + after_frame;
+	g_program.test_click_armed = true;
+}
+
+// test_pointer schedules a synthetic hover at (col, row), firing after
+// `after_frame` frames the same way test_click does. Useful for asserting
+// that hover effects render without driving a real mouse.
+fn void test_pointer(sz col, sz row, long after_frame) {
+	if (g_program == null) return;
+	g_program.test_pending_pointer_col = col;
+	g_program.test_pending_pointer_row = row;
+	g_program.test_pending_pointer_frame = g_program.frame_no + after_frame;
+	g_program.test_pointer_armed = true;
 }
 
 // set_mouse_mode turns mouse reporting on or off from the next frame. A
@@ -567,8 +693,27 @@ const String CURSOR_BLOCK     = "\xe2\x96\x88"; // █
 const String CURSOR_UNDERLINE = "\xe2\x96\x84"; // ▄
 const String CURSOR_BAR       = "\xe2\x96\x82"; // ▂
 
-fn Cmd quit() {
+// quit asks the running program to stop. It is a Cmd — the loop stops when a
+// model's update() returns it — so a caller with no Cmd to return (a click
+// handler, say, which is a plain void function) wants request_quit() instead.
+// @nodiscard is what makes that distinction visible: `quit();` as a statement
+// builds a Cmd and throws it away, which reads as "quit" and does nothing.
+fn Cmd quit() @nodiscard {
 	return &make_quit_msg;
+}
+
+// request_quit asks the running program to stop at the next turn, for callers
+// with no Cmd to hand back — a node's click handler is a void function, and a
+// window's close button is exactly that. The message goes through the send
+// queue, which both backends drain every frame, so it is handled on the next
+// pass of the loop rather than inside the callback that asked for it (which
+// may be midway through a dispatch).
+//
+// Returns false when nothing is running to receive it.
+fn bool request_quit() {
+	if (g_program == null) return false;
+	g_program.send(make_quit_msg());
+	return true;
 }
 
 // emit writes raw terminal bytes through the same tty path the renderer uses,
@@ -765,6 +910,11 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
 	self.stamp_now();
+	if (m.kind == MsgKind.MOUSE
+		&& (m.mouse.action == MouseAction.MOUSE_PRESS
+			|| m.mouse.action == MouseAction.MOUSE_MOTION)) {
+		dispatch_hover(m.mouse.col, m.mouse.row);
+	}
 	Cmd c     = model.update(m);
 	sz chain = 0;
 	while (c != null && chain < MAX_BATCH) {
@@ -1065,6 +1215,7 @@ fn void? Program.run(Program* self) {
 			mem::free(self.draw_scratch);
 			self.draw_scratch = null;
 		}
+		self.click_targets.free();
 
 		if (self.renderer != null) {
 			self.renderer.destroy();
@@ -1447,7 +1598,7 @@ fn void? Program.run(Program* self) {
 						self.pending[i - 1] = self.pending[i];
 					}
 					self.pending_len--;
-					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS } };
+					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS, false } };
 					if (dispatch(self, self.model, em)) return;
 					dirty   = true;
 					reparse = true;
@@ -1461,6 +1612,10 @@ fn void? Program.run(Program* self) {
 			self.render_current_view();
 		}
 
+		// A scripted click or pointer move (test_click, test_pointer) waits a
+		// number of frames, so while one is armed every pass renders one.
+		if (self.test_armed() && self.fire_test_events()) return;
+
 
 		// In test mode there is no reader thread and no wall-clock waiting, so
 		// once the injected input is consumed, the pending buffer is drained
@@ -1468,7 +1623,7 @@ fn void? Program.run(Program* self) {
 		// Without this the loop spins at 100% CPU forever whenever a model
 		// under test doesn't return quit() — one bad test hangs the suite.
 		if (self.test_mode && self.inject_input_pos >= self.inject_input.len && self.pending_len == 0
-			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()) {
 			return;
 		}
 
@@ -1478,7 +1633,7 @@ fn void? Program.run(Program* self) {
 		// immediately once the queue is closed. Timers still keep the program
 		// alive, so an animation driven purely by tick() is unaffected.
 		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
-			&& !self.has_active_timer() && self.send_head == self.send_tail) {
+			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()) {
 			return;
 		}
 
@@ -1499,11 +1654,36 @@ fn void? Program.run(Program* self) {
 			}
 			// When stuck on incomplete data, cap wait to avoid long hangs
 			if (stuck && wait_ms > 100) wait_ms = 100;
+			if (self.test_armed()) wait_ms = 0;
 			if (wait_ms > 0) {
 				input_queue_wait(&g_input_queue, wait_ms);
 			}
 		}
 	}
+}
+
+fn bool Program.test_armed(Program* self) @inline => self.test_click_armed || self.test_pointer_armed;
+
+// fire_test_events sends whichever scripted click or pointer move has reached
+// its frame through dispatch(), as a real mouse event, then renders, which
+// also counts the frame the others are waiting for. Returns true on quit.
+fn bool Program.fire_test_events(Program* self) {
+	if (self.test_click_armed && self.frame_no >= self.test_pending_click_frame) {
+		self.test_click_armed = false;
+		Msg m = { .kind = MsgKind.MOUSE, .mouse = { .button = MouseButton.MOUSE_LEFT,
+			.action = MouseAction.MOUSE_PRESS, .row = self.test_pending_click_row,
+			.col = self.test_pending_click_col } };
+		if (dispatch(self, self.model, m)) return true;
+	}
+	if (self.test_pointer_armed && self.frame_no >= self.test_pending_pointer_frame) {
+		self.test_pointer_armed = false;
+		Msg m = { .kind = MsgKind.MOUSE, .mouse = { .button = MouseButton.MOUSE_NONE,
+			.action = MouseAction.MOUSE_MOTION, .row = self.test_pending_pointer_row,
+			.col = self.test_pending_pointer_col } };
+		if (dispatch(self, self.model, m)) return true;
+	}
+	self.render_current_view();
+	return false;
 }
 
 // has_active_timer reports whether any timer slot is armed.
@@ -1687,6 +1867,7 @@ fn Msg repaint_msg() @local => {};
 // alt-screen transitions and output routing (stdout vs capture buffer).
 // In non-test mode, uses xray's differential renderer with synchronized output.
 fn void Program.render_current_view(Program* self) {
+	self.frame_no++;
 	@pool() {
 		self.stamp_now();
 		// The alternate screen is the program's to fill; inline, the block is

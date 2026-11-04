@@ -87,15 +87,15 @@ fn Pressed Dialog.take_pending(&self) {
 	return p;
 }
 
-fn void button_clicked(void* ctx, sz col, sz row) @local {
-	ButtonSlot* slot = (ButtonSlot*)ctx;
+fn void button_clicked(void* id, String id_str, sz col, sz row) @local {
+	ButtonSlot* slot = (ButtonSlot*)id;
 	slot.dialog.focused = slot.index;
 	slot.dialog.open = false;
 	slot.dialog.pending = slot.index == 0 ? Pressed.CONFIRMED : Pressed.DISMISSED;
 }
 
-fn void backdrop_dismissed(void* ctx, sz col, sz row) @local {
-	Dialog* d = (Dialog*)ctx;
+fn void backdrop_dismissed(void* id, String id_str, sz col, sz row) @local {
+	Dialog* d = (Dialog*)id;
 	d.open = false;
 	d.pending = Pressed.DISMISSED;
 }
@@ -119,18 +119,16 @@ fn xray::Node* modal_panel(Theme* th, sz min_cols) {
 // node returns the dialog, or null when it is closed, so the caller can add
 // it unconditionally.
 //
-// The panel is a real container sized entirely by the layout solver: the
-// header text and the button row are children, and min_width().center()
-// measures the panel from them (same content_width/content_height the
-// solver already uses for any CFIT node) rather than computing panel_w/
-// panel_h by hand ahead of time.
+// The panel is a styled box sized by the layout: its border and padding frame
+// the title, body and button row, and it hugs them, no narrower than the
+// min_width its style carries.
 fn xray::Node* Dialog.node(&self, Theme* th) {
 	if (!self.open) return null;
 
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
 	xray::Node* panel_node = modal_panel(th, self.min_cols);
-	panel_node.on_click_outside(&backdrop_dismissed, self);
+	panel_node.id_with(self).on_click_outside(&backdrop_dismissed);
 
 	// Body text has no bg of its own — without one it paints on the
 	// renderer's default (black) instead of showing the panel through, so it
@@ -150,7 +148,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 		self.button_slots[i] = { .dialog = self, .index = i };
 		String label = self.buttons[i].themed(th).with_focus(i == self.focused).view();
 		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.on_click(&button_clicked, &self.button_slots[i]);
+		btn.id_with(&self.button_slots[i]).on_click(&button_clicked);
 		buttons_row.add(btn);
 	}
 	panel_node.add(buttons_row);

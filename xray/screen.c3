@@ -3,6 +3,7 @@ module xray;
 import std::core::dstring;
 import std::math;
 import glaze;
+import std::collections::list;
 
 // ============================================================
 // ScreenBuffer — cell grid with diff-based rendering.
@@ -11,6 +12,13 @@ import glaze;
 // ============================================================
 
 struct ScreenBuffer {
+	// Opt-in GUI command recording; terminal buffers allocate no stream.
+	bool record_paint;
+	LayoutMetrics paint_metrics;
+	sz paint_dx, paint_dy;
+	Rect paint_extent;
+	bool decorated_content;
+	List{PaintOp} paint_ops;
 	Cell[] cells; // flat grid: width * height
 	Cell[] prev_cells; // previous frame for diffing
 	sz width;
@@ -78,6 +86,7 @@ fn ScreenBuffer* new_screen_buffer(sz width, sz height) {
 
 // destroy frees all allocated memory.
 fn void ScreenBuffer.destroy(&self) {
+	if (self.paint_ops.is_initialized()) self.paint_ops.free();
 	mem::free(self.cells.ptr);
 	mem::free(self.prev_cells.ptr);
 	mem::free(self.dirty_lines.ptr);
@@ -152,7 +161,9 @@ fn bool is_block_char(Cell* cell) @local {
 // repair. Reserved for callers that are placing both halves of a wide glyph
 // themselves and must not have the pair torn apart mid-write.
 fn void ScreenBuffer.put_raw_cell(&self, sz col, sz row, Cell cell) {
+	if (self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
+	if (!self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	sz idx = row * self.width + col;
 	if (!self.cells[idx].eq(cell)) {
 		self.cells[idx] = cell;
@@ -181,6 +192,8 @@ fn void ScreenBuffer.split_wide_neighbors(&self, sz col, sz row, char incoming_w
 			Style keep = left.style;
 			*left = empty_cell();
 			left.style = keep;
+			// Pixel-positioned nodes need not share this cell's origin.
+			if (!self.paint_metrics.pixels) self.record_cell(col - 1, row, *left);
 			self.dirty_lines[row] = true;
 		}
 	}
@@ -191,6 +204,7 @@ fn void ScreenBuffer.split_wide_neighbors(&self, sz col, sz row, char incoming_w
 		blank.style = right.style;
 		if (!right.eq(blank)) {
 			*right = blank;
+			if (!self.paint_metrics.pixels) self.record_cell(col + 1, row, blank);
 			self.dirty_lines[row] = true;
 		}
 	}
@@ -207,7 +221,9 @@ fn void ScreenBuffer.set_cell(&self, sz col, sz row, Cell cell) {
 	// sz is signed: negative coordinates must be rejected explicitly, or they
 	// index before the buffer (a trap in safe builds, silent heap corruption
 	// in the -Os/-O3 example targets).
+	if (self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	if (col < 0 || row < 0 || col >= self.width || row >= self.height) return;
+	if (!self.paint_metrics.pixels) self.record_cell(col, row, cell);
 	sz idx = row * self.width + col;
 	if (cell.style.bg.kind == ColorKind.TRANSPARENT) {
 		Cell* existing = &self.cells[idx];
@@ -1316,7 +1332,11 @@ fn void ScreenBuffer.put_cells(&self, Cell[] src, sz src_w, sz src_h, Rect clip)
 
 	for (sz y = y0; y < y1; y++) {
 		sz from = (y - clip.y) * src_w + (x0 - clip.x);
-		mem::copy(&self.cells[y * self.width + x0], &src[from], (usz)(x1 - x0) * Cell::size);
+		if (self.recording()) {
+			for (sz x = x0; x < x1; x++) self.set_cell(x, y, src[from + x - x0]);
+		} else {
+			mem::copy(&self.cells[y * self.width + x0], &src[from], (usz)(x1 - x0) * Cell::size);
+		}
 		self.dirty_lines[y] = true;
 	}
 }

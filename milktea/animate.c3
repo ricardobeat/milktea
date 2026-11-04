@@ -7,19 +7,19 @@ import xray;
 // `Node.transition` reads the tween at frame_ms() and writes the result into
 // the node's offset and alpha, so it drops into a view's builder chain and
 // changes nothing but the node:
-// 
+//
 //     dialog = milktea::text(body, panel).center()
 //         .transition(milktea::slide_down(6).fade(), self.anim);
-// 
+//
 // The model's only job is to aim the tween, which also keeps frames coming
 // until it arrives:
-// 
+//
 //     self.anim.update(1); // open; update(0) closes
-// 
+//
 // This is the other half of Node.animate. A node that animates changes for as
 // long as it is on screen — a spinner, a caret — and says so from the view. A
 // transition is a change of state, which update() starts and the tween times.
-// 
+//
 // This lives in milktea rather than xray because it needs Tween and the frame
 // clock, and xray deliberately has neither. Everything it writes is a plain
 // xray field, so the node stays an ordinary node.
