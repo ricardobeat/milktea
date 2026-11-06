@@ -140,6 +140,9 @@ enum MsgKind : char {
 	// They are consumed in Program.run() and never forwarded to model.update().
 	PASTE_START,
 	PASTE_END,
+	// MENU is a menu item chosen outside the view — from the platform's own
+	// menu bar (see set_native_menus). Msg.tag is the item's id.
+	MENU,
 }
 
 struct WindowSizeMsg {
