@@ -344,7 +344,7 @@ fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuf
 // shows in part at the top and the extra row in part at the bottom. The
 // grid keeps r's rows; the extra row only goes into the paint stream, which
 // is all a window draws.
-fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz shift, Color fg) @private {
+fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz shift, Color fg) {
 	self.record_clip(area);
 	sz old_dy = self.paint_dy;
 	self.paint_dy -= shift;

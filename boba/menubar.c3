@@ -163,7 +163,7 @@ fn void MenuBar.set_menus(&self, Menu[] menus) {
 	self.published = false;
 }
 
-fn void MenuBar.free_menus(&self) @private {
+fn void MenuBar.free_menus(&self) {
 	foreach (m : self.menus) mem::free(m.items);
 	if (self.menus.len > 0) mem::free(self.menus);
 	if (self.title_slots.len > 0) mem::free(self.title_slots);
@@ -285,7 +285,7 @@ fn int native_tag(sz menu_index, sz item_index) @private {
 	return (int)(menu_index * NATIVE_TAG_STRIDE + item_index + 1);
 }
 
-fn MenuEvent MenuBar.picked_by_id(&self, int tag) @private {
+fn MenuEvent MenuBar.picked_by_id(&self, int tag) {
 	if (tag <= 0) return {};
 	sz mi = (sz)((tag - 1) / NATIVE_TAG_STRIDE);
 	sz ii = (sz)((tag - 1) % NATIVE_TAG_STRIDE);
@@ -295,14 +295,14 @@ fn MenuEvent MenuBar.picked_by_id(&self, int tag) @private {
 	return { .kind = PICKED, .id = it.id, .item = it };
 }
 
-fn MenuEvent MenuBar.picked(&self) @private {
+fn MenuEvent MenuBar.picked(&self) {
 	MenuItem it = self.current_item();
 	self.deactivate();
 	if (it.separator || it.label.len == 0) return { .kind = DISMISSED };
 	return { .kind = PICKED, .id = it.id, .item = it };
 }
 
-fn MenuEvent MenuBar.key(&self, milktea::KeyMsg k) @private {
+fn MenuEvent MenuBar.key(&self, milktea::KeyMsg k) {
 	if (k.action == milktea::KeyAction.KEY_RELEASE) return {};
 	if (self.open) return self.key_open(k);
 	if (self.is_active()) return self.key_bar(k);
@@ -327,7 +327,7 @@ fn MenuEvent MenuBar.key(&self, milktea::KeyMsg k) @private {
 
 fn uint lower(uint c) @private => c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c;
 
-fn MenuEvent MenuBar.key_bar(&self, milktea::KeyMsg k) @private {
+fn MenuEvent MenuBar.key_bar(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.LEFT:
 			self.step_title(-1);
@@ -346,7 +346,7 @@ fn MenuEvent MenuBar.key_bar(&self, milktea::KeyMsg k) @private {
 	return { .kind = CONSUMED };
 }
 
-fn MenuEvent MenuBar.key_open(&self, milktea::KeyMsg k) @private {
+fn MenuEvent MenuBar.key_open(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.ESC:
 			self.deactivate();
@@ -369,14 +369,14 @@ fn MenuEvent MenuBar.key_open(&self, milktea::KeyMsg k) @private {
 	return { .kind = CONSUMED };
 }
 
-fn void MenuBar.step_title(&self, sz d) @private {
+fn void MenuBar.step_title(&self, sz d) {
 	sz n = self.menus.len;
 	if (n == 0) return;
 	self.selected = (self.selected + d + n) % n;
 }
 
 // step_item moves to the next item that is not a separator.
-fn void MenuBar.step_item(&self, sz d) @private {
+fn void MenuBar.step_item(&self, sz d) {
 	if (self.selected >= self.menus.len) return;
 	MenuItem[] items = self.menus[self.selected].items;
 	sz i = self.item;
@@ -390,7 +390,7 @@ fn void MenuBar.step_item(&self, sz d) @private {
 	}
 }
 
-fn void MenuBar.open_menu(&self, sz index) @private {
+fn void MenuBar.open_menu(&self, sz index) {
 	if (index < 0 || index >= self.menus.len) return;
 	self.selected = index;
 	self.open = true;
@@ -460,14 +460,14 @@ fn bool in_window() @private => milktea::layout_metrics().pixels;
 
 // bar_height is the bar's height in a window: a row, at least tall enough
 // for the window buttons, plus bar_shape's padding.
-fn sz MenuBar.bar_height(&self) @private {
+fn sz MenuBar.bar_height(&self) {
 	sz h = milktea::layout_metrics().unit_h();
 	if (h < MENU_BAR_MIN_HEIGHT) h = MENU_BAR_MIN_HEIGHT;
 	return h;
 }
 
 // publish puts the menus in the platform's menu bar, once per set of menus.
-fn void MenuBar.publish(&self) @private {
+fn void MenuBar.publish(&self) {
 	if (self.published) return;
 	self.published = true;
 	if (!milktea::has_native_menus()) return;
@@ -541,7 +541,7 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 
 // controls are minimise, maximise and close, for a window whose platform
 // draws none in the app's own bar.
-fn xray::Node* MenuBar.controls(&self) @private {
+fn xray::Node* MenuBar.controls(&self) {
 	glaze::Style s = self.controls_style;
 	return milktea::hstack().width(milktea::cells(9))
 		.add(milktea::text(" – ", s).width(milktea::cells(3)).on_click(&menubar_minimize))
@@ -596,7 +596,7 @@ fn xray::Node* MenuBar.dropdown(&self, xray::Node* lead = null) {
 		.add(panel.at(title_x, 1));
 }
 
-fn xray::Node* MenuBar.item_row(&self, MenuItem it, bool current) @private {
+fn xray::Node* MenuBar.item_row(&self, MenuItem it, bool current) {
 	glaze::Style s = current ? self.item_selected_style : self.item_style;
 	xray::Node* r = milktea::hstack()
 		.style({ .bg = s.bg, .fg = s.fg, .pad_left = MENU_ITEM_PAD, .pad_right = MENU_ITEM_PAD })
@@ -623,7 +623,7 @@ fn xray::Node* MenuBar.item_row(&self, MenuItem it, bool current) @private {
 
 // rule_width is the width, in cells, of the open menu's widest item between
 // the row's padding: label, gap and shortcut.
-fn sz MenuBar.rule_width(&self) @private {
+fn sz MenuBar.rule_width(&self) {
 	sz w = 0;
 	foreach (it : self.menus[self.selected].items) {
 		if (it.separator) continue;

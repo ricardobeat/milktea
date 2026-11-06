@@ -290,22 +290,22 @@ fn bool Viewport.handle_mouse(&self, String button, String action) {
 // scroll_by scrolls by the given number of lines (negative = up, positive = down).
 // ── smooth scrolling ─────────────────────────────────────────────────────────
 
-fn float Viewport.row_px(&self) @private => (float)milktea::layout_metrics().unit_h();
+fn float Viewport.row_px(&self) => (float)milktea::layout_metrics().unit_h();
 
-fn float Viewport.max_px(&self) @private {
+fn float Viewport.max_px(&self) {
 	sz rows = self.total_lines - self.height;
 	return rows > 0 ? (float)rows * self.row_px() : 0.0f;
 }
 
 // position is the scroll position in pixels, taken from offset when the row
 // methods (scroll_down, page_up, ...) moved it since the last pixel scroll.
-fn float Viewport.position(&self) @private {
+fn float Viewport.position(&self) {
 	float row = self.row_px();
 	if ((sz)math::floor(self.pos_px / row) != self.offset) self.pos_px = (float)self.offset * row;
 	return self.pos_px;
 }
 
-fn void Viewport.set_position(&self, float px) @private {
+fn void Viewport.set_position(&self, float px) {
 	self.pos_px = px;
 	self.offset = (sz)math::floor(px / self.row_px());
 }
@@ -347,7 +347,7 @@ fn void Viewport.scroll_pixels(&self, float dy, bool precise, milktea::ScrollPha
 }
 
 // settle moves a springing viewport towards the nearest end it ran past.
-fn void Viewport.settle(&self) @private {
+fn void Viewport.settle(&self) {
 	if (!self.springing) return;
 	float target = clampf(self.pos_px, 0, self.max_px());
 	float t = (float)(milktea::frame_ms() - self.spring_start_ms);
@@ -477,7 +477,7 @@ fn String Viewport.view(&self) => self.view_rows(self.height);
 // view_rows renders rows lines from offset. Rows before the content or
 // past its end (a trackpad pulling past an end, or the extra row a smooth
 // scroll asks for) are blank; without either, it stops at the last line.
-fn String Viewport.view_rows(&self, sz rows) @private {
+fn String Viewport.view_rows(&self, sz rows) {
 	DString out = dstring::temp();
 	sz start = self.offset;
 	sz end = start + rows;
@@ -577,7 +577,7 @@ fn String Viewport.render(&self, xray::Rect r) @dynamic {
 }
 
 // frac_px is how far into its first row the viewport is scrolled.
-fn sz Viewport.frac_px(&self) @private {
+fn sz Viewport.frac_px(&self) {
 	float row = self.row_px();
 	float f = self.pos_px - (float)self.offset * row;
 	return f > 0 ? (sz)math::round(f) % (sz)row : 0;

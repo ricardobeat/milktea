@@ -23,6 +23,8 @@ struct DosModel {
 	boba::MenuBar menu;
 	Dialog about;
 	Picker theme_picker;
+	Picker open_picker;
+	FileViewer viewer;
 	ThemeSet themes;
 	int active_tab;
 	String status_msg;
@@ -50,6 +52,9 @@ fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
 		self.theme_picker.add_choice(self.themes.themes[i].name);
 	}
 
+	self.open_picker = new_picker("Open File", " Open ", "Cancel");
+	self.open_picker.add_choice("BANNER.TXT");
+
 	self.about = new_dialog("About milktea",
 		"A TUI framework for the C3\nprogramming language.\n\nVersion 0.1.0  —  MIT License",
 		"  OK  ", "Cancel");
@@ -72,7 +77,13 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 	// The menu bar sees everything first while no dialog is up: clicks and
 	// keys on it, item shortcuts, and picks from the platform's menu bar.
-	if (!self.theme_picker.open && !self.about.open) {
+	// The file viewer is modal: it takes everything while it is up.
+	if (self.viewer.open) {
+		self.viewer.handle(msg);
+		if (!self.viewer.open) self.status_msg = "Ready";
+		return null;
+	}
+	if (!self.theme_picker.open && !self.about.open && !self.open_picker.open) {
 		boba::MenuEvent ev = self.menu.update(msg);
 		switch (ev.kind) {
 			case PICKED:
@@ -92,11 +103,27 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 	// Whichever layer is on top gets the key first. Only when nothing has one
 	// open do the app's own shortcuts apply.
 	if (self.theme_picker.open) return self.handle_theme_picker(k);
+	if (self.open_picker.open) return self.opened(self.open_picker.handle_key(k));
 	if (self.about.open) return self.handle_dialog(k);
 	return self.handle_desktop(k);
 }
 
+// opened acts on the Open File picker: its one choice opens in the viewer.
+fn milktea::Cmd DosModel.opened(&self, Pressed p) {
+	switch (p) {
+		case Pressed.CONFIRMED:
+			self.viewer.show(self.open_picker.choices[self.open_picker.selected], BANNER_TXT[..]);
+			self.status_msg = "Viewing BANNER.TXT";
+		case Pressed.DISMISSED:
+			self.status_msg = "Ready";
+		default:
+	}
+	return null;
+}
+
 fn milktea::Cmd DosModel.handle_mouse_result(&self) {
+	Pressed opened = self.open_picker.take_pending();
+	if (opened != Pressed.NOTHING) return self.opened(opened);
 	switch (self.theme_picker.take_pending()) {
 		case Pressed.CONFIRMED:
 			self.themes.active = self.theme_picker.selected;
@@ -160,6 +187,8 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 			self.about.show();
 		case "Color Theme...":
 			self.theme_picker.show(self.themes.active);
+		case "Open...":
+			self.open_picker.show(0);
 		default:
 			self.status_msg = "Action: not implemented in demo";
 	}
@@ -203,7 +232,9 @@ fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
 		// neither needs a condition here.
 		.add(self.menu.dropdown())
 		.add(self.about.node(self.theme()))
-		.add(self.theme_picker.node(self.theme()));
+		.add(self.theme_picker.node(self.theme()))
+		.add(self.open_picker.node(self.theme()))
+		.add(self.viewer.node(self.theme()));
 }
 
 // menu_bar styles the bar from the current theme, so a theme change reaches
