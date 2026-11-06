@@ -171,9 +171,10 @@ struct Node {
 	Constraint size_w;
 	Constraint size_h;
 
-	Node** children;
+	// The first child_count entries are the children; the slice's length is
+	// the room it has, so indexing it is bounds-checked.
+	Node*[] children;
 	sz child_count;
-	sz child_cap;
 
 	NodeDirection direction;
 	JustifyContent justify;
@@ -313,12 +314,11 @@ fn Node* content_node(Content c) {
 fn Node* Node.add(&self, Node* child) {
 	assert(child == null || !self.leaf, "a leaf node, such as text(), cannot hold children");
 	if (child == null) return self;
-	if (self.child_count == self.child_cap) {
-		sz cap = self.child_cap == 0 ? NODE_CHILDREN_INITIAL : self.child_cap * 2;
+	if (self.child_count == self.children.len) {
+		sz cap = self.children.len == 0 ? NODE_CHILDREN_INITIAL : self.children.len * 2;
 		Node*[] grown = mem::talloc_array(Node*, cap);
-		if (self.child_count > 0) grown[:self.child_count] = self.children[:self.child_count];
-		self.children = grown.ptr;
-		self.child_cap = cap;
+		grown[:self.child_count] = self.children[:self.child_count];
+		self.children = grown;
 	}
 	self.children[self.child_count++] = child;
 	return self;
