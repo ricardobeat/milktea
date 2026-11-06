@@ -22,6 +22,8 @@ struct ClickTarget {
 	ClickFn on_hover_out;
 	// The node blocks the pointer for everything collected before it.
 	bool blocks;
+	// The node paints differently under the pointer (see Node.style's hover).
+	bool hover_style;
 }
 
 // collect_click_targets walks a solved tree and appends one ClickTarget per
@@ -34,7 +36,7 @@ struct ClickTarget {
 fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
 	if (n == null) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null
-		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.blocks_pointer) {
+		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.blocks_pointer || n.has_hover()) {
 		out.push({
 			.rect = n.computed_rect,
 			.metrics = n.layout_metrics,
@@ -47,6 +49,7 @@ fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
 			.on_hover_in = n.on_hover_in_fn,
 			.on_hover_out = n.on_hover_out_fn,
 			.blocks = n.blocks_pointer,
+			.hover_style = n.has_hover(),
 		});
 	}
 	for (sz i = 0; i < n.child_count; i++) {
@@ -117,17 +120,22 @@ fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 //
 // col and row passed to the callbacks are local to the hit target's rect,
 // matching dispatch_click.
-fn void dispatch_hover(ClickTarget[] targets, sz col, sz row,
+//
+// Returns whether anything that reacts to the pointer — a hover callback or
+// a hover style — went in or out, which is when the screen needs redrawing.
+fn bool dispatch_hover(ClickTarget[] targets, sz col, sz row,
 		ClickTarget[] prev, sz prev_count, sz prev_col, sz prev_row, bool dbg) {
-	if (col == prev_col && row == prev_row) return;
+	if (col == prev_col && row == prev_row) return false;
+	bool changed = false;
 	// A target under a blocking one is not hovered while the pointer is over
 	// the blocker, so moving onto a modal reads as leaving what it covers.
 	sz floor_now = pointer_floor(targets, col, row);
 	sz floor_prev = pointer_floor(targets, prev_col, prev_row);
 	foreach (i, t : targets) {
-		if (t.on_hover_in == null && t.on_hover_out == null) continue;
+		if (t.on_hover_in == null && t.on_hover_out == null && !t.hover_style) continue;
 		bool inside_now = (sz)i >= floor_now && t.rect.contains(col, row);
 		bool inside_prev = (sz)i >= floor_prev && t.rect.contains(prev_col, prev_row);
+		if (inside_now != inside_prev) changed = true;
 		if (inside_now && !inside_prev && t.on_hover_in != null) {
 			if (dbg) io::eprintfn("  -> firing on_hover_in of [%d]", i);
 			t.on_hover_in(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
@@ -139,6 +147,7 @@ fn void dispatch_hover(ClickTarget[] targets, sz col, sz row,
 		}
 	}
 	(void)prev; (void)prev_count;
+	return changed;
 }
 
 // collect_drag_regions walks a solved tree and appends the rect of every node

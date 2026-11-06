@@ -568,20 +568,19 @@ fn void dispatch_click(sz col, sz row) {
 // the last pointer event. A press at (col, row) also counts as motion for
 // the purposes of hover tracking — the press location becomes the new
 // pointer position. (-1, -1) on the first call skips every prior target.
-fn void dispatch_hover(sz col, sz row) {
-	if (g_program == null) return;
+//
+// Returns whether a hover callback or hover style went in or out, which is
+// the only way a bare pointer move changes the screen.
+fn bool dispatch_hover(sz col, sz row) {
+	if (g_program == null) return false;
 	xray::ClickTarget[] targs = g_program.click_targets.array_view();
-	if (g_program.hover_has_prev) {
-		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
-			g_program.hover_prev_col, g_program.hover_prev_row,
-			g_program.debug_mouse);
-	} else {
-		xray::dispatch_hover(targs, col, row, targs, (sz)targs.len,
-			-1, -1, g_program.debug_mouse);
-	}
+	sz pc = g_program.hover_has_prev ? g_program.hover_prev_col : -1;
+	sz pr = g_program.hover_has_prev ? g_program.hover_prev_row : -1;
+	bool changed = xray::dispatch_hover(targs, col, row, targs, (sz)targs.len, pc, pr, g_program.debug_mouse);
 	g_program.hover_prev_col = col;
 	g_program.hover_prev_row = row;
 	g_program.hover_has_prev = true;
+	return changed;
 }
 
 // ---- keyboard focus --------------------------------------------------------

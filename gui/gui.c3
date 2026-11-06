@@ -93,6 +93,11 @@ struct Gui {
 	bool drawn;
 	// Pointer, in points; -1 when it is outside the window.
 	float ptr_x;
+	// The left button is down, and the cell the last motion message named,
+	// for MOUSE_MODE_CELL_MOTION.
+	bool button_down;
+	sz motion_col;
+	sz motion_row;
 	float ptr_y;
 	float wheel;
 	// Requests from the app, picked up at the top of the next pass.
@@ -411,6 +416,9 @@ fn void on_event(MtEvent* e) @private {
 		case MOUSE_DOWN:
 			pointer_to(e.x, e.y);
 			if (e.button != 0) return;
+			g.button_down = true;
+			g.motion_col = cell_of(g.ptr_x, g.opts.cell_w);
+			g.motion_row = cell_of(g.ptr_y, g.opts.cell_h);
 			// Same order as the terminal loop: the press settles hover, the
 			// click reaches its target against the last frame's layout, and
 			// then the model gets the raw message.
@@ -421,10 +429,12 @@ fn void on_event(MtEvent* e) @private {
 				// AppKit moves the window until the button comes up and eats
 				// the release, so it is sent here instead.
 				mt_window_drag();
+				g.button_down = false;
 				send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_RELEASE) });
 			}
 		case MOUSE_UP:
 			pointer_to(e.x, e.y);
+			if (e.button == 0) g.button_down = false;
 			if (e.button == 0) send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_RELEASE) });
 		case SCROLL:
 			g.wheel += e.scroll_y;
@@ -438,14 +448,26 @@ fn void on_event(MtEvent* e) @private {
 	}
 }
 
-// pointer_to moves the pointer, and when it really moved, tells hover and
-// the model.
+// pointer_to moves the pointer. A move redraws only when something under
+// it reacts — a hover style or hover callback going in or out — and reaches
+// the model only if it asked for motion, as in a terminal: every move with
+// MOUSE_MODE_ALL_MOTION, moves to another cell with a button held with
+// MOUSE_MODE_CELL_MOTION, none otherwise.
 fn void pointer_to(float x, float y) @private {
 	if (x == g.ptr_x && y == g.ptr_y) return;
 	g.ptr_x = x;
 	g.ptr_y = y;
-	milktea::dispatch_hover(x < 0 ? -1 : (sz)x, y < 0 ? -1 : (sz)y);
-	send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_NONE, MOUSE_MOTION) });
+	if (milktea::dispatch_hover(x < 0 ? -1 : (sz)x, y < 0 ? -1 : (sz)y)) g.dirty = true;
+	if (x < 0 || y < 0) return;
+	milktea::MouseMsg mm = mouse_at(g.button_down ? MOUSE_LEFT : MOUSE_NONE, MOUSE_MOTION);
+	milktea::MouseMode mode = milktea::g_program.want_mouse_mode;
+	if (mode == MOUSE_MODE_NONE) return;
+	if (mode == MOUSE_MODE_CELL_MOTION) {
+		if (!g.button_down || (mm.col == g.motion_col && mm.row == g.motion_row)) return;
+	}
+	g.motion_col = mm.col;
+	g.motion_row = mm.row;
+	send({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
 }
 
 // ---- the loop -------------------------------------------------------------
