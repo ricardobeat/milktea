@@ -40,6 +40,10 @@ struct GuiOptions {
 	// bar: the window keeps its buttons but loses the title bar, and a press
 	// in those rows (or on a node marked window_drag) moves the window.
 	int chrome_rows;
+	// Height in points of the strip the window buttons are centred on, for a
+	// top bar taller than its rows; 0 is chrome_rows rows. set_chrome_height
+	// changes it while running.
+	int chrome_height;
 	// Takes the close/minimise/zoom buttons away along with the title bar,
 	// for a window whose own top row offers its own. Only meaningful with
 	// chrome_rows set.
@@ -145,6 +149,21 @@ fn void set_font(String path, int cell_w, int cell_h, int font_size, float heigh
 fn int chrome_inset_cells(int cell_w) {
 	if (cell_w < 1) return 0;
 	return (g.buttons_right + cell_w - 1) / cell_w;
+}
+
+// set_chrome_height re-centres the window buttons on a top bar of this
+// many points (0: chrome_rows rows), as an app does when its bar's height
+// follows its text size.
+fn void set_chrome_height(int points) {
+	if (points == g.opts.chrome_height) return;
+	g.opts.chrome_height = points;
+	if (g.headless || g.opts.chrome_rows <= 0) return;
+	int br = mt_window_inline_titlebar(chrome_row_height(), g.opts.hide_window_buttons ? 1 : 0);
+	if (br >= 0) g.buttons_right = br;
+}
+
+fn int chrome_row_height() @private {
+	return g.opts.chrome_height > 0 ? g.opts.chrome_height : g.opts.cell_h * g.opts.chrome_rows;
 }
 
 fn void minimize_window() {
@@ -530,7 +549,7 @@ fn bool step() @private {
 		g.opts.font_size = g.req_font_size;
 		load_fonts();
 		if (!g.headless && g.opts.chrome_rows > 0) {
-			int br = mt_window_inline_titlebar(g.opts.cell_h, g.opts.hide_window_buttons ? 1 : 0);
+			int br = mt_window_inline_titlebar(chrome_row_height(), g.opts.hide_window_buttons ? 1 : 0);
 			if (br >= 0) g.buttons_right = br;
 		}
 		regrid = true;
@@ -661,7 +680,7 @@ fn bool start() @private {
 		mt_window_setup(borderless ? 1 : 0, borderless ? 1 : 0,
 			g.opts.cell_w * 4, g.opts.cell_h * 4);
 		if (g.opts.chrome_rows > 0) {
-			int br = mt_window_inline_titlebar(g.opts.cell_h, g.opts.hide_window_buttons ? 1 : 0);
+			int br = mt_window_inline_titlebar(chrome_row_height(), g.opts.hide_window_buttons ? 1 : 0);
 			if (br >= 0) g.buttons_right = br;
 		}
 	}

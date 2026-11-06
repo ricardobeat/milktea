@@ -226,25 +226,54 @@ int mt_window_inline_titlebar(int row_height, int hide_buttons) {
 	w.styleMask |= NSWindowStyleMaskFullSizeContentView;
 	w.titlebarAppearsTransparent = YES;
 	w.titleVisibility = NSWindowTitleHidden;
+	// sokol's view hosts its Metal layer itself, and AppKit does not lay out
+	// subviews inside a layer-hosting view properly: they draw flipped and
+	// away from where they take clicks. So the buttons go in a plain
+	// container that holds the sokol view and sits above it.
 	NSView *content = w.contentView;
+	if (content.layer != nil && !content.isFlipped && content.subviews.count == 0
+			&& ![content.identifier isEqualToString:@"milktea.chrome"]) {
+		NSView *box = [[NSView alloc] initWithFrame:content.frame];
+		box.identifier = @"milktea.chrome";
+		box.autoresizesSubviews = YES;
+		box.wantsLayer = YES;
+		[content retain];
+		w.contentView = box;
+		content.frame = box.bounds;
+		content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+		[box addSubview:content];
+		[content release];
+		[box release];
+		[w makeFirstResponder:content];
+		content = box;
+	}
+	// The window's own buttons stay where AppKit keeps them, hidden: AppKit
+	// lays them out again with its title bar's geometry whenever it likes,
+	// over anything done to them here. Standalone copies of the same native
+	// buttons, which act on whatever window they are in, take their place.
+	static NSButton *own[3];
 	CGFloat x = 12, right = 0;
 	for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
-		NSButton *btn = [w standardWindowButton:b];
-		if (!btn) continue;
+		NSButton *std = [w standardWindowButton:b];
+		if (std) [std setHidden:YES];
 		if (hide_buttons) {
-			[btn setHidden:YES];
+			if (own[b]) [own[b] setHidden:YES];
 			continue;
 		}
-		NSRect f = btn.frame;
-		if (btn.superview != content) {
-			[btn retain];
-			[btn removeFromSuperview];
-			[content addSubview:btn];
-			[btn release];
+		if (own[b] == nil) {
+			own[b] = [[NSWindow standardWindowButton:b forStyleMask:w.styleMask] retain];
+			if (own[b] == nil) continue;
+			[content addSubview:own[b]];
+		} else if (own[b].superview != content) {
+			[own[b] removeFromSuperview];
+			[content addSubview:own[b]];
 		}
-		CGFloat top = content.bounds.size.height - (row_height + f.size.height) / 2.0;
-		btn.frame = NSMakeRect(x, top, f.size.width, f.size.height);
-		btn.autoresizingMask = NSViewMaxXMargin | NSViewMinYMargin;
+		[own[b] setHidden:NO];
+		NSRect f = own[b].frame;
+		// Centred on the top strip, held there as the window resizes.
+		CGFloat inset = (row_height - f.size.height) / 2.0;
+		own[b].frame = NSMakeRect(x, content.bounds.size.height - inset - f.size.height, f.size.width, f.size.height);
+		own[b].autoresizingMask = NSViewMaxXMargin | NSViewMinYMargin;
 		x += f.size.width + 6;
 		right = x - 6;
 	}
