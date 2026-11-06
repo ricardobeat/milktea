@@ -1,7 +1,7 @@
 // dos-app — a DOS-era desktop: menu bar, dropdowns, a bordered content panel,
 // a modal dialog and a status line.
 //
-// The menu, the dialog and its buttons are components (menu.c3, dialog.c3,
+// The menu bar is boba::MenuBar; the dialog and its buttons are components (dialog.c3,
 // button.c3): each owns its own state, key handling and node, so the model
 // below is little more than which tab is showing and what the status line says.
 module dos_app;
@@ -9,6 +9,7 @@ module dos_app;
 import milktea;
 import glaze;
 import xray;
+import boba;
 import std::io;
 
 // Chrome the layout reserves: the menu bar and status bar are one row each,
@@ -19,7 +20,7 @@ const int CONTENT_MARGIN = 1;
 const int TAB_COUNT = 3;
 
 struct DosModel {
-	Menu menu;
+	boba::MenuBar menu;
 	Dialog about;
 	Picker theme_picker;
 	ThemeSet themes;
@@ -32,11 +33,16 @@ struct DosModel {
 fn Theme* DosModel.theme(&self) => self.themes.current();
 
 fn milktea::Cmd DosModel.init(DosModel* self) @dynamic {
-	self.menu = new_menu({ " File ", " Edit ", " View ", " Help " });
-	self.menu.set_items(0, { {"New", "Ctrl+N"}, {"Open...", "Ctrl+O"}, {"Save", "Ctrl+S"}, {"Exit", "Alt+F4"} });
-	self.menu.set_items(1, { {"Undo", "Ctrl+Z"}, {"Cut", "Ctrl+X"}, {"Copy", "Ctrl+C"}, {"Paste", "Ctrl+V"} });
-	self.menu.set_items(2, { {"Color Theme...", "Ctrl+T"}, {"Zoom In", "+"}, {"Zoom Out", "-"}, {"Full Screen", "F11"} });
-	self.menu.set_items(3, { {"Help Topics", "F1"}, {"About milktea...", ""}, {"License", ""}, {"Diagnostics...", ""} });
+	self.menu = boba::menu_bar({
+		boba::menu(" File ", { boba::item("New", 'n'), boba::item("Open...", 'o'), boba::item("Save", 's'),
+			boba::separator(), boba::item("Exit") }),
+		boba::menu(" Edit ", { boba::item("Undo", 'z'), boba::separator(), boba::item("Cut", 'x'),
+			boba::item("Copy"), boba::item("Paste", 'v') }),
+		boba::menu(" View ", { boba::item("Color Theme...", 't'), boba::item("Zoom In"), boba::item("Zoom Out"),
+			boba::item("Full Screen") }),
+		boba::menu(" Help ", { boba::item("Help Topics"), boba::item("About milktea..."), boba::item("License"),
+			boba::item("Diagnostics...") }),
+	}).with_keyboard_focus();
 
 	self.themes = load_themes();
 	self.theme_picker = new_picker("Color Theme", "  OK  ", "Cancel");
@@ -62,29 +68,35 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 	// .focused the same way handle_key does. All that's left here is reading
 	// what happened for the status-message side effects, via take_pending(),
 	// the same shape handle_key returns synchronously for the keyboard path.
+	if (msg.kind == milktea::MsgKind.KEY && msg.key.code == milktea::KeyCode.CTRL_C) return milktea::quit();
+
+	// The menu bar sees everything first while no dialog is up: clicks and
+	// keys on it, item shortcuts, and picks from the platform's menu bar.
+	if (!self.theme_picker.open && !self.about.open) {
+		boba::MenuEvent ev = self.menu.update(msg);
+		switch (ev.kind) {
+			case PICKED:
+				return self.run_menu_item(ev.item.label);
+			case DISMISSED:
+				self.status_msg = "Ready";
+				return null;
+			case CONSUMED:
+				return null;
+			default:
+		}
+	}
 	if (msg.kind == milktea::MsgKind.MOUSE) return self.handle_mouse_result();
 	if (msg.kind != milktea::MsgKind.KEY) return null;
 	milktea::KeyMsg k = msg.key;
-
-	if (k.code == milktea::KeyCode.CTRL_C) return milktea::quit();
 
 	// Whichever layer is on top gets the key first. Only when nothing has one
 	// open do the app's own shortcuts apply.
 	if (self.theme_picker.open) return self.handle_theme_picker(k);
 	if (self.about.open) return self.handle_dialog(k);
-	if (self.menu.open) return self.handle_menu(k);
 	return self.handle_desktop(k);
 }
 
 fn milktea::Cmd DosModel.handle_mouse_result(&self) {
-	switch (self.menu.take_pending()) {
-		case Chosen.PICKED:
-			return self.run_menu_item(self.menu.current_item().label);
-		case Chosen.DISMISSED:
-			self.status_msg = "Ready";
-			return null;
-		default:
-	}
 	switch (self.theme_picker.take_pending()) {
 		case Pressed.CONFIRMED:
 			self.themes.active = self.theme_picker.selected;
@@ -138,17 +150,6 @@ fn milktea::Cmd DosModel.handle_theme_picker(&self, milktea::KeyMsg k) {
 	return null;
 }
 
-fn milktea::Cmd DosModel.handle_menu(&self, milktea::KeyMsg k) {
-	switch (self.menu.handle_key(k)) {
-		case Chosen.PICKED:
-			return self.run_menu_item(self.menu.current_item().label);
-		case Chosen.DISMISSED:
-			self.status_msg = "Ready";
-		default:
-	}
-	return null;
-}
-
 // run_menu_item acts on a chosen item by name, so adding an item to the menu
 // does not mean re-deriving which column and row it landed on.
 fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
@@ -166,11 +167,6 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 }
 
 fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
-	// An active bar takes Esc for itself, to let go of the keyboard.
-	if (self.menu.is_active()) {
-		if (self.menu.handle_key(k) == Chosen.DISMISSED) self.status_msg = "Ready";
-		return null;
-	}
 	if (k.code == milktea::KeyCode.ESC) return milktea::quit();
 	if (k.code == milktea::KeyCode.RUNE) {
 		if (k.rune == 'q') return milktea::quit();
@@ -179,7 +175,16 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 			return null;
 		}
 	}
-	self.menu.handle_key(k);
+	// The arrows and Enter wake the menu bar, as F10 does; the key that wakes
+	// it does not also move it.
+	switch (k.code) {
+		case milktea::KeyCode.LEFT:
+		case milktea::KeyCode.RIGHT:
+		case milktea::KeyCode.DOWN:
+		case milktea::KeyCode.ENTER:
+			self.menu.activate();
+		default:
+	}
 	return null;
 }
 
@@ -188,7 +193,7 @@ fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
 fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
 	return milktea::root()
 		.add(milktea::vstack()
-			.add(self.menu.bar(self.theme()))
+			.add(self.menu_bar())
 			.add(milktea::vstack()
 				.fill(1)
 				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2)
@@ -196,9 +201,24 @@ fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
 			.add(self.statusbar()))
 		// Both return null when closed, and add() ignores a null child, so
 		// neither needs a condition here.
-		.add(self.menu.dropdown(BAR_ROWS, self.theme()))
+		.add(self.menu.dropdown())
 		.add(self.about.node(self.theme()))
 		.add(self.theme_picker.node(self.theme()));
+}
+
+// menu_bar styles the bar from the current theme, so a theme change reaches
+// it, in the DOS look: square blocks of colour, a bordered dropdown with a
+// hard shadow, and no shapes, so a window draws it the way a terminal does.
+fn xray::Node* DosModel.menu_bar(&self) {
+	Theme* th = self.theme();
+	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
+	glaze::Style open = { .bg = th.ink, .fg = th.text, .bold = true };
+	self.menu = self.menu
+		.with_styles(bar, bar, open, open)
+		.with_panel_styles({ .bg = th.bar, .fg = th.bar_text, .border = glaze::NORMAL, .border_color = th.text },
+			bar, { .bg = th.ink, .fg = th.accent, .bold = true }, bar)
+		.with_panel_shadow(milktea::shadow(2, 1).with_color(th.shadow));
+	return self.menu.node();
 }
 
 fn xray::Node* DosModel.content(&self) {

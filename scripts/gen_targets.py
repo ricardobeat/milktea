@@ -143,7 +143,6 @@ OVERRIDES = {
             "gui/**",
             "examples/dos-app/button.c3",
             "examples/dos-app/dialog.c3",
-            "examples/dos-app/menu.c3",
             "examples/dos-app/picker.c3",
             "examples/dos-app/theme.c3",
             "examples/dos-app-gui/**",

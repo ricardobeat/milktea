@@ -32,6 +32,7 @@ import milktea;
 import glaze;
 import xray;
 import std::core::mem;
+import std::core::dstring;
 import std::core::string;
 import std::core::string::conv;
 
@@ -593,9 +594,12 @@ fn xray::Node* MenuBar.item_row(&self, MenuItem it, bool current) @private {
 		.height(milktea::cells(1));
 	if (self.item_shape.kind != xray::DecorationKind.NONE) r.decorate(self.item_shape);
 	if (it.separator) {
-		// Long enough for any panel; the row clips it to its width.
-		return r.add(milktea::text("────────────────────────────────────────────────────────────",
-			{ .fg = self.shortcut_style.fg }).fill(1));
+		// As long as the widest item, so it spans the panel without making it
+		// any wider.
+		sz w = self.rule_width();
+		DString line = dstring::temp();
+		for (sz i = 0; i < w; i++) line.append("─");
+		return r.add(milktea::text(line.str_view(), { .fg = self.shortcut_style.fg }).width(milktea::cells(w)));
 	}
 	r.with_justify(xray::JustifyContent.JUSTIFY_SPACE_BETWEEN).with_gap(MENU_ITEM_GAP)
 		.add(milktea::text(it.label, { .bold = s.bold }).fit_width());
@@ -606,6 +610,20 @@ fn xray::Node* MenuBar.item_row(&self, MenuItem it, bool current) @private {
 		r.add(milktea::text(shortcut_label(it.key), ks).fit_width());
 	}
 	return r;
+}
+
+// rule_width is the width, in cells, of the open menu's widest item between
+// the row's padding: label, gap and shortcut.
+fn sz MenuBar.rule_width(&self) @private {
+	sz w = 0;
+	foreach (it : self.menus[self.selected].items) {
+		if (it.separator) continue;
+		sz iw = glaze::string_width(it.label);
+		if (it.key != 0) iw += MENU_ITEM_GAP + glaze::string_width(shortcut_label(it.key));
+		if (iw > w) w = iw;
+	}
+	sz floor = self.min_panel_width - MENU_ITEM_PAD * 2;
+	return w > floor ? w : floor;
 }
 
 // shortcut_label is how an item's shortcut reads: ⌘N where the platform's
