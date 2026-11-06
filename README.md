@@ -318,6 +318,30 @@ Anything else implementing `xray::Content` goes in with
 `milktea::component(&thing)`. A text input also reports where the cursor belongs,
 so the terminal cursor follows the layout rather than a hand-counted row.
 
+### Menu bar
+
+`boba::MenuBar` is an application's top bar: menus as data, keyboard and mouse
+handling, and, in a window, room for the platform's window buttons. On macOS the
+same menus also go in the system menu bar, with ⌘ shortcuts.
+
+```c3
+self.bar = boba::menu_bar({
+    boba::menu("File", { boba::item("New", 'n', NEW), boba::separator(), boba::item("Quit", 'q', QUIT) }),
+});
+
+// update(): picks arrive here however they were made (click, keys, Ctrl+N, the macOS menu)
+boba::MenuEvent ev = self.bar.update(msg);
+if (ev.kind == PICKED) return self.run(ev.id);
+
+// view(): the bar on top, the open dropdown over everything else
+root.add(vstack().add(self.bar.node()).add(content)).add(self.bar.dropdown());
+```
+
+The look is set with `with_styles`/`with_panel_styles` (glaze styles, used in the
+terminal and in a window) and `with_shapes` (`xray::Decoration`s a window draws;
+`xray::solid().round(4)` rounds the matching style's background). The empty part
+of the bar drags the window.
+
 ### Inline mode
 
 Set `.alt_screen = true` for a full-screen UI:
