@@ -216,6 +216,54 @@ void mt_window_setup(int borderless, int transparent, int min_w, int min_h) {
 	if (min_w > 0 && min_h > 0) w.contentMinSize = NSMakeSize(min_w, min_h);
 }
 
+// MtChromeView is the window's content view when the window buttons sit in
+// an app's own top bar: it holds sokol's view and, above it, the buttons.
+// Native window buttons show their glyphs while the pointer is over any of
+// them, which they learn by asking their superview _mouseInGroup:. AppKit's
+// title bar answers that; this does too, tracking the buttons' strip whether
+// or not the window is key, as the title bar does.
+@interface MtChromeView : NSView {
+	BOOL inside;
+	NSRect strip;
+	NSTrackingArea *area;
+}
+- (void)setButtonStrip:(NSRect)r;
+@end
+
+@implementation MtChromeView
+- (BOOL)_mouseInGroup:(NSButton *)button { (void)button; return inside; }
+- (void)setInside:(BOOL)on {
+	if (inside == on) return;
+	inside = on;
+	for (NSView *v in self.subviews) {
+		if ([v isKindOfClass:[NSButton class]]) [v setNeedsDisplay:YES];
+	}
+}
+- (void)setButtonStrip:(NSRect)r {
+	strip = r;
+	[self updateTrackingAreas];
+}
+- (void)updateTrackingAreas {
+	if (area) {
+		[self removeTrackingArea:area];
+		[area release];
+		area = nil;
+	}
+	if (!NSIsEmptyRect(strip)) {
+		// The strip keeps its distance from the top as the window resizes.
+		NSRect r = strip;
+		r.origin.y = self.bounds.size.height - strip.origin.y;
+		area = [[NSTrackingArea alloc] initWithRect:r
+			options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways
+			owner:self userInfo:nil];
+		[self addTrackingArea:area];
+	}
+	[super updateTrackingAreas];
+}
+- (void)mouseEntered:(NSEvent *)e { (void)e; [self setInside:YES]; }
+- (void)mouseExited:(NSEvent *)e { (void)e; [self setInside:NO]; }
+@end
+
 // mt_window_inline_titlebar takes the title bar away but keeps the window
 // buttons, moved into the content view and centred on a row_height strip at
 // the top. Returns how far the buttons reach from the window's left edge in
@@ -233,7 +281,7 @@ int mt_window_inline_titlebar(int row_height, int hide_buttons) {
 	NSView *content = w.contentView;
 	if (content.layer != nil && !content.isFlipped && content.subviews.count == 0
 			&& ![content.identifier isEqualToString:@"milktea.chrome"]) {
-		NSView *box = [[NSView alloc] initWithFrame:content.frame];
+		NSView *box = [[MtChromeView alloc] initWithFrame:content.frame];
 		box.identifier = @"milktea.chrome";
 		box.autoresizesSubviews = YES;
 		box.wantsLayer = YES;
@@ -252,30 +300,34 @@ int mt_window_inline_titlebar(int row_height, int hide_buttons) {
 	// over anything done to them here. Standalone copies of the same native
 	// buttons, which act on whatever window they are in, take their place.
 	static NSButton *own[3];
-	CGFloat x = 12, right = 0;
+	CGFloat x = 12, right = 0, top = 0, h = 0;
 	for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
 		NSButton *std = [w standardWindowButton:b];
 		if (std) [std setHidden:YES];
-		if (hide_buttons) {
-			if (own[b]) [own[b] setHidden:YES];
-			continue;
-		}
 		if (own[b] == nil) {
 			own[b] = [[NSWindow standardWindowButton:b forStyleMask:w.styleMask] retain];
 			if (own[b] == nil) continue;
-			[content addSubview:own[b]];
-		} else if (own[b].superview != content) {
+		}
+		if (own[b].superview != content) {
 			[own[b] removeFromSuperview];
 			[content addSubview:own[b]];
 		}
-		[own[b] setHidden:NO];
+		[own[b] setHidden:hide_buttons ? YES : NO];
+		if (hide_buttons) continue;
 		NSRect f = own[b].frame;
 		// Centred on the top strip, held there as the window resizes.
 		CGFloat inset = (row_height - f.size.height) / 2.0;
 		own[b].frame = NSMakeRect(x, content.bounds.size.height - inset - f.size.height, f.size.width, f.size.height);
 		own[b].autoresizingMask = NSViewMaxXMargin | NSViewMinYMargin;
+		top = inset + f.size.height;
+		if (f.size.height > h) h = f.size.height;
 		x += f.size.width + 6;
 		right = x - 6;
+	}
+	if ([content isKindOfClass:[MtChromeView class]]) {
+		// The strip's y is its bottom edge's distance from the top.
+		[(MtChromeView *)content setButtonStrip:hide_buttons || right == 0
+			? NSZeroRect : NSMakeRect(12, top, right - 12, h)];
 	}
 	return (int)ceil(right);
 }

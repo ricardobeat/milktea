@@ -6473,8 +6473,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         [self removeTrackingArea:_sapp.macos.tracking_area];
         _SAPP_OBJC_RELEASE(_sapp.macos.tracking_area);
     }
+    // MILKTEA PATCH: track the pointer whether or not the window is key, and
+    // deliver moves through the tracking area, so hover works in a window
+    // that has not been clicked yet (an app started from a terminal is often
+    // not made key). Repeated positions are ignored on milktea's side.
     const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
-                                          NSTrackingActiveInKeyWindow |
+                                          NSTrackingMouseMoved |
+                                          NSTrackingActiveAlways |
                                           NSTrackingEnabledDuringMouseDrag |
                                           NSTrackingCursorUpdate |
                                           NSTrackingInVisibleRect |
