@@ -256,6 +256,9 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 			.on_hover_in(&title_hovered);
 		row.add(title_node);
 	}
+	// The rest of the bar moves the window, the way a title bar does. A
+	// terminal has no window to move and ignores it.
+	row.add(xray::hstack().fill(1).window_drag());
 	return row;
 }
 
