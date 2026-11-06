@@ -886,17 +886,20 @@ static void fake_start(void) {
 }
 
 // A borderless window (see mt_window_setup) cannot take the keyboard unless
-// its class says it can, and its performClose: only beeps, having no close
-// button to press. sokol quits through performClose:, so without the
-// override below a borderless app never closes its window and hangs on quit.
+// its class says it can.
+//
+// sokol quits by calling performClose: on every frame until the window goes.
+// AppKit's performClose: works by simulating a click on the close button: a
+// borderless window has none and only beeps, and on a titled one the click
+// can land while the user's own click on that button is still being tracked
+// (the frame runs from inside that tracking loop), and the two loops wait on
+// each other forever. So it asks the delegate, as a click would, and closes
+// the window directly.
 @implementation _sapp_macos_window (MilkteaBorderless)
 - (BOOL)canBecomeKeyWindow { return YES; }
 - (BOOL)canBecomeMainWindow { return YES; }
 - (void)performClose:(id)sender {
-	if (self.styleMask & NSWindowStyleMaskTitled) {
-		[super performClose:sender];
-		return;
-	}
+	(void)sender;
 	id<NSWindowDelegate> d = self.delegate;
 	if ([d respondsToSelector:@selector(windowShouldClose:)] && ![d windowShouldClose:self]) return;
 	[self close];
