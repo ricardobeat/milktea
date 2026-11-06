@@ -912,6 +912,11 @@ static void app_init(void) {
 	sg_setup(&(sg_desc){ .environment = sglue_environment(), .logger.func = slog_func });
 	gfx_init();
 	if (g.init_fn) g.init_fn();
+	// Come to the front now the window and its menus are set up; sokol asks
+	// once before that, which the system may not honour for a process that
+	// was just made a regular app.
+	[NSApp activateIgnoringOtherApps:YES];
+	[_sapp.macos.window makeKeyAndOrderFront:nil];
 	fake_start();
 }
 
@@ -983,6 +988,12 @@ void mt_run(const char *title, int width, int height, MtVoidFn init, MtVoidFn fr
 	late_latch_sec = (ll_env && ll_env[0] ? atof(ll_env) : LATE_LATCH_DEFAULT_MS) / 1000.0;
 	const char *lat_env = getenv("MILKTEA_DEBUG_LATENCY");
 	lat.on = lat_env != NULL && lat_env[0] != 0 && lat_env[0] != '0';
+	// A bare executable started from a terminal is not an app bundle, so it
+	// gets no activation policy from an Info.plist and never becomes a real
+	// foreground app: no Dock icon, no menu bar, and its window controls do
+	// not answer as an active window's do. sokol does not set one; GLFW did.
+	[NSApplication sharedApplication];
+	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 	if (lat.on) {
 		atexit(lat_report);
 		signal(SIGTERM, lat_sigterm);
