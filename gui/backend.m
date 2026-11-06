@@ -32,6 +32,7 @@
 #import <ImageIO/ImageIO.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // ---- shared with gui/backend.c3 -------------------------------------------
 
@@ -380,8 +381,11 @@ void mt_atlas_upload(const uint8_t *pixels, int w, int h) {
 // command in order. Quads are uploaded once and every command draws a range
 // of them, so a decoration between two runs of cells costs a pipeline switch,
 // not another upload.
+static void lat_count_render(void);
+
 void mt_render(const MtVertex *verts, int nquads, const MtCmd *cmds, int ncmds,
 	const MtDecor *decors, int fb_w, int fb_h, const float *clear) {
+	lat_count_render();
 	if (!g.ready || fb_w < 1 || fb_h < 1) return;
 	ensure_target(fb_w, fb_h);
 	if (nquads > 0) {
@@ -552,6 +556,7 @@ static struct {
 	int reported;
 	double last_start;
 	double newest_ev;     // timestamp of the latest move handled so far
+	int frames, renders;  // display-link frames, and those that drew anything new
 	double refresh_sum;
 	int refresh_n;
 } lat;
@@ -575,7 +580,8 @@ static void lat_report(void) {
 	lat.reported = n;
 	static double v[LAT_MAX];
 	double refresh = lat.refresh_n > 0 ? lat.refresh_sum / lat.refresh_n : 0;
-	fprintf(stderr, "milktea latency: %d mouse moves, frame interval %.2f ms\n", n, refresh * 1000);
+	fprintf(stderr, "milktea latency: %d mouse moves, frame interval %.2f ms, redrew %d of %d frames\n",
+		n, refresh * 1000, lat.renders, lat.frames);
 	for (int i = 0; i < n; i++) v[i] = lat.s[i].seen - lat.s[i].ev;
 	lat_row("input", v, n);
 	for (int i = 0; i < n; i++) v[i] = lat.s[i].start - lat.s[i].seen;
@@ -611,8 +617,11 @@ static void lat_event(const sapp_event *e) {
 	lat.pending = 1;
 }
 
+static void lat_count_render(void) { lat.renders++; }
+
 static void lat_frame_start(void) {
 	if (!lat.on) return;
+	lat.frames++;
 	double now = CACurrentMediaTime();
 	lat.cur.target = _sapp.mtl.display_link ? _sapp.mtl.display_link.targetTimestamp : 0;
 	if (lat.last_start > 0 && now - lat.last_start < 0.05) {
@@ -674,12 +683,163 @@ static void lat_present(void) {
 #include <unistd.h>
 static void lat_sigterm(int sig) { (void)sig; lat_report(); _exit(0); }
 
+// ---- fake input -------------------------------------------------------------
+//
+// MILKTEA_FAKE_INPUT runs a script of mouse input against the window without
+// touching the real pointer. Each step becomes an NSEvent posted to the app's
+// own queue, so it goes through AppKit, sokol and milktea the way a real one
+// does; only the WindowServer leg is skipped. Steps, separated by ';', in
+// points from the window's top-left corner:
+//
+//   wait <ms>                              pause
+//   move <x> <y>                           one move
+//   sweep <y> <x0> <x1> <ms> [hz=120]      back and forth along a row
+//   down / up                              left button at the current point
+//   click <x> <y>                          move, down, up
+//   quit                                   ask the app to quit
+//
+// e.g. MILKTEA_FAKE_INPUT="wait 300; sweep 8 5 235 4000; quit"
+
+typedef enum { FK_WAIT, FK_MOVE, FK_SWEEP, FK_DOWN, FK_UP, FK_CLICK, FK_QUIT } FakeKind;
+typedef struct { FakeKind kind; double a, b, c, d, e; } FakeStep;
+
+#define FAKE_MAX 64
+static struct {
+	FakeStep steps[FAKE_MAX];
+	int count;
+	int at;            // current step
+	double step_t0;    // when it started
+	int sent;          // moves sent in the current sweep
+	double x, y;
+	int down;
+} fake;
+
+static int fake_parse(const char *src) {
+	char buf[1024];
+	strncpy(buf, src, sizeof(buf) - 1);
+	buf[sizeof(buf) - 1] = 0;
+	for (char *save = NULL, *tok = strtok_r(buf, ";", &save); tok && fake.count < FAKE_MAX;
+			tok = strtok_r(NULL, ";", &save)) {
+		char name[16] = {0};
+		FakeStep st = { .e = 120 };
+		int n = sscanf(tok, " %15s %lf %lf %lf %lf %lf", name, &st.a, &st.b, &st.c, &st.d, &st.e);
+		if (n < 1) continue;
+		if (!strcmp(name, "wait") && n >= 2) st.kind = FK_WAIT;
+		else if (!strcmp(name, "move") && n >= 3) st.kind = FK_MOVE;
+		else if (!strcmp(name, "sweep") && n >= 5) st.kind = FK_SWEEP;
+		else if (!strcmp(name, "down")) st.kind = FK_DOWN;
+		else if (!strcmp(name, "up")) st.kind = FK_UP;
+		else if (!strcmp(name, "click") && n >= 3) st.kind = FK_CLICK;
+		else if (!strcmp(name, "quit")) st.kind = FK_QUIT;
+		else {
+			fprintf(stderr, "milktea fake input: cannot read step '%s'\n", tok);
+			return 0;
+		}
+		fake.steps[fake.count++] = st;
+	}
+	return fake.count > 0;
+}
+
+static void fake_post(NSEventType type, double x, double y) {
+	NSWindow *win = _sapp.macos.window;
+	if (win == nil) return;
+	fake.x = x;
+	fake.y = y;
+	NSRect content = [win contentRectForFrameRect:win.frame];
+	NSPoint p = NSMakePoint(x, content.size.height - y);
+	NSEvent *e = [NSEvent mouseEventWithType:type location:p modifierFlags:0
+		timestamp:[NSProcessInfo processInfo].systemUptime windowNumber:win.windowNumber
+		context:nil eventNumber:0 clickCount:1 pressure:fake.down ? 1.0f : 0.0f];
+	[NSApp postEvent:e atStart:NO];
+}
+
+static void fake_move(double x, double y) {
+	fake_post(fake.down ? NSEventTypeLeftMouseDragged : NSEventTypeMouseMoved, x, y);
+}
+
+// fake_tick runs from a timer: it finishes whatever steps are due and
+// returns, leaving a timed step (wait, sweep) for a later tick.
+static void fake_tick(void) {
+	double now = CACurrentMediaTime();
+	while (fake.at < fake.count) {
+		FakeStep *st = &fake.steps[fake.at];
+		double t = (now - fake.step_t0) * 1000.0;
+		switch (st->kind) {
+			case FK_WAIT:
+				if (t < st->a) return;
+				break;
+			case FK_MOVE:
+				fake_move(st->a, st->b);
+				break;
+			case FK_SWEEP: {
+				// a=y b=x0 c=x1 d=ms e=hz; a triangle wave, one leg per second.
+				int due = (int)(t / 1000.0 * st->e);
+				int total = (int)(st->d / 1000.0 * st->e);
+				if (due > total) due = total;
+				for (; fake.sent < due; fake.sent++) {
+					double ph = fmod((double)fake.sent / st->e, 2.0);
+					double f = ph < 1.0 ? ph : 2.0 - ph;
+					fake_move(st->b + (st->c - st->b) * f, st->a);
+				}
+				if (t < st->d) return;
+				break;
+			}
+			case FK_DOWN:
+				fake.down = 1;
+				fake_post(NSEventTypeLeftMouseDown, fake.x, fake.y);
+				break;
+			case FK_UP:
+				fake.down = 0;
+				fake_post(NSEventTypeLeftMouseUp, fake.x, fake.y);
+				break;
+			case FK_CLICK:
+				fake_move(st->a, st->b);
+				fake.down = 1;
+				fake_post(NSEventTypeLeftMouseDown, st->a, st->b);
+				fake.down = 0;
+				fake_post(NSEventTypeLeftMouseUp, st->a, st->b);
+				break;
+			case FK_QUIT:
+				sapp_request_quit();
+				break;
+		}
+		fake.at++;
+		fake.step_t0 = now;
+		fake.sent = 0;
+	}
+}
+
+@interface MtFakeInputTimer : NSObject
+- (void)tick:(NSTimer *)timer;
+@end
+@implementation MtFakeInputTimer
+- (void)tick:(NSTimer *)timer {
+	fake_tick();
+	if (fake.at >= fake.count) [timer invalidate];
+}
+@end
+
+// fake_start reads MILKTEA_FAKE_INPUT and starts the script once the window
+// is up. The timer runs in the common modes, so it keeps firing while a
+// frame waits for late input (see late_latch_wait).
+static void fake_start(void) {
+	const char *src = getenv("MILKTEA_FAKE_INPUT");
+	if (src == NULL || src[0] == 0 || !fake_parse(src)) return;
+	fake.step_t0 = CACurrentMediaTime();
+	static MtFakeInputTimer *target;
+	target = [[MtFakeInputTimer alloc] init];
+	NSTimer *t = [NSTimer timerWithTimeInterval:1.0 / 1000.0 target:target selector:@selector(tick:)
+		userInfo:nil repeats:YES];
+	[[NSRunLoop currentRunLoop] addTimer:t forMode:NSRunLoopCommonModes];
+}
+
 // ---- windowed ---------------------------------------------------------------
 
 static void app_init(void) {
 	sg_setup(&(sg_desc){ .environment = sglue_environment(), .logger.func = slog_func });
 	gfx_init();
 	if (g.init_fn) g.init_fn();
+	fake_start();
 }
 
 static void app_frame(void) {

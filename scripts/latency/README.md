@@ -8,12 +8,19 @@ starting point for a timeline inspector.
   percentiles to stderr (every 200 samples, on exit, on SIGTERM).
   `CAMetalDrawable.presentedTime` is always 0 for a windowed `CAMetalLayer`,
   so compositing and scan-out cannot be timed and are reported as an estimate.
+- `gui/backend.m`, "fake input" section: `MILKTEA_FAKE_INPUT` runs a script
+  of mouse steps (`wait`, `move`, `sweep`, `down`, `up`, `click`, `quit`) as
+  NSEvents posted to the app's own queue. They take the same AppKit → sokol →
+  milktea path as real input, minus the WindowServer, and the real pointer
+  never moves. The probe also counts how many frames redrew.
 - `mover.c`: posts real mouse-moved events (through the HID event tap) along
-  the top row of a process's window, so a run needs no hands. It moves the
-  real cursor and puts it back afterwards.
+  the top row of a process's window. It moves the real cursor; use it only to
+  include the WindowServer leg.
 
 ```
-just latency            # dos-app-gui, 6 s at 120 Hz
+just latency                # fake input over dos-app's menu bar, 4 s at 120 Hz
+just latency y=200          # over the content, where nothing reacts to hover
+just latency-real           # real events, moves the cursor
 ```
 
 Measured on a 60 Hz display (Nov 2026, dos-app-gui, 242 samples): event →
