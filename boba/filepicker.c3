@@ -126,9 +126,10 @@ fn void FilePicker.load_dir(&self, String path) {
 			self.names[self.count][j] = 0;
 			self.name_lens[self.count] = (sz)j;
 
-			// Skip hidden files (except . and ..)
+			// Hidden files are left out, and so is ".", which is the
+			// directory already shown; ".." stays, as the way up.
 			if (j > 0 && self.names[self.count][0] == '.'
-				&& !(j == 1 || (j == 2 && self.names[self.count][1] == '.'))) {
+				&& !(j == 2 && self.names[self.count][1] == '.')) {
 				continue;
 			}
 
@@ -162,10 +163,6 @@ fn bool FilePicker.handle_key(&self, milktea::KeyMsg k) {
 			return true;
 		case milktea::KeyCode.ENTER:
 			if (self.cursor < self.count && self.is_dirs[self.cursor]) {
-				// Don't navigate into "."
-				if (self.name_lens[self.cursor] == 1 && self.names[self.cursor][0] == '.') {
-					return true;
-				}
 				DString new_path = dstring::temp();
 				new_path.append_string(self.current_dir);
 				new_path.append_char('/');
