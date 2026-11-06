@@ -31,3 +31,12 @@ gen-targets:
 # from Unicode data (edit scripts/gen_width.py first)
 gen-width:
     python3 scripts/gen_width.py
+
+# Measure mouse-move-to-frame latency in a GUI example (moves the real cursor).
+latency target="dos-app-gui" seconds="6" hz="120":
+    c3c build examples/{{target}}
+    mkdir -p build
+    cc -O2 -o build/latency-mover scripts/latency/mover.c -framework ApplicationServices
+    MILKTEA_DEBUG_LATENCY=1 ./out/examples/{{target}} & app=$!; \
+        build/latency-mover $app {{seconds}} {{hz}}; \
+        kill $app; wait $app 2>/dev/null || true
