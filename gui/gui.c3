@@ -95,6 +95,10 @@ struct Gui {
 	xray::Cell[] prev_cells;
 	xray::PaintOp[] prev_paint;
 	bool drawn;
+	// MILKTEA_CELLS: lay out in whole cells, the way a terminal does, so a
+	// program takes its terminal path in the window, without the window
+	// buttons (see set_metrics).
+	bool cells;
 	// Pointer, in points; -1 when it is outside the window.
 	float ptr_x;
 	// The left button is down, and the cell the last motion message named,
@@ -301,7 +305,7 @@ fn xray::Rect pixel_area(xray::Node* root, bool alt) @private {
 fn bool is_drag_point(float x, float y) @private {
 	if (g.drag_regions.len() > 0) {
 		foreach (r : g.drag_regions) {
-			if (r.contains((sz)x, (sz)y)) return true;
+			if (r.contains(layout_x(x), layout_y(y))) return true;
 		}
 		return false;
 	}
@@ -320,6 +324,25 @@ fn String? clipboard_read() @private {
 }
 
 fn sz cell_of(float v, int unit) @private => v < 0 ? -1 : xray::floor_cell((sz)v, unit);
+
+// set_metrics gives the program the units it lays out in: logical pixels, or
+// with MILKTEA_CELLS whole cells, which the painter still draws in the
+// window but which leave out everything that needs pixels to place.
+fn void set_metrics(milktea::Program* p) @private {
+	if (g.cells) {
+		p.layout_metrics = {};
+		p.layout_area = { .w = math::max((sz)g.win_w / g.opts.cell_w, (sz)1),
+			.h = math::max((sz)g.win_h / g.opts.cell_h, (sz)1) };
+		return;
+	}
+	p.layout_metrics = xray::pixel_metrics(g.opts.cell_w, g.opts.cell_h);
+	p.layout_area = { .w = (sz)g.win_w, .h = (sz)g.win_h };
+}
+
+// layout_x and layout_y turn a pointer position in points into the units the
+// tree is laid out in; -1, outside the window, stays -1.
+fn sz layout_x(float x) @private => g.cells ? cell_of(x, g.opts.cell_w) : x < 0 ? -1 : (sz)x;
+fn sz layout_y(float y) @private => g.cells ? cell_of(y, g.opts.cell_h) : y < 0 ? -1 : (sz)y;
 
 fn milktea::MouseMsg mouse_at(milktea::MouseButton b, milktea::MouseAction a) @private {
 	return { .button = b, .action = a,
@@ -457,8 +480,8 @@ fn void on_event(MtEvent* e) @private {
 			// Same order as the terminal loop: the press settles hover, the
 			// click reaches its target against the last frame's layout, and
 			// then the model gets the raw message.
-			milktea::dispatch_click((sz)g.ptr_x, (sz)g.ptr_y);
-			milktea::dispatch_hover((sz)g.ptr_x, (sz)g.ptr_y);
+			milktea::dispatch_click(layout_x(g.ptr_x), layout_y(g.ptr_y));
+			milktea::dispatch_hover(layout_x(g.ptr_x), layout_y(g.ptr_y));
 			send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_PRESS) });
 			if (!g.quit && !g.headless && is_drag_point(g.ptr_x, g.ptr_y)) {
 				// AppKit moves the window until the button comes up and eats
@@ -508,10 +531,10 @@ fn void pointer_to(float x, float y) @private {
 	if (x == g.ptr_x && y == g.ptr_y) return;
 	g.ptr_x = x;
 	g.ptr_y = y;
-	if (milktea::dispatch_hover(x < 0 ? -1 : (sz)x, y < 0 ? -1 : (sz)y)) g.dirty = true;
+	if (milktea::dispatch_hover(layout_x(x), layout_y(y))) g.dirty = true;
 	update_pointer();
 	if (x < 0 || y < 0) return;
-	if (g.button_down && milktea::dispatch_drag((sz)x, (sz)y)) g.dirty = true;
+	if (g.button_down && milktea::dispatch_drag(layout_x(x), layout_y(y))) g.dirty = true;
 	milktea::MouseMsg mm = mouse_at(g.button_down ? MOUSE_LEFT : MOUSE_NONE, MOUSE_MOTION);
 	milktea::MouseMode mode = milktea::g_program.want_mouse_mode;
 	if (mode == MOUSE_MODE_NONE) return;
@@ -527,7 +550,7 @@ fn void pointer_to(float x, float y) @private {
 fn void update_pointer() @private {
 	if (g.headless) return;
 	xray::PointerShape shape = g.ptr_x < 0 || g.ptr_y < 0 ? xray::PointerShape.DEFAULT
-		: milktea::pointer_at((sz)g.ptr_x, (sz)g.ptr_y);
+		: milktea::pointer_at(layout_x(g.ptr_x), layout_y(g.ptr_y));
 	if (shape == g.pointer_shape) return;
 	g.pointer_shape = shape;
 	mt_set_pointer((int)shape.ordinal);
@@ -602,8 +625,7 @@ fn bool step() @private {
 	int old_fb_w = g.fb_w;
 	int old_fb_h = g.fb_h;
 	measure_window();
-	p.layout_metrics = xray::pixel_metrics(g.opts.cell_w, g.opts.cell_h);
-	p.layout_area = { .w = (sz)g.win_w, .h = (sz)g.win_h };
+	set_metrics(p);
 	if (regrid || g.fb_w != old_fb_w || g.fb_h != old_fb_h) {
 		g.dirty = true;
 		int cols = math::max((int)g.win_w / g.opts.cell_w, 1);
@@ -648,7 +670,7 @@ fn bool step() @private {
 		sz tr = p.test_pending_click_row;
 		p.test_click_armed = false;
 		io::eprintfn("[test] frame %d: click col=%d row=%d, %d targets", p.frame_no, tc, tr, p.click_targets.len());
-		milktea::dispatch_click(tc * g.opts.cell_w, tr * g.opts.cell_h);
+		milktea::dispatch_click(g.cells ? tc : tc * g.opts.cell_w, g.cells ? tr : tr * g.opts.cell_h);
 		send({ .kind = milktea::MsgKind.MOUSE, .mouse = { .button = MOUSE_LEFT, .action = MOUSE_PRESS, .row = tr, .col = tc } });
 	}
 	if (p.test_pointer_armed && p.frame_no >= p.test_pending_pointer_frame) {
@@ -656,7 +678,7 @@ fn bool step() @private {
 		sz pr = p.test_pending_pointer_row;
 		p.test_pointer_armed = false;
 		io::eprintfn("[test] frame %d: pointer col=%d row=%d", p.frame_no, pc, pr);
-		milktea::dispatch_hover(pc * g.opts.cell_w, pr * g.opts.cell_h);
+		milktea::dispatch_hover(g.cells ? pc : pc * g.opts.cell_w, g.cells ? pr : pr * g.opts.cell_h);
 		send({ .kind = milktea::MsgKind.MOUSE, .mouse = { .button = MOUSE_NONE, .action = MOUSE_MOTION, .row = pr, .col = pc } });
 	}
 	if (g.test_key_armed && p.frame_no >= g.test_key_frame) {
@@ -734,6 +756,9 @@ fn bool start() @private {
 	milktea::use_clipboard(&clipboard_write, &clipboard_read);
 	install_hooks();
 	if (g.opts.font_height_ratio > 0) g.font_ratio = g.opts.font_height_ratio;
+	if (try v = env::tget_var("MILKTEA_CELLS")) g.cells = v.len > 0 && v != "0";
+	// A terminal has no window buttons in its rows, so this mode has none.
+	if (g.cells) g.opts.hide_window_buttons = true;
 
 	if (!g.headless) {
 		// macOS rounds the corners of any titled window, title bar hidden or
@@ -749,8 +774,7 @@ fn bool start() @private {
 	}
 	load_fonts();
 	measure_window();
-	p.layout_metrics = xray::pixel_metrics(g.opts.cell_w, g.opts.cell_h);
-	p.layout_area = { .w = (sz)g.win_w, .h = (sz)g.win_h };
+	set_metrics(p);
 	read_debug_env();
 
 	p.stamp_now();

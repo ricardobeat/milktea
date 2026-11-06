@@ -657,8 +657,10 @@ milktea_gui::run(&model, {
 
 `MILKTEA_FONT` picks the font (a file or a font name). `MILKTEA_GUI_SHOT=out.png`
 draws one frame offscreen, with no window, and writes it out, which is how
-`examples/dos-app-gui` and `scripts/gui-paint-test` are checked. See
-`gui/gui.c3` for the rest of `GuiOptions`.
+`examples/dos-app-gui` and `scripts/gui-paint-test` are checked.
+`MILKTEA_CELLS=1` lays the window out in whole cells, as a terminal would,
+with no window buttons: the app takes its terminal path, drawn in the window.
+See `gui/gui.c3` for the rest of `GuiOptions`.
 
 ---
 
