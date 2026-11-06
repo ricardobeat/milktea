@@ -24,7 +24,7 @@ struct DosModel {
 	Dialog about;
 	Picker theme_picker;
 	Picker open_picker;
-	FileViewer viewer;
+	OpenFile file;
 	ThemeSet themes;
 	int active_tab;
 	String status_msg;
@@ -77,12 +77,6 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 
 	// The menu bar sees everything first while no dialog is up: clicks and
 	// keys on it, item shortcuts, and picks from the platform's menu bar.
-	// The file viewer is modal: it takes everything while it is up.
-	if (self.viewer.open) {
-		self.viewer.handle(msg);
-		if (!self.viewer.open) self.status_msg = "Ready";
-		return null;
-	}
 	if (!self.theme_picker.open && !self.about.open && !self.open_picker.open) {
 		boba::MenuEvent ev = self.menu.update(msg);
 		switch (ev.kind) {
@@ -95,6 +89,11 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 				return null;
 			default:
 		}
+	}
+	// An open file scrolls under the wheel or trackpad.
+	if (msg.kind == milktea::MsgKind.MOUSE && self.file.open && !self.theme_picker.open
+			&& !self.about.open && !self.open_picker.open) {
+		self.file.vp.handle_mouse_msg(msg.mouse);
 	}
 	if (msg.kind == milktea::MsgKind.MOUSE) return self.handle_mouse_result();
 	if (msg.kind != milktea::MsgKind.KEY) return null;
@@ -112,7 +111,7 @@ fn milktea::Cmd DosModel.update(DosModel* self, milktea::Msg msg) @dynamic {
 fn milktea::Cmd DosModel.opened(&self, Pressed p) {
 	switch (p) {
 		case Pressed.CONFIRMED:
-			self.viewer.show(self.open_picker.choices[self.open_picker.selected], BANNER_TXT[..]);
+			self.file.show(self.open_picker.choices[self.open_picker.selected], BANNER_TXT[..]);
 			self.status_msg = "Viewing BANNER.TXT";
 		case Pressed.DISMISSED:
 			self.status_msg = "Ready";
@@ -196,6 +195,11 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 }
 
 fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
+	// An open file takes Esc (to close it) and the scrolling keys.
+	if (self.file.open && self.file.handle_key(k)) {
+		if (!self.file.open) self.status_msg = "Ready";
+		return null;
+	}
 	if (k.code == milktea::KeyCode.ESC) return milktea::quit();
 	if (k.code == milktea::KeyCode.RUNE) {
 		if (k.rune == 'q') return milktea::quit();
@@ -233,8 +237,7 @@ fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
 		.add(self.menu.dropdown())
 		.add(self.about.node(self.theme()))
 		.add(self.theme_picker.node(self.theme()))
-		.add(self.open_picker.node(self.theme()))
-		.add(self.viewer.node(self.theme()));
+		.add(self.open_picker.node(self.theme()));
 }
 
 // menu_bar styles the bar from the current theme, so a theme change reaches
@@ -270,6 +273,8 @@ fn xray::Node* DosModel.content(&self) {
 		"Theme         DOS Classic\nColors        True color\nBorder        Double\nMenu style    Cyan bar\nShadows       Enabled\n\n(These are display-only in this demo)",
 	};
 
+	// An open file takes the whole panel; the status bar names it.
+	if (self.file.open) return milktea::vstack().style(panel).add(self.file.node(th));
 	return milktea::vstack().style(panel)
 		.add(milktea::text(tab_titles[self.active_tab], title).fit_height())
 		.add(milktea::text(tab_bodies[self.active_tab], body).fit_height());

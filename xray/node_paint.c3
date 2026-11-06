@@ -361,7 +361,11 @@ fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz
 	}
 	tmp.render_ansi_string(0, 0, s, base);
 	for (sz x = 0; x < r.w; x++) {
-		self.record_cell(r.x + x, r.y + r.h, tmp.cells[r.h * tmp.width + x]);
+		Cell c = tmp.cells[r.h * tmp.width + x];
+		// A cell the string never reached has no background of its own; it
+		// shows what is beneath, as the rows above do.
+		if (c.style.bg.kind == ColorKind.NONE) c.style.bg = color_transparent();
+		self.record_cell(r.x + x, r.y + r.h, c);
 	}
 	self.paint_dy = old_dy;
 	self.record_clip({});
