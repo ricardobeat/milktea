@@ -22,6 +22,7 @@
 #define SOKOL_IMPL
 #define SOKOL_METAL
 #define SOKOL_NO_ENTRY
+#import <QuartzCore/CAMetalLayer.h>
 #include "sokol_gfx.h"
 #include "sokol_app.h"
 #include "sokol_glue.h"
@@ -383,9 +384,16 @@ void mt_atlas_upload(const uint8_t *pixels, int w, int h) {
 // not another upload.
 static void lat_count_render(void);
 
+// The colour the last frame was cleared to. While a window is being resized
+// AppKit shows the window's own background wherever the last frame does not
+// reach yet, so that background is kept the same colour (see mt_present).
+static float g_clear[4];
+static float g_window_bg[4] = { -1, -1, -1, -1 };
+
 void mt_render(const MtVertex *verts, int nquads, const MtCmd *cmds, int ncmds,
 	const MtDecor *decors, int fb_w, int fb_h, const float *clear) {
 	lat_count_render();
+	if (clear != NULL) memcpy(g_clear, clear, sizeof(g_clear));
 	if (!g.ready || fb_w < 1 || fb_h < 1) return;
 	ensure_target(fb_w, fb_h);
 	if (nquads > 0) {
@@ -438,6 +446,19 @@ static void lat_present(void);
 // frame. radius is the window's corner radius in device pixels, 0 for none.
 void mt_present(float radius) {
 	if (!g.ready || g.headless) return;
+	NSWindow *win = _sapp.macos.window;
+	if (win.isOpaque && memcmp(g_window_bg, g_clear, sizeof(g_clear)) != 0) {
+		memcpy(g_window_bg, g_clear, sizeof(g_clear));
+		NSColor *bg = [NSColor colorWithSRGBRed:g_clear[0] green:g_clear[1] blue:g_clear[2] alpha:1.0];
+		win.backgroundColor = bg;
+		_sapp.mtl.layer.backgroundColor = bg.CGColor;
+	}
+	// During a live resize the frame is presented in the same Core Animation
+	// transaction as the window's new size, so the two change together
+	// instead of the content trailing the frame. It costs a wait for the GPU
+	// to schedule the frame, which is why it is only on while resizing.
+	bool sync = win.inLiveResize;
+	_sapp.mtl.layer.presentsWithTransaction = sync;
 	sg_begin_pass(&(sg_pass){
 		.action = { .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = { 0, 0, 0, 0 } } },
 		.swapchain = sglue_swapchain(),
@@ -449,9 +470,16 @@ void mt_present(float radius) {
 		sg_apply_uniforms(1, &(sg_range){ p, sizeof(p) });
 		sg_draw(0, 3, 1);
 	}
+	// The pass's own drawable: end_pass lets go of it, so it is taken first.
+	id<CAMetalDrawable> drawable = _sg.mtl.cur_drawable;
 	sg_end_pass();
+	id<MTLCommandBuffer> cb = _sg.mtl.cmd_buffer;
 	lat_present();
 	sg_commit();
+	if (sync && cb != nil && drawable != nil) {
+		[cb waitUntilScheduled];
+		[drawable present];
+	}
 }
 
 // mt_commit ends a frame that drew offscreen only (a screenshot run).
@@ -651,6 +679,8 @@ static double late_latch_sec;
 
 static void late_latch_wait(void) {
 	if (late_latch_sec <= 0 || _sapp.mtl.display_link == nil) return;
+	// A live resize wants the frame now, at the window's new size.
+	if (_sapp.macos.window.inLiveResize) return;
 	double deadline = _sapp.mtl.display_link.targetTimestamp - late_latch_sec;
 	for (;;) {
 		double now = CACurrentMediaTime();

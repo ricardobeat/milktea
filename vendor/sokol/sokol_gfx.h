@@ -17217,7 +17217,13 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(const _sg_attachments_ptrs_t* atts) {
     }
     // if this is a swapchain pass, present the drawable
     if (nil != _sg.mtl.cur_drawable) {
-        [_sg.mtl.cmd_buffer presentDrawable:_sg.mtl.cur_drawable];
+        // MILKTEA PATCH: a layer that presents with its Core Animation
+        // transaction (milktea sets this during a window's live resize) must
+        // present the drawable itself once the command buffer is scheduled,
+        // which gui/backend.m mt_present does.
+        if (!((CAMetalLayer*)_sg.mtl.cur_drawable.layer).presentsWithTransaction) {
+            [_sg.mtl.cmd_buffer presentDrawable:_sg.mtl.cur_drawable];
+        }
         _sg.mtl.cur_drawable = nil;
     }
 }
