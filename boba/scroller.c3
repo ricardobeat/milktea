@@ -30,6 +30,9 @@ struct Scroller {
 	bool springing;
 	float spring_from;
 	long spring_start_ms;
+	// Momentum from a gesture that ran past an end: it is spent on the
+	// bounce, not the position, until the fingers touch again.
+	bool drop_momentum;
 }
 
 fn Scroller scroller(bool rubber_band = true) => { .rubber_band = rubber_band };
@@ -75,6 +78,14 @@ fn float clampf(float v, float lo, float hi) @private => v < lo ? lo : v > hi ? 
 
 // scroll_pixels moves it by dy layout units (positive towards the start).
 fn void Scroller.scroll_pixels(&self, float dy, bool precise, milktea::ScrollPhase phase) {
+	bool momentum = phase == milktea::ScrollPhase.MOMENTUM || phase == milktea::ScrollPhase.MOMENTUM_ENDED;
+	// The platform keeps sending momentum after the fingers lift; once the
+	// view is springing back from an end, that momentum must not undo it.
+	if (momentum && self.drop_momentum) {
+		if (phase == milktea::ScrollPhase.MOMENTUM_ENDED) self.drop_momentum = false;
+		return;
+	}
+	if (!momentum) self.drop_momentum = false;
 	float pos = self.pos_px;
 	float max = self.max_px();
 	float delta = -dy;
@@ -101,6 +112,7 @@ fn void Scroller.scroll_pixels(&self, float dy, bool precise, milktea::ScrollPha
 		self.springing = true;
 		self.spring_from = pos;
 		self.spring_start_ms = milktea::frame_ms();
+		self.drop_momentum = phase != milktea::ScrollPhase.MOMENTUM_ENDED;
 	}
 }
 

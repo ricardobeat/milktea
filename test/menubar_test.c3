@@ -116,3 +116,29 @@ fn void test_viewport_overscroll_resists_and_springs_back() @test {
 	v.scroll_pixels(0, true, milktea::ScrollPhase.ENDED);
 	assert(v.scroll.springing, "lifting the fingers past an end springs back");
 }
+
+// Momentum after the fingers lift must not undo the spring back from an end.
+fn void test_viewport_momentum_does_not_undo_spring() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(2, true, milktea::ScrollPhase.CHANGED);
+	v.scroll_pixels(0, true, milktea::ScrollPhase.ENDED);
+	assert(v.scroll.springing);
+	float at = v.scroll.pos_px;
+	v.scroll_pixels(3, true, milktea::ScrollPhase.MOMENTUM);
+	v.scroll_pixels(2, true, milktea::ScrollPhase.MOMENTUM);
+	assert(v.scroll.springing && v.scroll.pos_px == at, "momentum is dropped while springing");
+	v.scroll_pixels(0, true, milktea::ScrollPhase.MOMENTUM_ENDED);
+	v.scroll_pixels(-1, true, milktea::ScrollPhase.BEGAN);
+	assert(!v.scroll.springing, "a new touch takes over");
+}
+
+// A flick that coasts past an end bounces at once rather than after the
+// momentum runs out.
+fn void test_viewport_momentum_past_end_bounces() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(-1, true, milktea::ScrollPhase.ENDED);
+	v.scroll_pixels(3, true, milktea::ScrollPhase.MOMENTUM);
+	assert(v.scroll.springing, "out of bounds under momentum springs");
+}
