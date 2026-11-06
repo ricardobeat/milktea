@@ -710,14 +710,15 @@ static void lat_sigterm(int sig) { (void)sig; lat_report(); _exit(0); }
 //   sweep <y> <x0> <x1> <ms> [hz=120]      back and forth along a row
 //   down / up                              left button at the current point
 //   click <x> <y>                          move, down, up
+//   resize <w> <h>                         set the window's content size
 //   quit                                   ask the app to quit
 //
 // e.g. MILKTEA_FAKE_INPUT="wait 300; sweep 8 5 235 4000; quit"
 
-typedef enum { FK_WAIT, FK_MOVE, FK_SWEEP, FK_DOWN, FK_UP, FK_CLICK, FK_QUIT } FakeKind;
+typedef enum { FK_WAIT, FK_MOVE, FK_SWEEP, FK_DOWN, FK_UP, FK_CLICK, FK_RESIZE, FK_QUIT } FakeKind;
 typedef struct { FakeKind kind; double a, b, c, d, e; } FakeStep;
 
-#define FAKE_MAX 64
+#define FAKE_MAX 1024
 static struct {
 	FakeStep steps[FAKE_MAX];
 	int count;
@@ -729,7 +730,7 @@ static struct {
 } fake;
 
 static int fake_parse(const char *src) {
-	char buf[1024];
+	static char buf[32768];
 	strncpy(buf, src, sizeof(buf) - 1);
 	buf[sizeof(buf) - 1] = 0;
 	for (char *save = NULL, *tok = strtok_r(buf, ";", &save); tok && fake.count < FAKE_MAX;
@@ -744,6 +745,7 @@ static int fake_parse(const char *src) {
 		else if (!strcmp(name, "down")) st.kind = FK_DOWN;
 		else if (!strcmp(name, "up")) st.kind = FK_UP;
 		else if (!strcmp(name, "click") && n >= 3) st.kind = FK_CLICK;
+		else if (!strcmp(name, "resize") && n >= 3) st.kind = FK_RESIZE;
 		else if (!strcmp(name, "quit")) st.kind = FK_QUIT;
 		else {
 			fprintf(stderr, "milktea fake input: cannot read step '%s'\n", tok);
@@ -812,6 +814,9 @@ static void fake_tick(void) {
 				fake_post(NSEventTypeLeftMouseDown, st->a, st->b);
 				fake.down = 0;
 				fake_post(NSEventTypeLeftMouseUp, st->a, st->b);
+				break;
+			case FK_RESIZE:
+				[_sapp.macos.window setContentSize:NSMakeSize(st->a, st->b)];
 				break;
 			case FK_QUIT:
 				sapp_request_quit();
