@@ -613,8 +613,11 @@ out per pixel. List it next to milktea:
 
 ```json
 "dependency-search-paths": ["path/to/milktea/lib"],
-"dependencies": ["milktea", "milktea_gui"]
+"dependencies": ["milktea", "milktea_gui"],
+"macos-min-version": "14.0"
 ```
+
+It needs macOS 14 or later: the frame loop runs on `CADisplayLink`.
 
 and call it from `main` in place of `milktea::@run`:
 
