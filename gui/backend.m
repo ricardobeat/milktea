@@ -684,6 +684,11 @@ static void late_latch_wait(void) {
 	if (late_latch_sec <= 0 || _sapp.mtl.display_link == nil) return;
 	// A live resize wants the frame now, at the window's new size.
 	if (_sapp.macos.window.inLiveResize) return;
+	// Inside one of AppKit's own loops (tracking a click on a button, a
+	// drag, a menu) the events belong to that loop: one taken here, such as
+	// the mouse-up a button is waiting for, never reaches it and the loop
+	// waits forever. Only the normal run loop's frames wait for input.
+	if (![[[NSRunLoop currentRunLoop] currentMode] isEqualToString:NSDefaultRunLoopMode]) return;
 	double deadline = _sapp.mtl.display_link.targetTimestamp - late_latch_sec;
 	for (;;) {
 		double now = CACurrentMediaTime();
@@ -692,15 +697,20 @@ static void late_latch_wait(void) {
 			untilDate:[NSDate dateWithTimeIntervalSinceNow:deadline - now]
 			inMode:NSDefaultRunLoopMode dequeue:YES];
 		if (e == nil) continue;
-		// A press can start one of AppKit's own tracking loops — a live
-		// resize from the window edge, a window drag, a menu — which runs
-		// the run loop until the button comes up and so fires the display
-		// link again, inside this frame. Leave presses for the normal run
-		// loop: put it back, draw now, and it is handled after the frame.
+		// Button events are AppKit's: a press can start one of its tracking
+		// loops (a live resize, a window drag, a button), and those loops
+		// wait for the matching drag and release events. Put them back, draw
+		// now, and they are handled after the frame by whoever wants them.
 		switch (e.type) {
 			case NSEventTypeLeftMouseDown:
 			case NSEventTypeRightMouseDown:
 			case NSEventTypeOtherMouseDown:
+			case NSEventTypeLeftMouseUp:
+			case NSEventTypeRightMouseUp:
+			case NSEventTypeOtherMouseUp:
+			case NSEventTypeLeftMouseDragged:
+			case NSEventTypeRightMouseDragged:
+			case NSEventTypeOtherMouseDragged:
 				[NSApp postEvent:e atStart:YES];
 				return;
 			default:
