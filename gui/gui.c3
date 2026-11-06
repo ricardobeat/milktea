@@ -29,8 +29,8 @@ struct GuiOptions {
 	int cell_h;
 	int font_size;
 	float font_height_ratio; // ascent-to-descent height / em; 0 keeps pixel-height sizing
-	bool undecorated;
-	float corner_radius; // points; 0 = square corners. Implies undecorated and a transparent window.
+	bool undecorated; // no title bar or frame; corners as corner_radius says
+	float corner_radius; // points; 0 = square corners. Implies undecorated.
 	// When set, the first settled frame is written to this path as a PNG and
 	// run() returns. It is drawn offscreen with no window, through the same
 	// font and renderer, so a view can be inspected with nobody at the
@@ -654,8 +654,11 @@ fn bool start() @private {
 	if (g.opts.font_height_ratio > 0) g.font_ratio = g.opts.font_height_ratio;
 
 	if (!g.headless) {
-		bool rounded = g.opts.corner_radius > 0;
-		mt_window_setup(g.opts.undecorated || rounded ? 1 : 0, rounded ? 1 : 0,
+		// macOS rounds the corners of any titled window, title bar hidden or
+		// not, so a borderless one is also made transparent: its corners are
+		// then whatever the frame draws, square at corner_radius 0.
+		bool borderless = g.opts.undecorated || g.opts.corner_radius > 0;
+		mt_window_setup(borderless ? 1 : 0, borderless ? 1 : 0,
 			g.opts.cell_w * 4, g.opts.cell_h * 4);
 		if (g.opts.chrome_rows > 0) {
 			int br = mt_window_inline_titlebar(g.opts.cell_h, g.opts.hide_window_buttons ? 1 : 0);

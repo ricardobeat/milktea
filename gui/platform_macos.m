@@ -199,12 +199,13 @@ void mt_window_setup(int borderless, int transparent, int min_w, int min_h) {
 	NSWindow *w = window();
 	if (!w) return;
 	if (borderless) {
-		w.styleMask |= NSWindowStyleMaskFullSizeContentView;
-		w.titlebarAppearsTransparent = YES;
-		w.titleVisibility = NSWindowTitleHidden;
-		for (NSWindowButton b = NSWindowCloseButton; b <= NSWindowZoomButton; b++) {
-			[[w standardWindowButton:b] setHidden:YES];
-		}
+		// Not titled at all: macOS rounds and clips every titled window, title
+		// bar hidden or not, so only a borderless one has the corners the
+		// frame draws. It still resizes from its edges, minimises and casts a
+		// shadow; backend.m lets it become the key window.
+		w.styleMask = NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable
+			| NSWindowStyleMaskMiniaturizable;
+		w.hasShadow = YES;
 	}
 	if (transparent) {
 		w.opaque = NO;

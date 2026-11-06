@@ -447,10 +447,13 @@ static void lat_present(void);
 void mt_present(float radius) {
 	if (!g.ready || g.headless) return;
 	NSWindow *win = _sapp.macos.window;
-	if (win.isOpaque && memcmp(g_window_bg, g_clear, sizeof(g_clear)) != 0) {
+	// A transparent window (borderless) keeps a clear window background, or
+	// macOS would draw its rounded frame; with square corners the layer can
+	// still carry the colour. Rounded corners must stay clear.
+	if (radius <= 0 && memcmp(g_window_bg, g_clear, sizeof(g_clear)) != 0) {
 		memcpy(g_window_bg, g_clear, sizeof(g_clear));
 		NSColor *bg = [NSColor colorWithSRGBRed:g_clear[0] green:g_clear[1] blue:g_clear[2] alpha:1.0];
-		win.backgroundColor = bg;
+		if (win.isOpaque) win.backgroundColor = bg;
 		_sapp.mtl.layer.backgroundColor = bg.CGColor;
 	}
 	// During a live resize the frame is presented in the same Core Animation
@@ -881,6 +884,24 @@ static void fake_start(void) {
 		userInfo:nil repeats:YES];
 	[[NSRunLoop currentRunLoop] addTimer:t forMode:NSRunLoopCommonModes];
 }
+
+// A borderless window (see mt_window_setup) cannot take the keyboard unless
+// its class says it can, and its performClose: only beeps, having no close
+// button to press. sokol quits through performClose:, so without the
+// override below a borderless app never closes its window and hangs on quit.
+@implementation _sapp_macos_window (MilkteaBorderless)
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeMainWindow { return YES; }
+- (void)performClose:(id)sender {
+	if (self.styleMask & NSWindowStyleMaskTitled) {
+		[super performClose:sender];
+		return;
+	}
+	id<NSWindowDelegate> d = self.delegate;
+	if ([d respondsToSelector:@selector(windowShouldClose:)] && ![d windowShouldClose:self]) return;
+	[self close];
+}
+@end
 
 // ---- windowed ---------------------------------------------------------------
 
