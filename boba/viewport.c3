@@ -281,7 +281,7 @@ fn bool Viewport.handle_mouse(&self, String button, String action) {
 
 // scroller brings the Scroller up to date with the content and with offset,
 // which the row methods (scroll_down, page_up, ...) move directly.
-fn Scroller* Viewport.scroller(&self) @private {
+fn Scroller* Viewport.scroller(&self) {
 	self.scroll.rubber_band = true;
 	self.scroll.set_content(self.total_lines, self.height);
 	self.scroll.sync_row(self.offset);
