@@ -631,11 +631,13 @@ static void lat_frame_start(void) {
 // The display link fires right after a vsync and the frame it draws is shown
 // at targetTimestamp, a whole refresh later. Drawing at once leaves most of
 // that refresh idle, and input that lands in it waits for the next frame.
-// MILKTEA_LATE_LATCH_MS=<n> instead keeps handling events until n ms before
-// the target and only then draws, so the frame carries input up to that
-// point. n has to cover the frame's CPU and GPU work plus the compositor's
-// margin, or frames miss their vsync.
+// So the frame callback keeps handling events until LATE_LATCH_DEFAULT_MS
+// before the target and only then draws, so the frame carries input up to
+// that point. The budget has to cover the frame's CPU and GPU work plus the
+// compositor's margin, or frames miss their vsync. MILKTEA_LATE_LATCH_MS=<n>
+// sets another budget, and 0 draws as soon as the display link fires.
 
+#define LATE_LATCH_DEFAULT_MS 5.0
 static double late_latch_sec;
 
 static void late_latch_wait(void) {
@@ -737,7 +739,7 @@ void mt_run(const char *title, int width, int height, MtVoidFn init, MtVoidFn fr
 	g.event_fn = event;
 	g.cleanup_fn = cleanup;
 	const char *ll_env = getenv("MILKTEA_LATE_LATCH_MS");
-	late_latch_sec = ll_env ? atof(ll_env) / 1000.0 : 0;
+	late_latch_sec = (ll_env && ll_env[0] ? atof(ll_env) : LATE_LATCH_DEFAULT_MS) / 1000.0;
 	const char *lat_env = getenv("MILKTEA_DEBUG_LATENCY");
 	lat.on = lat_env != NULL && lat_env[0] != 0 && lat_env[0] != '0';
 	if (lat.on) {

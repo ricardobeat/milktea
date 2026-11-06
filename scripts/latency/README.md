@@ -22,9 +22,9 @@ for the next frame.
 
 ## Late latching
 
-`MILKTEA_LATE_LATCH_MS=<n>` keeps handling events until n ms before the
-display link's `targetTimestamp` and draws then, instead of right after the
-vsync. Measured on the same setup (p50, "→target" is a move's age when its
+The GUI keeps handling events until 5 ms before the display link's
+`targetTimestamp` and draws then, instead of right after the vsync.
+`MILKTEA_LATE_LATCH_MS=<n>` sets another budget; 0 turns it off. Measured on the same setup (p50, "→target" is a move's age when its
 frame is due on screen; "late" is GPU done after the target):
 
 | n | newest move → target | oldest move → target | slack | late |
