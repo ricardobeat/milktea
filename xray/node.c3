@@ -520,14 +520,8 @@ fn void merge_box_paint(glaze::Style* b, glaze::Style s) @private {
 // milktea::blur.
 fn Node* Node.focusable(&self, bool on = true) {
 	self.can_focus = on;
+	if (on) use_focus();
 	return self;
-}
-
-// focus_matches reports whether this node is the one named by id_str or
-// id_ptr. A node with no id never matches.
-fn bool Node.focus_matches(&self, String id_str, void* id_ptr) {
-	if (self.id_str.len > 0) return id_str.len > 0 && self.id_str == id_str;
-	return id_ptr != null && self.id_ptr == id_ptr;
 }
 
 // has_focus_style reports whether the node changes anything while focused.

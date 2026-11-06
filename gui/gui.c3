@@ -723,6 +723,7 @@ fn void stop() @private {
 	g.prev_paint = {};
 	if (p.draw_buf != null && p.draw_buf.paint_ops.is_initialized()) p.draw_buf.paint_ops.free();
 	p.click_targets.free();
+	if (xray::g_focus_runtime != null) xray::g_focus_runtime.free();
 	if (g.drag_regions.is_initialized()) g.drag_regions.free();
 	g_paint.free();
 	atlas_free();

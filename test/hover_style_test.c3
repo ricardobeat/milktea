@@ -140,7 +140,8 @@ fn void test_focus_style_paints() @test {
 	root.solve(xray::new_rect(0, 0, 10, 3));
 	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 3);
 	defer { sb.destroy(); mem::free(sb); }
-	sb.focus_str = "b";
+	xray::focus_set_named("b");
+	defer xray::focus_clear();
 	sb.paint(root);
 	assert(!same(sb.cell_at(0, 0).style.bg, BLUE), "unfocused node keeps its bg");
 	assert(same(sb.cell_at(0, 1).style.bg, BLUE), "focused node takes its focus bg");

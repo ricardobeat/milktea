@@ -228,9 +228,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt) @local {
 	buf.pointer_on = g_program.hover_has_prev && g_program.hover_prev_col >= 0 && g_program.hover_prev_row >= 0;
 	buf.pointer_x = g_program.hover_prev_col;
 	buf.pointer_y = g_program.hover_prev_row;
-	update_focus(root);
-	buf.focus_str = g_program.focus_str;
-	buf.focus_ptr = g_program.focus_ptr;
+	if (xray::g_focus_runtime != null) xray::g_focus_runtime.update(root);
 	xray::PaintResult res = buf.paint(root, &g_program.draw_scratch, frame_ms());
 
 	// Mouse hit-testing wants this frame's geometry, not last frame's — clear

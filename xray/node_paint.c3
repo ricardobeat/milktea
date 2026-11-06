@@ -155,7 +155,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	Color parent_fg = self.inherit_fg;
 	defer self.inherit_fg = parent_fg;
 	if (n.fg.kind != ColorKind.NONE) self.inherit_fg = n.fg;
-	if (n.can_focus && n.has_focus_style() && n.focus_matches(self.focus_str, self.focus_ptr)) {
+	if (n.can_focus && n.has_focus_style() && n.has_keyboard_focus()) {
 		merge_box_paint(&box, n.focus_box);
 		if (n.focus_fg.kind != ColorKind.NONE) self.inherit_fg = n.focus_fg;
 	}

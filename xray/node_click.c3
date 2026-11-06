@@ -164,36 +164,3 @@ fn void collect_drag_regions(Node* n, List{Rect}* out) {
 		collect_drag_regions(n.children[i], out);
 	}
 }
-
-// FocusTarget is a focusable node as it stood in the last solved tree: its
-// id, which is what focus is remembered by, and its rect, for focus on click.
-//
-// The name is copied, not referenced: targets outlive the frame whose
-// temp allocator held the node's id.
-struct FocusTarget {
-	Rect rect;
-	char[64] name;
-	char name_len;
-	void* id_ptr;
-}
-
-fn String FocusTarget.id_str(&self) => (String)self.name[:self.name_len];
-
-// collect_focus_targets appends every focusable node with an id, in paint
-// order, which is Tab order. A node that blocks the pointer drops everything
-// collected before it, since a modal covers those, and *trapped is set.
-fn void collect_focus_targets(Node* n, List{FocusTarget}* out, bool* trapped) {
-	if (n == null || n.alpha_value == 0) return;
-	if (n.blocks_pointer) {
-		out.clear();
-		*trapped = true;
-	}
-	if (n.can_focus && (n.id_str.len > 0 || n.id_ptr != null)) {
-		FocusTarget t = { .rect = n.computed_rect, .id_ptr = n.id_ptr };
-		usz len = n.id_str.len < t.name.len ? n.id_str.len : t.name.len;
-		t.name[:len] = n.id_str[:len];
-		t.name_len = (char)len;
-		out.push(t);
-	}
-	for (sz i = 0; i < n.child_count; i++) collect_focus_targets(n.children[i], out, trapped);
-}
