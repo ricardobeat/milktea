@@ -13,6 +13,8 @@ fn int main() {
 		.cols = 80, .rows = 24,
 		.cell_w = 10, .cell_h = 19,
 		.font_size = 17,
+		// The menu bar stands in for the title bar, with the window buttons in it.
+		.chrome_rows = 1,
 	});
 	return 0;
 }
