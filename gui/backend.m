@@ -1104,6 +1104,16 @@ void mt_run(const char *title, int width, int height, MtVoidFn init, MtVoidFn fr
 	});
 }
 
+// mt_set_pointer sets the mouse pointer: xray's PointerShape, in order.
+void mt_set_pointer(int shape) {
+	switch (shape) {
+		case 1: sapp_set_mouse_cursor(SAPP_MOUSECURSOR_ARROW); break;
+		case 2: sapp_set_mouse_cursor(SAPP_MOUSECURSOR_IBEAM); break;
+		case 3: sapp_set_mouse_cursor(SAPP_MOUSECURSOR_POINTING_HAND); break;
+		default: sapp_set_mouse_cursor(SAPP_MOUSECURSOR_DEFAULT); break;
+	}
+}
+
 void mt_quit(void) { sapp_quit(); }
 void mt_cancel_quit(void) { sapp_cancel_quit(); }
 float mt_dpi_scale(void) { return sapp_dpi_scale(); }

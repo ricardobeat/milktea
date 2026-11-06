@@ -100,6 +100,8 @@ struct Gui {
 	// The left button is down, and the cell the last motion message named,
 	// for MOUSE_MODE_CELL_MOTION.
 	bool button_down;
+	// The pointer shape last set, to set it again only when it changes.
+	xray::PointerShape pointer_shape;
 	// This frame's scrolling so far (see the wheel message in step).
 	float scroll_dx;
 	float scroll_dy;
@@ -182,6 +184,14 @@ fn void toggle_zoom() {
 }
 
 fn bool is_zoomed() => !g.headless && mt_window_is_zoomed() != 0;
+
+// toggle_fullscreen puts the window in a full-screen space of its own, or
+// takes it out.
+fn void toggle_fullscreen() {
+	if (!g.headless) mt_window_toggle_fullscreen();
+}
+
+fn bool is_fullscreen() => !g.headless && mt_window_is_fullscreen() != 0;
 
 // ---- fonts ----------------------------------------------------------------
 
@@ -455,11 +465,15 @@ fn void on_event(MtEvent* e) @private {
 				// the release, so it is sent here instead.
 				mt_window_drag();
 				g.button_down = false;
+				milktea::end_drag();
 				send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_RELEASE) });
 			}
 		case MOUSE_UP:
 			pointer_to(e.x, e.y);
-			if (e.button == 0) g.button_down = false;
+			if (e.button == 0) {
+				g.button_down = false;
+				milktea::end_drag();
+			}
 			if (e.button == 0) send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_RELEASE) });
 		case SCROLL:
 			// The old notch count: a precise device scrolls a notch per ten points.
@@ -495,7 +509,9 @@ fn void pointer_to(float x, float y) @private {
 	g.ptr_x = x;
 	g.ptr_y = y;
 	if (milktea::dispatch_hover(x < 0 ? -1 : (sz)x, y < 0 ? -1 : (sz)y)) g.dirty = true;
+	update_pointer();
 	if (x < 0 || y < 0) return;
+	if (g.button_down && milktea::dispatch_drag((sz)x, (sz)y)) g.dirty = true;
 	milktea::MouseMsg mm = mouse_at(g.button_down ? MOUSE_LEFT : MOUSE_NONE, MOUSE_MOTION);
 	milktea::MouseMode mode = milktea::g_program.want_mouse_mode;
 	if (mode == MOUSE_MODE_NONE) return;
@@ -505,6 +521,16 @@ fn void pointer_to(float x, float y) @private {
 	g.motion_col = mm.col;
 	g.motion_row = mm.row;
 	send({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
+}
+
+// update_pointer gives the pointer the shape the node under it asks for.
+fn void update_pointer() @private {
+	if (g.headless) return;
+	xray::PointerShape shape = g.ptr_x < 0 || g.ptr_y < 0 ? xray::PointerShape.DEFAULT
+		: milktea::pointer_at((sz)g.ptr_x, (sz)g.ptr_y);
+	if (shape == g.pointer_shape) return;
+	g.pointer_shape = shape;
+	mt_set_pointer((int)shape.ordinal);
 }
 
 // ---- the loop -------------------------------------------------------------
@@ -652,6 +678,8 @@ fn bool step() @private {
 			g.drawn = true;
 			if (g.headless) mt_commit();
 		}
+		// What is under a still pointer can change with the frame.
+		update_pointer();
 	}
 	if (shot_owed()) {
 		if (mt_write_png(g.opts.screenshot_path.zstr_tcopy()) != 0) {

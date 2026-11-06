@@ -20,6 +20,8 @@ struct ClickTarget {
 	ClickFn on_click_outside;
 	ClickFn on_hover_in;
 	ClickFn on_hover_out;
+	ClickFn on_drag;
+	PointerShape pointer;
 	// The node blocks the pointer for everything collected before it.
 	bool blocks;
 	// The node paints differently under the pointer (see Node.style's hover).
@@ -36,7 +38,8 @@ struct ClickTarget {
 fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
 	if (n == null) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null
-		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.blocks_pointer || n.has_hover()) {
+		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.on_drag_fn != null
+		|| n.pointer_shape != PointerShape.DEFAULT || n.blocks_pointer || n.has_hover()) {
 		out.push({
 			.rect = n.computed_rect,
 			.metrics = n.layout_metrics,
@@ -48,6 +51,8 @@ fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
 			.on_click_outside = n.on_click_outside_fn,
 			.on_hover_in = n.on_hover_in_fn,
 			.on_hover_out = n.on_hover_out_fn,
+			.on_drag = n.on_drag_fn,
+			.pointer = n.pointer_shape,
 			.blocks = n.blocks_pointer,
 			.hover_style = n.has_hover(),
 		});
@@ -77,8 +82,13 @@ fn sz pointer_floor(ClickTarget[] targets, sz col, sz row) @local {
 // after removing GUI decoration padding, so a widget that cares where the
 // press landed inside it can read the position as a 0-based cell within its
 // own content area rather than subtracting its own origin by hand.
-fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
+//
+// Returns the index of the target the press landed on, or -1: a target with
+// on_drag counts as hit even without on_click, so the caller can hold on to
+// it for the drag that may follow (see ClickTarget.drag).
+fn sz dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 	if (dbg) io::eprintfn("[dispatch] (%d,%d) against %d targets", col, row, targets.len);
+	sz hit = -1;
 	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
 		if (dbg) {
 			Rect r = targets[i].rect;
@@ -86,15 +96,19 @@ fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 				i, r.x, r.y, r.w, r.h, r.contains(col, row), targets[i].on_click != null,
 				targets[i].id_str.len > 0 ? targets[i].id_str : "(ptr)");
 		}
-		if (targets[i].on_click == null && targets[i].blocks && targets[i].rect.contains(col, row)) {
+		bool takes = targets[i].on_click != null || targets[i].on_drag != null;
+		if (!takes && targets[i].blocks && targets[i].rect.contains(col, row)) {
 			if (dbg) io::eprintfn("  -> blocked by [%d]", i);
 			break;
 		}
-		if (targets[i].on_click != null && targets[i].rect.contains(col, row)) {
+		if (takes && targets[i].rect.contains(col, row)) {
+			hit = i;
+			if (targets[i].on_click == null) break;
 			if (dbg) io::eprintfn("  -> firing on_click of [%d]", i);
-			Rect r = targets[i].rect;
-			targets[i].on_click(targets[i].id_ptr, targets[i].id_str, floor_cell(col - r.x - targets[i].inset_x, targets[i].metrics.unit_w()),
-				floor_cell(row - r.y - targets[i].inset_y, targets[i].metrics.unit_h()));
+			sz lc;
+			sz lr;
+			targets[i].local(col, row, &lc, &lr);
+			targets[i].on_click(targets[i].id_ptr, targets[i].id_str, lc, lr);
 			break;
 		}
 	}
@@ -104,9 +118,33 @@ fn void dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 			t.on_click_outside(t.id_ptr, t.id_str, floor_cell(col, t.metrics.unit_w()), floor_cell(row, t.metrics.unit_h()));
 		}
 	}
+	return hit;
 }
 
-// dispatch_hover walks `targets` and fires on_hover_in for any target whose
+// pointer_at is the pointer shape at (col, row): the topmost target's there.
+fn PointerShape pointer_at(ClickTarget[] targets, sz col, sz row) {
+	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
+		if (targets[i].rect.contains(col, row)) return targets[i].pointer;
+	}
+	return PointerShape.DEFAULT;
+}
+
+// local turns a point in layout units into a cell of the target's content.
+fn void ClickTarget.local(&self, sz col, sz row, sz* lc, sz* lr) {
+	*lc = floor_cell(col - self.rect.x - self.inset_x, self.metrics.unit_w());
+	*lr = floor_cell(row - self.rect.y - self.inset_y, self.metrics.unit_h());
+}
+
+// drag fires the target's on_drag for the pointer at (col, row), in local
+// cells, wherever the pointer is.
+fn void ClickTarget.drag(&self, sz col, sz row) {
+	if (self.on_drag == null) return;
+	sz lc;
+	sz lr;
+	self.local(col, row, &lc, &lr);
+	self.on_drag(self.id_ptr, self.id_str, lc, lr);
+}
+
 // rect contains (col, row) but did NOT contain the previous pointer position,
 // and on_hover_out for any whose rect did contain it but no longer does.
 // Targets that contained the pointer on both frames, or neither, are left

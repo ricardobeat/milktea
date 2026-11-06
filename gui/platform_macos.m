@@ -223,7 +223,6 @@ void mt_window_setup(int borderless, int transparent, int min_w, int min_h) {
 // title bar answers that; this does too, tracking the buttons' strip whether
 // or not the window is key, as the title bar does.
 @interface MtChromeView : NSView {
-	BOOL inside;
 	NSRect strip;
 	NSTrackingArea *area;
 }
@@ -231,10 +230,26 @@ void mt_window_setup(int borderless, int transparent, int min_w, int min_h) {
 @end
 
 @implementation MtChromeView
-- (BOOL)_mouseInGroup:(NSButton *)button { (void)button; return inside; }
-- (void)setInside:(BOOL)on {
-	if (inside == on) return;
-	inside = on;
+// AppKit asks this as each button draws, to show the symbols on all three
+// while the pointer is over any of them. It is answered from where the
+// pointer is now rather than from enter and exit events: an area replaced
+// with the pointer already in it sends no enter, and a button can draw
+// before the strip hears of the pointer at all, and either left only the
+// button under the pointer lit.
+- (BOOL)_mouseInGroup:(NSButton *)button {
+	(void)button;
+	if (!self.window || NSIsEmptyRect(strip)) return NO;
+	NSPoint p = [self convertPoint:[self.window mouseLocationOutsideOfEventStream] fromView:nil];
+	return NSPointInRect(p, [self stripRect]);
+}
+// The strip in this view's coordinates; it keeps its distance from the top
+// as the window resizes.
+- (NSRect)stripRect {
+	NSRect r = strip;
+	r.origin.y = self.bounds.size.height - strip.origin.y;
+	return r;
+}
+- (void)redrawButtons {
 	for (NSView *v in self.subviews) {
 		if ([v isKindOfClass:[NSButton class]]) [v setNeedsDisplay:YES];
 	}
@@ -250,18 +265,20 @@ void mt_window_setup(int borderless, int transparent, int min_w, int min_h) {
 		area = nil;
 	}
 	if (!NSIsEmptyRect(strip)) {
-		// The strip keeps its distance from the top as the window resizes.
-		NSRect r = strip;
-		r.origin.y = self.bounds.size.height - strip.origin.y;
-		area = [[NSTrackingArea alloc] initWithRect:r
-			options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways
+		area = [[NSTrackingArea alloc] initWithRect:[self stripRect]
+			options:NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingActiveAlways
 			owner:self userInfo:nil];
 		[self addTrackingArea:area];
 	}
 	[super updateTrackingAreas];
+	// The pointer may already be over the strip, which sends no enter.
+	[self redrawButtons];
 }
-- (void)mouseEntered:(NSEvent *)e { (void)e; [self setInside:YES]; }
-- (void)mouseExited:(NSEvent *)e { (void)e; [self setInside:NO]; }
+// Any move over the strip redraws all three, so moving from one button to
+// the next never leaves one behind.
+- (void)mouseEntered:(NSEvent *)e { (void)e; [self redrawButtons]; }
+- (void)mouseMoved:(NSEvent *)e { (void)e; [self redrawButtons]; }
+- (void)mouseExited:(NSEvent *)e { (void)e; [self redrawButtons]; }
 @end
 
 // mt_window_inline_titlebar takes the title bar away but keeps the window
@@ -344,6 +361,17 @@ void mt_window_drag(void) {
 void mt_window_minimize(void) { [window() miniaturize:nil]; }
 void mt_window_zoom(void) { [window() zoom:nil]; }
 int mt_window_is_zoomed(void) { return window().isZoomed ? 1 : 0; }
+
+// A window takes its own space in full screen only when it says it can.
+void mt_window_toggle_fullscreen(void) {
+	NSWindow *w = window();
+	if (!w) return;
+	w.collectionBehavior |= NSWindowCollectionBehaviorFullScreenPrimary;
+	[w toggleFullScreen:nil];
+}
+int mt_window_is_fullscreen(void) {
+	return (window().styleMask & NSWindowStyleMaskFullScreen) != 0 ? 1 : 0;
+}
 
 void mt_window_set_title(const char *title) {
 	NSWindow *w = window();

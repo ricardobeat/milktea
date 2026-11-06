@@ -277,10 +277,10 @@ fn Rect Node.stack_child_rect(&self, Rect area, Node* child) {
 	// A pinned child names its own offset; everything else is placed by its
 	// justify and align within the space it did not fill.
 	sz x = child.pinned
-		? child.offset_x * self.layout_metrics.unit_w()
+		? child.offset_x * (child.pinned_px ? 1 : self.layout_metrics.unit_w())
 		: justify_offset(child.justify, area.w - w, 0, 1);
 	sz y = child.pinned
-		? child.offset_y * self.layout_metrics.unit_h()
+		? child.offset_y * (child.pinned_px ? 1 : self.layout_metrics.unit_h())
 		: align_offset(child.align, area.h - h);
 
 	// offset() displaces the child from wherever it landed, pinned or placed,

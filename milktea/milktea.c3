@@ -253,6 +253,10 @@ struct Program {
 	sz hover_prev_col;
 	sz hover_prev_row;
 	bool hover_has_prev;
+	// The target a press landed on, while the button that pressed is held
+	// and the target asked for drags (see xray::Node.on_drag).
+	xray::ClickTarget drag_target;
+	bool dragging;
 	// on_draw, when set, sees every tree draw() has just solved and painted.
 	// A backend reads what it needs from the frame here — the GUI collects
 	// its window drag handles — so the terminal links none of that.
@@ -553,8 +557,31 @@ fn xray::Rect layout_area() {
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
 	if (xray::g_focus_runtime != null) xray::g_focus_runtime.click(col, row);
-	xray::dispatch_click(g_program.click_targets.array_view(),
-		col, row, g_program.debug_mouse);
+	xray::ClickTarget[] targs = g_program.click_targets.array_view();
+	sz hit = xray::dispatch_click(targs, col, row, g_program.debug_mouse);
+	g_program.dragging = hit >= 0 && targs[hit].on_drag != null;
+	if (g_program.dragging) g_program.drag_target = targs[hit];
+}
+
+// pointer_at is the pointer shape the last drawn frame asks for at (col,
+// row), in the backend's layout units (see xray::Node.pointer).
+fn xray::PointerShape pointer_at(sz col, sz row) {
+	if (g_program == null) return xray::PointerShape.DEFAULT;
+	return xray::pointer_at(g_program.click_targets.array_view(), col, row);
+}
+
+// dispatch_drag reports a move of the pointer, with the button held, to the
+// target the press landed on, if it asked for drags; end_drag lets it go when
+// the button comes up. A backend calls both, in its own layout units, as it
+// calls dispatch_click. Returns whether a target took the move.
+fn bool dispatch_drag(sz col, sz row) {
+	if (g_program == null || !g_program.dragging) return false;
+	g_program.drag_target.drag(col, row);
+	return true;
+}
+
+fn void end_drag() {
+	if (g_program != null) g_program.dragging = false;
 }
 
 // dispatch_hover walks the last drawn frame's click targets and fires
@@ -950,6 +977,11 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
+	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_MOTION
+		&& m.mouse.button == MouseButton.MOUSE_LEFT) {
+		dispatch_drag(m.mouse.col, m.mouse.row);
+	}
+	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_RELEASE) end_drag();
 	self.stamp_now();
 	if (m.kind == MsgKind.MOUSE
 		&& (m.mouse.action == MouseAction.MOUSE_PRESS

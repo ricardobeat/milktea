@@ -223,6 +223,8 @@ struct Node {
 	// Fixed offset inside the parent, used only when pinned (see at()).
 	sz offset_x, offset_y;
 	bool pinned;
+	// The pinned offset is in layout units (pixels in a window), not cells.
+	bool pinned_px;
 
 	// Displacement applied *after* placement, whether that placement came
 	// from justify/align or from a pin (see offset()). Unlike padding it does
@@ -254,6 +256,9 @@ struct Node {
 	ClickFn on_click_outside_fn;
 	ClickFn on_hover_in_fn;
 	ClickFn on_hover_out_fn;
+	ClickFn on_drag_fn;
+	// What the mouse pointer looks like over this node, in a window.
+	PointerShape pointer_shape;
 
 	// Marks this node's area as a place to drag the OS window from, the way
 	// a title bar is. Collected after solve() alongside the click targets
@@ -585,15 +590,27 @@ fn Node* Node.place(&self, JustifyContent j, AlignItems a) {
 // known rather than solved — a dropdown under the menu title that opened it,
 // a tooltip beside its anchor.
 //
+// x and y are in cells, or with PX in layout units: pixels in a window,
+// still cells in a terminal. PX is for something drawn between the cells,
+// like a text caret following content that scrolls by the pixel.
+//
 // Only meaningful in a stack, where every child gets the parent's whole rect
 // to place itself in; a row or column decides its children's offsets itself.
-fn Node* Node.at(&self, sz x, sz y) {
+fn Node* Node.at(&self, sz x, sz y, Unit unit = CELLS) {
 	self.offset_x = x;
 	self.offset_y = y;
 	self.pinned = true;
+	self.pinned_px = unit == PX;
 	if (self.size_w.kind == ConstraintKind.CAUTO) self.size_w = measured(&node_measure_w, self);
 	if (self.size_h.kind == ConstraintKind.CAUTO) self.size_h = measured(&node_measure_h, self);
 	return self;
+}
+
+// Unit is what a position is counted in: text cells, or layout units (PX),
+// which are pixels in a window and cells in a terminal.
+enum Unit : char {
+	CELLS,
+	PX,
 }
 
 // center places this node in the middle of its parent, sized to its content.
@@ -709,6 +726,33 @@ fn Node* Node.on_hover_in(&self, ClickFn handler) {
 // been inside (see on_hover_in).
 fn Node* Node.on_hover_out(&self, ClickFn handler) {
 	self.on_hover_out_fn = handler;
+	return self;
+}
+
+// on_drag fires handler(id, id_str, col, row) for every move of the pointer
+// with the button held after a press landed on this node, until the button
+// comes up. col and row are local to the node, as on_click's are, and go
+// negative or past its size when the pointer leaves it: a drag that selects
+// text keeps going above, below and beside the view.
+fn Node* Node.on_drag(&self, ClickFn handler) {
+	self.on_drag_fn = handler;
+	return self;
+}
+
+// PointerShape is what the mouse pointer looks like over a node. A terminal
+// has no say in its pointer and ignores it.
+enum PointerShape : char {
+	DEFAULT,
+	ARROW,
+	TEXT,  // an I-beam, over text that can be edited or selected
+	HAND,  // over a link or something else to press
+}
+
+// pointer sets the mouse pointer's look over this node. The topmost node
+// under the pointer decides, so a menu or dialog over text that set TEXT
+// shows the arrow.
+fn Node* Node.pointer(&self, PointerShape shape) {
+	self.pointer_shape = shape;
 	return self;
 }
 
