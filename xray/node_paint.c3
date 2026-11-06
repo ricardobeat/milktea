@@ -34,6 +34,11 @@ fn PaintResult ScreenBuffer.paint(&self, Node* root, ScreenBuffer** scratch = nu
 	self.record_begin();
 	PaintResult res;
 	self.paint_metrics = root != null ? root.layout_metrics : (LayoutMetrics){};
+	self.paint_seq = 0;
+	self.pointer_floor = 0;
+	if (self.pointer_on) self.find_pointer_floor(root);
+	self.paint_seq = 0;
+	self.inherit_fg = {};
 	self.paint_node(root, &res, scratch);
 	self.paint_dx = res.cursor_dx;
 	self.paint_dy = res.cursor_dy;
@@ -80,8 +85,27 @@ fn void ScreenBuffer.draw_cursor(&self, PaintResult* res, sz now_ms) {
 	self.overlay_char((sz)c.x, (sz)c.y, drawn, default_style());
 }
 
+// find_pointer_floor records, in pointer_floor, the paint index of the last
+// node that blocks the pointer at its position: a modal over what the pointer
+// is on. It numbers nodes exactly as paint_node does, so the two agree.
+fn void ScreenBuffer.find_pointer_floor(&self, Node* n) {
+	if (n == null) return;
+	sz seq = self.paint_seq++;
+	if (n.alpha_value == 0) return;
+	if (n.blocks_pointer && n.computed_rect.contains(self.pointer_x, self.pointer_y)) self.pointer_floor = seq;
+	for (sz i = 0; i < n.child_count; i++) self.find_pointer_floor(n.children[i]);
+}
+
+// hovered reports whether the pointer is over n, painted at index seq, and
+// not covered there by a blocking node painted after it.
+fn bool ScreenBuffer.hovered(&self, Node* n, sz seq) {
+	return self.pointer_on && seq >= self.pointer_floor
+		&& n.computed_rect.contains(self.pointer_x, self.pointer_y);
+}
+
 fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer** scratch) {
 	if (n == null) return;
+	sz seq = self.paint_seq++;
 	Rect r = n.content_cell_rect();
 	Rect content_area = n.content_layout_rect();
 	self.paint_dx = content_area.x - r.x * n.layout_metrics.unit_w();
@@ -124,15 +148,27 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		self.paint_dy = content_area.y - r.y * h;
 	}
 
+	// The box and text colour this frame: the node's own, with its hover
+	// style over them while the pointer is on it. The colour passes down to
+	// the subtree and is put back for the node's later siblings.
+	glaze::Style box = n.box;
+	Color parent_fg = self.inherit_fg;
+	defer self.inherit_fg = parent_fg;
+	if (n.fg.kind != ColorKind.NONE) self.inherit_fg = n.fg;
+	if (n.has_hover() && self.hovered(n, seq)) {
+		merge_box_paint(&box, n.hover_box);
+		if (n.hover_fg.kind != ColorKind.NONE) self.inherit_fg = n.hover_fg;
+	}
+
 	self.record_decoration(n);
 	self.decorated_content = n.decoration.kind != DecorationKind.NONE;
-	if (n.has_box() && r.w > 0 && r.h > 0) {
-		Color bg = n.box.bg;
+	if (box_paints(box) && r.w > 0 && r.h > 0) {
+		Color bg = box.bg;
 		if (bg.kind == ColorKind.TRUECOLOR && bg.effective_alpha() < 255) {
-			self.paint_translucent_box(r, n.box, n.alpha_value, scratch);
+			self.paint_translucent_box(r, box, n.alpha_value, scratch);
 		} else {
 			Style opaque = default_style();
-			String box_string = n.box.with_width(r.w).with_height(r.h).render("");
+			String box_string = box.with_width(r.w).with_height(r.h).render("");
 			if (n.alpha_value < 255 && scratch != null) {
 				self.paint_blended(r, box_string, n.alpha_value, scratch);
 			} else {
@@ -154,7 +190,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		if (&n.content.paint) {
 			n.content.paint(self, inner);
 		} else if (&n.content.render) {
-			self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch);
+			self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch, self.inherit_fg);
 		}
 
 		if (&n.content.cursor) {
@@ -271,10 +307,13 @@ fn char scale_alpha(Color c, char alpha) @local {
 
 // paint_string paints a rendered string over r, blended when the node is
 // translucent.
-fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuffer** scratch) {
+//
+// fg is the colour for text the string leaves uncoloured, and for text after
+// a reset: the colour inherited from the tree (see Node.style).
+fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuffer** scratch, Color fg = {}) {
 	if (s.len == 0) return;
 	if (alpha < 255 && scratch != null) {
-		self.paint_blended(r, s, alpha, scratch);
+		self.paint_blended(r, s, alpha, scratch, fg);
 		return;
 	}
 	if (!self.recording() && (r.x + r.w <= 0 || r.y + r.h <= 0)) return;
@@ -285,6 +324,7 @@ fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuf
 	// Text has no background of its own unless it sets one, as in CSS: where
 	// it does not, what is painted beneath shows through around its glyphs.
 	Style see_through = default_style().set_bg(color_transparent());
+	if (fg.kind != ColorKind.NONE) see_through.fg = fg;
 	self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
 }
 
@@ -323,7 +363,7 @@ fn void ScreenBuffer.overlay(&self, sz x, sz y, sz w, sz h, String s, char alpha
 // over what is already at r, leaving the underlying characters in place.
 // That is what makes a translucent panel dim the screen behind it instead of
 // erasing it.
-fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, ScreenBuffer** scratch) {
+fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, ScreenBuffer** scratch, Color fg = {}) {
 	ScreenBuffer* tmp = *scratch;
 	if (tmp == null) {
 		tmp = new_screen_buffer((sz)r.w, (sz)r.h);
@@ -336,7 +376,9 @@ fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, Sc
 	// The scratch is shared across nodes and frames, so it has to start
 	// empty or a previous node's content bleeds through.
 	tmp.clear();
-	tmp.render_ansi_string(0, 0, content, default_style());
+	Style base = default_style();
+	if (fg.kind != ColorKind.NONE) base.fg = fg;
+	tmp.render_ansi_string(0, 0, content, base);
 
 	for (sz cy = 0; cy < (sz)r.h; cy++) {
 		for (sz cx = 0; cx < (sz)r.w; cx++) {

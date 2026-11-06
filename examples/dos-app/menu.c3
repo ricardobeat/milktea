@@ -165,6 +165,23 @@ fn void title_clicked(void* id, String id_str, sz col, sz row) @local {
 	slot.menu.item = 0;
 }
 
+// title_hovered moves an open menu to the title under the pointer, the way
+// a menu bar does once one menu is down. A closed menu only highlights the
+// title, which its hover style already does.
+fn void title_hovered(void* id, String id_str, sz col, sz row) @local {
+	TitleSlot* slot = (TitleSlot*)id;
+	if (!slot.menu.open || slot.menu.selected == slot.index) return;
+	slot.menu.selected = slot.index;
+	slot.menu.item = 0;
+}
+
+// item_hovered makes the item under the pointer the current one, so the
+// pointer and the arrow keys move the same highlight.
+fn void item_hovered(void* id, String id_str, sz col, sz row) @local {
+	ItemSlot* slot = (ItemSlot*)id;
+	slot.menu.item = slot.index;
+}
+
 fn void item_clicked(void* id, String id_str, sz col, sz row) @local {
 	ItemSlot* slot = (ItemSlot*)id;
 	slot.menu.item = slot.index;
@@ -182,15 +199,19 @@ fn void dropdown_dismissed(void* id, String id_str, sz col, sz row) @local {
 
 fn xray::Node* Menu.bar(&self, Theme* th) {
 	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
-	glaze::Style active = { .bg = th.ink, .fg = th.text, .bold = true };
+	glaze::Style active = { .bg = th.ink, .fg = th.text };
 
 	xray::Node* row = milktea::hstack().style(bar).height(milktea::cells(1));
 	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
-		String label = (i == self.selected ? active : bar).render(self.titles[i]);
-		xray::Node* title_node = milktea::text(label, bar)
+		bool on = i == self.selected;
+		// The label sets no colour, so it takes the title's, hover included.
+		xray::Node* title_node = milktea::text(self.titles[i], { .bold = on })
+			.style(on ? active : bar, hover: active)
 			.width(milktea::cells(glaze::string_width(self.titles[i])));
-		title_node.id_with(&self.title_slots[i]).on_click(&title_clicked);
+		title_node.id_with(&self.title_slots[i])
+			.on_click(&title_clicked)
+			.on_hover_in(&title_hovered);
 		row.add(title_node);
 	}
 	return row;
@@ -220,7 +241,9 @@ fn xray::Node* Menu.dropdown(&self, sz below, Theme* th) {
 		self.item_slots[i] = { .menu = self, .index = i };
 		glaze::Style s = i == self.item ? selected : item;
 		xray::Node* row_node = self.item_row(self.items[self.selected][i], s);
-		row_node.id_with(&self.item_slots[i]).on_click(&item_clicked);
+		row_node.id_with(&self.item_slots[i])
+			.on_click(&item_clicked)
+			.on_hover_in(&item_hovered);
 		panel_node.add(row_node);
 	}
 	return panel_node;
@@ -238,7 +261,9 @@ fn xray::Node* Menu.item_row(&self, MenuItem mi, glaze::Style base) {
 	// default is fill, which would split the row 50/50 between them and
 	// leave JUSTIFY_SPACE_BETWEEN nothing to push apart, since two fill
 	// children already consume the whole row between them.
-	row.add(milktea::text(mi.label, base).width(milktea::cells(glaze::string_width(mi.label))));
-	row.add(milktea::text(mi.key, base).width(milktea::cells(glaze::string_width(mi.key))));
+	// The labels set no colour or background, so they take the row's.
+	glaze::Style label = { .bold = base.bold };
+	row.add(milktea::text(mi.label, label).width(milktea::cells(glaze::string_width(mi.label))));
+	row.add(milktea::text(mi.key, label).width(milktea::cells(glaze::string_width(mi.key))));
 	return row;
 }

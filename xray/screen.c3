@@ -18,6 +18,16 @@ struct ScreenBuffer {
 	sz paint_dx, paint_dy;
 	Rect paint_extent;
 	bool decorated_content;
+	// Where the pointer is during paint(), in layout units, for hover styles.
+	// Set by the caller before paint(); pointer_on false means no pointer.
+	bool pointer_on;
+	sz pointer_x, pointer_y;
+	// Paint-order bookkeeping for one paint() call: the next node's index,
+	// the index of the topmost node blocking the pointer (nodes before it get
+	// no hover), and the fg text inherits from the nodes being painted.
+	sz paint_seq;
+	sz pointer_floor;
+	Color inherit_fg;
 	List{PaintOp} paint_ops;
 	Cell[] cells; // flat grid: width * height
 	Cell[] prev_cells; // previous frame for diffing

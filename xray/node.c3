@@ -183,6 +183,16 @@ struct Node {
 	// those fields of the glaze style are kept.
 	glaze::Style box;
 
+	// Text colour for the node's own text and everything under it that does
+	// not set one (see style()). Unset inherits from the nearest ancestor
+	// that has one.
+	Color fg;
+
+	// What changes while the pointer is over the node (see style()'s hover).
+	// Only paint fields are kept, so hovering never moves anything.
+	glaze::Style hover_box;
+	Color hover_fg;
+
 	Content content;
 
 	// A leaf cannot hold children: add() on it is an error. text() makes
@@ -426,42 +436,76 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 	return self;
 }
 
-// style gives this node a background, a border and padding, taken from a
-// glaze style: bg, bg_gradient, border, border_color, border_gradient,
-// corner_color, border_bg, border_animation, anim_speed_ms and pad_*. The
-// other fields are ignored, so text colour and attributes are set on the text
-// itself, and the node is sized with width() and height().
+// style gives this node a background, a border, padding and a text colour,
+// taken from a glaze style: bg, bg_gradient, border, border_color,
+// border_gradient, corner_color, border_bg, border_animation, anim_speed_ms,
+// pad_* and fg. The other fields are ignored, and the node is sized with
+// width() and height().
+//
+// fg is inherited: text in this node and below it that sets no colour of its
+// own is drawn in it, whether the text is the node's content or sits several
+// layout nodes down. Text that sets an fg, or an ANSI string with its own
+// colour codes, keeps its colour.
 //
 // A translucent bg tints what is beneath the node and keeps its glyphs.
 //
 // Content and children go inside the border and then inside the padding. The
 // style's padding adds to whatever with_padding sets. A field the style leaves
-// unset is kept from an earlier style() call, so two calls can build one box.
-fn Node* Node.style(&self, glaze::Style s) {
+// unset is kept from an earlier style() call, so two calls can build one box;
+// padding adds up across calls, so set it in only one of them.
+//
+// hover is laid over the style while the pointer is over the node, and not
+// covered there by a node that blocks the pointer (see block_pointer). Only
+// its colours and border animation apply: padding, borders and sizes are
+// ignored, so a node keeps its shape under the pointer. Its fg is inherited
+// like the node's own, so `hover: { .bg = accent, .fg = white }` recolours a
+// whole row, label and shortcut alike, as long as they set no fg themselves.
+// A child with a bg of its own still covers the hover bg beneath it.
+fn Node* Node.style(&self, glaze::Style s, glaze::Style hover = {}) {
 	glaze::Style* b = &self.box;
-	if (s.bg.kind != ColorKind.NONE) b.bg = s.bg;
-	if (s.bg_gradient.kind != ColorKind.NONE) b.bg_gradient = s.bg_gradient;
+	merge_box_paint(b, s);
 	if (s.border.top.len > 0 || s.border.bottom.len > 0 || s.border.left.len > 0 || s.border.right.len > 0) {
 		b.border = s.border;
 	}
+	if (s.fg.kind != ColorKind.NONE) self.fg = s.fg;
+	b.pad_top    += s.pad_top;
+	b.pad_right  += s.pad_right;
+	b.pad_bottom += s.pad_bottom;
+	b.pad_left   += s.pad_left;
+	merge_box_paint(&self.hover_box, hover);
+	if (hover.fg.kind != ColorKind.NONE) self.hover_fg = hover.fg;
+	return self;
+}
+
+// merge_box_paint copies the fields of s that only change how a box is
+// painted, not its size, into b — those s sets.
+fn void merge_box_paint(glaze::Style* b, glaze::Style s) @private {
+	if (s.bg.kind != ColorKind.NONE) b.bg = s.bg;
+	if (s.bg_gradient.kind != ColorKind.NONE) b.bg_gradient = s.bg_gradient;
 	if (s.border_color.kind != ColorKind.NONE) b.border_color = s.border_color;
 	if (s.corner_color.kind != ColorKind.NONE) b.corner_color = s.corner_color;
 	if (s.border_bg.kind != ColorKind.NONE) b.border_bg = s.border_bg;
 	if (s.border_gradient.kind != ColorKind.NONE) b.border_gradient = s.border_gradient;
 	if (s.border_animation != glaze::BorderAnimation.NONE) b.border_animation = s.border_animation;
 	if (s.anim_speed_ms != 0) b.anim_speed_ms = s.anim_speed_ms;
-	b.pad_top    += s.pad_top;
-	b.pad_right  += s.pad_right;
-	b.pad_bottom += s.pad_bottom;
-	b.pad_left   += s.pad_left;
-	return self;
+}
+
+// has_hover reports whether the node changes anything under the pointer.
+fn bool Node.has_hover(&self) {
+	glaze::Style h = self.hover_box;
+	return self.hover_fg.kind != ColorKind.NONE || h.bg.kind != ColorKind.NONE
+		|| h.bg_gradient.kind != ColorKind.NONE || h.border_color.kind != ColorKind.NONE
+		|| h.corner_color.kind != ColorKind.NONE || h.border_bg.kind != ColorKind.NONE
+		|| h.border_gradient.kind != ColorKind.NONE || h.border_animation != glaze::BorderAnimation.NONE;
 }
 
 // has_box reports whether the node's box paints anything: a background or a
 // border. Box padding alone takes space but leaves it unpainted.
-fn bool Node.has_box(&self) {
-	glaze::Border b = self.box.border;
-	return self.box.bg.kind != ColorKind.NONE || self.box.bg_gradient.kind != ColorKind.NONE
+fn bool Node.has_box(&self) => box_paints(self.box);
+
+fn bool box_paints(glaze::Style s) @private {
+	glaze::Border b = s.border;
+	return s.bg.kind != ColorKind.NONE || s.bg_gradient.kind != ColorKind.NONE
 		|| b.top.len > 0 || b.bottom.len > 0 || b.left.len > 0 || b.right.len > 0;
 }
 
