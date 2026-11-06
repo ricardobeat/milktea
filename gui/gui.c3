@@ -670,6 +670,7 @@ fn bool start() @private {
 	p.send_mu.init()!!;
 	p.send_accepting.store(true);
 	milktea::use_clipboard(&clipboard_write, &clipboard_read);
+	install_hooks();
 	if (g.opts.font_height_ratio > 0) g.font_ratio = g.opts.font_height_ratio;
 
 	if (!g.headless) {
@@ -736,6 +737,7 @@ fn void stop() @private {
 		alloc::free(&allocators::LIBC_ALLOCATOR, p.send_queue.ptr);
 		p.send_queue = {};
 	}
+	milktea::install_window_hooks({});
 	milktea::g_program = null;
 }
 

@@ -373,3 +373,105 @@ char *mt_clipboard_read(void) {
 void mt_free(void *p) { free(p); }
 
 #endif
+
+// ---- menu bar ---------------------------------------------------------------
+//
+// The application's menu bar: the app menu (Hide, Show All, Quit), the app's
+// own menus, then the Window menu. mt_menu_begin starts a new bar,
+// mt_menu_add/_item/_separator fill the app's menus in order, and
+// mt_menu_end installs it. Choosing one of the app's items calls the pick
+// callback with its id; Quit calls it with -1, so the app quits the way its
+// own quit does.
+
+typedef void (*MtMenuPickFn)(int id);
+static MtMenuPickFn g_menu_pick;
+static NSMenu *g_menu_building;
+static NSMenu *g_menu_current;
+
+@interface MtMenuTarget : NSObject
+- (void)pick:(NSMenuItem *)item;
+@end
+
+@implementation MtMenuTarget
+- (void)pick:(NSMenuItem *)item {
+	if (g_menu_pick) g_menu_pick((int)item.tag);
+}
+@end
+
+static MtMenuTarget *g_menu_target;
+
+static NSString *menu_key(unsigned key) {
+	if (key == 0 || key > 0xFFFF) return @"";
+	unichar c = (unichar)key;
+	if (c >= 'A' && c <= 'Z') c = (unichar)(c - 'A' + 'a'); // upper case would mean Shift
+	return [NSString stringWithCharacters:&c length:1];
+}
+
+void mt_menu_begin(const char *app_name, MtMenuPickFn pick) {
+	g_menu_pick = pick;
+	if (g_menu_target == nil) g_menu_target = [[MtMenuTarget alloc] init];
+	if (g_menu_building) [g_menu_building release];
+	g_menu_building = [[NSMenu alloc] initWithTitle:@""];
+	g_menu_current = nil;
+
+	NSString *name = (app_name && app_name[0]) ? [NSString stringWithUTF8String:app_name]
+		: [[NSProcessInfo processInfo] processName];
+	NSMenu *app = [[NSMenu alloc] initWithTitle:name];
+	[app addItemWithTitle:[@"Hide " stringByAppendingString:name] action:@selector(hide:) keyEquivalent:@"h"];
+	NSMenuItem *others = [app addItemWithTitle:@"Hide Others" action:@selector(hideOtherApplications:)
+		keyEquivalent:@"h"];
+	others.keyEquivalentModifierMask = NSEventModifierFlagOption | NSEventModifierFlagCommand;
+	[app addItemWithTitle:@"Show All" action:@selector(unhideAllApplications:) keyEquivalent:@""];
+	[app addItem:[NSMenuItem separatorItem]];
+	NSMenuItem *quit = [app addItemWithTitle:[@"Quit " stringByAppendingString:name]
+		action:@selector(pick:) keyEquivalent:@"q"];
+	quit.target = g_menu_target;
+	quit.tag = -1;
+	NSMenuItem *top = [[NSMenuItem alloc] init];
+	top.submenu = app;
+	[g_menu_building addItem:top];
+	[top release];
+	[app release];
+}
+
+void mt_menu_add(const char *title) {
+	if (g_menu_building == nil) return;
+	NSMenu *m = [[NSMenu alloc] initWithTitle:[NSString stringWithUTF8String:title]];
+	NSMenuItem *top = [[NSMenuItem alloc] init];
+	top.submenu = m;
+	[g_menu_building addItem:top];
+	[top release];
+	[m release];
+	g_menu_current = m;
+}
+
+void mt_menu_add_item(const char *label, unsigned key, int id) {
+	if (g_menu_current == nil) return;
+	NSMenuItem *it = [g_menu_current addItemWithTitle:[NSString stringWithUTF8String:label]
+		action:@selector(pick:) keyEquivalent:menu_key(key)];
+	it.target = g_menu_target;
+	it.tag = id;
+}
+
+void mt_menu_add_separator(void) {
+	if (g_menu_current) [g_menu_current addItem:[NSMenuItem separatorItem]];
+}
+
+void mt_menu_end(void) {
+	if (g_menu_building == nil) return;
+	NSMenu *win = [[NSMenu alloc] initWithTitle:@"Window"];
+	[win addItemWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+	[win addItemWithTitle:@"Zoom" action:@selector(performZoom:) keyEquivalent:@""];
+	[win addItem:[NSMenuItem separatorItem]];
+	[win addItemWithTitle:@"Bring All to Front" action:@selector(arrangeInFront:) keyEquivalent:@""];
+	NSMenuItem *top = [[NSMenuItem alloc] init];
+	top.submenu = win;
+	[g_menu_building addItem:top];
+	[top release];
+	NSApp.mainMenu = g_menu_building;
+	NSApp.windowsMenu = win;
+	[win release];
+	[g_menu_building release];
+	g_menu_building = nil;
+	g_menu_current = nil;
+}
