@@ -542,7 +542,7 @@ void mt_headless_end(void) {
 #include <stdio.h>
 
 #define LAT_MAX 4096
-typedef struct { double ev, seen, start, commit, gpu_done; } LatSample;
+typedef struct { double ev, seen, start, commit, gpu_done, target, newest; } LatSample;
 static struct {
 	int on;
 	int pending;          // 1: a move is waiting for a frame; 2: this frame has it
@@ -551,6 +551,7 @@ static struct {
 	volatile int n;       // completed samples, written from the GPU completion handler
 	int reported;
 	double last_start;
+	double newest_ev;     // timestamp of the latest move handled so far
 	double refresh_sum;
 	int refresh_n;
 } lat;
@@ -585,13 +586,26 @@ static void lat_report(void) {
 	lat_row("gpu", v, n);
 	for (int i = 0; i < n; i++) v[i] = lat.s[i].gpu_done - lat.s[i].ev;
 	lat_row("event→gpu done", v, n);
-	fprintf(stderr, "  on screen: add compositing and scan-out, about one frame (%.1f ms), not measurable here\n",
-		refresh * 1000);
+	int late = 0;
+	for (int i = 0; i < n; i++) {
+		v[i] = lat.s[i].target - lat.s[i].gpu_done;
+		if (v[i] < 0) late++;
+	}
+	lat_row("slack", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].target - lat.s[i].ev;
+	lat_row("oldest→target", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].target - lat.s[i].newest;
+	lat_row("newest→target", v, n);
+	fprintf(stderr, "  slack is display-link target minus GPU done; %d of %d frames finished after it\n", late, n);
+	fprintf(stderr, "  →target is the move's age when the frame is due on screen (display link\n"
+		"  targetTimestamp); scan-out adds a little more, not measurable here\n");
 }
 
 static void lat_event(const sapp_event *e) {
-	if (!lat.on || e->type != SAPP_EVENTTYPE_MOUSE_MOVE || lat.pending) return;
+	if (!lat.on || e->type != SAPP_EVENTTYPE_MOUSE_MOVE) return;
 	NSEvent *ev = [NSApp currentEvent];
+	lat.newest_ev = ev ? ev.timestamp : CACurrentMediaTime();
+	if (lat.pending) return;
 	lat.cur.seen = CACurrentMediaTime();
 	lat.cur.ev = ev ? ev.timestamp : lat.cur.seen;
 	lat.pending = 1;
@@ -600,6 +614,7 @@ static void lat_event(const sapp_event *e) {
 static void lat_frame_start(void) {
 	if (!lat.on) return;
 	double now = CACurrentMediaTime();
+	lat.cur.target = _sapp.mtl.display_link ? _sapp.mtl.display_link.targetTimestamp : 0;
 	if (lat.last_start > 0 && now - lat.last_start < 0.05) {
 		lat.refresh_sum += now - lat.last_start;
 		lat.refresh_n++;
@@ -611,12 +626,38 @@ static void lat_frame_start(void) {
 	}
 }
 
+// ---- late latching ---------------------------------------------------------
+//
+// The display link fires right after a vsync and the frame it draws is shown
+// at targetTimestamp, a whole refresh later. Drawing at once leaves most of
+// that refresh idle, and input that lands in it waits for the next frame.
+// MILKTEA_LATE_LATCH_MS=<n> instead keeps handling events until n ms before
+// the target and only then draws, so the frame carries input up to that
+// point. n has to cover the frame's CPU and GPU work plus the compositor's
+// margin, or frames miss their vsync.
+
+static double late_latch_sec;
+
+static void late_latch_wait(void) {
+	if (late_latch_sec <= 0 || _sapp.mtl.display_link == nil) return;
+	double deadline = _sapp.mtl.display_link.targetTimestamp - late_latch_sec;
+	for (;;) {
+		double now = CACurrentMediaTime();
+		if (now >= deadline) break;
+		NSEvent *e = [NSApp nextEventMatchingMask:NSEventMaskAny
+			untilDate:[NSDate dateWithTimeIntervalSinceNow:deadline - now]
+			inMode:NSDefaultRunLoopMode dequeue:YES];
+		if (e != nil) [NSApp sendEvent:e];
+	}
+}
+
 // lat_present runs just before sg_commit and times the frame's command
 // buffer when the frame carries a move.
 static void lat_present(void) {
 	if (!lat.on || lat.pending != 2 || _sg.mtl.cmd_buffer == nil) return;
 	LatSample smp = lat.cur;
 	smp.commit = CACurrentMediaTime();
+	smp.newest = lat.newest_ev;
 	lat.pending = 0;
 	[_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
 		if (lat.n >= LAT_MAX) return;
@@ -640,6 +681,7 @@ static void app_init(void) {
 }
 
 static void app_frame(void) {
+	late_latch_wait();
 	lat_frame_start();
 	if (g.frame_fn) g.frame_fn();
 	if (lat.on && lat.n - lat.reported >= 200) lat_report();
@@ -694,6 +736,8 @@ void mt_run(const char *title, int width, int height, MtVoidFn init, MtVoidFn fr
 	g.frame_fn = frame;
 	g.event_fn = event;
 	g.cleanup_fn = cleanup;
+	const char *ll_env = getenv("MILKTEA_LATE_LATCH_MS");
+	late_latch_sec = ll_env ? atof(ll_env) / 1000.0 : 0;
 	const char *lat_env = getenv("MILKTEA_DEBUG_LATENCY");
 	lat.on = lat_env != NULL && lat_env[0] != 0 && lat_env[0] != '0';
 	if (lat.on) {
