@@ -658,7 +658,21 @@ static void late_latch_wait(void) {
 		NSEvent *e = [NSApp nextEventMatchingMask:NSEventMaskAny
 			untilDate:[NSDate dateWithTimeIntervalSinceNow:deadline - now]
 			inMode:NSDefaultRunLoopMode dequeue:YES];
-		if (e != nil) [NSApp sendEvent:e];
+		if (e == nil) continue;
+		// A press can start one of AppKit's own tracking loops — a live
+		// resize from the window edge, a window drag, a menu — which runs
+		// the run loop until the button comes up and so fires the display
+		// link again, inside this frame. Leave presses for the normal run
+		// loop: put it back, draw now, and it is handled after the frame.
+		switch (e.type) {
+			case NSEventTypeLeftMouseDown:
+			case NSEventTypeRightMouseDown:
+			case NSEventTypeOtherMouseDown:
+				[NSApp postEvent:e atStart:YES];
+				return;
+			default:
+				[NSApp sendEvent:e];
+		}
 	}
 }
 
@@ -842,10 +856,18 @@ static void app_init(void) {
 	fake_start();
 }
 
+// in_frame guards against the display link firing again while a frame is
+// still running, which a tracking loop started from inside it would do. A
+// nested frame would rebuild the tree the outer one is still using.
+static int in_frame;
+
 static void app_frame(void) {
+	if (in_frame) return;
+	in_frame = 1;
 	late_latch_wait();
 	lat_frame_start();
 	if (g.frame_fn) g.frame_fn();
+	in_frame = 0;
 	if (lat.on && lat.n - lat.reported >= 200) lat_report();
 }
 
