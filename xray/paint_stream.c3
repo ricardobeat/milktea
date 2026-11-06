@@ -2,7 +2,9 @@ module xray;
 
 // Recorded before cell compositing, so transparent backgrounds keep the
 // vector surface beneath them instead of inheriting a flattened cell colour.
-enum PaintKind : char { CELL, DECORATION, TINT }
+// CLIP limits the ops after it to the rect col, row, bg_w x bg_h (layout
+// units); with bg_w 0 it lifts the limit.
+enum PaintKind : char { CELL, DECORATION, TINT, CLIP }
 
 struct PaintOp {
 	PaintKind kind;

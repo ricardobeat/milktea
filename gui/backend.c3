@@ -13,12 +13,14 @@ struct MtVertex {
 
 const int CMD_QUADS = 0;
 const int CMD_DECOR = 1;
+const int CMD_CLIP = 2;
 
 struct MtCmd {
 	int kind;
 	int first_quad;
 	int quad_count;
 	int decor;
+	int[4] clip; // CMD_CLIP: device pixels; w <= 0 is the whole target
 }
 
 struct MtDecor {
@@ -61,6 +63,9 @@ struct MtEvent {
 	float x;
 	float y;
 	float scroll_y;
+	float scroll_x;
+	CInt precise;
+	CInt phase;
 }
 
 const uint MOD_SHIFT = 0x1;

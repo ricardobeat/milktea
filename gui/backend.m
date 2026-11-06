@@ -43,13 +43,14 @@ typedef struct {
 	uint32_t color; // RGBA8, straight alpha
 } MtVertex;
 
-enum { MT_CMD_QUADS = 0, MT_CMD_DECOR = 1 };
+enum { MT_CMD_QUADS = 0, MT_CMD_DECOR = 1, MT_CMD_CLIP = 2 };
 
 typedef struct {
 	int kind;
 	int first_quad;
 	int quad_count;
 	int decor; // index into the decor array, for MT_CMD_DECOR
+	int clip[4]; // MT_CMD_CLIP: x, y, w, h in device pixels; w <= 0 clips to the whole target
 } MtCmd;
 
 // Per-decoration parameters, as the decor fragment shader reads them: eleven
@@ -77,6 +78,9 @@ typedef struct {
 	int button;
 	float x, y; // points
 	float scroll_y;
+	float scroll_x;
+	int precise;   // MT_EV_SCROLL: a trackpad or other precise device
+	int phase;     // MT_EV_SCROLL: milktea::ScrollPhase
 } MtEvent;
 
 enum {
@@ -414,6 +418,14 @@ void mt_render(const MtVertex *verts, int nquads, const MtCmd *cmds, int ncmds,
 	int bound = -1; // 0 quad, 1 decor
 	for (int i = 0; i < ncmds && nquads > 0; i++) {
 		const MtCmd *c = &cmds[i];
+		if (c->kind == MT_CMD_CLIP) {
+			if (c->clip[2] > 0 && c->clip[3] > 0) {
+				sg_apply_scissor_rect(c->clip[0], c->clip[1], c->clip[2], c->clip[3], true);
+			} else {
+				sg_apply_scissor_rect(0, 0, fb_w, fb_h, true);
+			}
+			continue;
+		}
 		if (c->quad_count < 1) continue;
 		if (c->kind == MT_CMD_QUADS) {
 			if (!g.atlas.id) continue;
@@ -916,12 +928,57 @@ static void fake_start(void) {
 }
 @end
 
+// ---- scroll -------------------------------------------------------------------
+//
+// Scroll events come from an AppKit monitor rather than through sokol, which
+// scales precise deltas down and drops events that do not move, among them
+// the one that ends a trackpad gesture. The monitor sees every one, with its
+// deltas in points and its phases, and hands them on as MT_EV_SCROLL.
+
+static id g_scroll_monitor;
+
+static int scroll_phase(NSEvent *e) {
+	if (e.momentumPhase != NSEventPhaseNone) {
+		return (e.momentumPhase & (NSEventPhaseEnded | NSEventPhaseCancelled)) ? 5 : 4;
+	}
+	switch (e.phase) {
+		case NSEventPhaseBegan:
+		case NSEventPhaseMayBegin: return 1;
+		case NSEventPhaseChanged: return 2;
+		case NSEventPhaseEnded:
+		case NSEventPhaseCancelled: return 3;
+		default: return 0;
+	}
+}
+
+static void scroll_monitor_start(void) {
+	if (g_scroll_monitor) return;
+	g_scroll_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
+		handler:^NSEvent *(NSEvent *e) {
+			if (g.event_fn == NULL || e.window != _sapp.macos.window) return e;
+			NSPoint p = [_sapp.macos.view convertPoint:e.locationInWindow fromView:nil];
+			MtEvent m = {0};
+			m.type = MT_EV_SCROLL;
+			m.x = (float)p.x;
+			m.y = (float)(_sapp.macos.view.bounds.size.height - p.y);
+			m.scroll_x = (float)e.scrollingDeltaX;
+			m.scroll_y = (float)e.scrollingDeltaY;
+			m.precise = e.hasPreciseScrollingDeltas ? 1 : 0;
+			m.phase = scroll_phase(e);
+			m.mods = 0;
+			g.event_fn(&m);
+			return nil; // handled: sokol would only repeat it, scaled
+		}];
+	[g_scroll_monitor retain];
+}
+
 // ---- windowed ---------------------------------------------------------------
 
 static void app_init(void) {
 	sg_setup(&(sg_desc){ .environment = sglue_environment(), .logger.func = slog_func });
 	gfx_init();
 	if (g.init_fn) g.init_fn();
+	scroll_monitor_start();
 	// Come to the front now the window and its menus are set up; sokol asks
 	// once before that, which the system may not honour for a process that
 	// was just made a regular app.
@@ -969,7 +1026,7 @@ static void app_event(const sapp_event *e) {
 		case SAPP_EVENTTYPE_MOUSE_UP: m.type = MT_EV_MOUSE_UP; break;
 		case SAPP_EVENTTYPE_MOUSE_MOVE: m.type = MT_EV_MOUSE_MOVE; break;
 		case SAPP_EVENTTYPE_MOUSE_LEAVE: m.type = MT_EV_MOUSE_LEAVE; break;
-		case SAPP_EVENTTYPE_MOUSE_SCROLL: m.type = MT_EV_SCROLL; break;
+		case SAPP_EVENTTYPE_MOUSE_SCROLL: return; // see scroll_monitor_start
 		case SAPP_EVENTTYPE_RESIZED: m.type = MT_EV_RESIZED; break;
 		case SAPP_EVENTTYPE_QUIT_REQUESTED: m.type = MT_EV_QUIT_REQUESTED; break;
 		case SAPP_EVENTTYPE_FOCUSED: m.type = MT_EV_FOCUSED; break;

@@ -100,6 +100,12 @@ struct Gui {
 	// The left button is down, and the cell the last motion message named,
 	// for MOUSE_MODE_CELL_MOTION.
 	bool button_down;
+	// This frame's scrolling so far (see the wheel message in step).
+	float scroll_dx;
+	float scroll_dy;
+	bool scroll_precise;
+	milktea::ScrollPhase scroll_phase;
+	bool scroll_pending;
 	sz motion_col;
 	sz motion_row;
 	float ptr_y;
@@ -456,7 +462,19 @@ fn void on_event(MtEvent* e) @private {
 			if (e.button == 0) g.button_down = false;
 			if (e.button == 0) send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_RELEASE) });
 		case SCROLL:
-			g.wheel += e.scroll_y;
+			// The old notch count: a precise device scrolls a notch per ten points.
+			g.wheel += e.precise != 0 ? e.scroll_y * 0.1f : e.scroll_y;
+			// The real distance: points from a precise device, lines (taken as
+			// rows) from a wheel.
+			float unit = e.precise != 0 ? 1.0f : (float)g.opts.cell_h;
+			g.scroll_dx += e.scroll_x * unit;
+			g.scroll_dy += e.scroll_y * unit;
+			g.scroll_precise = e.precise != 0;
+			milktea::ScrollPhase ph = (milktea::ScrollPhase)e.phase;
+			if (ph != NONE) {
+				g.scroll_phase = ph;
+				g.scroll_pending = true;
+			}
 		case RESIZED:
 		case FOCUSED:
 		case UNFOCUSED:
@@ -574,10 +592,26 @@ fn bool step() @private {
 		}
 	}
 
-	if (g.wheel != 0) {
-		milktea::MouseButton b = g.wheel > 0 ? MOUSE_WHEEL_UP : MOUSE_WHEEL_DOWN;
+	// One wheel message a frame, as before, now carrying the frame's real
+	// scroll distance and gesture phase; a phase change with no movement
+	// (fingers lifted) comes as MOUSE_SCROLL_PHASE.
+	if (g.wheel != 0 || g.scroll_dy != 0 || g.scroll_dx != 0 || g.scroll_pending) {
+		milktea::MouseMsg mm;
+		if (g.wheel != 0 || g.scroll_dy != 0) {
+			bool up = g.wheel != 0 ? g.wheel > 0 : g.scroll_dy > 0;
+			mm = mouse_at(up ? MOUSE_WHEEL_UP : MOUSE_WHEEL_DOWN, MOUSE_PRESS);
+		} else {
+			mm = mouse_at(MOUSE_NONE, MOUSE_SCROLL_PHASE);
+		}
+		mm.scroll_dx = g.scroll_dx;
+		mm.scroll_dy = g.scroll_dy;
+		mm.scroll_precise = g.scroll_precise;
+		mm.scroll_phase = g.scroll_phase;
 		g.wheel = 0;
-		send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(b, MOUSE_PRESS) });
+		g.scroll_dx = 0;
+		g.scroll_dy = 0;
+		g.scroll_pending = false;
+		send({ .kind = milktea::MsgKind.MOUSE, .mouse = mm });
 	}
 
 	// Test events count passes of the loop, not frames drawn: a script asks

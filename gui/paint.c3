@@ -122,7 +122,18 @@ fn void Painter.push_quad(&self, float x0, float y0, float x1, float y1,
 		self.cmds.get_ref(n - 1).quad_count++;
 		return;
 	}
-	self.cmds.push({ kind, q, 1, decor });
+	self.cmds.push({ .kind = kind, .first_quad = q, .quad_count = 1, .decor = decor });
+}
+
+// clip limits what follows to a rect given in layout units (points), or
+// with w <= 0 lifts the limit.
+fn void Painter.clip(&self, sz x, sz y, sz w, sz h) {
+	float s = self.scale;
+	MtCmd c = { .kind = CMD_CLIP, .first_quad = self.quads() };
+	if (w > 0 && h > 0) {
+		c.clip = { (int)((float)x * s), (int)((float)y * s), (int)math::ceil((float)w * s), (int)math::ceil((float)h * s) };
+	}
+	self.cmds.push(c);
 }
 
 // rect fills a rect given in points.
@@ -313,6 +324,7 @@ fn void Painter.paint_view(&self, milktea::View v) {
 				case xray::PaintKind.DECORATION: self.decoration(op.decoration);
 				case xray::PaintKind.TINT: self.tint(op.col, op.row, op.pixels, op.tint);
 				case xray::PaintKind.CELL: self.cell(op.cell, op.col, op.row, true, op.pixels, op.bg_w, op.bg_h);
+				case xray::PaintKind.CLIP: self.clip(op.col, op.row, op.bg_w, op.bg_h);
 			}
 		}
 		return;

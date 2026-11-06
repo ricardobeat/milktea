@@ -59,6 +59,21 @@ enum MouseAction : int {
 	MOUSE_PRESS,
 	MOUSE_RELEASE,
 	MOUSE_MOTION,
+	// A scroll gesture changed phase without moving (the fingers lifted, or
+	// momentum ran out). Only a GUI on a precise device sends it; see
+	// MouseMsg.scroll_phase.
+	MOUSE_SCROLL_PHASE,
+}
+
+// ScrollPhase is where a scroll is in a trackpad gesture, as the platform
+// reports it. NONE is a mouse wheel or a terminal, which have no gestures.
+enum ScrollPhase : char {
+	NONE,
+	BEGAN,           // fingers down
+	CHANGED,         // fingers moving
+	ENDED,           // fingers lifted; momentum may follow
+	MOMENTUM,        // the platform's inertia after the fingers lifted
+	MOMENTUM_ENDED,  // inertia ran out (or was stopped)
 }
 
 enum MouseButton : int {
@@ -83,6 +98,15 @@ struct MouseMsg {
 	// terminal actually reported pixel coordinates for this event.
 	sz px;
 	sz py;
+	// Wheel messages from a GUI also carry the scroll as it really was: the
+	// distance in layout units (pixels) the content should move this frame,
+	// positive towards the start of the document (as WHEEL_UP), whether it
+	// came from a precise device (a trackpad) and the gesture's phase. A
+	// terminal leaves these zero: one wheel message is one notch.
+	float scroll_dx;
+	float scroll_dy;
+	bool scroll_precise;
+	ScrollPhase scroll_phase;
 }
 
 struct ParseResult {
@@ -256,7 +280,7 @@ fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift, KEY_PRESS, false },
-		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
+		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE },
 		consumed
 	};
 }
@@ -268,7 +292,7 @@ fn ParseResult make_key_action(KeyCode code, uint rune, bool ctrl, bool alt, boo
 	return {
 		MsgKind.KEY,
 		{ code, rune, ctrl, alt, shift, action, false },
-		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 },
+		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE },
 		consumed
 	};
 }
@@ -286,7 +310,7 @@ fn ParseResult make_mouse(
 	return {
 		MsgKind.MOUSE,
 		{ NONE, 0, false, false, false, KEY_PRESS, false },
-		{ button, action, row, col, shift, alt, ctrl, 0, 0 },
+		{ button, action, row, col, shift, alt, ctrl, 0, 0, 0, 0, false, ScrollPhase.NONE },
 		consumed
 	};
 }
@@ -495,7 +519,7 @@ fn ParseResult parse_key(char[] buf) {
 				ParseResult pr;
 				pr.kind = FOCUS;
 				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
+				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
 				pr.consumed = total;
 				return pr;
 			}
@@ -503,7 +527,7 @@ fn ParseResult parse_key(char[] buf) {
 				ParseResult pr;
 				pr.kind = BLUR;
 				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
+				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
 				pr.consumed = total;
 				return pr;
 			}
@@ -539,7 +563,7 @@ fn ParseResult parse_key(char[] buf) {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_START;
 						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
 						pr.consumed = total;
 						return pr;
 					}
@@ -547,7 +571,7 @@ fn ParseResult parse_key(char[] buf) {
 						ParseResult pr;
 						pr.kind     = MsgKind.PASTE_END;
 						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0 };
+						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
 						pr.consumed = total;
 						return pr;
 					}
