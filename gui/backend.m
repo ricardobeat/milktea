@@ -428,6 +428,8 @@ void mt_render(const MtVertex *verts, int nquads, const MtCmd *cmds, int ncmds,
 	sg_end_pass();
 }
 
+static void lat_present(void);
+
 // mt_present composites the offscreen target onto the window and ends the
 // frame. radius is the window's corner radius in device pixels, 0 for none.
 void mt_present(float radius) {
@@ -444,6 +446,7 @@ void mt_present(float radius) {
 		sg_draw(0, 3, 1);
 	}
 	sg_end_pass();
+	lat_present();
 	sg_commit();
 }
 
@@ -520,6 +523,114 @@ void mt_headless_end(void) {
 	memset(&g, 0, sizeof(g));
 }
 
+// ---- latency probe ------------------------------------------------------------
+//
+// MILKTEA_DEBUG_LATENCY=1 times each mouse move from the system event to the
+// GPU finishing the frame that reacts to it. Times are seconds on the host
+// clock NSEvent.timestamp and MTLCommandBuffer.GPUEndTime both use.
+//
+// Stages: input (event made → app handles it), wait (→ next frame starts),
+// cpu (→ frame committed to the GPU), gpu (→ GPU done). What follows GPU
+// completion — WindowServer compositing the window and scan-out — cannot be
+// timed from inside a windowed app: CAMetalDrawable.presentedTime reads 0
+// here. It is usually one more refresh.
+//
+// A summary goes to stderr every 200 samples, on exit and on SIGTERM.
+
+#import <QuartzCore/QuartzCore.h>
+#import <AppKit/AppKit.h>
+#include <stdio.h>
+
+#define LAT_MAX 4096
+typedef struct { double ev, seen, start, commit, gpu_done; } LatSample;
+static struct {
+	int on;
+	int pending;          // 1: a move is waiting for a frame; 2: this frame has it
+	LatSample cur;
+	LatSample s[LAT_MAX];
+	volatile int n;       // completed samples, written from the GPU completion handler
+	int reported;
+	double last_start;
+	double refresh_sum;
+	int refresh_n;
+} lat;
+
+static int cmp_double(const void *a, const void *b) {
+	double x = *(const double *)a, y = *(const double *)b;
+	return x < y ? -1 : x > y;
+}
+
+static void lat_row(const char *name, double *v, int n) {
+	qsort(v, n, sizeof(double), cmp_double);
+	double sum = 0;
+	for (int i = 0; i < n; i++) sum += v[i];
+	fprintf(stderr, "  %-14s mean %6.2f  p50 %6.2f  p90 %6.2f  p99 %6.2f  max %6.2f ms\n", name,
+		sum / n * 1000, v[n / 2] * 1000, v[(int)(n * 0.9)] * 1000, v[(int)(n * 0.99)] * 1000, v[n - 1] * 1000);
+}
+
+static void lat_report(void) {
+	int n = lat.n;
+	if (!lat.on || n == 0 || n == lat.reported) return;
+	lat.reported = n;
+	static double v[LAT_MAX];
+	double refresh = lat.refresh_n > 0 ? lat.refresh_sum / lat.refresh_n : 0;
+	fprintf(stderr, "milktea latency: %d mouse moves, frame interval %.2f ms\n", n, refresh * 1000);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].seen - lat.s[i].ev;
+	lat_row("input", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].start - lat.s[i].seen;
+	lat_row("wait", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].commit - lat.s[i].start;
+	lat_row("cpu", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].gpu_done - lat.s[i].commit;
+	lat_row("gpu", v, n);
+	for (int i = 0; i < n; i++) v[i] = lat.s[i].gpu_done - lat.s[i].ev;
+	lat_row("event→gpu done", v, n);
+	fprintf(stderr, "  on screen: add compositing and scan-out, about one frame (%.1f ms), not measurable here\n",
+		refresh * 1000);
+}
+
+static void lat_event(const sapp_event *e) {
+	if (!lat.on || e->type != SAPP_EVENTTYPE_MOUSE_MOVE || lat.pending) return;
+	NSEvent *ev = [NSApp currentEvent];
+	lat.cur.seen = CACurrentMediaTime();
+	lat.cur.ev = ev ? ev.timestamp : lat.cur.seen;
+	lat.pending = 1;
+}
+
+static void lat_frame_start(void) {
+	if (!lat.on) return;
+	double now = CACurrentMediaTime();
+	if (lat.last_start > 0 && now - lat.last_start < 0.05) {
+		lat.refresh_sum += now - lat.last_start;
+		lat.refresh_n++;
+	}
+	lat.last_start = now;
+	if (lat.pending == 1) {
+		lat.cur.start = now;
+		lat.pending = 2;
+	}
+}
+
+// lat_present runs just before sg_commit and times the frame's command
+// buffer when the frame carries a move.
+static void lat_present(void) {
+	if (!lat.on || lat.pending != 2 || _sg.mtl.cmd_buffer == nil) return;
+	LatSample smp = lat.cur;
+	smp.commit = CACurrentMediaTime();
+	lat.pending = 0;
+	[_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
+		if (lat.n >= LAT_MAX) return;
+		double done = cb.GPUEndTime > 0 ? cb.GPUEndTime : CACurrentMediaTime();
+		lat.s[lat.n] = smp;
+		lat.s[lat.n].gpu_done = done;
+		lat.n++;
+	}];
+}
+
+#include <signal.h>
+#include <unistd.h>
+static void lat_sigterm(int sig) { (void)sig; lat_report(); _exit(0); }
+
 // ---- windowed ---------------------------------------------------------------
 
 static void app_init(void) {
@@ -529,16 +640,20 @@ static void app_init(void) {
 }
 
 static void app_frame(void) {
+	lat_frame_start();
 	if (g.frame_fn) g.frame_fn();
+	if (lat.on && lat.n - lat.reported >= 200) lat_report();
 }
 
 static void app_cleanup(void) {
+	lat_report();
 	if (g.cleanup_fn) g.cleanup_fn();
 	sg_shutdown();
 	memset(&g, 0, sizeof(g));
 }
 
 static void app_event(const sapp_event *e) {
+	lat_event(e);
 	if (!g.event_fn) return;
 	MtEvent m = {0};
 	float s = sapp_dpi_scale();
@@ -579,6 +694,12 @@ void mt_run(const char *title, int width, int height, MtVoidFn init, MtVoidFn fr
 	g.frame_fn = frame;
 	g.event_fn = event;
 	g.cleanup_fn = cleanup;
+	const char *lat_env = getenv("MILKTEA_DEBUG_LATENCY");
+	lat.on = lat_env != NULL && lat_env[0] != 0 && lat_env[0] != '0';
+	if (lat.on) {
+		atexit(lat_report);
+		signal(SIGTERM, lat_sigterm);
+	}
 	sapp_run(&(sapp_desc){
 		.init_cb = app_init,
 		.frame_cb = app_frame,
