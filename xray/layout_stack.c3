@@ -33,11 +33,9 @@ struct LayoutOptions {
 fn void vertical(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
-	assert(n <= xray::MAX_LAYOUT_SLOTS, "vertical solves %d slots at a time", xray::MAX_LAYOUT_SLOTS);
-	if (n > xray::MAX_LAYOUT_SLOTS) n = xray::MAX_LAYOUT_SLOTS;
 
-	xray::Constraint[xray::MAX_LAYOUT_SLOTS] cs;
-	xray::Rect[xray::MAX_LAYOUT_SLOTS]       rects;
+	xray::Constraint[] cs = mem::talloc_array(xray::Constraint, n);
+	xray::Rect[] rects = mem::talloc_array(xray::Rect, n);
 
 	for (sz i = 0; i < n; i++) cs[i] = slots[i].constraint;
 	xray::layout_v_gap(area, cs[0:n], opts.gap, rects[0:n]);
@@ -50,11 +48,9 @@ fn void vertical(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 fn void horizontal(xray::Rect area, LayoutSlot[] slots, LayoutOptions opts = {}) {
 	sz n = (sz)slots.len;
 	if (n == 0) return;
-	assert(n <= xray::MAX_LAYOUT_SLOTS, "horizontal solves %d slots at a time", xray::MAX_LAYOUT_SLOTS);
-	if (n > xray::MAX_LAYOUT_SLOTS) n = xray::MAX_LAYOUT_SLOTS;
 
-	xray::Constraint[xray::MAX_LAYOUT_SLOTS] cs;
-	xray::Rect[xray::MAX_LAYOUT_SLOTS]       rects;
+	xray::Constraint[] cs = mem::talloc_array(xray::Constraint, n);
+	xray::Rect[] rects = mem::talloc_array(xray::Rect, n);
 
 	for (sz i = 0; i < n; i++) cs[i] = slots[i].constraint;
 	xray::layout_h_gap(area, cs[0:n], opts.gap, rects[0:n]);

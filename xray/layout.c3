@@ -1,9 +1,7 @@
 module xray;
 
-// How many constraints one split solves at a time; the solvers keep their
-// scratch arrays on the stack. More than this is a bug in the caller, not a
-// layout to shrink to fit.
-const sz MAX_LAYOUT_SLOTS = 64;
+// A split solves any number of constraints; its scratch arrays come from the
+// temp allocator, sized to the call.
 
 struct Rect {
 	sz x, y, w, h;
@@ -147,23 +145,21 @@ fn sz resolve_fit(Constraint c, sz cross, sz no_measure = 0) @private {
 fn sz layout_axis_cross(sz total, sz gap, sz cross, Constraint[] cs, sz[] out_sizes) @local {
 	sz n = cs.len;
 	if (n == 0) return 0;
-	if (n > MAX_LAYOUT_SLOTS) n = MAX_LAYOUT_SLOTS;
 
 	// Calculate available space after gaps
 	sz gap_count = n > 1 ? n - 1 : 0;
 	sz available = total - gap * gap_count;
 	if (available < 0) available = 0;
 
-	// Initialize sizes array on stack
-	sz[MAX_LAYOUT_SLOTS] sizes;
+	sz[] sizes = mem::talloc_array(sz, n);
 	for (sz i = 0; i < n; i++) {
 		sizes[i] = 0;
 	}
 
 	sz fixed             = 0;
 	sz fill_weight_total = 0;
-	sz[MAX_LAYOUT_SLOTS] max_caps;
-	bool[MAX_LAYOUT_SLOTS] is_fill;
+	sz[] max_caps = mem::talloc_array(sz, n);
+	bool[] is_fill = mem::talloc_array(bool, n);
 
 	// Pass 1: assign fixed sizes and calculate fill weights
 	for (sz i = 0; i < n; i++) {
@@ -345,11 +341,10 @@ fn sz layout_v(Rect area, Constraint[] cs, Rect[] out_rects) {
 fn sz layout_h_gap(Rect area, Constraint[] cs, sz gap, Rect[] out_rects) {
 	sz n = cs.len;
 	if (n == 0) return 0;
-	if (n > MAX_LAYOUT_SLOTS) n = MAX_LAYOUT_SLOTS;
 	if (n > out_rects.len) n = out_rects.len;
 	if (n == 0) return 0;
 
-	sz[MAX_LAYOUT_SLOTS] sizes;
+	sz[] sizes = mem::talloc_array(sz, n);
 	sz n_computed = layout_axis_cross(area.w, gap, area.h, cs[0:n], sizes[0:n]);
 
 	sz offset = 0;
@@ -364,11 +359,10 @@ fn sz layout_h_gap(Rect area, Constraint[] cs, sz gap, Rect[] out_rects) {
 fn sz layout_v_gap(Rect area, Constraint[] cs, sz gap, Rect[] out_rects) {
 	sz n = cs.len;
 	if (n == 0) return 0;
-	if (n > MAX_LAYOUT_SLOTS) n = MAX_LAYOUT_SLOTS;
 	if (n > out_rects.len) n = out_rects.len;
 	if (n == 0) return 0;
 
-	sz[MAX_LAYOUT_SLOTS] sizes;
+	sz[] sizes = mem::talloc_array(sz, n);
 	sz n_computed = layout_axis_cross(area.h, gap, area.w, cs[0:n], sizes[0:n]);
 
 	sz offset = 0;

@@ -145,3 +145,13 @@ fn void test_focus_style_paints() @test {
 	assert(!same(sb.cell_at(0, 0).style.bg, BLUE), "unfocused node keeps its bg");
 	assert(same(sb.cell_at(0, 1).style.bg, BLUE), "focused node takes its focus bg");
 }
+
+// A node used to hold at most 32 children, and in an optimised build the
+// 33rd overwrote memory past the array (ted's sidebar, in a tall window).
+fn void test_node_takes_many_children() @test {
+	xray::Node* v = xray::vstack();
+	for (sz i = 0; i < 100; i++) v.add(milktea::text("x").height(xray::cells(1)));
+	assert(v.count() == 100);
+	v.solve(xray::new_rect(0, 0, 10, 100));
+	assert(v.child_rect(99).y == 99, "the last child is laid out where it belongs");
+}

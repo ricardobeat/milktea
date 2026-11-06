@@ -164,8 +164,8 @@ fn void Node.solve_layout(&self, Rect area) {
 	bool row = self.direction == NodeDirection.ROW;
 	sz cc   = self.child_count;
 
-	Constraint[MAX_NODE_CHILDREN] constraints;
-	Rect[MAX_NODE_CHILDREN] child_rects;
+	Constraint[] constraints = mem::talloc_array(Constraint, cc);
+	Rect[] child_rects = mem::talloc_array(Rect, cc);
 
 	// The main axis belongs to the parent, so it picks which of each child's
 	// two constraints applies along it. A child with no size of its own is as

@@ -151,7 +151,9 @@ enum NodeDirection : char @private {
 	STACK,
 }
 
-const sz MAX_NODE_CHILDREN @private = 32;
+// Room for this many children comes with the first add(); past it the array
+// doubles. Children live in the temp allocator with the node itself.
+const sz NODE_CHILDREN_INITIAL @private = 8;
 
 // Node is one box in a layout tree. It can have a box style (see style()),
 // content, and children. The box is painted across the node's whole rect, and
@@ -169,8 +171,9 @@ struct Node {
 	Constraint size_w;
 	Constraint size_h;
 
-	Node*[MAX_NODE_CHILDREN] children;
+	Node** children;
 	sz child_count;
+	sz child_cap;
 
 	NodeDirection direction;
 	JustifyContent justify;
@@ -309,10 +312,15 @@ fn Node* content_node(Content c) {
 // should have a background or border.
 fn Node* Node.add(&self, Node* child) {
 	assert(child == null || !self.leaf, "a leaf node, such as text(), cannot hold children");
-	assert(child == null || self.child_count < MAX_NODE_CHILDREN, "a node can hold %d children", MAX_NODE_CHILDREN);
-	if (child != null && self.child_count < MAX_NODE_CHILDREN) {
-		self.children[self.child_count++] = child;
+	if (child == null) return self;
+	if (self.child_count == self.child_cap) {
+		sz cap = self.child_cap == 0 ? NODE_CHILDREN_INITIAL : self.child_cap * 2;
+		Node*[] grown = mem::talloc_array(Node*, cap);
+		if (self.child_count > 0) grown[:self.child_count] = self.children[:self.child_count];
+		self.children = grown.ptr;
+		self.child_cap = cap;
 	}
+	self.children[self.child_count++] = child;
 	return self;
 }
 
