@@ -5,8 +5,8 @@ import glaze;
 import xray;
 
 // A modal dialog: a centered panel with a title, a body, and a row of buttons
-// along the bottom. It owns which button is focused and reports which one was
-// pressed, so the app does not track the selection itself.
+// along the bottom. It reports which button was pressed; which one has the
+// keyboard is the runtime's focus (see milktea::focus), not dialog state.
 
 const sz DIALOG_BUTTONS = 2;
 
@@ -14,7 +14,6 @@ struct Dialog {
 	String title;
 	String body;
 	Button[DIALOG_BUTTONS] buttons;
-	sz focused;
 	bool open;
 
 	// Narrowest the panel will be. It grows past this to fit its content;
@@ -30,7 +29,7 @@ struct Dialog {
 }
 
 // Pressed is what handle_key reports: nothing yet, dismissed without choosing,
-// or a button was pressed — which one is `focused`.
+// or a button was pressed — which one is focused_button().
 enum Pressed {
 	NOTHING,
 	DISMISSED,
@@ -55,10 +54,14 @@ fn Dialog new_dialog(String title, String body, String ok, String cancel) {
 	};
 }
 
+// show opens the dialog. The panel blocks the pointer, so the runtime keeps
+// focus inside it and starts it on the first button.
 fn void Dialog.show(&self) {
 	self.open = true;
-	self.focused = 0;
 }
+
+// focused_button is the index of the button with keyboard focus.
+fn sz Dialog.focused_button(&self) => milktea::is_focused(&self.button_slots[1]) ? 1 : 0;
 
 fn Pressed Dialog.handle_key(&self, milktea::KeyMsg k) {
 	if (!self.open) return Pressed.NOTHING;
@@ -67,10 +70,10 @@ fn Pressed Dialog.handle_key(&self, milktea::KeyMsg k) {
 		case milktea::KeyCode.ESC:
 			self.open = false;
 			return Pressed.DISMISSED;
+		// Tab is the runtime's; the arrows move focus between the two too.
 		case milktea::KeyCode.LEFT:
 		case milktea::KeyCode.RIGHT:
-		case milktea::KeyCode.TAB:
-			self.focused = (self.focused + 1) % DIALOG_BUTTONS;
+			milktea::focus(&self.button_slots[1 - self.focused_button()]);
 		case milktea::KeyCode.ENTER:
 			self.open = false;
 			return Pressed.CONFIRMED;
@@ -89,7 +92,6 @@ fn Pressed Dialog.take_pending(&self) {
 
 fn void button_clicked(void* id, String id_str, sz col, sz row) @local {
 	ButtonSlot* slot = (ButtonSlot*)id;
-	slot.dialog.focused = slot.index;
 	slot.dialog.open = false;
 	slot.dialog.pending = slot.index == 0 ? Pressed.CONFIRMED : Pressed.DISMISSED;
 }
@@ -105,10 +107,12 @@ const sz PANEL_PAD_ROWS = 1;
 const sz PANEL_PAD_COLS = 2;
 
 // modal_panel is the box dialogs and the picker are built in: bordered,
-// centered and with a drop shadow.
+// centered and with a drop shadow. It blocks the pointer, which also keeps
+// keyboard focus inside it while it is open.
 fn xray::Node* modal_panel(Theme* th, sz min_cols) {
 	glaze::Style frame = { .bg = th.panel, .border = glaze::DOUBLE, .border_color = th.accent };
 	return milktea::vstack().style(frame)
+		.block_pointer()
 		.min_width(min_cols)
 		.with_padding(PANEL_PAD_ROWS, PANEL_PAD_COLS, PANEL_PAD_ROWS, PANEL_PAD_COLS)
 		.with_gap(1)
@@ -146,10 +150,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .dialog = self, .index = i };
-		String label = self.buttons[i].themed(th).with_focus(i == self.focused).view();
-		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.id_with(&self.button_slots[i]).on_click(&button_clicked);
-		buttons_row.add(btn);
+		buttons_row.add(self.buttons[i].themed(th).focus_node(&self.button_slots[i]).on_click(&button_clicked));
 	}
 	panel_node.add(buttons_row);
 

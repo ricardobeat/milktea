@@ -51,10 +51,6 @@ struct Menu {
 	sz selected;      // which title
 	sz item;          // which item within the open dropdown
 	bool open;
-	// The bar has the keyboard: the current title is highlighted and the
-	// arrows move along the bar. F10, an arrow, Enter or a click turns it
-	// on; Esc, a pick or a click elsewhere turns it off.
-	bool active;
 
 	// Narrowest a dropdown gets, border included; longer items widen it.
 	sz item_width;
@@ -92,6 +88,20 @@ fn void Menu.set_items(&self, sz col, MenuItem[MENU_ITEMS] items) {
 	if (col >= 0 && col < MENU_COLS) self.items[col] = items;
 }
 
+// is_active reports whether the bar has the keyboard: the current title is
+// highlighted and the arrows move along the bar. That is the bar's focus
+// (see milktea::focus): F10, an arrow, Enter, Tab or a click gives it, and
+// Esc, a pick or a click elsewhere takes it away.
+fn bool Menu.is_active(&self) => milktea::is_focused(self);
+
+fn void Menu.set_active(&self, bool on) {
+	if (on) {
+		milktea::focus(self);
+	} else if (self.is_active()) {
+		milktea::blur();
+	}
+}
+
 fn MenuItem Menu.current_item(&self) => self.items[self.selected][self.item];
 
 // handle_key drives the menu. It reports whether the key produced a choice;
@@ -102,7 +112,7 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.ESC:
 			self.open = false;
-			self.active = false;
+			self.set_active(false);
 			return Chosen.DISMISSED;
 		case milktea::KeyCode.UP:
 			if (self.item > 0) self.item--;
@@ -116,7 +126,7 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 			self.item = 0;
 		case milktea::KeyCode.ENTER:
 			self.open = false;
-			self.active = false;
+			self.set_active(false);
 			return Chosen.PICKED;
 		default:
 	}
@@ -129,15 +139,15 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 // An inactive bar only wakes up: the key that turns it on does not also move
 // it, so the first arrow shows where the highlight is before moving it.
 fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
-	if (!self.active) {
+	if (!self.is_active()) {
 		switch (k.code) {
 			case milktea::KeyCode.F10:
 			case milktea::KeyCode.LEFT:
 			case milktea::KeyCode.RIGHT:
-				self.active = true;
+				self.set_active(true);
 			case milktea::KeyCode.DOWN:
 			case milktea::KeyCode.ENTER:
-				self.active = true;
+				self.set_active(true);
 				self.open = true;
 				self.item = 0;
 			default:
@@ -147,7 +157,7 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.ESC:
 		case milktea::KeyCode.F10:
-			self.active = false;
+			self.set_active(false);
 			return Chosen.DISMISSED;
 		case milktea::KeyCode.LEFT:
 			if (self.selected > 0) self.selected--;
@@ -169,7 +179,7 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
 // outside the bar and the dropdown, same effect as ESC.
 fn void Menu.dismiss(&self) {
 	self.open = false;
-	self.active = false;
+	self.set_active(false);
 }
 
 // take_pending returns and clears whatever a mouse click reported since the
@@ -191,7 +201,7 @@ fn void title_clicked(void* id, String id_str, sz col, sz row) @local {
 	TitleSlot* slot = (TitleSlot*)id;
 	slot.menu.selected = slot.index;
 	slot.menu.open = true;
-	slot.menu.active = true;
+	slot.menu.set_active(true);
 	slot.menu.item = 0;
 }
 
@@ -216,7 +226,7 @@ fn void item_clicked(void* id, String id_str, sz col, sz row) @local {
 	ItemSlot* slot = (ItemSlot*)id;
 	slot.menu.item = slot.index;
 	slot.menu.open = false;
-	slot.menu.active = false;
+	slot.menu.set_active(false);
 	slot.menu.pending = Chosen.PICKED;
 }
 
@@ -232,10 +242,11 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	glaze::Style bar = { .bg = th.bar, .fg = th.bar_text };
 	glaze::Style active = { .bg = th.ink, .fg = th.text };
 
-	xray::Node* row = milktea::hstack().style(bar).height(milktea::cells(1));
+	xray::Node* row = milktea::hstack().style(bar).height(milktea::cells(1))
+		.id_with(self).focusable();
 	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
-		bool on = self.active && i == self.selected;
+		bool on = self.is_active() && i == self.selected;
 		// The label sets no colour, so it takes the title's, hover included.
 		xray::Node* title_node = milktea::text(self.titles[i], { .bold = on })
 			.style(on ? active : bar, hover: active)

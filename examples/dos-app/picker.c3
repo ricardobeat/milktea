@@ -24,7 +24,6 @@ struct Picker {
 	sz opening;
 
 	Button[DIALOG_BUTTONS] buttons;
-	sz focused_button;
 	bool open;
 
 	sz min_cols;
@@ -64,8 +63,11 @@ fn void Picker.show(&self, sz current) {
 	self.open = true;
 	self.selected = current;
 	self.opening = current;
-	self.focused_button = 0;
 }
+
+// focused_button is the index of the button with keyboard focus; the
+// runtime starts it on the first when the picker opens.
+fn sz Picker.focused_button(&self) => milktea::is_focused(&self.button_slots[1]) ? 1 : 0;
 
 // handle_key reports what the key did. On CONFIRMED the choice is `selected`;
 // on DISMISSED it has already been restored to what it was when the picker
@@ -84,12 +86,11 @@ fn Pressed Picker.handle_key(&self, milktea::KeyMsg k) {
 			if (self.selected < self.count - 1) self.selected++;
 		case milktea::KeyCode.LEFT:
 		case milktea::KeyCode.RIGHT:
-		case milktea::KeyCode.TAB:
-			self.focused_button = (self.focused_button + 1) % DIALOG_BUTTONS;
+			milktea::focus(&self.button_slots[1 - self.focused_button()]);
 		case milktea::KeyCode.ENTER:
 			self.open = false;
 			// Button 1 is Cancel, which discards the highlight like ESC does.
-			if (self.focused_button == 1) {
+			if (self.focused_button() == 1) {
 				self.selected = self.opening;
 				return Pressed.DISMISSED;
 			}
@@ -117,7 +118,6 @@ fn void picker_choice_clicked(void* id, String id_str, sz col, sz row) @local {
 fn void picker_button_clicked(void* id, String id_str, sz col, sz row) @local {
 	PickerButtonSlot* slot = (PickerButtonSlot*)id;
 	Picker* p = slot.picker;
-	p.focused_button = slot.index;
 	p.open = false;
 	if (slot.index == 1) {
 		p.selected = p.opening;
@@ -172,10 +172,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		.height(milktea::cells(2)); // label row + the button's own drop shadow
 	for (sz i = 0; i < DIALOG_BUTTONS; i++) {
 		self.button_slots[i] = { .picker = self, .index = i };
-		String label = self.buttons[i].themed(th).with_focus(i == self.focused_button).view();
-		xray::Node* btn = milktea::text(label, { .bg = th.panel }).width(milktea::cells(self.buttons[i].measure_width(2)));
-		btn.id_with(&self.button_slots[i]).on_click(&picker_button_clicked);
-		buttons_row.add(btn);
+		buttons_row.add(self.buttons[i].themed(th).focus_node(&self.button_slots[i]).on_click(&picker_button_clicked));
 	}
 	panel_node.add(buttons_row);
 

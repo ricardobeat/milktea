@@ -22,7 +22,6 @@ const sz BUTTON_PAD = 2;
 
 struct Button (xray::Content) {
 	String label;
-	bool focused;
 	// The face changes with focus; the shadow never does.
 	glaze::Color face;
 	glaze::Color focused_face;
@@ -51,16 +50,10 @@ fn Button Button.themed(self, Theme* th) {
 	return b;
 }
 
-fn Button Button.with_focus(self, bool on) {
-	Button b = self;
-	b.focused = on;
-	return b;
-}
-
 fn glaze::Style Button.style(&self) {
 	return {
 		.fg = self.text,
-		.bg = self.focused ? self.focused_face : self.face,
+		.bg = self.face,
 		.border = BUTTON_SHADOW,
 		.border_color = self.shadow,
 		.border_bg = self.surface,
@@ -70,6 +63,18 @@ fn glaze::Style Button.style(&self) {
 }
 
 fn String Button.view(&self) => self.style().render(self.label);
+
+// focus_node is the button as a focusable node identified by id. The face, shadow
+// and padding are the node's box and the label takes its colour from it, so
+// focus only has to swap the face (see xray::Node.style's focus).
+fn xray::Node* Button.focus_node(&self, void* id) {
+	return milktea::text(self.label)
+		.style(self.style(), focus: { .bg = self.focused_face })
+		.width(milktea::cells(self.measure_width(2)))
+		.height(milktea::cells(2))
+		.id_with(id)
+		.focusable();
+}
 
 // The face is one row; the shadow along the bottom adds another.
 fn sz Button.measure(&self, sz width) @dynamic => 2;
