@@ -979,6 +979,13 @@ fn void Program.send(Program* self, Msg msg) {
 	defer self.send_inflight.sub(1);
 
 	self.send_mu.lock();
+	// A backend that drives the loop itself (the GUI) arms send() without
+	// Program.run(), so the queue is made on first use if it has none yet.
+	if (self.send_queue.len == 0) {
+		self.send_queue = alloc::new_array(&allocators::LIBC_ALLOCATOR, Msg, INITIAL_SEND_CAPACITY);
+		self.send_head = 0;
+		self.send_tail = 0;
+	}
 	sz capacity = self.send_queue.len;
 	sz next = (self.send_head + 1) % capacity;
 	if (next == self.send_tail) {

@@ -710,6 +710,10 @@ fn void stop() @private {
 	p.send_accepting.store(false);
 	while (p.send_inflight.load() > 0) thread::yield();
 	p.send_mu.destroy();
+	if (p.send_queue.len > 0) {
+		alloc::free(&allocators::LIBC_ALLOCATOR, p.send_queue.ptr);
+		p.send_queue = {};
+	}
 	milktea::g_program = null;
 }
 
