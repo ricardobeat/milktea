@@ -12,10 +12,9 @@ import xray;
 import boba;
 import std::io;
 
-// Chrome the layout reserves: the menu bar and status bar are one row each,
-// and the content panel sits inside a one-row, two-column margin.
+// The menu bar and status bar are one row each; the content panel fills
+// the rest, edge to edge.
 const int BAR_ROWS       = 1;
-const int CONTENT_MARGIN = 1;
 
 const int TAB_COUNT = 3;
 
@@ -227,10 +226,7 @@ fn milktea::Node* DosModel.view(DosModel* self) @dynamic {
 	return milktea::root()
 		.add(milktea::vstack()
 			.add(self.menu_bar())
-			.add(milktea::vstack()
-				.fill(1)
-				.with_padding(CONTENT_MARGIN, CONTENT_MARGIN * 2, 0, CONTENT_MARGIN * 2)
-				.add(self.content().fill(1)))
+			.add(self.content().fill(1))
 			.add(self.statusbar()))
 		// Both return null when closed, and add() ignores a null child, so
 		// neither needs a condition here.
