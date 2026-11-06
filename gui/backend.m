@@ -766,11 +766,13 @@ static void lat_sigterm(int sig) { (void)sig; lat_report(); _exit(0); }
 //   down / up                              left button at the current point
 //   click <x> <y>                          move, down, up
 //   resize <w> <h>                         set the window's content size
+//   scroll <dy> [phase]                    a trackpad scroll of dy points at the pointer;
+//                                          phase 1 began, 2 changed, 3 ended, 4 momentum, 5 momentum ended
 //   quit                                   ask the app to quit
 //
 // e.g. MILKTEA_FAKE_INPUT="wait 300; sweep 8 5 235 4000; quit"
 
-typedef enum { FK_WAIT, FK_MOVE, FK_SWEEP, FK_DOWN, FK_UP, FK_CLICK, FK_RESIZE, FK_QUIT } FakeKind;
+typedef enum { FK_WAIT, FK_MOVE, FK_SWEEP, FK_DOWN, FK_UP, FK_CLICK, FK_RESIZE, FK_SCROLL, FK_QUIT } FakeKind;
 typedef struct { FakeKind kind; double a, b, c, d, e; } FakeStep;
 
 #define FAKE_MAX 1024
@@ -801,6 +803,7 @@ static int fake_parse(const char *src) {
 		else if (!strcmp(name, "up")) st.kind = FK_UP;
 		else if (!strcmp(name, "click") && n >= 3) st.kind = FK_CLICK;
 		else if (!strcmp(name, "resize") && n >= 3) st.kind = FK_RESIZE;
+		else if (!strcmp(name, "scroll") && n >= 2) st.kind = FK_SCROLL;
 		else if (!strcmp(name, "quit")) st.kind = FK_QUIT;
 		else {
 			fprintf(stderr, "milktea fake input: cannot read step '%s'\n", tok);
@@ -870,6 +873,26 @@ static void fake_tick(void) {
 				fake.down = 0;
 				fake_post(NSEventTypeLeftMouseUp, st->a, st->b);
 				break;
+			case FK_SCROLL: {
+				// A pixel-unit scroll is a precise one, as a trackpad's is.
+				CGEventRef ce = CGEventCreateScrollWheelEvent2(NULL, kCGScrollEventUnitPixel, 1, (int32_t)st->a, 0, 0);
+				int ph = (int)st->b;
+				if (ph >= 1 && ph <= 3) {
+					int64_t p = ph == 1 ? kCGScrollPhaseBegan : ph == 2 ? kCGScrollPhaseChanged : kCGScrollPhaseEnded;
+					CGEventSetIntegerValueField(ce, kCGScrollWheelEventScrollPhase, p);
+				} else if (ph == 4 || ph == 5) {
+					CGEventSetIntegerValueField(ce, kCGScrollWheelEventMomentumPhase,
+						ph == 4 ? kCGMomentumScrollPhaseContinue : kCGMomentumScrollPhaseEnd);
+				}
+				NSWindow *win = _sapp.macos.window;
+				NSRect content = [win contentRectForFrameRect:win.frame];
+				CGEventSetLocation(ce, CGPointMake(content.origin.x + fake.x,
+					NSScreen.screens[0].frame.size.height - (content.origin.y + content.size.height - fake.y)));
+				NSEvent *e = [NSEvent eventWithCGEvent:ce];
+				CFRelease(ce);
+				if (e) [NSApp postEvent:e atStart:NO];
+				break;
+			}
 			case FK_RESIZE:
 				[_sapp.macos.window setContentSize:NSMakeSize(st->a, st->b)];
 				break;
@@ -955,7 +978,9 @@ static void scroll_monitor_start(void) {
 	if (g_scroll_monitor) return;
 	g_scroll_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel
 		handler:^NSEvent *(NSEvent *e) {
-			if (g.event_fn == NULL || e.window != _sapp.macos.window) return e;
+			// An event for another window is not ours; one with no window
+			// (made from a CGEvent, as fake input does) is taken as ours.
+			if (g.event_fn == NULL || (e.window != nil && e.window != _sapp.macos.window)) return e;
 			NSPoint p = [_sapp.macos.view convertPoint:e.locationInWindow fromView:nil];
 			MtEvent m = {0};
 			m.type = MT_EV_SCROLL;

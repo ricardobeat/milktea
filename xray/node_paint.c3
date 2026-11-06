@@ -194,7 +194,14 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		if (&n.content.paint) {
 			n.content.paint(self, inner);
 		} else if (&n.content.render) {
-			self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch, self.inherit_fg);
+			sz shift = uh > 0 ? n.scroll_shift_px % uh : 0;
+			if (shift > 0 && n.layout_metrics.pixels && self.recording()) {
+				Rect taller = inner;
+				taller.h++;
+				self.paint_string_shifted(inner, inner_area, n.content.render(taller), shift, self.inherit_fg);
+			} else {
+				self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch, self.inherit_fg);
+			}
 		}
 
 		if (&n.content.cursor) {
@@ -330,6 +337,34 @@ fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuf
 	Style see_through = default_style().set_bg(color_transparent());
 	if (fg.kind != ColorKind.NONE) see_through.fg = fg;
 	self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
+}
+
+// paint_string_shifted paints s, which has one row more than r, shift layout
+// units higher than r, clipped to area (r in layout units): the first row
+// shows in part at the top and the extra row in part at the bottom. The
+// grid keeps r's rows; the extra row only goes into the paint stream, which
+// is all a window draws.
+fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz shift, Color fg) @private {
+	self.record_clip(area);
+	sz old_dy = self.paint_dy;
+	self.paint_dy -= shift;
+	Style base = default_style().set_bg(color_transparent());
+	if (fg.kind != ColorKind.NONE) base.fg = fg;
+	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
+	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
+	self.render_ansi_string((sz)r.x, (sz)r.y, s, base, max_row, max_col);
+	// The extra row, rendered aside and recorded at the row below r.
+	ScreenBuffer* tmp = new_screen_buffer(r.w, r.h + 1);
+	defer {
+		tmp.destroy();
+		mem::free(tmp);
+	}
+	tmp.render_ansi_string(0, 0, s, base);
+	for (sz x = 0; x < r.w; x++) {
+		self.record_cell(r.x + x, r.y + r.h, tmp.cells[r.h * tmp.width + x]);
+	}
+	self.paint_dy = old_dy;
+	self.record_clip({});
 }
 
 // scale_opacity dims an effect's opacity by a node's alpha, so shadows fade

@@ -79,3 +79,40 @@ fn void test_native_pick_without_ids() @test {
 fn void test_terminal_shortcut_label() @test {
 	assert(boba::shortcut_label('n') == "Ctrl+N", "no native menus: Ctrl");
 }
+
+// ---- Viewport smooth scrolling (pixel logic, one unit per row here) ------
+
+fn boba::Viewport viewport100() {
+	boba::Viewport v = boba::new_viewport(20, 10);
+	for (sz i = 0; i < 100; i++) v.add_line("line");
+	v.set_content(100);
+	return v;
+}
+
+fn void test_viewport_precise_scroll_moves_exactly() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(-7, true, milktea::ScrollPhase.CHANGED);
+	assert(v.offset == 7, "got %d", v.offset);
+	v.scroll_pixels(3, true, milktea::ScrollPhase.CHANGED);
+	assert(v.offset == 4);
+}
+
+fn void test_viewport_wheel_stays_in_content() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(50, false, milktea::ScrollPhase.NONE);
+	assert(v.offset == 0 && !v.springing);
+	v.scroll_pixels(-500, false, milktea::ScrollPhase.NONE);
+	assert(v.offset == 90, "the last page, got %d", v.offset);
+}
+
+fn void test_viewport_overscroll_resists_and_springs_back() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(2, true, milktea::ScrollPhase.CHANGED);
+	assert(v.offset < 0, "pulled past the start");
+	assert(v.pos_px > -2, "with resistance");
+	v.scroll_pixels(0, true, milktea::ScrollPhase.ENDED);
+	assert(v.springing, "lifting the fingers past an end springs back");
+}

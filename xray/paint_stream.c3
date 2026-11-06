@@ -22,12 +22,14 @@ alias RecordBeginFn = fn void(ScreenBuffer* buf);
 alias RecordCellFn = fn void(ScreenBuffer* buf, sz col, sz row, Cell cell);
 alias RecordTintFn = fn void(ScreenBuffer* buf, sz col, sz row, Color tint);
 alias RecordDecorationFn = fn void(ScreenBuffer* buf, Node* n, Color fill);
+alias RecordClipFn = fn void(ScreenBuffer* buf, Rect r);
 
 struct PaintRecorder {
 	RecordBeginFn begin;
 	RecordCellFn cell;
 	RecordTintFn tint;
 	RecordDecorationFn decoration;
+	RecordClipFn clip;
 }
 
 PaintRecorder paint_recorder;
@@ -35,7 +37,7 @@ PaintRecorder paint_recorder;
 // enable_paint_recording installs the recorder. A buffer records once its
 // record_paint is also set; record_paints does both.
 fn void enable_paint_recording() {
-	paint_recorder = { &recorder_begin, &recorder_cell, &recorder_tint, &recorder_decoration };
+	paint_recorder = { &recorder_begin, &recorder_cell, &recorder_tint, &recorder_decoration, &recorder_clip };
 }
 
 fn void ScreenBuffer.record_paints(&self, bool on = true) {
@@ -62,6 +64,16 @@ fn void ScreenBuffer.record_tint(&self, sz col, sz row, Color tint) @inline {
 // takes it (see Node.decorate).
 fn void ScreenBuffer.record_decoration(&self, Node* n, Color fill) @inline {
 	if (self.recording() && n.decoration.kind != DecorationKind.NONE) paint_recorder.decoration(self, n, fill);
+}
+
+// record_clip limits the ops recorded after it to r (layout units); an empty
+// r lifts the limit.
+fn void ScreenBuffer.record_clip(&self, Rect r) @inline {
+	if (self.recording()) paint_recorder.clip(self, r);
+}
+
+fn void recorder_clip(ScreenBuffer* self, Rect r) @local {
+	self.paint_ops.push({ .kind = PaintKind.CLIP, .col = r.x, .row = r.y, .bg_w = r.w, .bg_h = r.h });
 }
 
 fn void recorder_begin(ScreenBuffer* self) @local {

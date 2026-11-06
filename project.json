@@ -399,6 +399,14 @@
       "c-sources": ["gui/backend.m", "gui/platform_macos.m"],
       "strip-unused": true,
       "c-include-dirs": ["vendor/sokol"]
+    },
+    "examples/viewport-gui": {
+      "type": "executable",
+      "sources": ["gui/**", "examples/viewport-gui/**"],
+      "opt": "Os",
+      "c-sources": ["gui/backend.m", "gui/platform_macos.m"],
+      "strip-unused": true,
+      "c-include-dirs": ["vendor/sokol"]
     }
   }
 }

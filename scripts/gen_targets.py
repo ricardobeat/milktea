@@ -155,6 +155,11 @@ OVERRIDES = {
         "c_sources": GUI_C_SOURCES,
         "c_include_dirs": GUI_INCLUDE_DIRS,
     },
+    "viewport-gui": {
+        "extra_dirs": ["gui"],
+        "c_sources": GUI_C_SOURCES,
+        "c_include_dirs": GUI_INCLUDE_DIRS,
+    },
 }
 
 # doom-fire's directory produces multiple targets (not a 1:1 dir->target

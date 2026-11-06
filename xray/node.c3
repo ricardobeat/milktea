@@ -197,6 +197,10 @@ struct Node {
 	glaze::Style hover_box;
 	Color hover_fg;
 
+	// Layout units its content is drawn shifted up by, less than a row, for
+	// smooth scrolling in a window (see scroll_shift).
+	sz scroll_shift_px;
+
 	// The node can take keyboard focus (see focusable()), and what changes
 	// while it has it — kept like hover_box.
 	bool can_focus;
@@ -507,6 +511,16 @@ fn void merge_box_paint(glaze::Style* b, glaze::Style s) @private {
 	if (s.border_gradient.kind != ColorKind.NONE) b.border_gradient = s.border_gradient;
 	if (s.border_animation != glaze::BorderAnimation.NONE) b.border_animation = s.border_animation;
 	if (s.anim_speed_ms != 0) b.anim_speed_ms = s.anim_speed_ms;
+}
+
+// scroll_shift draws the node's content px layout units higher than its
+// place, clipped to the node, for content that scrolls by less than a row:
+// the content is asked for one row more than fits, and the rows at both
+// edges show in part. Only a pixel layout (a window) draws it; a terminal
+// scrolls by whole rows and ignores it. px is taken modulo a row.
+fn Node* Node.scroll_shift(&self, sz px) {
+	self.scroll_shift_px = px;
+	return self;
 }
 
 // focusable lets the node take keyboard focus. Its id (see id(), id_with())
