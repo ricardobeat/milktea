@@ -250,6 +250,15 @@ struct Program {
 	sz hover_prev_col;
 	sz hover_prev_row;
 	bool hover_has_prev;
+	// Keyboard focus: the focused node's id, and the focusable nodes of the
+	// last drawn frame in Tab order (see xray::Node.focusable). focus_str
+	// points into focus_buf, because the id a node was built with is
+	// temp-allocated and gone after the frame.
+	void* focus_ptr;
+	char[64] focus_buf;
+	String focus_str;
+	List{xray::FocusTarget} focus_targets;
+	bool focus_trapped;
 	// on_draw, when set, sees every tree draw() has just solved and painted.
 	// A backend reads what it needs from the frame here — the GUI collects
 	// its window drag handles — so the terminal links none of that.
@@ -549,6 +558,7 @@ fn xray::Rect layout_area() {
 // Dispatch coordinates use backend layout units; callbacks receive text cells.
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
+	dispatch_focus_click(col, row);
 	xray::dispatch_click(g_program.click_targets.array_view(),
 		col, row, g_program.debug_mouse);
 }
@@ -572,6 +582,109 @@ fn void dispatch_hover(sz col, sz row) {
 	g_program.hover_prev_col = col;
 	g_program.hover_prev_row = row;
 	g_program.hover_has_prev = true;
+}
+
+// ---- keyboard focus --------------------------------------------------------
+
+// focus gives keyboard focus to the node with this id_with() pointer.
+fn void focus(void* id) {
+	if (g_program == null) return;
+	g_program.focus_ptr = id;
+	g_program.focus_str = {};
+}
+
+// focus_named gives keyboard focus to the node with this id() name.
+fn void focus_named(String id) {
+	if (g_program == null) return;
+	usz n = id.len < g_program.focus_buf.len ? id.len : g_program.focus_buf.len;
+	g_program.focus_buf[:n] = id[:n];
+	g_program.focus_str = (String)g_program.focus_buf[:n];
+	g_program.focus_ptr = null;
+}
+
+// blur leaves nothing focused.
+fn void blur() {
+	if (g_program == null) return;
+	g_program.focus_ptr = null;
+	g_program.focus_str = {};
+}
+
+// is_focused reports whether the node with this id_with() pointer has focus.
+fn bool is_focused(void* id) => g_program != null && id != null && g_program.focus_ptr == id;
+
+// is_focused_named reports whether the node with this id() name has focus.
+fn bool is_focused_named(String id) {
+	return g_program != null && id.len > 0 && g_program.focus_str == id;
+}
+
+// has_focus reports whether any node has focus.
+fn bool has_focus() => g_program != null && (g_program.focus_ptr != null || g_program.focus_str.len > 0);
+
+fn void focus_target(xray::FocusTarget t) @local {
+	if (t.name_len > 0) {
+		focus_named(t.id_str());
+	} else {
+		focus(t.id_ptr);
+	}
+}
+
+fn sz focused_index() @local {
+	foreach (i, t : g_program.focus_targets) {
+		if (t.name_len > 0 ? t.id_str() == g_program.focus_str : (t.id_ptr != null && t.id_ptr == g_program.focus_ptr)) {
+			return (sz)i;
+		}
+	}
+	return -1;
+}
+
+// update_focus brings focus in line with a newly solved tree: inside a
+// modal, focus that is not on one of its nodes moves to the first; anywhere
+// else, focus on a node that is gone is dropped.
+fn void update_focus(xray::Node* root) @private {
+	if (g_program == null) return;
+	if (!g_program.focus_targets.is_initialized()) g_program.focus_targets.init(mem);
+	g_program.focus_targets.clear();
+	g_program.focus_trapped = false;
+	xray::collect_focus_targets(root, &g_program.focus_targets, &g_program.focus_trapped);
+	if (!has_focus() && !g_program.focus_trapped) return;
+	if (focused_index() >= 0) return;
+	if (g_program.focus_trapped && g_program.focus_targets.len() > 0) {
+		focus_target(g_program.focus_targets[0]);
+	} else {
+		blur();
+	}
+}
+
+// dispatch_focus_key moves focus on Tab and Shift-Tab, when the last frame
+// had anything focusable. Returns true when it took the key, which then does
+// not reach update().
+fn bool dispatch_focus_key(KeyMsg k) {
+	if (g_program == null || k.code != KeyCode.TAB || k.ctrl || k.alt) return false;
+	sz n = (sz)g_program.focus_targets.len();
+	if (n == 0) return false;
+	sz i = focused_index();
+	if (k.shift) {
+		i = i <= 0 ? n - 1 : i - 1;
+	} else {
+		i = i < 0 || i >= n - 1 ? 0 : i + 1;
+	}
+	focus_target(g_program.focus_targets[i]);
+	return true;
+}
+
+// dispatch_focus_click focuses the topmost focusable node under a press, or
+// outside a modal, drops focus when the press hits none. Runs before the
+// click hooks, so an on_click can already read is_focused.
+fn void dispatch_focus_click(sz col, sz row) {
+	if (g_program == null) return;
+	xray::FocusTarget[] ts = g_program.focus_targets.array_view();
+	for (sz i = (sz)ts.len - 1; i >= 0; i--) {
+		if (ts[i].rect.contains(col, row)) {
+			focus_target(ts[i]);
+			return;
+		}
+	}
+	if (!g_program.focus_trapped) blur();
 }
 
 // set_debug_mouse turns mouse-event tracing on or off for the running
@@ -906,6 +1019,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // ever crashing or blocking the event loop.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
+	if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE && dispatch_focus_key(m.key)) return false;
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
@@ -1216,6 +1330,7 @@ fn void? Program.run(Program* self) {
 			self.draw_scratch = null;
 		}
 		self.click_targets.free();
+		if (self.focus_targets.is_initialized()) self.focus_targets.free();
 
 		if (self.renderer != null) {
 			self.renderer.destroy();

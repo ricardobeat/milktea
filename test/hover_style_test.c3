@@ -2,6 +2,7 @@ module hover_style_test;
 import glaze;
 import xray;
 import milktea;
+import std::core::dstring;
 
 const glaze::Color RED = { .kind = TRUECOLOR, .r = 255 };
 const glaze::Color BLUE = { .kind = TRUECOLOR, .b = 255 };
@@ -69,4 +70,78 @@ fn void test_hover_blocked_by_later_node() @test {
 fn void test_style_twice_keeps_hover() @test {
 	xray::Node* n = xray::vstack().style({ .bg = GREY }, hover: { .bg = BLUE }).style({ .fg = RED });
 	assert(same(n.hover_box.bg, BLUE) && same(n.box.bg, GREY) && same(n.fg, RED));
+}
+
+// ---- focus ----------------------------------------------------------------
+
+struct FocusProbe {
+	bool modal;
+	milktea::KeyMsg[] keys;
+	// What update() saw focused on each 'x' key: 'a', 'b', 'm' or '-'.
+	char[8] seen;
+	sz count;
+}
+
+fn milktea::Cmd FocusProbe.init(&self) @dynamic {
+	foreach (k : self.keys) milktea::g_program.send({ .kind = milktea::MsgKind.KEY, .key = k });
+	milktea::g_program.send({ .kind = milktea::MsgKind.QUIT });
+	return null;
+}
+
+fn milktea::Cmd FocusProbe.update(&self, milktea::Msg msg) @dynamic {
+	if (msg.kind != milktea::MsgKind.KEY || msg.key.rune != 'x' || self.count >= 8) return null;
+	char c = '-';
+	if (milktea::is_focused_named("a")) c = 'a';
+	if (milktea::is_focused_named("b")) c = 'b';
+	if (milktea::is_focused_named("m")) c = 'm';
+	self.seen[self.count++] = c;
+	return null;
+}
+
+fn milktea::Node* FocusProbe.view(&self) @dynamic {
+	milktea::Node* root = milktea::root().add(milktea::vstack()
+		.add(milktea::text("a").id("a").focusable().height(xray::cells(1)))
+		.add(milktea::text("b").id("b").focusable().height(xray::cells(1))));
+	if (self.modal) {
+		root.add(milktea::vstack().block_pointer().width(xray::cells(6)).height(xray::cells(2)).at(10, 5)
+			.add(milktea::text("m").id("m").focusable()));
+	}
+	return root;
+}
+
+fn String run_focus(FocusProbe* p, milktea::KeyMsg[] keys) {
+	DString o = dstring::temp();
+	milktea::Program pr = milktea::@test_program(p, &o, 40, 10, { .alt_screen = true });
+	p.keys = keys;
+	pr.run()!!;
+	return (String)p.seen[:p.count];
+}
+
+const milktea::KeyMsg TAB = { .code = TAB };
+const milktea::KeyMsg BACKTAB = { .code = TAB, .shift = true };
+const milktea::KeyMsg PROBE = { .code = RUNE, .rune = 'x' };
+
+fn void test_tab_cycles_focus() @test {
+	FocusProbe p;
+	String seen = run_focus(&p, { PROBE, TAB, PROBE, TAB, PROBE, TAB, PROBE, BACKTAB, PROBE });
+	assert(seen == "-abab", "got %s", seen);
+}
+
+fn void test_modal_traps_focus() @test {
+	FocusProbe p = { .modal = true };
+	String seen = run_focus(&p, { PROBE, TAB, PROBE });
+	assert(seen == "mm", "got %s", seen);
+}
+
+fn void test_focus_style_paints() @test {
+	xray::Node* root = xray::vstack()
+		.add(milktea::text("a").id("a").focusable().style({}, focus: { .bg = BLUE }).height(xray::cells(1)))
+		.add(milktea::text("b").id("b").focusable().style({}, focus: { .bg = BLUE }).height(xray::cells(1)));
+	root.solve(xray::new_rect(0, 0, 10, 3));
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 3);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.focus_str = "b";
+	sb.paint(root);
+	assert(!same(sb.cell_at(0, 0).style.bg, BLUE), "unfocused node keeps its bg");
+	assert(same(sb.cell_at(0, 1).style.bg, BLUE), "focused node takes its focus bg");
 }

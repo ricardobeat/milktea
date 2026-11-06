@@ -148,13 +148,17 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		self.paint_dy = content_area.y - r.y * h;
 	}
 
-	// The box and text colour this frame: the node's own, with its hover
-	// style over them while the pointer is on it. The colour passes down to
-	// the subtree and is put back for the node's later siblings.
+	// The box and text colour this frame: the node's own, with its focus
+	// style and then its hover style over them when they apply. The colour
+	// passes down to the subtree and is put back for later siblings.
 	glaze::Style box = n.box;
 	Color parent_fg = self.inherit_fg;
 	defer self.inherit_fg = parent_fg;
 	if (n.fg.kind != ColorKind.NONE) self.inherit_fg = n.fg;
+	if (n.can_focus && n.has_focus_style() && n.focus_matches(self.focus_str, self.focus_ptr)) {
+		merge_box_paint(&box, n.focus_box);
+		if (n.focus_fg.kind != ColorKind.NONE) self.inherit_fg = n.focus_fg;
+	}
 	if (n.has_hover() && self.hovered(n, seq)) {
 		merge_box_paint(&box, n.hover_box);
 		if (n.hover_fg.kind != ColorKind.NONE) self.inherit_fg = n.hover_fg;

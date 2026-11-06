@@ -28,6 +28,10 @@ struct ScreenBuffer {
 	sz paint_seq;
 	sz pointer_floor;
 	Color inherit_fg;
+	// The focused node's id during paint(), for focus styles. Set by the
+	// caller; both empty means nothing is focused.
+	String focus_str;
+	void* focus_ptr;
 	List{PaintOp} paint_ops;
 	Cell[] cells; // flat grid: width * height
 	Cell[] prev_cells; // previous frame for diffing

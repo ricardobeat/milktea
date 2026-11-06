@@ -218,6 +218,7 @@ fn CellFit cell_fit(Face face, int font_size, float ratio) @private {
 fn bool dispatch(milktea::Msg msg) @private {
 	g.dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
+	if (msg.kind == milktea::MsgKind.KEY && milktea::dispatch_focus_key(msg.key)) return false;
 	milktea::g_program.stamp_now();
 	milktea::Cmd c = g.m.update(msg);
 	int chain = 0;

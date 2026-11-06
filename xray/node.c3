@@ -193,6 +193,12 @@ struct Node {
 	glaze::Style hover_box;
 	Color hover_fg;
 
+	// The node can take keyboard focus (see focusable()), and what changes
+	// while it has it — kept like hover_box.
+	bool can_focus;
+	glaze::Style focus_box;
+	Color focus_fg;
+
 	Content content;
 
 	// A leaf cannot hold children: add() on it is an error. text() makes
@@ -461,7 +467,10 @@ fn Node* Node.with_padding(&self, sz top, sz right, sz bottom, sz left) {
 // like the node's own, so `hover: { .bg = accent, .fg = white }` recolours a
 // whole row, label and shortcut alike, as long as they set no fg themselves.
 // A child with a bg of its own still covers the hover bg beneath it.
-fn Node* Node.style(&self, glaze::Style s, glaze::Style hover = {}) {
+//
+// focus works the same way while the node has keyboard focus (see
+// focusable()). When a node is both focused and hovered, hover goes on top.
+fn Node* Node.style(&self, glaze::Style s, glaze::Style hover = {}, glaze::Style focus = {}) {
 	glaze::Style* b = &self.box;
 	merge_box_paint(b, s);
 	if (s.border.top.len > 0 || s.border.bottom.len > 0 || s.border.left.len > 0 || s.border.right.len > 0) {
@@ -474,6 +483,8 @@ fn Node* Node.style(&self, glaze::Style s, glaze::Style hover = {}) {
 	b.pad_left   += s.pad_left;
 	merge_box_paint(&self.hover_box, hover);
 	if (hover.fg.kind != ColorKind.NONE) self.hover_fg = hover.fg;
+	merge_box_paint(&self.focus_box, focus);
+	if (focus.fg.kind != ColorKind.NONE) self.focus_fg = focus.fg;
 	return self;
 }
 
@@ -488,6 +499,36 @@ fn void merge_box_paint(glaze::Style* b, glaze::Style s) @private {
 	if (s.border_gradient.kind != ColorKind.NONE) b.border_gradient = s.border_gradient;
 	if (s.border_animation != glaze::BorderAnimation.NONE) b.border_animation = s.border_animation;
 	if (s.anim_speed_ms != 0) b.anim_speed_ms = s.anim_speed_ms;
+}
+
+// focusable lets the node take keyboard focus. Its id (see id(), id_with())
+// is what the runtime remembers as focused, so it needs one. Tab and
+// Shift-Tab move focus between focusable nodes in paint order, a click
+// focuses the one under the pointer, and while a node that blocks the
+// pointer (see block_pointer) is on screen, only the focusable nodes inside
+// it and after it take part, so focus cannot leave a modal.
+//
+// Read and set focus with milktea::is_focused, milktea::focus and
+// milktea::blur.
+fn Node* Node.focusable(&self, bool on = true) {
+	self.can_focus = on;
+	return self;
+}
+
+// focus_matches reports whether this node is the one named by id_str or
+// id_ptr. A node with no id never matches.
+fn bool Node.focus_matches(&self, String id_str, void* id_ptr) {
+	if (self.id_str.len > 0) return id_str.len > 0 && self.id_str == id_str;
+	return id_ptr != null && self.id_ptr == id_ptr;
+}
+
+// has_focus_style reports whether the node changes anything while focused.
+fn bool Node.has_focus_style(&self) {
+	glaze::Style h = self.focus_box;
+	return self.focus_fg.kind != ColorKind.NONE || h.bg.kind != ColorKind.NONE
+		|| h.bg_gradient.kind != ColorKind.NONE || h.border_color.kind != ColorKind.NONE
+		|| h.corner_color.kind != ColorKind.NONE || h.border_bg.kind != ColorKind.NONE
+		|| h.border_gradient.kind != ColorKind.NONE || h.border_animation != glaze::BorderAnimation.NONE;
 }
 
 // has_hover reports whether the node changes anything under the pointer.
@@ -603,7 +644,7 @@ fn Node* Node.animate(&self, sz fps = 60) {
 // when the tree is torn down at the end of the frame.
 fn Node* Node.id(&self, String name) {
 	self.id_str = name.tcopy();
-	self.id_with(null);
+	self.id_ptr = null;
 	return self;
 }
 

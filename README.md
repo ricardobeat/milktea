@@ -513,6 +513,26 @@ if (msg.kind == milktea::MsgKind.MOUSE) {
 }
 ```
 
+### Hover and focus styles
+
+A node's style can change while the pointer is over it, or while it has
+keyboard focus, without any state in the model:
+
+```c3
+xray::hstack().style(item, hover: { .bg = th.accent }, focus: { .bg = th.ink, .fg = th.text })
+```
+
+Only colours apply, so nothing moves. Text that sets no `fg` of its own
+takes the nearest ancestor's, so a hover or focus `fg` recolours a whole row.
+Terminal hover needs `MOUSE_MODE_ALL_MOTION`; in a window it always works.
+
+A node with an id takes keyboard focus with `.focusable()`. Tab and
+Shift-Tab move focus in paint order, a click focuses the node under it, and
+while a node with `.block_pointer()` is on screen focus stays inside it.
+Read and set focus from `update` with `milktea::is_focused(ptr)`,
+`is_focused_named("id")`, `focus(ptr)`, `focus_named("id")` and `blur()`.
+Tab only reaches `update` when nothing on screen is focusable.
+
 ---
 
 ## Paste support
