@@ -192,11 +192,21 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	self.paint_extent = inner_area;
 	if (n.content != null && inner.w > 0 && inner.h > 0) {
 		sz shifted = 0;
+		sz shifted_x = 0;
 		if (&n.content.paint) {
 			n.content.paint(self, inner);
 		} else if (&n.content.render) {
 			sz shift = uh > 0 ? n.scroll_shift_px % uh : 0;
-			if (shift > 0 && n.layout_metrics.pixels && self.recording()) {
+			sz shift_x = uw > 0 ? n.scroll_shift_x_px % uw : 0;
+			if (shift_x > 0 && n.layout_metrics.pixels && self.recording()) {
+				Rect bigger = inner;
+				bigger.w++;
+				if (shift > 0) bigger.h++;
+				self.paint_string_scrolled(inner, inner_area, n.content.render(bigger), shift, shift_x,
+					n.fixed_left_cols, n.fixed_right_cols, self.inherit_fg);
+				shifted = shift;
+				shifted_x = shift_x;
+			} else if (shift > 0 && n.layout_metrics.pixels && self.recording()) {
 				Rect taller = inner;
 				taller.h++;
 				self.paint_string_shifted(inner, inner_area, n.content.render(taller), shift, self.inherit_fg);
@@ -210,7 +220,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 			ContentCursor c = n.content.cursor(inner);
 			if (c.has_cursor) {
 				res.cursor = c;
-				res.cursor_dx = self.paint_dx;
+				res.cursor_dx = self.paint_dx - shifted_x;
 				// The cursor rides with text drawn part-way into a row.
 				res.cursor_dy = self.paint_dy - shifted;
 			}
@@ -372,6 +382,70 @@ fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz
 	}
 	self.paint_dy = old_dy;
 	self.record_clip({});
+}
+
+// paint_string_scrolled paints content rendered one column wider than r (and
+// one row taller when dy is set) shifted dx layout units left and dy up,
+// clipped to area, except for the left and right columns at the edges of
+// each row, which stay in place: the gutter and scrollbar of a view that
+// scrolls sideways by the pixel. The grid keeps the unshifted cells, without
+// recording them, and every recorded cell comes from a scratch render.
+fn void ScreenBuffer.paint_string_scrolled(&self, Rect r, Rect area, String s, sz dy, sz dx,
+		sz left, sz right, Color fg) {
+	Style base = default_style().set_bg(color_transparent());
+	if (fg.kind != ColorKind.NONE) base.fg = fg;
+	sz w = r.w + 1;
+	sz h = dy > 0 ? r.h + 1 : r.h;
+	if (left + right > r.w) right = r.w - left;
+	if (right < 0) right = 0;
+
+	bool rec = self.record_paint;
+	self.record_paint = false;
+	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
+	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
+	self.render_ansi_string((sz)r.x, (sz)r.y, s, base, max_row, max_col);
+	self.record_paint = rec;
+
+	ScreenBuffer* tmp = new_screen_buffer(w, h);
+	defer {
+		tmp.destroy();
+		mem::free(tmp);
+	}
+	tmp.render_ansi_string(0, 0, s, base);
+
+	sz uw = self.paint_metrics.unit_w();
+	sz old_dx = self.paint_dx;
+	sz old_dy = self.paint_dy;
+	self.paint_dy -= dy;
+
+	// The fixed columns, at their own places: the right ones sit one column
+	// further out in the wider render.
+	self.record_clip(area);
+	for (sz y = 0; y < h; y++) {
+		for (sz x = 0; x < left; x++) self.record_scratch_cell(tmp, x, y, r.x + x, r.y + y);
+		for (sz x = w - right; x < w; x++) self.record_scratch_cell(tmp, x, y, r.x + x - 1, r.y + y);
+	}
+
+	// The rest, shifted and kept between them.
+	Rect middle = { .x = r.x * uw + old_dx + left * uw, .y = area.y,
+		.w = (r.w - left - right) * uw, .h = area.h };
+	self.record_clip(middle);
+	self.paint_dx -= dx;
+	for (sz y = 0; y < h; y++) {
+		for (sz x = left; x < w - right; x++) self.record_scratch_cell(tmp, x, y, r.x + x, r.y + y);
+	}
+
+	self.paint_dx = old_dx;
+	self.paint_dy = old_dy;
+	self.record_clip({});
+}
+
+// record_scratch_cell records a cell of a scratch render at col, row. A cell
+// the string never reached shows what is beneath it.
+fn void ScreenBuffer.record_scratch_cell(&self, ScreenBuffer* tmp, sz x, sz y, sz col, sz row) {
+	Cell c = tmp.cells[y * tmp.width + x];
+	if (c.style.bg.kind == ColorKind.NONE) c.style.bg = color_transparent();
+	self.record_cell(col, row, c);
 }
 
 // scale_opacity dims an effect's opacity by a node's alpha, so shadows fade

@@ -200,6 +200,12 @@ struct Node {
 	// Layout units its content is drawn shifted up by, less than a row, for
 	// smooth scrolling in a window (see scroll_shift).
 	sz scroll_shift_px;
+	// The same sideways: layout units the content is drawn shifted left by,
+	// less than a column, outside the fixed columns at either edge (see
+	// scroll_shift_x and fixed_cols).
+	sz scroll_shift_x_px;
+	sz fixed_left_cols;
+	sz fixed_right_cols;
 
 	// The node can take keyboard focus (see focusable()), and what changes
 	// while it has it — kept like hover_box.
@@ -525,6 +531,25 @@ fn void merge_box_paint(glaze::Style* b, glaze::Style s) @private {
 // scrolls by whole rows and ignores it. px is taken modulo a row.
 fn Node* Node.scroll_shift(&self, sz px) {
 	self.scroll_shift_px = px;
+	return self;
+}
+
+// scroll_shift_x draws the node's content px layout units further left than
+// its place, clipped to the node, for content that scrolls sideways by less
+// than a column. The content is asked for one column more than fits. The
+// columns fixed_cols names at either edge stay where they are, so a gutter
+// or a scrollbar drawn in the same rows does not move with the text. Only a
+// pixel layout draws it; px is taken modulo a column.
+fn Node* Node.scroll_shift_x(&self, sz px) {
+	self.scroll_shift_x_px = px;
+	return self;
+}
+
+// fixed_cols keeps left columns at the start of each row and right columns at
+// its end in place while the rest scrolls sideways (see scroll_shift_x).
+fn Node* Node.fixed_cols(&self, sz left, sz right) {
+	self.fixed_left_cols = left;
+	self.fixed_right_cols = right;
 	return self;
 }
 

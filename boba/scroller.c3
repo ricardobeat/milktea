@@ -11,6 +11,11 @@
 //
 // top_row() can be negative or past the last full screen while it is pulled
 // past an end: the view draws blank rows there.
+//
+// Sideways it is simpler: columns instead of rows, no rubber band, and
+// apply() gives the node the part-column too (see xray's scroll_shift_x),
+// for a view of lines that do not wrap. scrollbar() draws where the view is,
+// by the pixel, for a window.
 module boba;
 
 import milktea;
@@ -33,6 +38,21 @@ struct Scroller {
 	// Momentum from a gesture that ran past an end: it is spent on the
 	// bounce, not the position, until the fingers touch again.
 	bool drop_momentum;
+	// Sideways: where the view is, in layout units, and how many columns
+	// there are and fit (see set_columns).
+	float pos_x_px;
+	sz cols;
+	sz visible_cols;
+}
+
+// ScrollbarStyle is how scrollbar() draws: a track down the whole height
+// and a thumb, both rounded and width layout units wide. An unset track
+// colour leaves the track out. The thumb is never shorter than min_thumb.
+struct ScrollbarStyle {
+	xray::Color track;
+	xray::Color thumb;
+	sz width;
+	sz min_thumb;
 }
 
 fn Scroller scroller(bool rubber_band = true) => { .rubber_band = rubber_band };
@@ -58,6 +78,82 @@ fn sz Scroller.shift(&self) {
 	float row = self.row_px();
 	float f = self.pos_px - (float)self.top_row() * row;
 	return f > 0 ? (sz)math::round(f) % (sz)row : 0;
+}
+
+// ── Sideways ────────────────────────────────────────────────────────────────
+
+// set_columns tells it how many columns the content is across and how many
+// fit, and keeps it within them.
+fn void Scroller.set_columns(&self, sz cols, sz visible) {
+	self.cols = cols;
+	self.visible_cols = visible;
+	self.pos_x_px = clampf(self.pos_x_px, 0, self.max_x_px());
+}
+
+fn float Scroller.col_px(&self) => (float)milktea::layout_metrics().unit_w();
+
+fn float Scroller.max_x_px(&self) {
+	sz over = self.cols - self.visible_cols;
+	return over > 0 ? (float)over * self.col_px() : 0.0f;
+}
+
+// left_col is the first column on screen, whole or in part.
+fn sz Scroller.left_col(&self) => (sz)math::floor(self.pos_x_px / self.col_px());
+
+// shift_x is how far into left_col the view is, in layout units.
+fn sz Scroller.shift_x(&self) {
+	float col = self.col_px();
+	float f = self.pos_x_px - (float)self.left_col() * col;
+	return f > 0 ? (sz)math::round(f) % (sz)col : 0;
+}
+
+// sync_col puts it at col when the view was moved across by columns some
+// other way (keys, keeping a caret in sight) since it last moved it.
+fn void Scroller.sync_col(&self, sz col) {
+	if (self.left_col() == col) return;
+	self.pos_x_px = clampf((float)col * self.col_px(), 0, self.max_x_px());
+}
+
+// scroll_x_pixels moves it across by dx layout units (positive towards the
+// start of the line), within the content.
+fn void Scroller.scroll_x_pixels(&self, float dx) {
+	self.pos_x_px = clampf(self.pos_x_px - dx, 0, self.max_x_px());
+}
+
+// ── Scrollbar ───────────────────────────────────────────────────────────────
+
+// scrollbar is a vertical scrollbar for a window, height layout units tall:
+// the track with the thumb on it, sized to the share of the rows in view and
+// placed by the pixel, the way the view itself scrolls. The caller places it
+// (at the right edge of the view, say, with at(..., PX)). It is null in a
+// terminal, which has no pixels to draw it with, and when every row fits.
+fn xray::Node* Scroller.scrollbar(&self, sz height, ScrollbarStyle style) {
+	if (!milktea::layout_metrics().pixels || height <= 0) return null;
+	if (self.rows <= self.visible || self.rows <= 0) return null;
+	float track = (float)height;
+	float thumb = track * (float)self.visible / (float)self.rows;
+	if (thumb < (float)style.min_thumb) thumb = (float)style.min_thumb;
+	if (thumb > track) thumb = track;
+	// Pulled past an end, the thumb shrinks against that end rather than
+	// leaving the track.
+	float max = self.max_px();
+	float pos = self.pos_px;
+	if (pos < 0) {
+		thumb = math::max(thumb + pos * track / ((float)self.rows * self.row_px()), (float)style.width);
+		pos = 0;
+	} else if (pos > max) {
+		thumb = math::max(thumb - (pos - max) * track / ((float)self.rows * self.row_px()), (float)style.width);
+		pos = max;
+	}
+	float y = max > 0 ? (track - thumb) * pos / max : 0;
+	float radius = (float)style.width / 2.0f;
+
+	xray::Node* bar = xray::zstack().width(xray::pixels(style.width)).height(xray::pixels(height));
+	if (!style.track.is_none()) bar.decorate(xray::solid(style.track).round(radius));
+	bar.add(xray::vstack().width(xray::pixels(style.width)).height(xray::pixels((sz)math::round(thumb)))
+		.at(0, (sz)math::round(y), xray::Unit.PX)
+		.decorate(xray::solid(style.thumb).round(radius)));
+	return bar;
 }
 
 // sync_row puts it at row when the view was moved by rows some other way
@@ -145,5 +241,6 @@ fn void Scroller.apply(&self, xray::Node* n) {
 	self.settle();
 	if (!milktea::layout_metrics().pixels) return;
 	n.scroll_shift(self.shift());
+	n.scroll_shift_x(self.shift_x());
 	if (self.springing) n.animate(60);
 }
