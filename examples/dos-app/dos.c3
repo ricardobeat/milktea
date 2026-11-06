@@ -164,6 +164,11 @@ fn milktea::Cmd DosModel.run_menu_item(&self, String label) {
 }
 
 fn milktea::Cmd DosModel.handle_desktop(&self, milktea::KeyMsg k) {
+	// An active bar takes Esc for itself, to let go of the keyboard.
+	if (self.menu.active) {
+		if (self.menu.handle_key(k) == Chosen.DISMISSED) self.status_msg = "Ready";
+		return null;
+	}
 	if (k.code == milktea::KeyCode.ESC) return milktea::quit();
 	if (k.code == milktea::KeyCode.RUNE) {
 		if (k.rune == 'q') return milktea::quit();

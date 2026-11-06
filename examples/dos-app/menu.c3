@@ -51,6 +51,10 @@ struct Menu {
 	sz selected;      // which title
 	sz item;          // which item within the open dropdown
 	bool open;
+	// The bar has the keyboard: the current title is highlighted and the
+	// arrows move along the bar. F10, an arrow, Enter or a click turns it
+	// on; Esc, a pick or a click elsewhere turns it off.
+	bool active;
 
 	// Narrowest a dropdown gets, border included; longer items widen it.
 	sz item_width;
@@ -98,6 +102,7 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
 		case milktea::KeyCode.ESC:
 			self.open = false;
+			self.active = false;
 			return Chosen.DISMISSED;
 		case milktea::KeyCode.UP:
 			if (self.item > 0) self.item--;
@@ -111,6 +116,7 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 			self.item = 0;
 		case milktea::KeyCode.ENTER:
 			self.open = false;
+			self.active = false;
 			return Chosen.PICKED;
 		default:
 	}
@@ -119,8 +125,30 @@ fn Chosen Menu.handle_key(&self, milktea::KeyMsg k) {
 
 // handle_bar_key is the closed state: arrows move along the bar, and Enter or
 // Down opens the dropdown under the current title.
+//
+// An inactive bar only wakes up: the key that turns it on does not also move
+// it, so the first arrow shows where the highlight is before moving it.
 fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
+	if (!self.active) {
+		switch (k.code) {
+			case milktea::KeyCode.F10:
+			case milktea::KeyCode.LEFT:
+			case milktea::KeyCode.RIGHT:
+				self.active = true;
+			case milktea::KeyCode.DOWN:
+			case milktea::KeyCode.ENTER:
+				self.active = true;
+				self.open = true;
+				self.item = 0;
+			default:
+		}
+		return Chosen.NOTHING;
+	}
 	switch (k.code) {
+		case milktea::KeyCode.ESC:
+		case milktea::KeyCode.F10:
+			self.active = false;
+			return Chosen.DISMISSED;
 		case milktea::KeyCode.LEFT:
 			if (self.selected > 0) self.selected--;
 		case milktea::KeyCode.RIGHT:
@@ -141,6 +169,7 @@ fn Chosen Menu.handle_bar_key(&self, milktea::KeyMsg k) {
 // outside the bar and the dropdown, same effect as ESC.
 fn void Menu.dismiss(&self) {
 	self.open = false;
+	self.active = false;
 }
 
 // take_pending returns and clears whatever a mouse click reported since the
@@ -162,6 +191,7 @@ fn void title_clicked(void* id, String id_str, sz col, sz row) @local {
 	TitleSlot* slot = (TitleSlot*)id;
 	slot.menu.selected = slot.index;
 	slot.menu.open = true;
+	slot.menu.active = true;
 	slot.menu.item = 0;
 }
 
@@ -186,6 +216,7 @@ fn void item_clicked(void* id, String id_str, sz col, sz row) @local {
 	ItemSlot* slot = (ItemSlot*)id;
 	slot.menu.item = slot.index;
 	slot.menu.open = false;
+	slot.menu.active = false;
 	slot.menu.pending = Chosen.PICKED;
 }
 
@@ -204,7 +235,7 @@ fn xray::Node* Menu.bar(&self, Theme* th) {
 	xray::Node* row = milktea::hstack().style(bar).height(milktea::cells(1));
 	for (sz i = 0; i < MENU_COLS; i++) {
 		self.title_slots[i] = { .menu = self, .index = i };
-		bool on = i == self.selected;
+		bool on = self.active && i == self.selected;
 		// The label sets no colour, so it takes the title's, hover included.
 		xray::Node* title_node = milktea::text(self.titles[i], { .bold = on })
 			.style(on ? active : bar, hover: active)
