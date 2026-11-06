@@ -136,6 +136,41 @@ fn void FilePicker.load_dir(&self, String path) {
 			self.count++;
 		}
 	};
+	self.sort();
+}
+
+// sort puts ".." first, then directories, then files, each by name without
+// regard to case: the order a listing is read in, not the order the disk
+// keeps it in.
+fn void FilePicker.sort(&self) {
+	for (sz i = 1; i < self.count; i++) {
+		for (sz j = i; j > 0 && self.before(j, j - 1); j--) {
+			char[64] name = self.names[j];
+			self.names[j] = self.names[j - 1];
+			self.names[j - 1] = name;
+			sz len = self.name_lens[j];
+			self.name_lens[j] = self.name_lens[j - 1];
+			self.name_lens[j - 1] = len;
+			bool dir = self.is_dirs[j];
+			self.is_dirs[j] = self.is_dirs[j - 1];
+			self.is_dirs[j - 1] = dir;
+		}
+	}
+}
+
+// before reports whether entry a sorts ahead of entry b.
+fn bool FilePicker.before(&self, sz a, sz b) {
+	String na = (String)self.names[a][:self.name_lens[a]];
+	String nb = (String)self.names[b][:self.name_lens[b]];
+	if ((na == "..") != (nb == "..")) return na == "..";
+	if (self.is_dirs[a] != self.is_dirs[b]) return self.is_dirs[a];
+	sz n = na.len < nb.len ? na.len : nb.len;
+	for (sz i = 0; i < n; i++) {
+		char ca = na[i].to_lower();
+		char cb = nb[i].to_lower();
+		if (ca != cb) return ca < cb;
+	}
+	return na.len < nb.len;
 }
 
 extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
