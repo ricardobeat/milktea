@@ -191,6 +191,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 	self.paint_dy = inner_area.y - inner.y * uh;
 	self.paint_extent = inner_area;
 	if (n.content != null && inner.w > 0 && inner.h > 0) {
+		sz shifted = 0;
 		if (&n.content.paint) {
 			n.content.paint(self, inner);
 		} else if (&n.content.render) {
@@ -199,6 +200,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 				Rect taller = inner;
 				taller.h++;
 				self.paint_string_shifted(inner, inner_area, n.content.render(taller), shift, self.inherit_fg);
+				shifted = shift;
 			} else {
 				self.paint_string(inner, n.content.render(inner), n.alpha_value, scratch, self.inherit_fg);
 			}
@@ -209,7 +211,8 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 			if (c.has_cursor) {
 				res.cursor = c;
 				res.cursor_dx = self.paint_dx;
-				res.cursor_dy = self.paint_dy;
+				// The cursor rides with text drawn part-way into a row.
+				res.cursor_dy = self.paint_dy - shifted;
 			}
 		}
 	}

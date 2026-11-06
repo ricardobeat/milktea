@@ -29,19 +29,9 @@ struct Viewport (xray::Content) {
 	bool has_selection;
 	glaze::Style selection_style;
 
-	// Smooth scrolling in a window: the scroll position in layout units
-	// (pixels), of which offset is the whole rows. It can run past either end
-	// while a trackpad gesture pulls it there, and springs back after.
-	float pos_px;
-	bool springing;
-	float spring_from;
-	long spring_start_ms;
+	// Smooth scrolling (see Scroller); offset is its top row.
+	Scroller scroll;
 }
-
-// How far a trackpad can pull the content past an end, as a share of the
-// viewport's height, and how quickly it springs back (ms per 1/e).
-const float OVERSCROLL_SHARE @private = 0.25f;
-const float SPRING_MS @private = 70.0f;
 
 fn Viewport new_viewport(sz width, sz height) {
 	Viewport v = { };
@@ -189,9 +179,8 @@ fn bool Viewport.handle_mouse_msg(&self, milktea::MouseMsg msg) {
 
 	// A window reports how far the scroll really went, and where a trackpad
 	// gesture is; scroll by exactly that.
-	if (milktea::layout_metrics().pixels
-			&& (msg.scroll_dy != 0 || msg.action == milktea::MouseAction.MOUSE_SCROLL_PHASE)) {
-		self.scroll_pixels(msg.scroll_dy, msg.scroll_precise, msg.scroll_phase);
+	if (self.scroller().handle(msg)) {
+		self.offset = self.scroll.top_row();
 		return true;
 	}
 
@@ -290,73 +279,20 @@ fn bool Viewport.handle_mouse(&self, String button, String action) {
 // scroll_by scrolls by the given number of lines (negative = up, positive = down).
 // ── smooth scrolling ─────────────────────────────────────────────────────────
 
-fn float Viewport.row_px(&self) => (float)milktea::layout_metrics().unit_h();
-
-fn float Viewport.max_px(&self) {
-	sz rows = self.total_lines - self.height;
-	return rows > 0 ? (float)rows * self.row_px() : 0.0f;
+// scroller brings the Scroller up to date with the content and with offset,
+// which the row methods (scroll_down, page_up, ...) move directly.
+fn Scroller* Viewport.scroller(&self) @private {
+	self.scroll.rubber_band = true;
+	self.scroll.set_content(self.total_lines, self.height);
+	self.scroll.sync_row(self.offset);
+	return &self.scroll;
 }
 
-// position is the scroll position in pixels, taken from offset when the row
-// methods (scroll_down, page_up, ...) moved it since the last pixel scroll.
-fn float Viewport.position(&self) {
-	float row = self.row_px();
-	if ((sz)math::floor(self.pos_px / row) != self.offset) self.pos_px = (float)self.offset * row;
-	return self.pos_px;
-}
-
-fn void Viewport.set_position(&self, float px) {
-	self.pos_px = px;
-	self.offset = (sz)math::floor(px / self.row_px());
-}
-
-fn float clampf(float v, float lo, float hi) @private => v < lo ? lo : v > hi ? hi : v;
-
-// scroll_pixels moves the content by dy layout units (positive towards the
-// start), as a trackpad reports it: exactly, past the ends with growing
-// resistance while the gesture lasts, and springing back when it ends. A
-// device without precise deltas (a wheel) stays within the content.
+// scroll_pixels moves the content by dy layout units (see
+// Scroller.scroll_pixels).
 fn void Viewport.scroll_pixels(&self, float dy, bool precise, milktea::ScrollPhase phase) {
-	float pos = self.position();
-	float max = self.max_px();
-	float delta = -dy;
-	self.springing = false;
-	if (!precise) {
-		self.set_position(clampf(pos + delta, 0, max));
-		return;
-	}
-	float limit = (float)self.height * self.row_px() * OVERSCROLL_SHARE;
-	if (limit < 1) limit = 1;
-	float over = pos < 0 ? -pos : pos > max ? pos - max : 0;
-	bool outward = (pos <= 0 && delta < 0) || (pos >= max && delta > 0);
-	if (outward) {
-		// The further out, the less the content follows the fingers.
-		float give = 1.0f - over / limit;
-		delta *= give > 0 ? give * 0.5f : 0;
-	}
-	pos += delta;
-	self.set_position(pos);
-	bool out = pos < 0 || pos > max;
-	bool settling = phase == milktea::ScrollPhase.ENDED || phase == milktea::ScrollPhase.MOMENTUM_ENDED
-		|| (phase == milktea::ScrollPhase.MOMENTUM && out);
-	if (out && settling) {
-		self.springing = true;
-		self.spring_from = pos;
-		self.spring_start_ms = milktea::frame_ms();
-	}
-}
-
-// settle moves a springing viewport towards the nearest end it ran past.
-fn void Viewport.settle(&self) {
-	if (!self.springing) return;
-	float target = clampf(self.pos_px, 0, self.max_px());
-	float t = (float)(milktea::frame_ms() - self.spring_start_ms);
-	float pos = target + (self.spring_from - target) * math::exp(-t / SPRING_MS);
-	if (math::abs(pos - target) < 0.5f) {
-		pos = target;
-		self.springing = false;
-	}
-	self.set_position(pos);
+	self.scroller().scroll_pixels(dy, precise, phase);
+	self.offset = self.scroll.top_row();
 }
 
 fn void Viewport.scroll_by(&self, sz lines) {
@@ -571,28 +507,18 @@ fn String Viewport.render(&self, xray::Rect r) @dynamic {
 	self.width = r.w;
 	// A smooth scroll part-way into a row asks for one more row than fits
 	// (see node); the viewport's own height stays the rows that fit.
-	bool extra = milktea::layout_metrics().pixels && self.frac_px() > 0;
+	bool extra = milktea::layout_metrics().pixels && self.scroll.shift() > 0;
 	self.height = extra ? r.h - 1 : r.h;
 	return self.view_rows(r.h);
 }
 
-// frac_px is how far into its first row the viewport is scrolled.
-fn sz Viewport.frac_px(&self) {
-	float row = self.row_px();
-	float f = self.pos_px - (float)self.offset * row;
-	return f > 0 ? (sz)math::round(f) % (sz)row : 0;
-}
 
 fn sz Viewport.measure(&self, sz width) @dynamic => self.height;
 fn sz Viewport.measure_width(&self, sz height) @dynamic => self.width;
 
 fn xray::Node* Viewport.node(&self) {
-	self.settle();
 	xray::Node* n = xray::content_node(self);
-	if (milktea::layout_metrics().pixels) {
-		self.position();
-		n.scroll_shift(self.frac_px());
-		if (self.springing) n.animate(60);
-	}
+	self.scroller().apply(n);
+	self.offset = self.scroll.top_row();
 	return n;
 }

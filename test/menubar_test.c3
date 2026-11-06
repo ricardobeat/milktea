@@ -102,7 +102,7 @@ fn void test_viewport_wheel_stays_in_content() @test {
 	boba::Viewport v = viewport100();
 	defer v.free();
 	v.scroll_pixels(50, false, milktea::ScrollPhase.NONE);
-	assert(v.offset == 0 && !v.springing);
+	assert(v.offset == 0 && !v.scroll.springing);
 	v.scroll_pixels(-500, false, milktea::ScrollPhase.NONE);
 	assert(v.offset == 90, "the last page, got %d", v.offset);
 }
@@ -112,7 +112,7 @@ fn void test_viewport_overscroll_resists_and_springs_back() @test {
 	defer v.free();
 	v.scroll_pixels(2, true, milktea::ScrollPhase.CHANGED);
 	assert(v.offset < 0, "pulled past the start");
-	assert(v.pos_px > -2, "with resistance");
+	assert(v.scroll.pos_px > -2, "with resistance");
 	v.scroll_pixels(0, true, milktea::ScrollPhase.ENDED);
-	assert(v.springing, "lifting the fingers past an end springs back");
+	assert(v.scroll.springing, "lifting the fingers past an end springs back");
 }
