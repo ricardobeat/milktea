@@ -11,6 +11,11 @@ import std::math;
 // has the pixels to show it. It replaces the node's own cell backgrounds, before its glyphs
 // and children. Child backgrounds and later siblings paint over it.
 //
+// A decoration extends the node's style rather than standing beside it: a
+// solid one with no colour of its own (solid()) is filled with the node's
+// background as the style paints it this frame, focus and hover included,
+// so the style says what colour and the decoration says what shape.
+//
 // Gradient geometry is normalised to the node's rect (0..1 on each axis), so
 // one Decoration survives the node being laid out at a different size.
 enum DecorationKind : char {
@@ -76,7 +81,11 @@ struct Decoration {
 }
 
 // solid fills the shape with one colour.
-fn Decoration solid(Color c) {
+// solid fills the shape with c. With no colour it fills with the node's own
+// background — its style's bg, with focus and hover applied — so the
+// decoration only adds the shape: solid().round(4) is the style's bg with
+// rounded corners, and a hover bg recolours it.
+fn Decoration solid(Color c = {}) {
 	Decoration d;
 	d.kind = DecorationKind.SOLID;
 	d.color = c;

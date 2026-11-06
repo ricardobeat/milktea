@@ -522,7 +522,9 @@ keyboard focus, without any state in the model:
 xray::hstack().style(item, hover: { .bg = th.accent }, focus: { .bg = th.ink, .fg = th.text })
 ```
 
-Only colours apply, so nothing moves. Text that sets no `fg` of its own
+Only colours apply, so nothing moves. In a window, `.decorate(xray::solid().round(4))`
+gives the same background rounded corners: a decoration without a colour of its
+own is filled with the node's background, hover and focus included. Text that sets no `fg` of its own
 takes the nearest ancestor's, so a hover or focus `fg` recolours a whole row.
 Terminal hover needs `MOUSE_MODE_ALL_MOTION`; in a window it always works.
 

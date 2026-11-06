@@ -155,3 +155,29 @@ fn void test_node_takes_many_children() @test {
 	v.solve(xray::new_rect(0, 0, 10, 100));
 	assert(v.child_rect(99).y == 99, "the last child is laid out where it belongs");
 }
+
+// A colourless solid decoration is filled with the node's background as the
+// style paints it, hover included; a decoration with its own colour keeps it.
+fn xray::Color decoration_fill(xray::Decoration d, sz px, sz py) {
+	xray::Node* n = xray::vstack().style({ .bg = GREY }, hover: { .bg = BLUE })
+		.width(xray::cells(4)).height(xray::cells(1)).decorate(d);
+	xray::Node* root = xray::vstack().add(n);
+	root.solve(xray::new_rect(0, 0, 10, 3));
+	xray::ScreenBuffer* sb = xray::new_screen_buffer(10, 3);
+	defer { sb.destroy(); mem::free(sb); }
+	sb.record_paints();
+	sb.pointer_on = px >= 0;
+	sb.pointer_x = px;
+	sb.pointer_y = py;
+	sb.paint(root);
+	foreach (op : sb.paint_ops.array_view()) {
+		if (op.kind == xray::PaintKind.DECORATION) return op.decoration.color;
+	}
+	return {};
+}
+
+fn void test_decoration_takes_style_bg() @test {
+	assert(same(decoration_fill(xray::solid().round(4.0f), -1, -1), GREY), "solid() fills with the style's bg");
+	assert(same(decoration_fill(xray::solid().round(4.0f), 1, 0), BLUE), "and with the hover bg under the pointer");
+	assert(same(decoration_fill(xray::solid(RED), 1, 0), RED), "an explicit colour is kept");
+}

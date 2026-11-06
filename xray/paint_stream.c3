@@ -19,7 +19,7 @@ struct PaintOp {
 alias RecordBeginFn = fn void(ScreenBuffer* buf);
 alias RecordCellFn = fn void(ScreenBuffer* buf, sz col, sz row, Cell cell);
 alias RecordTintFn = fn void(ScreenBuffer* buf, sz col, sz row, Color tint);
-alias RecordDecorationFn = fn void(ScreenBuffer* buf, Node* n);
+alias RecordDecorationFn = fn void(ScreenBuffer* buf, Node* n, Color fill);
 
 struct PaintRecorder {
 	RecordBeginFn begin;
@@ -55,8 +55,11 @@ fn void ScreenBuffer.record_tint(&self, sz col, sz row, Color tint) @inline {
 	if (self.recording()) paint_recorder.tint(self, col, row, tint);
 }
 
-fn void ScreenBuffer.record_decoration(&self, Node* n) @inline {
-	if (self.recording() && n.decoration.kind != DecorationKind.NONE) paint_recorder.decoration(self, n);
+// fill is the node's background as it paints this frame, its style's bg
+// with focus and hover applied; a solid decoration with no colour of its own
+// takes it (see Node.decorate).
+fn void ScreenBuffer.record_decoration(&self, Node* n, Color fill) @inline {
+	if (self.recording() && n.decoration.kind != DecorationKind.NONE) paint_recorder.decoration(self, n, fill);
 }
 
 fn void recorder_begin(ScreenBuffer* self) @local {
@@ -64,8 +67,11 @@ fn void recorder_begin(ScreenBuffer* self) @local {
 	self.paint_ops.clear();
 }
 
-fn void recorder_decoration(ScreenBuffer* self, Node* n) @local {
+fn void recorder_decoration(ScreenBuffer* self, Node* n, Color fill) @local {
 	Decoration d = n.decoration;
+	if (d.kind == DecorationKind.SOLID && d.color.kind == ColorKind.NONE) {
+		d.color = fill.kind == ColorKind.NONE ? color_transparent() : fill;
+	}
 	d.rect = n.computed_rect;
 	d.pixel_rect = n.layout_metrics.pixels;
 	self.paint_ops.push({ .kind = PaintKind.DECORATION, .decoration = d });

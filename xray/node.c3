@@ -726,6 +726,11 @@ fn Node* Node.block_pointer(&self, bool on = true) {
 // xray::Decoration): rounded corners, a gradient fill, a border, a drop shadow.
 // A terminal build ignores it and the node's cells paint as they always did, so
 // the same view renders in both — only the GUI shows the decoration.
+//
+// It extends the style: solid() without a colour fills the shape with the
+// node's background, so `.style(s, hover: { .bg = h }).decorate(solid().round(4))`
+// is a rounded s.bg that turns h under the pointer. Give solid() a colour, or
+// use a gradient, to paint something other than the style's bg.
 fn Node* Node.decorate(&self, Decoration d) {
 	self.decoration = d;
 	return self;

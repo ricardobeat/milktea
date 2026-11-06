@@ -164,7 +164,7 @@ fn void ScreenBuffer.paint_node(&self, Node* n, PaintResult* res, ScreenBuffer**
 		if (n.hover_fg.kind != ColorKind.NONE) self.inherit_fg = n.hover_fg;
 	}
 
-	self.record_decoration(n);
+	self.record_decoration(n, box.bg);
 	self.decorated_content = n.decoration.kind != DecorationKind.NONE;
 	if (box_paints(box) && r.w > 0 && r.h > 0) {
 		Color bg = box.bg;
