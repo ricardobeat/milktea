@@ -277,13 +277,22 @@ fn MenuEvent MenuBar.update(&self, milktea::Msg msg) {
 	}
 }
 
-fn MenuEvent MenuBar.picked_by_id(&self, int id) @private {
-	foreach (m : self.menus) {
-		foreach (it : m.items) {
-			if (!it.separator && it.id == id) return { .kind = PICKED, .id = id, .item = it };
-		}
-	}
-	return {};
+// A native menu item is tagged with its place, not the app's id, so items
+// need no ids of their own (or unique ones) to come back as themselves.
+const int NATIVE_TAG_STRIDE @private = 1024;
+
+fn int native_tag(sz menu_index, sz item_index) @private {
+	return (int)(menu_index * NATIVE_TAG_STRIDE + item_index + 1);
+}
+
+fn MenuEvent MenuBar.picked_by_id(&self, int tag) @private {
+	if (tag <= 0) return {};
+	sz mi = (sz)((tag - 1) / NATIVE_TAG_STRIDE);
+	sz ii = (sz)((tag - 1) % NATIVE_TAG_STRIDE);
+	if (mi >= self.menus.len || ii >= self.menus[mi].items.len) return {};
+	MenuItem it = self.menus[mi].items[ii];
+	if (it.separator) return {};
+	return { .kind = PICKED, .id = it.id, .item = it };
 }
 
 fn MenuEvent MenuBar.picked(&self) @private {
@@ -466,7 +475,7 @@ fn void MenuBar.publish(&self) @private {
 	foreach (i, m : self.menus) {
 		milktea::NativeMenuItem[] items = mem::temp_array(milktea::NativeMenuItem, m.items.len);
 		foreach (j, it : m.items) {
-			items[j] = { .label = it.label, .key = it.key, .id = it.id, .separator = it.separator };
+			items[j] = { .label = it.label, .key = it.key, .id = native_tag(i, j), .separator = it.separator };
 		}
 		native[i] = { .title = m.title, .items = items };
 	}

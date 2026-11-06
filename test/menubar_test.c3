@@ -56,12 +56,24 @@ fn void test_left_right_wrap_and_esc_dismisses() @test {
 	assert(!b.open && !b.is_active());
 }
 
+// A native item is tagged with its place (menu * 1024 + item + 1), so it
+// comes back as itself even when the app gave its items no ids.
 fn void test_native_pick_arrives_as_menu_message() @test {
 	boba::MenuBar b = bar();
 	defer b.free();
-	boba::MenuEvent ev = b.update({ .kind = milktea::MsgKind.MENU, .tag = UNDO });
+	boba::MenuEvent ev = b.update({ .kind = milktea::MsgKind.MENU, .tag = 1024 + 0 + 1 });
 	assert(ev.kind == PICKED && ev.id == UNDO && ev.item.label == "Undo");
 	assert(b.update({ .kind = milktea::MsgKind.MENU, .tag = 99 }).kind == NONE);
+	assert(b.update({ .kind = milktea::MsgKind.MENU, .tag = 3 }).kind == NONE, "a separator is not picked");
+}
+
+fn void test_native_pick_without_ids() @test {
+	boba::MenuBar b = boba::menu_bar({
+		boba::menu("Help", { boba::item("Topics"), boba::item("About") }),
+	});
+	defer b.free();
+	boba::MenuEvent ev = b.update({ .kind = milktea::MsgKind.MENU, .tag = 2 });
+	assert(ev.kind == PICKED && ev.item.label == "About", "got %s", ev.item.label);
 }
 
 fn void test_terminal_shortcut_label() @test {
