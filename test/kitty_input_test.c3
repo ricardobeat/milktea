@@ -234,3 +234,34 @@ fn void test_kitty_home_release() @test {
 	assert(rel.key.code == milktea::KeyCode.HOME);
 	assert(rel.key.action == milktea::KeyAction.KEY_RELEASE);
 }
+
+// ============================================================
+// Super (Cmd on a Mac): bit 3 of the modifier parameter
+// ============================================================
+
+fn void test_kitty_super_c_is_not_plain_c() @test {
+	// Ghostty passes Cmd+C on as ESC[99;9u (mod 9 = 1+8 = super) when it has
+	// no selection of its own. Dropping the bit typed a 'c' over the
+	// selection instead of copying it.
+	milktea::ParseResult pr = milktea::parse_key("\x1b[99;9u");
+	assert(pr.kind == milktea::MsgKind.KEY);
+	assert(pr.key.code == milktea::KeyCode.RUNE);
+	assert(pr.key.rune == 'c');
+	assert(pr.key.super);
+	assert(!pr.key.ctrl && !pr.key.alt && !pr.key.shift);
+}
+
+fn void test_kitty_super_ctrl_c_is_not_ctrl_c_keycode() @test {
+	// mod 13 = 1+4+8: ctrl+super+c stays a chord, not the plain CTRL_C key.
+	milktea::ParseResult pr = milktea::parse_key("\x1b[99;13u");
+	assert(pr.key.code == milktea::KeyCode.RUNE);
+	assert(pr.key.ctrl && pr.key.super);
+}
+
+fn void test_super_arrow() @test {
+	// ESC[1;9D: Cmd+Left.
+	milktea::ParseResult pr = milktea::parse_key("\x1b[1;9D");
+	assert(pr.key.code == milktea::KeyCode.LEFT);
+	assert(pr.key.super);
+	assert(!pr.key.ctrl && !pr.key.alt && !pr.key.shift);
+}

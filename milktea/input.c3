@@ -50,8 +50,9 @@ struct KeyMsg {
 	bool alt;
 	bool shift;
 	KeyAction action;
-	// Cmd on macOS, the Windows or Super key elsewhere. Only the GUI backend
-	// sets it: a terminal keeps those shortcuts for itself.
+	// Cmd on macOS, the Windows or Super key elsewhere. The GUI backend
+	// always sets it; a terminal keeps most of those shortcuts for itself,
+	// and reports the ones it passes on only under the kitty protocol.
 	bool super;
 }
 
@@ -247,19 +248,28 @@ struct KeyMods @private {
 	bool shift;
 	bool alt;
 	bool ctrl;
+	bool super;
 }
 
 // decode_xterm_mods decodes an xterm modifier parameter, which encodes
-// "1 + bitfield": bit 0 (+1) shift, bit 1 (+2) alt, bit 2 (+4) ctrl. Higher
-// bits carry meta/super/hyper and the kitty lock states, which we don't model
-// but must not let disturb the three we do.
+// "1 + bitfield": bit 0 (+1) shift, bit 1 (+2) alt, bit 2 (+4) ctrl, bit 3
+// (+8) super. Higher bits carry hyper/meta and the kitty lock states, which we
+// don't model but must not let disturb the four we do.
 //
 // This must be a bitmask test, not a set of equality comparisons against
 // 2/4/6/8 — those silently dropped every modifier once any higher bit was
 // set, so ctrl+meta+Up (mod 13) arrived with no modifiers at all.
 fn KeyMods decode_xterm_mods(sz mod) @private {
 	sz bits = mod > 0 ? mod - 1 : 0;
-	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0 };
+	return { (bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0, (bits & 8) != 0 };
+}
+
+// with_super marks a parsed key as held with super (Cmd on a Mac). A terminal
+// that passes Cmd chords on, as Ghostty does with Cmd+C when it has no
+// selection of its own, reports super as bit 3 of the modifier parameter.
+fn ParseResult with_super(ParseResult pr, bool super) @private {
+	pr.key.super = super;
+	return pr;
 }
 
 // decode_kitty_event maps the ':'-separated event subparameter of a CSI
@@ -504,14 +514,14 @@ fn ParseResult parse_key(char[] buf) {
 				}
 
 				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
-				return make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total);
+				return with_super(make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total), mods.super);
 			}
 
 			// Home / End — xterm sends ESC [ 1 ; <mod> H/F, same modifier layout as arrows
 			if (fb == 'H' || fb == 'F') {
 				KeyCode code = (fb == 'H') ? HOME : END;
 				KeyMods mods = decode_xterm_mods(csi_param(csi, 1, 1));
-				return make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total);
+				return with_super(make_key_action(code, 0, mods.ctrl, mods.alt, mods.shift, decode_kitty_event(csi, 1), total), mods.super);
 			}
 
 			// Focus in / Focus out (xterm focus reporting: ESC [ I / ESC [ O)
@@ -596,7 +606,8 @@ fn ParseResult parse_key(char[] buf) {
 			//
 			// Final byte 'u', no private prefix. Param 0 = Unicode codepoint;
 			// param 1 (optional, default 1) = 1 + modifier bitfield:
-			//   bit 0 (+1) = shift, bit 1 (+2) = alt, bit 2 (+4) = ctrl.
+			//   bit 0 (+1) = shift, bit 1 (+2) = alt, bit 2 (+4) = ctrl,
+			//   bit 3 (+8) = super.
 			// A bare CSI u with no params is unusual but not something we emit,
 			// so treat param_count==0 conservatively as an unknown sequence.
 			//
@@ -614,6 +625,7 @@ fn ParseResult parse_key(char[] buf) {
 				bool shift   = (mod_bits & 1) != 0;
 				bool alt     = (mod_bits & 2) != 0;
 				bool ctrl    = (mod_bits & 4) != 0;
+				bool super   = (mod_bits & 8) != 0;
 
 				// Event type is the subparameter on the modifier param
 				// (CSI cp;mods:event u). 1=press, 2=repeat, 3=release; absent
@@ -643,7 +655,7 @@ fn ParseResult parse_key(char[] buf) {
 				// modifiers (ctrl+shift+c etc.) stay RUNE so copy-shortcuts remain
 				// distinguishable. cp==3 is also mapped defensively.
 				if (cp == 3)   return make_key_action(CTRL_C, 0, true, false, false, action, total);
-				if (cp == 'c' && ctrl && !alt && !shift) {
+				if (cp == 'c' && ctrl && !alt && !shift && !super) {
 					return make_key_action(CTRL_C, 0, true, false, false, action, total);
 				}
 
@@ -651,7 +663,7 @@ fn ParseResult parse_key(char[] buf) {
 				// Match the legacy control-char path (0x01..0x1a) which also produces
 				// RUNE <lowercase> with ctrl=true, so models see identical messages from
 				// both code paths.
-				return make_key_action(RUNE, cp, ctrl, alt, shift, action, total);
+				return with_super(make_key_action(RUNE, cp, ctrl, alt, shift, action, total), super);
 			}
 
 			// Unknown but well-formed CSI — consume the whole sequence and
