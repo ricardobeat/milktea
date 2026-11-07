@@ -556,6 +556,7 @@ fn xray::Rect layout_area() {
 // Dispatch coordinates use backend layout units; callbacks receive text cells.
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
+	control_pointer_event("press", col, row);
 	if (xray::g_focus_runtime != null) xray::g_focus_runtime.click(col, row);
 	xray::ClickTarget[] targs = g_program.click_targets.array_view();
 	sz hit = xray::dispatch_click(targs, col, row, g_program.debug_mouse);
@@ -581,7 +582,9 @@ fn bool dispatch_drag(sz col, sz row) {
 }
 
 fn void end_drag() {
-	if (g_program != null) g_program.dragging = false;
+	if (g_program == null) return;
+	g_program.dragging = false;
+	control_pointer_event("release", -2, -2);
 }
 
 // dispatch_hover walks the last drawn frame's click targets and fires
@@ -594,6 +597,7 @@ fn void end_drag() {
 // the only way a bare pointer move changes the screen.
 fn bool dispatch_hover(sz col, sz row) {
 	if (g_program == null) return false;
+	control_pointer_event("move", col, row);
 	xray::ClickTarget[] targs = g_program.click_targets.array_view();
 	sz pc = g_program.hover_has_prev ? g_program.hover_prev_col : -1;
 	sz pr = g_program.hover_has_prev ? g_program.hover_prev_row : -1;
@@ -973,6 +977,7 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // ever crashing or blocking the event loop.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
+	control_msg_event(m);
 	if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE && dispatch_focus_key(m.key)) return false;
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
 		dispatch_click(m.mouse.col, m.mouse.row);
@@ -1711,9 +1716,11 @@ fn void? Program.run(Program* self) {
 			return;
 		}
 
+		control_poll();
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
-			sz wait_ms = 1000;
+			// An open control socket is polled, not waited on.
+			sz wait_ms = control_active() ? 10 : 1000;
 			now = time_ms();
 			for (sz i = 0; i < MAX_TIMERS; i++) {
 				if (self.timers[i].active) {

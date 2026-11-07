@@ -238,6 +238,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt) @local {
 	g_program.click_targets.clear();
 	xray::collect_click_targets(root, &g_program.click_targets);
 	if (g_program.on_draw) g_program.on_draw(root);
+	control_on_draw(root, buf, res.repaint_ms);
 
 	View v = {
 		.paint_ops = buf.recording() ? buf.paint_ops.array_view() : {},

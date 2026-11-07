@@ -81,6 +81,8 @@ struct Gui {
 	GuiOptions opts;
 	milktea::Program prog;
 	bool headless;
+	// The input on_event is handling came from the control socket.
+	bool controlled;
 	float scale;
 	int fb_w;
 	int fb_h;
@@ -262,6 +264,7 @@ fn CellFit cell_fit(Face face, int font_size, float ratio) @private {
 fn bool dispatch(milktea::Msg msg) @private {
 	g.dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
+	milktea::control_msg_event(msg);
 	if (msg.kind == milktea::MsgKind.KEY && milktea::dispatch_focus_key(msg.key)) return false;
 	milktea::g_program.stamp_now();
 	milktea::Cmd c = g.m.update(msg);
@@ -483,7 +486,7 @@ fn void on_event(MtEvent* e) @private {
 			milktea::dispatch_click(layout_x(g.ptr_x), layout_y(g.ptr_y));
 			milktea::dispatch_hover(layout_x(g.ptr_x), layout_y(g.ptr_y));
 			send({ .kind = milktea::MsgKind.MOUSE, .mouse = mouse_at(MOUSE_LEFT, MOUSE_PRESS) });
-			if (!g.quit && !g.headless && is_drag_point(g.ptr_x, g.ptr_y)) {
+			if (!g.quit && !g.headless && !g.controlled && is_drag_point(g.ptr_x, g.ptr_y)) {
 				// AppKit moves the window until the button comes up and eats
 				// the release, so it is sent here instead.
 				mt_window_drag();
@@ -520,6 +523,39 @@ fn void on_event(MtEvent* e) @private {
 			g.quit = true;
 		default:
 	}
+}
+
+// control_point is a place in layout units as a point in the window: the
+// middle of the cell in the terminal look, where a layout unit is a cell.
+fn void control_point(sz x, sz y, float* px, float* py) @private {
+	*px = g.cells ? (float)(x * g.opts.cell_w + g.opts.cell_w / 2) : (float)x;
+	*py = g.cells ? (float)(y * g.opts.cell_h + g.opts.cell_h / 2) : (float)y;
+}
+
+// control_pointer and control_scroll take input from the control socket
+// (see milktea::control) through on_event, as if the window had sent it. A
+// press made this way never starts moving the window.
+fn void control_pointer(milktea::MouseAction action, sz x, sz y) @private {
+	MtEvent e;
+	control_point(x, y, &e.x, &e.y);
+	switch (action) {
+		case MOUSE_PRESS: e.type = MOUSE_DOWN;
+		case MOUSE_RELEASE: e.type = MOUSE_UP;
+		default: e.type = MOUSE_MOVE;
+	}
+	g.controlled = true;
+	on_event(&e);
+	g.controlled = false;
+}
+
+fn void control_scroll(sz x, sz y, double dx, double dy) @private {
+	float px;
+	float py;
+	control_point(x, y, &px, &py);
+	pointer_to(px, py);
+	// A wheel's lines, up being positive.
+	MtEvent e = { .type = SCROLL, .x = px, .y = py, .scroll_x = (float)-dx, .scroll_y = (float)-dy };
+	on_event(&e);
 }
 
 // pointer_to moves the pointer. A move redraws only when something under
@@ -582,6 +618,7 @@ fn void measure_window() @private {
 // step runs one pass of the loop. It returns false when the run is over.
 fn bool step() @private {
 	milktea::Program* p = &g.prog;
+	milktea::control_poll();
 	// Messages from outside the loop: milktea::send from another thread, or
 	// request_quit() from a callback with no Cmd to return.
 	milktea::Msg sent;
@@ -754,6 +791,7 @@ fn bool start() @private {
 	p.send_mu.init()!!;
 	p.send_accepting.store(true);
 	milktea::use_clipboard(&clipboard_write, &clipboard_read);
+	milktea::install_control_hooks({ .pointer = &control_pointer, .scroll = &control_scroll });
 	install_hooks();
 	if (g.opts.font_height_ratio > 0) g.font_ratio = g.opts.font_height_ratio;
 	if (try v = env::tget_var("MILKTEA_CELLS")) g.cells = v.len > 0 && v != "0";

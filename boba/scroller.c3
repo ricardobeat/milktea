@@ -148,7 +148,8 @@ fn xray::Node* Scroller.scrollbar(&self, sz height, ScrollbarStyle style) {
 	float y = max > 0 ? (track - thumb) * pos / max : 0;
 	float radius = (float)style.width / 2.0f;
 
-	xray::Node* bar = xray::zstack().width(xray::pixels(style.width)).height(xray::pixels(height));
+	xray::Node* bar = xray::zstack().width(xray::pixels(style.width)).height(xray::pixels(height))
+		.id("scrollbar").role(SCROLLBAR);
 	if (!style.track.is_none()) bar.decorate(xray::solid(style.track).round(radius));
 	bar.add(xray::vstack().width(xray::pixels(style.width)).height(xray::pixels((sz)math::round(thumb)))
 		.at(0, (sz)math::round(y), xray::Unit.PX)
