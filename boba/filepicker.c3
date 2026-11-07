@@ -340,7 +340,7 @@ fn xray::Node* FilePicker.row_node(&self, sz i) {
 	rc.picker = self;
 	rc.index = i;
 	xray::Node* n = milktea::text(label, *s).height(milktea::cells(1));
-	n.ref(rc)
+	n.id("file").key(string::tformat("%s%s", name, suffix)).role(LIST_ITEM).ref(rc)
 		.on_click(&picker_row_clicked)
 		.on_hover_in(&picker_row_hover_in)
 		.on_hover_out(&picker_row_hover_out);

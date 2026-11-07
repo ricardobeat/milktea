@@ -795,7 +795,7 @@ fn xray::ContentCursor Textarea.cursor(&self, xray::Rect r) @dynamic {
 }
 
 fn xray::Node* Textarea.node(&self) {
-	xray::Node* n = xray::content_node(self);
+	xray::Node* n = xray::content_node(self).role(TEXT_FIELD);
 	if (self.on_press_fn != null) {
 		PressCtx* pc = mem::tnew(PressCtx);
 		pc.t = self;

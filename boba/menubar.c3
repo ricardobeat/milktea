@@ -503,7 +503,7 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 	bool window = in_window();
 	milktea::WindowChrome chrome = milktea::window_chrome();
 
-	xray::Node* row = milktea::hstack().style(self.bar_style).ref(self);
+	xray::Node* row = milktea::hstack().style(self.bar_style).ref(self).id("menubar").role(MENU_BAR);
 	if (self.keyboard_focus) row.focusable();
 	if (window && self.bar_shape.kind != xray::DecorationKind.NONE) {
 		sz h = self.bar_height();
@@ -529,6 +529,7 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 				.style({ .bg = s.bg, .fg = s.fg }, hover: current ? (glaze::Style){} : self.title_hover_style)
 				.fit_width();
 			if (self.title_shape.kind != xray::DecorationKind.NONE) t.decorate(self.title_shape);
+			t.id("menu").key(m.title.trim()).role(MENU);
 			t.ref(&self.title_slots[i]).on_click(&menubar_title_clicked).on_hover_in(&menubar_title_hovered);
 			row.add(t);
 		}
@@ -544,9 +545,9 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 fn xray::Node* MenuBar.controls(&self) {
 	glaze::Style s = self.controls_style;
 	return milktea::hstack().width(milktea::cells(9))
-		.add(milktea::text(" – ", s).width(milktea::cells(3)).on_click(&menubar_minimize))
-		.add(milktea::text(" □ ", s).width(milktea::cells(3)).on_click(&menubar_zoom))
-		.add(milktea::text(" × ", s).width(milktea::cells(3)).on_click(&menubar_close));
+		.add(milktea::text(" – ", s).width(milktea::cells(3)).id("minimize").role(BUTTON).on_click(&menubar_minimize))
+		.add(milktea::text(" □ ", s).width(milktea::cells(3)).id("zoom").role(BUTTON).on_click(&menubar_zoom))
+		.add(milktea::text(" × ", s).width(milktea::cells(3)).id("close").role(BUTTON).on_click(&menubar_close));
 }
 
 // dropdown is the open menu, or null when none is: add it over the rest of
@@ -575,11 +576,13 @@ fn xray::Node* MenuBar.dropdown(&self, xray::Node* lead = null) {
 	} else if (self.panel_shadow.enabled) {
 		panel.shadow(self.panel_shadow);
 	}
+	panel.id("menu-items").key(self.menus[self.selected].title.trim()).role(MENU);
 	panel.ref(self).on_click_outside(&menubar_dismissed);
 
 	foreach (i, it : self.menus[self.selected].items) {
 		self.item_slots[i] = { .bar = self, .index = i };
 		xray::Node* r = self.item_row(it, i == self.item);
+		r.id("item").key(it.label.trim()).role(MENU_ITEM);
 		r.ref(&self.item_slots[i]).on_click(&menubar_item_clicked).on_hover_in(&menubar_item_hovered);
 		panel.add(r);
 	}
