@@ -12,8 +12,8 @@ the variable nothing is opened. It works the same in a terminal and in a
 window.
 
 Through the socket you can read the tree the program last drew, send it
-clicks, keys and scrolls, wait for it to settle, and follow the input it
-gets.
+clicks, keys and scrolls, select text, wait for it to settle, and follow the
+input it gets.
 
 ## From the shell
 
@@ -30,10 +30,12 @@ Then:
 ted ctl /tmp/app.sock find 'file[key="src/"]'
 ted ctl /tmp/app.sock click 'file[key="src/"]' wait idle find statusbar
 ted ctl /tmp/app.sock key ctrl+b type 'hello' key enter
+ted ctl /tmp/app.sock select editor 'import boba;'
+ted ctl /tmp/app.sock select editor '/fn [a-z_]+/'
 ted ctl /tmp/app.sock subscribe
 ```
 
-Each request is either a command followed by its argument, or a JSON
+Each request is either a command followed by its arguments, or a JSON
 object. They run in order, and each reply is printed on its own line. The
 exit status is 1 if any request failed. `subscribe` keeps printing events
 until the program exits.
@@ -47,11 +49,11 @@ Each request is one line of JSON, and each reply is one line back. A
 request's `"id"` comes back in its reply:
 
 ```
-→ {"id":1,"cmd":"click","select":"menu[key=\"File\"]"}
+→ {"id":1,"cmd":"click","target":"menu[key=\"File\"]"}
 ← {"id":1,"ok":true}
-→ {"id":2,"cmd":"find","select":"nope"}
+→ {"id":2,"cmd":"find","target":"nope"}
 ← {"id":2,"ok":true,"nodes":[]}
-→ {"id":3,"cmd":"click","select":"nope"}
+→ {"id":3,"cmd":"click","target":"nope"}
 ← {"id":3,"ok":false,"error":"nothing matches nope"}
 ```
 
@@ -62,26 +64,36 @@ the same as with a real mouse or keyboard.
 | cmd | fields | does |
 |---|---|---|
 | `ping` | | answers |
-| `tree` | `select`, `depth` | the tree from the root, or from each match |
-| `find` | `select` | the matching nodes, as a flat list |
-| `click` | `select` or `at`, `cell` | moves there, presses and releases |
-| `move`, `press`, `release` | `select` or `at`, `cell` | one of those |
-| `drag` | `from`, `to` | each is `{select or at, cell}` |
-| `scroll` | `select` or `at`, `dy`, `dx` | in rows; positive scrolls towards the end |
+| `tree` | `target`, `depth` | the tree from the root, or from each match |
+| `find` | `target` | the matching nodes, as a flat list |
+| `click` | `target` or `at`, `cell` | moves there, presses and releases |
+| `move`, `press`, `release` | `target` or `at`, `cell` | one of those |
+| `drag` | `from`, `to` | each is `{target or at, cell}` |
+| `scroll` | `target` or `at`, `dy`, `dx` | in rows; positive scrolls towards the end |
 | `key` | `key` | `"ctrl+b"`, `"enter"`, `"shift+tab"`, `"a"` |
 | `type` | `text` | one key per character |
-| `wait` | `frames`, `select` or nothing, `timeout_ms` | see below |
+| `select` | `target`, `text` or `match`, `nth` | selects text; see below |
+| `wait` | `frames`, `target` or nothing, `timeout_ms` | see below |
 | `subscribe` | `events` | `["input"]` (the default), `["frame"]` |
 | `unsubscribe` | `events` | |
 
-`at` is `[col, row]` on the screen, in cells. `select` picks the first match
-and points at its middle, or at `cell`, a `[col, row]` within its content.
-When a request has both and the selector matches nothing, `at` is used.
+`target` is a [selector](#selectors). A request points at the middle of the
+first node it matches, or at `cell`, a `[col, row]` within its content. `at`
+is `[col, row]` on the screen, in cells. When a request has both and the
+target matches nothing, `at` is used.
+
+`select` selects text in the target's content without the pointer: the
+`nth` occurrence of `text`, counting from 0, or the `nth` match of the
+regular expression `match` (POSIX extended, with `\w`, `\s`, `\d` and `\b`;
+`^`, `$` and `.` work line by line). The reply has the text selected. On the
+command line, a pattern goes between slashes. Only content that defines
+`selectable_text`, `selected_range` and `select_range` can be selected
+this way.
 
 `wait` answers once:
 
 - with `frames: n`, n more frames have been drawn;
-- with `select`, something matches it;
+- with `target`, something matches it;
 - with neither, the program is idle: nothing is queued, nothing is
   animating, and the input sent before has been drawn.
 
@@ -130,22 +142,26 @@ a label. `role` comes from a fixed list close to the one accessibility uses.
 | `:nth(2)` | the third match of the whole selector |
 | `sidebar file` | a `file` inside `sidebar` |
 
-These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is matched with its spaces trimmed off both ends.
+These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is
+matched with its spaces trimmed off both ends.
 
 ## Events
 
 After `subscribe`, input arrives as lines of its own:
 
 ```json
-{"event":"press","select":"sidebar file[key=\"src/\"]","cell":[11,0],"at":[13,12]}
+{"event":"press","target":"sidebar file[key=\"src/\"]","cell":[11,0],"at":[13,12]}
 {"event":"key","key":"ctrl+b"}
-{"event":"scroll","dy":3.00,"select":"editor","cell":[26,10],"at":[53,12]}
+{"event":"scroll","dy":3.00,"target":"editor","cell":[26,10],"at":[53,12]}
+{"event":"select","target":"editor","text":"import boba;","nth":0}
 ```
 
-The events are `move`, `press`, `release`, `key` and `scroll`. `select` is a
-selector that finds the node under the pointer again, and `cell` is the
-place within it. `at` is the place on screen, and is `[-1,-1]` when the
-pointer has left the program.
+The events are `move`, `press`, `release`, `key`, `scroll` and `select`.
+`target` is a selector that finds the node under the pointer again, and
+`cell` is the place within it. `at` is the place on screen, and is `[-1,-1]`
+when the pointer has left the program. `select` comes after a frame in which
+a selection changed, however it changed, with the text selected and which
+occurrence of it that is; selecting nothing sends nothing.
 
 Each event is also the request that repeats it: the socket takes `"event"`
 where it would take `"cmd"`, and passes over lines that are replies. So
@@ -156,14 +172,17 @@ the first does:
 ted ctl $A subscribe | ted ctl $B > /dev/null
 ```
 
-The selector finds the same node in B however differently B is laid out, a
+The target finds the same node in B however differently B is laid out, a
 window next to a terminal, say. When nothing in B matches it, B uses `at`.
+A `select` event selects the same text in B, whatever B's size, wrapping or
+scroll.
 
 `["frame"]` sends `{"event":"frame","n":42}` after each frame is drawn.
 
 ## Not yet
 
-- The model's own state cannot be read; only what is on screen.
+- The model's own state cannot be read; only what is on screen and what
+  is selected.
 - Keys can be sent but not released, and the mouse has only the left
   button.
 - A screenshot over the socket.

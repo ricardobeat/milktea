@@ -6,6 +6,7 @@ import std::net::os;
 import std::encoding::json;
 import std::collections::object;
 import std::collections::list;
+import std::encoding::experimental::regex;
 import std::core::dstring;
 import std::core::string;
 import std::os::env;
@@ -37,27 +38,29 @@ import libc;
 // Requests ("cmd"):
 //
 //   ping
-//   tree       {select?, depth?}       the tree, from the root or each match
-//   find       {select}                the matches, as a flat list
-//   click      {select | at, cell?}    move there, press and release
-//   press, release, move {select | at, cell?}
-//   drag       {from, to}              each a {select | at, cell?}
-//   scroll     {select | at?, dy, dx?} rows, positive towards the end
+//   tree       {target?, depth?}       the tree, from the root or each match
+//   find       {target}                the matches, as a flat list
+//   click      {target | at, cell?}    move there, press and release
+//   press, release, move {target | at, cell?}
+//   drag       {from, to}              each a {target | at, cell?}
+//   scroll     {target | at?, dy, dx?} rows, positive towards the end
 //   key        {key}                   "ctrl+b", "enter", "shift+tab", "a"
 //   type       {text}
-//   wait       {frames | idle | select, timeout_ms?}
+//   select     {target, text | match, nth?}  select text in the content
+//   wait       {frames | idle | target, timeout_ms?}
 //   subscribe  {events}                "input", "frame"; then events arrive
 //                                      as {"event": ...} lines
 //   unsubscribe
 //
-// `at` is [col, row] in cells. `cell` is [col, row] within the node's
-// content. A selector that matches nothing falls back to `at` when there is
-// one.
+// `target` is a selector; the first node it matches is the target. `at` is
+// [col, row] in cells. `cell` is [col, row] within the target's content. A
+// target that matches nothing falls back to `at` when there is one.
 //
 // An input event is the request that repeats it, with "event" for "cmd":
-// {"event":"press","select":...,"cell":[c,r],"at":[c,r]}. Its selector finds
+// {"event":"press","target":...,"cell":[c,r],"at":[c,r]}. Its selector finds
 // the node again, so another program can replay it on its own copy of the
-// tree, however differently laid out.
+// tree, however differently laid out. A change of selection is a "select"
+// event, the selected text and which occurrence of it.
 
 // ── Input hooks ────────────────────────────────────────────────────────────
 
@@ -101,6 +104,9 @@ struct CtlNode @local {
 	CtlSpan key;
 	CtlSpan type;
 	xray::Role role;
+	// The content, when it has text to select (see
+	// xray::Content.selected_range).
+	xray::Content texts;
 	xray::Rect rect;
 	xray::Rect inner;
 	bool clickable;
@@ -113,7 +119,7 @@ struct CtlNode @local {
 enum CtlWaitKind : char @local {
 	FRAMES,
 	IDLE,
-	SELECT,
+	TARGET,
 }
 
 struct CtlWait @local {
@@ -121,7 +127,7 @@ struct CtlWait @local {
 	String id;
 	CtlWaitKind kind;
 	sz frames;
-	String select;
+	String target;
 	sz since_ms;
 	sz deadline_ms;
 }
@@ -142,9 +148,18 @@ struct Control @local {
 	xray::LayoutMetrics metrics;
 	sz frame;
 	sz repaint_ms;
+	// What each node with text had selected at the last frame, by the
+	// selector that finds it, to report changes.
+	List{CtlSelected} selected;
 	// The last pointer position reported to subscribers, in layout units.
 	sz event_x;
 	sz event_y;
+}
+
+struct CtlSelected @local {
+	String target;
+	String text;
+	sz nth;
 }
 
 Control g_ctl @local;
@@ -282,6 +297,10 @@ fn void ctl_read(CtlClient* c) @local {
 		c.in.append_bytes(chunk[:n]);
 	}
 	for (;;) {
+		// A request waits for the input before it to be handled and drawn:
+		// where it points is worked out against the frame on screen, and a
+		// terminal handles input later, from a queue.
+		if (ctl_queued()) break;
 		String s = c.in.str_view();
 		sz? nl = s.index_of_char('\n');
 		if (catch nl) break;
@@ -304,7 +323,7 @@ fn void ctl_drop_waits(CtlClient* c) @local {
 
 fn void ctl_free_wait(CtlWait* w) @local {
 	w.id.free(mem);
-	w.select.free(mem);
+	w.target.free(mem);
 }
 
 // ctl_complain writes a line to stderr in one write, so the lines of two
@@ -442,6 +461,7 @@ fn void ctl_handle(CtlClient* c, String line) @local {
 		case "scroll": ctl_scroll(c, id, req);
 		case "key": ctl_key(c, id, req);
 		case "type": ctl_type(c, id, req);
+		case "select": ctl_select_text(c, id, req);
 		case "wait": ctl_wait(c, id, req);
 		case "subscribe": ctl_subscribe(c, id, req, true);
 		case "unsubscribe": ctl_subscribe(c, id, req, false);
@@ -471,6 +491,11 @@ fn void control_on_draw(xray::Node* root, xray::ScreenBuffer* buf, sz repaint_ms
 	g_ctl.repaint_ms = repaint_ms;
 	g_ctl.frame++;
 	ctl_record(root, -1);
+	if (ctl_listening()) {
+		@pool() {
+			ctl_report_selections();
+		};
+	}
 	// A wait for frames needs frames drawn.
 	foreach (&w : g_ctl.waits) {
 		if (w.kind == FRAMES) frames_until(frame_ms() + 50);
@@ -492,6 +517,8 @@ fn void ctl_record(xray::Node* n, sz parent) @local {
 		.key = ctl_span(n.key_str),
 		.type = ctl_span(n.type_name),
 		.role = n.role_value,
+		.texts = n.content != null && &n.content.selectable_text && &n.content.selected_range
+			&& &n.content.select_range ? n.content : null,
 		.rect = n.computed_rect,
 		.inner = n.content_layout_rect(),
 		.clickable = n.on_click_fn != null,
@@ -799,7 +826,7 @@ fn void ctl_tree(CtlClient* c, String id, Object* req, bool tree) @local {
 	}
 	sz depth = (sz)(obj_number(req, "depth") ?? -1);
 	List{sz} roots = {};
-	if (try sel = obj_string(req, "select")) {
+	if (try sel = obj_string(req, "target")) {
 		List{sz}? found = ctl_select(sel);
 		if (catch found) {
 			ctl_error(c, id, string::tformat("bad selector: %s", sel));
@@ -807,7 +834,7 @@ fn void ctl_tree(CtlClient* c, String id, Object* req, bool tree) @local {
 		}
 		roots = found;
 	} else if (!tree) {
-		ctl_error(c, id, "find needs \"select\"");
+		ctl_error(c, id, "find needs \"target\"");
 		return;
 	} else {
 		roots.init(tmem);
@@ -834,7 +861,7 @@ fn String ctl_place(Object* o, sz* x, sz* y) @local {
 	sz col;
 	sz row;
 	bool has_at = (obj_pair(o, "at", &col, &row) ?? false);
-	if (try sel = obj_string(o, "select")) {
+	if (try sel = obj_string(o, "target")) {
 		List{sz}? found = ctl_select(sel);
 		if (catch found) return string::tformat("bad selector: %s", sel);
 		if (found.len() == 0 && !has_at) return string::tformat("nothing matches %s", sel);
@@ -864,7 +891,7 @@ fn String ctl_place(Object* o, sz* x, sz* y) @local {
 		*y = row * uh + uh / 2;
 		return "";
 	}
-	return "say where: \"select\" or \"at\"";
+	return "say where: \"target\" or \"at\"";
 }
 
 fn void ctl_inject(MouseAction action, sz x, sz y) @local {
@@ -936,7 +963,7 @@ fn void ctl_drag(CtlClient* c, String id, Object* req) @local {
 fn void ctl_scroll(CtlClient* c, String id, Object* req) @local {
 	sz x = 0;
 	sz y = 0;
-	if (req.has_key("select") || req.has_key("at")) {
+	if (req.has_key("target") || req.has_key("at")) {
 		String err = ctl_place(req, &x, &y);
 		if (err.len > 0) {
 			ctl_error(c, id, err);
@@ -1072,6 +1099,158 @@ fn void ctl_type(CtlClient* c, String id, Object* req) @local {
 	ctl_ok(c, id);
 }
 
+// ctl_redraw draws a frame soon, for a change made outside the model's
+// update, which would otherwise wait for the next input to show.
+fn void ctl_redraw() @local {
+	if (g_program != null) arm_timer(time_ms(), &ctl_redraw_msg, &g_ctl, "control redraw");
+}
+
+fn Msg ctl_redraw_msg() @local => {};
+
+// ctl_queued is whether input sent to the program is still waiting to be
+// handled.
+fn bool ctl_queued() @local {
+	if (g_program == null) return false;
+	g_program.send_mu.lock();
+	bool queued = g_program.send_head != g_program.send_tail;
+	g_program.send_mu.unlock();
+	return queued;
+}
+
+// ── select ─────────────────────────────────────────────────────────────────
+
+// ctl_occurrence finds where the nth occurrence of needle starts in hay,
+// counting overlapping ones, from 0.
+fn sz? ctl_occurrence(String hay, String needle, sz nth) @local {
+	if (needle.len == 0) return NOT_FOUND~;
+	sz from = 0;
+	for (sz k = 0; ; k++) {
+		sz at = hay[from..].index_of(needle)!;
+		if (k == nth) return from + at;
+		from += at + 1;
+	}
+}
+
+// ctl_nth is which occurrence of hay[start:len] that is, counted as
+// ctl_occurrence counts them.
+fn sz ctl_nth(String hay, sz start, sz len) @local {
+	String needle = hay[start:len];
+	sz nth = 0;
+	sz from = 0;
+	while (try at = hay[from..].index_of(needle)) {
+		if (from + at >= start) break;
+		nth++;
+		from += at + 1;
+	}
+	return nth;
+}
+
+fn void ctl_select_text(CtlClient* c, String id, Object* req) @local {
+	String? sel = obj_string(req, "target");
+	if (catch sel) {
+		ctl_error(c, id, "select needs \"target\"");
+		return;
+	}
+	List{sz}? found = ctl_select(sel);
+	if (catch found) {
+		ctl_error(c, id, string::tformat("bad selector: %s", sel));
+		return;
+	}
+	xray::Content content = null;
+	foreach (i : found) {
+		if (g_ctl.nodes[i].texts != null) {
+			content = g_ctl.nodes[i].texts;
+			break;
+		}
+	}
+	if (content == null) {
+		ctl_error(c, id, string::tformat("no text to select in %s", sel));
+		return;
+	}
+	String hay = content.selectable_text();
+	sz nth = (sz)(obj_number(req, "nth") ?? 0);
+	sz start;
+	sz end;
+	if (try text = obj_string(req, "text")) {
+		sz? at = ctl_occurrence(hay, text, nth);
+		if (catch at) {
+			ctl_error(c, id, "no such text");
+			return;
+		}
+		start = at;
+		end = at + text.len;
+	} else if (try pattern = obj_string(req, "match")) {
+		Regex? re = regex::compile(mem, pattern, EXTENDED | NEWLINE);
+		if (catch re) {
+			ctl_error(c, id, string::tformat("bad pattern: %s", pattern));
+			return;
+		}
+		defer re.free();
+		Match[]? all = re.tfind_all(hay);
+		if (catch all) {
+			ctl_error(c, id, "no match");
+			return;
+		}
+		if (nth < 0 || nth >= all.len) {
+			ctl_error(c, id, "no match");
+			return;
+		}
+		start = all[nth].start;
+		end = all[nth].end;
+	} else {
+		ctl_error(c, id, "select needs \"text\" or \"match\"");
+		return;
+	}
+	content.select_range(start, end);
+	ctl_redraw();
+	DString out = ctl_reply(id);
+	out.append_string(",\"text\":");
+	json_string(&out, hay[start:end - start]);
+	ctl_send(c, &out);
+}
+
+// ctl_report_selections sends a "select" event for each node whose
+// selection changed since the last frame, unless it now selects nothing:
+// the text and which occurrence of it, which a select request finds again.
+fn void ctl_report_selections() @local {
+	List{CtlSelected} now;
+	now.init(mem);
+	for (sz i = 0; i < g_ctl.nodes.len(); i++) {
+		xray::Content content = g_ctl.nodes[i].texts;
+		if (content == null) continue;
+		CtlSelected s = { .target = ctl_describe(i) };
+		sz start;
+		sz end;
+		if (content.selected_range(&start, &end) && end > start) {
+			String hay = content.selectable_text();
+			s.text = hay[start:end - start];
+			s.nth = ctl_nth(hay, start, end - start);
+		}
+		bool same = false;
+		foreach (old : g_ctl.selected) {
+			if (old.target == s.target) same = old.text == s.text && old.nth == s.nth;
+		}
+		if (!same && s.text.len > 0) {
+			DString out = dstring::temp();
+			out.append_string("{\"event\":\"select\",\"target\":");
+			json_string(&out, s.target);
+			out.append_string(",\"text\":");
+			json_string(&out, s.text);
+			out.appendf(",\"nth\":%d}", s.nth);
+			ctl_emit(out.str_view());
+		}
+		s.target = s.target.copy(mem);
+		s.text = s.text.copy(mem);
+		now.push(s);
+	}
+	foreach (old : g_ctl.selected) {
+		old.target.free(mem);
+		old.text.free(mem);
+	}
+	g_ctl.selected.free();
+	g_ctl.selected = now;
+}
+
 // ── wait ───────────────────────────────────────────────────────────────────
 
 fn void ctl_wait(CtlClient* c, String id, Object* req) @local {
@@ -1081,14 +1260,14 @@ fn void ctl_wait(CtlClient* c, String id, Object* req) @local {
 	if (try frames = obj_number(req, "frames")) {
 		w.kind = FRAMES;
 		w.frames = g_ctl.frame + (sz)frames;
-	} else if (try sel = obj_string(req, "select")) {
+	} else if (try sel = obj_string(req, "target")) {
 		if (catch sel_parse(sel)) {
 			ctl_error(c, id, string::tformat("bad selector: %s", sel));
 			w.id.free(mem);
 			return;
 		}
-		w.kind = SELECT;
-		w.select = sel.copy(mem);
+		w.kind = TARGET;
+		w.target = sel.copy(mem);
 	} else {
 		w.kind = IDLE;
 	}
@@ -1101,10 +1280,7 @@ fn void ctl_wait(CtlClient* c, String id, Object* req) @local {
 // frame drawn since, unless there was nothing to draw.
 fn bool ctl_idle(CtlWait* w) @local {
 	if (g_program == null) return true;
-	g_program.send_mu.lock();
-	bool queued = g_program.send_head != g_program.send_tail;
-	g_program.send_mu.unlock();
-	if (queued) return false;
+	if (ctl_queued()) return false;
 	if (g_ctl.repaint_ms > 0 && g_ctl.repaint_ms < 100) return false;
 	if (g_program.frames_until_ms > time_ms()) return false;
 	return g_ctl.frame > w.frames || time_ms() >= w.since_ms + 100;
@@ -1118,8 +1294,8 @@ fn void ctl_check_waits() @local {
 		switch (w.kind) {
 			case FRAMES: done = g_ctl.frame >= w.frames;
 			case IDLE: done = ctl_idle(w);
-			case SELECT:
-				if (try found = ctl_select(w.select)) done = found.len() > 0;
+			case TARGET:
+				if (try found = ctl_select(w.target)) done = found.len() > 0;
 		}
 		if (!done && !timed_out) {
 			i++;
@@ -1238,9 +1414,11 @@ fn void ctl_where(DString* out, sz x, sz y) @local {
 	sz t = ctl_target(x, y);
 	if (t >= 0) {
 		CtlNode* n = &g_ctl.nodes[t];
-		out.append_string(",\"select\":");
+		out.append_string(",\"target\":");
 		json_string(out, ctl_describe(t));
-		out.appendf(",\"cell\":[%d,%d]", xray::floor_cell(x - n.inner.x, uw), xray::floor_cell(y - n.inner.y, uh));
+		sz lc = xray::floor_cell(x - n.inner.x, uw);
+		sz lr = xray::floor_cell(y - n.inner.y, uh);
+		out.appendf(",\"cell\":[%d,%d]", lc, lr);
 	}
 	out.appendf(",\"at\":[%d,%d]", xray::floor_cell(x, uw), xray::floor_cell(y, uh));
 }
@@ -1367,11 +1545,11 @@ fn String key_spec(KeyMsg k) {
 //                                 events on stdout, until stdin ends
 //   ctl SOCK REQUEST...           each request in turn, printing its reply
 //
-// A REQUEST is a JSON object, or a command and its argument as two words:
-// `tree`, `find SELECTOR`, `click SELECTOR`, `key ctrl+b`, `type TEXT`,
-// `wait SELECTOR`, `wait idle`, `subscribe`. After a subscribe it prints
-// events until the program ends. Returns the exit status: 1 if a request
-// failed.
+// A REQUEST is a JSON object, or a command and its arguments as words:
+// `tree`, `find TARGET`, `click TARGET`, `key ctrl+b`, `type TEXT`,
+// `select TARGET TEXT` (or `/PATTERN/`), `wait TARGET`, `wait idle`,
+// `subscribe`. After a subscribe it prints events until the program ends.
+// Returns the exit status: 1 if a request failed.
 fn int control_client(String[] args) {
 	if (args.len == 0) {
 		ctl_complain("usage: ctl SOCKET [REQUEST...]");
@@ -1400,8 +1578,10 @@ fn int control_client(String[] args) {
 			if (!req.starts_with("{")) {
 				String cmd = req;
 				String arg = "";
+				String arg2 = "";
 				if (ctl_takes_arg(cmd) && i < args.len && !args[i].starts_with("{")) arg = args[i++];
-				req = ctl_shorthand(cmd, arg);
+				if (cmd == "select" && i < args.len) arg2 = args[i++];
+				req = ctl_shorthand(cmd, arg, arg2);
 				stream = cmd == "subscribe";
 			}
 			String reply = ctl_call(fd, &pending, req);
@@ -1435,14 +1615,16 @@ fn bool ctl_takes_arg(String cmd) @local {
 		case "type":
 		case "wait":
 		case "scroll":
+		case "select":
 			return true;
 		default:
 			return false;
 	}
 }
 
-// ctl_shorthand makes a request of a command and its argument.
-fn String ctl_shorthand(String cmd, String arg) @local {
+// ctl_shorthand makes a request of a command and its argument, or for
+// select its two: the target, and the text, or a pattern between slashes.
+fn String ctl_shorthand(String cmd, String arg, String arg2) @local {
 	DString s = dstring::temp();
 	s.append_string("{\"cmd\":");
 	json_string(&s, cmd);
@@ -1460,21 +1642,31 @@ fn String ctl_shorthand(String cmd, String arg) @local {
 			} else {
 				s.append_string(",\"dy\":1");
 				if (arg.len > 0) {
-					s.append_string(",\"select\":");
+					s.append_string(",\"target\":");
 					json_string(&s, arg);
 				}
+			}
+		case "select":
+			s.append_string(",\"target\":");
+			json_string(&s, arg);
+			if (arg2.len >= 2 && arg2.starts_with("/") && arg2.ends_with("/")) {
+				s.append_string(",\"match\":");
+				json_string(&s, arg2[1:arg2.len - 2]);
+			} else {
+				s.append_string(",\"text\":");
+				json_string(&s, arg2);
 			}
 		case "wait":
 			if (arg == "idle" || arg.len == 0) break;
 			if (arg[0].is_digit()) {
 				s.appendf(",\"frames\":%s", arg);
 			} else {
-				s.append_string(",\"select\":");
+				s.append_string(",\"target\":");
 				json_string(&s, arg);
 			}
 		default:
 			if (arg.len == 0) break;
-			s.append_string(",\"select\":");
+			s.append_string(",\"target\":");
 			json_string(&s, arg);
 	}
 	s.append_char('}');
