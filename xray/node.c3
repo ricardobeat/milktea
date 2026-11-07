@@ -58,15 +58,6 @@ interface Content {
 	fn sz measure(sz width) @optional;
 	fn sz measure_width(sz height) @optional;
 	fn ContentCursor cursor(Rect r) @optional;
-	// A content holding text a person can select gives the text, its
-	// selection as byte offsets into it (false when nothing is selected),
-	// and a way to set the selection. The control socket (milktea's
-	// control.c3) selects by a string or a pattern through them, and reports
-	// what was selected. A content that has them is kept past the frame it
-	// was drawn in, so it must be one the model owns.
-	fn String selectable_text() @optional;
-	fn bool selected_range(sz* start, sz* end) @optional;
-	fn void select_range(sz start, sz end) @optional;
 }
 
 // Insets holds a size in layout units for each side of a rect.

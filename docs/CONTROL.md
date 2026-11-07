@@ -72,7 +72,7 @@ the same as with a real mouse or keyboard.
 | `scroll` | `target` or `at`, `dy`, `dx` | in rows; positive scrolls towards the end |
 | `key` | `key` | `"ctrl+b"`, `"enter"`, `"shift+tab"`, `"a"` |
 | `type` | `text` | one key per character |
-| `select` | `target`, `text` or `match`, `nth` | selects text; see below |
+| `select` | `target`, `text` or `match`, `nth` | drags across text on screen; see below |
 | `wait` | `frames`, `target` or nothing, `timeout_ms` | see below |
 | `subscribe` | `events` | `["input"]` (the default), `["frame"]` |
 | `unsubscribe` | `events` | |
@@ -82,13 +82,16 @@ first node it matches, or at `cell`, a `[col, row]` within its content. `at`
 is `[col, row]` on the screen, in cells. When a request has both and the
 target matches nothing, `at` is used.
 
-`select` selects text in the target's content without the pointer: the
-`nth` occurrence of `text`, counting from 0, or the `nth` match of the
-regular expression `match` (POSIX extended, with `\w`, `\s`, `\d` and `\b`;
-`^`, `$` and `.` work line by line). The reply has the text selected. On the
-command line, a pattern goes between slashes. Only content that defines
-`selectable_text`, `selected_range` and `select_range` can be selected
-this way.
+`select` selects text the way a person would. It looks for the `nth`
+occurrence of `text`, counting from 0, or the `nth` match of the regular
+expression `match`, in what the target shows on screen, and drags from where
+it starts to just past where it ends. The reply has the text it dragged
+across. Only text on screen can be found, so scroll to it first. The screen
+is read a row to a line, with whatever else is drawn there, such as line
+numbers, so text across lines is better matched one line at a time.
+
+Patterns are POSIX extended, with `\w`, `\s`, `\d` and `\b`; `^`, `$` and
+`.` work line by line. On the command line, a pattern goes between slashes.
 
 `wait` answers once:
 
@@ -153,15 +156,12 @@ After `subscribe`, input arrives as lines of its own:
 {"event":"press","target":"sidebar file[key=\"src/\"]","cell":[11,0],"at":[13,12]}
 {"event":"key","key":"ctrl+b"}
 {"event":"scroll","dy":3.00,"target":"editor","cell":[26,10],"at":[53,12]}
-{"event":"select","target":"editor","text":"import boba;","nth":0}
 ```
 
-The events are `move`, `press`, `release`, `key`, `scroll` and `select`.
+The events are `move`, `press`, `release`, `key` and `scroll`.
 `target` is a selector that finds the node under the pointer again, and
 `cell` is the place within it. `at` is the place on screen, and is `[-1,-1]`
-when the pointer has left the program. `select` comes after a frame in which
-a selection changed, however it changed, with the text selected and which
-occurrence of it that is; selecting nothing sends nothing.
+when the pointer has left the program.
 
 Each event is also the request that repeats it: the socket takes `"event"`
 where it would take `"cmd"`, and passes over lines that are replies. So
@@ -172,17 +172,16 @@ the first does:
 ted ctl $A subscribe | ted ctl $B > /dev/null
 ```
 
-The target finds the same node in B however differently B is laid out, a
-window next to a terminal, say. When nothing in B matches it, B uses `at`.
-A `select` event selects the same text in B, whatever B's size, wrapping or
-scroll.
+The target finds the same node in B however B is laid out, and when nothing
+in B matches it, B uses `at`. Within the node the place is a cell, so the
+same cell shows the same thing only if the node's content is laid out and
+scrolled the same in both.
 
 `["frame"]` sends `{"event":"frame","n":42}` after each frame is drawn.
 
 ## Not yet
 
-- The model's own state cannot be read; only what is on screen and what
-  is selected.
+- The model's own state cannot be read; only what is on screen.
 - Keys can be sent but not released, and the mouse has only the left
   button.
 - A screenshot over the socket.

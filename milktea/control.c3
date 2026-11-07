@@ -2,6 +2,7 @@ module milktea;
 
 import xray;
 import std::io;
+import std::math;
 import std::net::os;
 import std::encoding::json;
 import std::collections::object;
@@ -46,7 +47,7 @@ import libc;
 //   scroll     {target | at?, dy, dx?} rows, positive towards the end
 //   key        {key}                   "ctrl+b", "enter", "shift+tab", "a"
 //   type       {text}
-//   select     {target, text | match, nth?}  select text in the content
+//   select     {target, text | match, nth?}  drag across text on screen
 //   wait       {frames | idle | target, timeout_ms?}
 //   subscribe  {events}                "input", "frame"; then events arrive
 //                                      as {"event": ...} lines
@@ -59,8 +60,7 @@ import libc;
 // An input event is the request that repeats it, with "event" for "cmd":
 // {"event":"press","target":...,"cell":[c,r],"at":[c,r]}. Its selector finds
 // the node again, so another program can replay it on its own copy of the
-// tree, however differently laid out. A change of selection is a "select"
-// event, the selected text and which occurrence of it.
+// tree, however differently laid out.
 
 // ── Input hooks ────────────────────────────────────────────────────────────
 
@@ -104,9 +104,6 @@ struct CtlNode @local {
 	CtlSpan key;
 	CtlSpan type;
 	xray::Role role;
-	// The content, when it has text to select (see
-	// xray::Content.selected_range).
-	xray::Content texts;
 	xray::Rect rect;
 	xray::Rect inner;
 	bool clickable;
@@ -148,18 +145,9 @@ struct Control @local {
 	xray::LayoutMetrics metrics;
 	sz frame;
 	sz repaint_ms;
-	// What each node with text had selected at the last frame, by the
-	// selector that finds it, to report changes.
-	List{CtlSelected} selected;
 	// The last pointer position reported to subscribers, in layout units.
 	sz event_x;
 	sz event_y;
-}
-
-struct CtlSelected @local {
-	String target;
-	String text;
-	sz nth;
 }
 
 Control g_ctl @local;
@@ -491,11 +479,6 @@ fn void control_on_draw(xray::Node* root, xray::ScreenBuffer* buf, sz repaint_ms
 	g_ctl.repaint_ms = repaint_ms;
 	g_ctl.frame++;
 	ctl_record(root, -1);
-	if (ctl_listening()) {
-		@pool() {
-			ctl_report_selections();
-		};
-	}
 	// A wait for frames needs frames drawn.
 	foreach (&w : g_ctl.waits) {
 		if (w.kind == FRAMES) frames_until(frame_ms() + 50);
@@ -517,8 +500,6 @@ fn void ctl_record(xray::Node* n, sz parent) @local {
 		.key = ctl_span(n.key_str),
 		.type = ctl_span(n.type_name),
 		.role = n.role_value,
-		.texts = n.content != null && &n.content.selectable_text && &n.content.selected_range
-			&& &n.content.select_range ? n.content : null,
 		.rect = n.computed_rect,
 		.inner = n.content_layout_rect(),
 		.clickable = n.on_click_fn != null,
@@ -1099,14 +1080,6 @@ fn void ctl_type(CtlClient* c, String id, Object* req) @local {
 	ctl_ok(c, id);
 }
 
-// ctl_redraw draws a frame soon, for a change made outside the model's
-// update, which would otherwise wait for the next input to show.
-fn void ctl_redraw() @local {
-	if (g_program != null) arm_timer(time_ms(), &ctl_redraw_msg, &g_ctl, "control redraw");
-}
-
-fn Msg ctl_redraw_msg() @local => {};
-
 // ctl_queued is whether input sent to the program is still waiting to be
 // handled.
 fn bool ctl_queued() @local {
@@ -1118,6 +1091,51 @@ fn bool ctl_queued() @local {
 }
 
 // ── select ─────────────────────────────────────────────────────────────────
+
+// CtlScreenText is what a node shows on screen as one string, a row to a
+// line, with the cell each byte was drawn in.
+struct CtlScreenText @local {
+	String text;
+	sz[] col;
+	sz[] row;
+}
+
+// ctl_screen_text reads node i's cells into a CtlScreenText, on tmem. A blank
+// cell reads as a space, so text with spaces in it still matches, and the
+// right half of a wide character is passed over.
+fn CtlScreenText ctl_screen_text(sz i) @local {
+	CtlScreenText st;
+	xray::ScreenBuffer* b = g_ctl.buf;
+	if (b == null) return st;
+	xray::Rect r = ctl_cells(g_ctl.nodes[i].rect);
+	DString out = dstring::temp();
+	List{sz} cols;
+	List{sz} rows;
+	cols.init(tmem);
+	rows.init(tmem);
+	for (sz y = math::max(r.y, (sz)0); y < r.y + r.h && y < b.height; y++) {
+		if (out.len() > 0) {
+			out.append_char('\n');
+			cols.push(r.x + r.w);
+			rows.push(y - 1);
+		}
+		bool wide = false;
+		for (sz x = math::max(r.x, (sz)0); x < r.x + r.w && x < b.width; x++) {
+			xray::Cell* cell = &b.cells[y * b.width + x];
+			String s = cell.content_len > 0 ? (String)cell.content[:cell.content_len] : (wide ? "" : " ");
+			wide = cell.width == 2;
+			out.append_string(s);
+			for (sz k = 0; k < s.len; k++) {
+				cols.push(x);
+				rows.push(y);
+			}
+		}
+	}
+	st.text = out.str_view();
+	st.col = cols.array_view();
+	st.row = rows.array_view();
+	return st;
+}
 
 // ctl_occurrence finds where the nth occurrence of needle starts in hay,
 // counting overlapping ones, from 0.
@@ -1131,20 +1149,10 @@ fn sz? ctl_occurrence(String hay, String needle, sz nth) @local {
 	}
 }
 
-// ctl_nth is which occurrence of hay[start:len] that is, counted as
-// ctl_occurrence counts them.
-fn sz ctl_nth(String hay, sz start, sz len) @local {
-	String needle = hay[start:len];
-	sz nth = 0;
-	sz from = 0;
-	while (try at = hay[from..].index_of(needle)) {
-		if (from + at >= start) break;
-		nth++;
-		from += at + 1;
-	}
-	return nth;
-}
-
+// ctl_select_text selects text the way a person would: it finds the text in
+// what the target shows and drags from the cell the text starts in to the
+// cell after it ends. Only what is on screen can be found; scroll first for
+// the rest.
 fn void ctl_select_text(CtlClient* c, String id, Object* req) @local {
 	String? sel = obj_string(req, "target");
 	if (catch sel) {
@@ -1156,25 +1164,18 @@ fn void ctl_select_text(CtlClient* c, String id, Object* req) @local {
 		ctl_error(c, id, string::tformat("bad selector: %s", sel));
 		return;
 	}
-	xray::Content content = null;
-	foreach (i : found) {
-		if (g_ctl.nodes[i].texts != null) {
-			content = g_ctl.nodes[i].texts;
-			break;
-		}
-	}
-	if (content == null) {
-		ctl_error(c, id, string::tformat("no text to select in %s", sel));
+	if (found.len() == 0) {
+		ctl_error(c, id, string::tformat("nothing matches %s", sel));
 		return;
 	}
-	String hay = content.selectable_text();
+	CtlScreenText st = ctl_screen_text(found[0]);
 	sz nth = (sz)(obj_number(req, "nth") ?? 0);
 	sz start;
 	sz end;
 	if (try text = obj_string(req, "text")) {
-		sz? at = ctl_occurrence(hay, text, nth);
+		sz? at = ctl_occurrence(st.text, text, nth);
 		if (catch at) {
-			ctl_error(c, id, "no such text");
+			ctl_error(c, id, "no such text on screen");
 			return;
 		}
 		start = at;
@@ -1186,69 +1187,46 @@ fn void ctl_select_text(CtlClient* c, String id, Object* req) @local {
 			return;
 		}
 		defer re.free();
-		Match[]? all = re.tfind_all(hay);
-		if (catch all) {
-			ctl_error(c, id, "no match");
+		Match[] all = re.tfind_all(st.text) ?? {};
+		// An empty match selects nothing.
+		List{Match} some;
+		some.init(tmem);
+		foreach (m : all) if (m.end > m.start) some.push(m);
+		if (nth < 0 || nth >= some.len()) {
+			ctl_error(c, id, "no match on screen");
 			return;
 		}
-		if (nth < 0 || nth >= all.len) {
-			ctl_error(c, id, "no match");
-			return;
-		}
-		start = all[nth].start;
-		end = all[nth].end;
+		start = some[nth].start;
+		end = some[nth].end;
 	} else {
 		ctl_error(c, id, "select needs \"text\" or \"match\"");
 		return;
 	}
-	content.select_range(start, end);
-	ctl_redraw();
+	if (end <= start) {
+		ctl_error(c, id, "nothing to select");
+		return;
+	}
+	// From the first byte's cell to just past the last byte's: the next
+	// cell along, or the end of a wide character.
+	sz uw = ctl_uw();
+	sz uh = ctl_uh();
+	sz last = end - 1;
+	sz end_col = st.col[last] + 1;
+	if (last + 1 < st.col.len && st.row[last + 1] == st.row[last] && st.col[last + 1] > end_col) {
+		end_col = st.col[last + 1];
+	}
+	sz x0 = st.col[start] * uw + uw / 2;
+	sz y0 = st.row[start] * uh + uh / 2;
+	sz x1 = end_col * uw + uw / 2;
+	sz y1 = st.row[last] * uh + uh / 2;
+	ctl_inject(MOUSE_MOTION, x0, y0);
+	ctl_inject(MOUSE_PRESS, x0, y0);
+	ctl_inject(MOUSE_MOTION, x1, y1);
+	ctl_inject(MOUSE_RELEASE, x1, y1);
 	DString out = ctl_reply(id);
 	out.append_string(",\"text\":");
-	json_string(&out, hay[start:end - start]);
+	json_string(&out, st.text[start:end - start]);
 	ctl_send(c, &out);
-}
-
-// ctl_report_selections sends a "select" event for each node whose
-// selection changed since the last frame, unless it now selects nothing:
-// the text and which occurrence of it, which a select request finds again.
-fn void ctl_report_selections() @local {
-	List{CtlSelected} now;
-	now.init(mem);
-	for (sz i = 0; i < g_ctl.nodes.len(); i++) {
-		xray::Content content = g_ctl.nodes[i].texts;
-		if (content == null) continue;
-		CtlSelected s = { .target = ctl_describe(i) };
-		sz start;
-		sz end;
-		if (content.selected_range(&start, &end) && end > start) {
-			String hay = content.selectable_text();
-			s.text = hay[start:end - start];
-			s.nth = ctl_nth(hay, start, end - start);
-		}
-		bool same = false;
-		foreach (old : g_ctl.selected) {
-			if (old.target == s.target) same = old.text == s.text && old.nth == s.nth;
-		}
-		if (!same && s.text.len > 0) {
-			DString out = dstring::temp();
-			out.append_string("{\"event\":\"select\",\"target\":");
-			json_string(&out, s.target);
-			out.append_string(",\"text\":");
-			json_string(&out, s.text);
-			out.appendf(",\"nth\":%d}", s.nth);
-			ctl_emit(out.str_view());
-		}
-		s.target = s.target.copy(mem);
-		s.text = s.text.copy(mem);
-		now.push(s);
-	}
-	foreach (old : g_ctl.selected) {
-		old.target.free(mem);
-		old.text.free(mem);
-	}
-	g_ctl.selected.free();
-	g_ctl.selected = now;
 }
 
 // ── wait ───────────────────────────────────────────────────────────────────
