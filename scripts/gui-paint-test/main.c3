@@ -46,7 +46,7 @@ fn milktea::Node* Scene.view(&self) @dynamic {
 		.add(milktea::vstack().style(base).at(18, 2)
 			.width(milktea::cells(8)).height(milktea::cells(3))
 			.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(3, 5, 7, 4))
-			.add(milktea::text("", green).id_with(self).on_click(&padded_click)))
+			.add(milktea::text("", green).ref(self).on_click(&padded_click)))
 		.add(milktea::text("█", { .fg = glaze::color_hex("#00ff00") }).at(18, 10)
 			.width(milktea::cells(8)).height(milktea::cells(1))
 			.decorate(xray::solid(xray::color_rgb(255, 0, 0)).padding(4, 4, 4, 4)));

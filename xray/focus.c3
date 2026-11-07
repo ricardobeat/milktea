@@ -13,7 +13,8 @@ import std::core::mem;
 // is_focused/focus/blur over the state.
 
 // FocusTarget is a focusable node as it stood in the last solved tree: its
-// id, which is what focus is remembered by, and its rect, for focus on click.
+// ref or else its id, which is what focus is remembered by, and its rect,
+// for focus on click.
 // The name is copied, not referenced: targets outlive the frame whose temp
 // allocator held the node's id.
 struct FocusTarget {
@@ -85,23 +86,23 @@ fn bool focus_any() => g_focus.ptr != null || g_focus.len > 0;
 // focus_matches reports whether n is the focused node.
 fn bool Node.has_keyboard_focus(&self) {
 	if (!self.can_focus) return false;
-	if (self.id_str.len > 0) return focus_is_named(self.id_str);
-	return focus_is(self.id_ptr);
+	if (self.id_ptr != null) return focus_is(self.id_ptr);
+	return focus_is_named(self.id_str);
 }
 
 // ---- runtime ------------------------------------------------------------------
 
 fn void focus_to(FocusTarget t) @private {
-	if (t.name_len > 0) {
-		focus_set_named(t.id_str());
-	} else {
+	if (t.id_ptr != null) {
 		focus_set(t.id_ptr);
+	} else {
+		focus_set_named(t.id_str());
 	}
 }
 
 fn sz focused_index() @private {
 	foreach (i, t : g_focus.targets) {
-		if (t.name_len > 0 ? focus_is_named(t.id_str()) : focus_is(t.id_ptr)) return (sz)i;
+		if (t.id_ptr != null ? focus_is(t.id_ptr) : focus_is_named(t.id_str())) return (sz)i;
 	}
 	return -1;
 }

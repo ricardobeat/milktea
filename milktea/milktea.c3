@@ -606,7 +606,7 @@ fn bool dispatch_hover(sz col, sz row) {
 
 // ---- keyboard focus --------------------------------------------------------
 
-// focus gives keyboard focus to the node with this id_with() pointer. The
+// focus gives keyboard focus to the node with this ref() pointer. The
 // focus state and its logic live in xray (see xray/focus.c3) and are linked
 // only into programs that use them.
 fn void focus(void* id) => xray::focus_set(id);
@@ -617,7 +617,7 @@ fn void focus_named(String id) => xray::focus_set_named(id);
 // blur leaves nothing focused.
 fn void blur() => xray::focus_clear();
 
-// is_focused reports whether the node with this id_with() pointer has focus.
+// is_focused reports whether the node with this ref() pointer has focus.
 fn bool is_focused(void* id) => xray::focus_is(id);
 
 // is_focused_named reports whether the node with this id() name has focus.

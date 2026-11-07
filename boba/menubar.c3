@@ -503,7 +503,7 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 	bool window = in_window();
 	milktea::WindowChrome chrome = milktea::window_chrome();
 
-	xray::Node* row = milktea::hstack().style(self.bar_style).id_with(self);
+	xray::Node* row = milktea::hstack().style(self.bar_style).ref(self);
 	if (self.keyboard_focus) row.focusable();
 	if (window && self.bar_shape.kind != xray::DecorationKind.NONE) {
 		sz h = self.bar_height();
@@ -529,7 +529,7 @@ fn xray::Node* MenuBar.node(&self, xray::Node* lead = null, xray::Node* trail = 
 				.style({ .bg = s.bg, .fg = s.fg }, hover: current ? (glaze::Style){} : self.title_hover_style)
 				.fit_width();
 			if (self.title_shape.kind != xray::DecorationKind.NONE) t.decorate(self.title_shape);
-			t.id_with(&self.title_slots[i]).on_click(&menubar_title_clicked).on_hover_in(&menubar_title_hovered);
+			t.ref(&self.title_slots[i]).on_click(&menubar_title_clicked).on_hover_in(&menubar_title_hovered);
 			row.add(t);
 		}
 	}
@@ -575,12 +575,12 @@ fn xray::Node* MenuBar.dropdown(&self, xray::Node* lead = null) {
 	} else if (self.panel_shadow.enabled) {
 		panel.shadow(self.panel_shadow);
 	}
-	panel.id_with(self).on_click_outside(&menubar_dismissed);
+	panel.ref(self).on_click_outside(&menubar_dismissed);
 
 	foreach (i, it : self.menus[self.selected].items) {
 		self.item_slots[i] = { .bar = self, .index = i };
 		xray::Node* r = self.item_row(it, i == self.item);
-		r.id_with(&self.item_slots[i]).on_click(&menubar_item_clicked).on_hover_in(&menubar_item_hovered);
+		r.ref(&self.item_slots[i]).on_click(&menubar_item_clicked).on_hover_in(&menubar_item_hovered);
 		panel.add(r);
 	}
 

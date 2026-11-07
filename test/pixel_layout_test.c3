@@ -103,7 +103,7 @@ fn void left(void* ctx, String id, sz col, sz row) { ((Hit*)ctx).left++; }
 fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	Hit hit;
 	xray::Node* child = milktea::text("abc", {}).width(xray::cells(3)).height(xray::cells(1))
-		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
+		.ref(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* root = xray::root().decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 2, 1, 4)).add(child);
 	root.solve({ .w = 200, .h = 100 }, test_pixels());
 	List{xray::ClickTarget} list;
@@ -285,7 +285,7 @@ fn void test_pixel_fixed_size_does_not_scale_with_font() @test {
 fn void test_block_pointer_covers_what_is_beneath() @test {
 	Hit hit;
 	xray::Node* under = milktea::text("row", {}).width(xray::cells(10)).height(xray::cells(1))
-		.id_with(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
+		.ref(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* modal = xray::root().width(xray::cells(5)).height(xray::cells(5)).at(0, 0).block_pointer();
 	xray::Node* root = xray::root().add(under).add(modal);
 	root.solve(xray::new_rect(0, 0, 20, 10));

@@ -146,7 +146,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 	glaze::Style title_s = { .fg = th.accent, .bg = th.panel, .bold = true };
 
 	xray::Node* panel_node = modal_panel(th, self.min_cols);
-	panel_node.id_with(self).on_click_outside(&picker_backdrop_dismissed);
+	panel_node.ref(self).on_click_outside(&picker_backdrop_dismissed);
 
 	panel_node.add(milktea::text(self.title, title_s).height(milktea::cells(1)));
 
@@ -161,7 +161,7 @@ fn xray::Node* Picker.node(&self, Theme* th) {
 		bool on = i == self.selected;
 		String label = string::tformat("%s %s", on ? "▸" : " ", self.choices[i]);
 		xray::Node* choice_node = milktea::text(label, on ? current : row).height(milktea::cells(1));
-		choice_node.id_with(&self.choice_slots[i]).on_click(&picker_choice_clicked);
+		choice_node.ref(&self.choice_slots[i]).on_click(&picker_choice_clicked);
 		list_node.add(choice_node);
 	}
 	panel_node.add(list_node);

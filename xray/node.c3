@@ -29,6 +29,29 @@ import glaze;
 // cursor leaves it unimplemented. Content that owns one only when focused
 // should return has_cursor = false when it is not, rather than relying on
 // paint order.
+// Role is what kind of thing a node is, as a person using it would put it:
+// what selectors match with a role name, and what accessibility will report.
+// NONE is a node with no role of its own, a layout container.
+enum Role : char {
+	NONE,
+	GROUP,
+	BUTTON,
+	LINK,
+	CHECKBOX,
+	TEXT,
+	TEXT_FIELD,
+	LIST,
+	LIST_ITEM,
+	MENU_BAR,
+	MENU,
+	MENU_ITEM,
+	DIALOG,
+	TAB,
+	SCROLLBAR,
+	STATUS,
+	IMAGE,
+}
+
 interface Content {
 	fn String render(Rect r) @optional;
 	fn void paint(ScreenBuffer* dst, Rect r) @optional;
@@ -56,16 +79,11 @@ alias DrawCursorFn = fn String(sz x, sz y, bool blink, String under);
 // (on_click_outside) the node's solved rect, and when the pointer crosses the
 // node's edges (on_hover_in / on_hover_out).
 //
-// id is whatever the node was tagged with via .id(...): for a string id it is
-// a pointer to the framework-owned copy (id_str below holds the value); for an
-// sz id it is the value as a void*; for a pointer id it is the pointer. Most
-// callers inspect id_str first and fall through to id_ptr.
-//
-// ctx was kept on the per-call site as a separate parameter historically; the
-// node's id now plays that role, so on_click / on_click_outside / on_hover_*
-// no longer take their own ctx — the id IS the ctx. col and row are the press
-// position in cells, useful only when a node spans a region it does not want
-// to divide into sub-targets.
+// id is the node's private context, set with ref() or ref_index(), and
+// id_str its name, set with id(); either may be empty. They are the
+// callback's context: on_click / on_click_outside / on_hover_* take no other.
+// col and row are the press position in cells, useful only when a node spans
+// a region it does not want to divide into sub-targets.
 alias ClickFn = fn void(void* id, String id_str, sz col, sz row);
 
 // place_cursor puts a caret at a column and row inside a content area, which
@@ -253,11 +271,14 @@ struct Node {
 	// about clicks elsewhere) would otherwise have the second call silently
 	// clobber the first's context.
 	//
-	// id_str / id_ptr are the per-node identity the click and hover callbacks
-	// receive; .id(String) and .id(...) populate them. id_str takes precedence
-	// when non-empty — a node with both set delivers the string.
+	// What the node is called, from outside and to its callbacks (see id,
+	// key, role and type_name), and its private context (see ref): the
+	// callbacks receive both, as id_str and id_ptr.
 	String id_str;
 	void* id_ptr;
+	String key_str;
+	Role role_value;
+	String type_name;
 	ClickFn on_click_fn;
 	ClickFn on_click_outside_fn;
 	ClickFn on_hover_in_fn;
@@ -310,10 +331,23 @@ fn Node* zstack() => new_node(NodeDirection.STACK);
 fn Node* root() => new_node(NodeDirection.STACK);
 
 // content_node wraps content as a leaf. Callers normally reach this through a
-// higher-level constructor such as milktea::text.
-fn Node* content_node(Content c) {
+// higher-level constructor such as milktea::text. It is a macro so the node
+// can record the content's type name (see type_name), which is gone once the
+// content is an interface value.
+macro Node* content_node(c) => content_node_typed(c, @content_type_name(c));
+
+macro String @content_type_name(c) @private {
+	$if $defined(*c):
+		return $Typeof(*c)::name;
+	$else
+		return $Typeof(c)::name;
+	$endif
+}
+
+fn Node* content_node_typed(Content c, String type_name) {
 	Node* n = new_node(NodeDirection.COLUMN);
 	n.content = c;
+	n.type_name = type_name;
 	return n;
 }
 
@@ -553,8 +587,8 @@ fn Node* Node.fixed_cols(&self, sz left, sz right) {
 	return self;
 }
 
-// focusable lets the node take keyboard focus. Its id (see id(), id_with())
-// is what the runtime remembers as focused, so it needs one. Tab and
+// focusable lets the node take keyboard focus. Its ref, or failing that its
+// id, is what the runtime remembers as focused, so it needs one. Tab and
 // Shift-Tab move focus between focusable nodes in paint order, a click
 // focuses the one under the pointer, and while a node that blocks the
 // pointer (see block_pointer) is on screen, only the focusable nodes inside
@@ -695,30 +729,43 @@ fn Node* Node.animate(&self, sz fps = 60) {
 	return self;
 }
 
-// id attaches a name to this node that the click and hover callbacks receive
-// as id_str. Useful for a small static layout — a chrome row, a fixed button
-// — where the callback can switch on the name without an app-side slot table.
-// Strings live as long as the node does: a copy is made here on tmem, freed
-// when the tree is torn down at the end of the frame.
+// id names the node for anything outside it: a selector picks it by this
+// name, and the click and hover callbacks receive it as id_str, so a small
+// static layout can switch on it without a slot table. It need not be
+// unique: many rows can be "file", told apart by key. The string is copied
+// on tmem, which lasts as long as the frame's tree.
 fn Node* Node.id(&self, String name) {
 	self.id_str = name.tcopy();
-	self.id_ptr = null;
 	return self;
 }
 
-// id_ptr attaches an opaque pointer as the node's identity. Used for ints
-// (boxed as void*) and for app-side structs (cast back on the way in). When
-// the node already has an id_str, it is cleared so id_ptr is the only id.
-fn Node* Node.id_with(&self, void* p) {
-	self.id_str = "";
+// key says which one of several nodes with the same id this is, by what a
+// person would recognise: a path, a label, a title. A selector matches it as
+// [key="src/"]. Copied on tmem, like id.
+fn Node* Node.key(&self, String k) {
+	self.key_str = k.tcopy();
+	return self;
+}
+
+// role says what kind of thing the node is, for selectors and, later,
+// accessibility.
+fn Node* Node.role(&self, Role r) {
+	self.role_value = r;
+	return self;
+}
+
+// ref attaches private context the callbacks receive as id_ptr: an app-side
+// struct, cast back on the way in. It is not visible from outside, and it is
+// what focus is remembered by when set.
+fn Node* Node.ref(&self, void* p) {
 	self.id_ptr = p;
 	return self;
 }
 
-// id_int is sugar for id_with on a (void*)(uptr) cast — the common case for
-// a static row index. The framework hands it back as a void* that the app
-// recovers with (sz)(uptr).
-fn Node* Node.id_int(&self, sz i) => self.id_with((void*)(uptr)i);
+// ref_index is ref holding a number, for a row of a static list: the
+// callbacks get it back as a void* the app turns into a number with
+// (sz)(uptr).
+fn Node* Node.ref_index(&self, sz i) => self.ref((void*)(uptr)i);
 
 // on_click fires fn(id, id_str, col, row) when a mouse press lands inside this
 // node's solved rect. Hit-testing picks the topmost (last-painted) node whose

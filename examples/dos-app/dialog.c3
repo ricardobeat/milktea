@@ -132,7 +132,7 @@ fn xray::Node* Dialog.node(&self, Theme* th) {
 	glaze::Style title_s = { .fg = th.accent, .bold = true };
 
 	xray::Node* panel_node = modal_panel(th, self.min_cols);
-	panel_node.id_with(self).on_click_outside(&backdrop_dismissed);
+	panel_node.ref(self).on_click_outside(&backdrop_dismissed);
 
 	// Body text has no bg of its own — without one it paints on the
 	// renderer's default (black) instead of showing the panel through, so it

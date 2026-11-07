@@ -799,7 +799,7 @@ fn xray::Node* Textarea.node(&self) {
 	if (self.on_press_fn != null) {
 		PressCtx* pc = mem::tnew(PressCtx);
 		pc.t = self;
-		n.id_with(pc).on_click(&textarea_press);
+		n.ref(pc).on_click(&textarea_press);
 	}
 	return n;
 }
