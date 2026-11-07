@@ -979,7 +979,9 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
 	control_msg_event(m);
 	if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE && dispatch_focus_key(m.key)) return false;
-	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS) {
+	// A wheel notch arrives as a press, but it scrolls; it clicks nothing.
+	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS
+		&& m.mouse.button != MOUSE_WHEEL_UP && m.mouse.button != MOUSE_WHEEL_DOWN) {
 		dispatch_click(m.mouse.col, m.mouse.row);
 	}
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_MOTION
