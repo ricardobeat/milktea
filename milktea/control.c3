@@ -51,9 +51,13 @@ import libc;
 //   unsubscribe
 //
 // `at` is [col, row] in cells. `cell` is [col, row] within the node's
-// content. Input events name their target by a selector that finds it again,
-// with the cell within it, so another program can replay them on its own
-// copy of the same tree, however differently laid out.
+// content. A selector that matches nothing falls back to `at` when there is
+// one.
+//
+// An input event is the request that repeats it, with "event" for "cmd":
+// {"event":"press","select":...,"cell":[c,r],"at":[c,r]}. Its selector finds
+// the node again, so another program can replay it on its own copy of the
+// tree, however differently laid out.
 
 // ── Input hooks ────────────────────────────────────────────────────────────
 
@@ -187,14 +191,14 @@ fn void control_start() @local {
 	if (path.len == 0) return;
 	CtlAddr a;
 	if (!ctl_addr(&a, path)) {
-		io::eprintfn("milktea: control socket path too long: %s", path);
+		ctl_complain("milktea: control socket path too long: %s", path);
 		return;
 	}
 	os::NativeSocket fd = os::socket(os::AF_UNIX, os::SOCK_STREAM, (os::AIProtocol)0);
 	if ((CInt)fd < 0) return;
 	(void)unlink(path.zstr_tcopy());
 	if (os::bind(fd, (os::SockAddrPtr)&a, (os::Socklen_t)CtlAddr::size) != 0 || os::listen(fd, 8) != 0) {
-		io::eprintfn("milktea: cannot listen on %s", path);
+		ctl_complain("milktea: cannot listen on %s: %s", path, libc::strerror(libc::errno()));
 		(void)libc::close((CInt)fd);
 		return;
 	}
@@ -303,6 +307,17 @@ fn void ctl_free_wait(CtlWait* w) @local {
 	w.select.free(mem);
 }
 
+// ctl_complain writes a line to stderr in one write, so the lines of two
+// programs writing at once, as both ends of a pipe of ctl clients may, do
+// not come out interleaved.
+fn void ctl_complain(String fmt, args...) @local {
+	@pool() {
+		String line = string::tformat(fmt, ...args);
+		line = line.tconcat("\n");
+		(void)libc::write((Fd)2, line.ptr, line.len);
+	};
+}
+
 // ── Replies ────────────────────────────────────────────────────────────────
 
 fn void json_string(DString* out, String s) @local {
@@ -401,9 +416,18 @@ fn void ctl_handle(CtlClient* c, String line) @local {
 			id = q.str_view();
 		}
 	}
-	String? cmd = obj_string(req, "cmd");
-	if (catch cmd) {
-		ctl_error(c, id, "no \"cmd\"");
+	// An input event is also the request that repeats it, so the events
+	// one program sends can be piped into another's socket as they are.
+	// Lines that are not requests are passed over: replies, and the
+	// events no request repeats.
+	String cmd;
+	if (try name = obj_string(req, "cmd")) {
+		cmd = name;
+	} else if (try name = obj_string(req, "event")) {
+		if (name == "frame") return;
+		cmd = name;
+	} else {
+		if (!req.has_key("ok")) ctl_error(c, id, "no \"cmd\"");
 		return;
 	}
 	switch (cmd) {
@@ -802,30 +826,40 @@ fn void ctl_tree(CtlClient* c, String id, Object* req, bool tree) @local {
 // ── Input ──────────────────────────────────────────────────────────────────
 
 // ctl_place works out where a request points, in layout units: a selector's
-// first match (its middle, or a cell of its content), or a cell of the
+// first match (its middle, or a cell of its content), else a cell of the
 // screen. It returns the error to report, or "" when it found a place.
 fn String ctl_place(Object* o, sz* x, sz* y) @local {
 	sz uw = ctl_uw();
 	sz uh = ctl_uh();
+	sz col;
+	sz row;
+	bool has_at = (obj_pair(o, "at", &col, &row) ?? false);
 	if (try sel = obj_string(o, "select")) {
 		List{sz}? found = ctl_select(sel);
 		if (catch found) return string::tformat("bad selector: %s", sel);
-		if (found.len() == 0) return string::tformat("nothing matches %s", sel);
-		CtlNode* n = &g_ctl.nodes[found[0]];
-		sz cc;
-		sz cr;
-		if (try has = obj_pair(o, "cell", &cc, &cr) && has) {
-			*x = n.inner.x + cc * uw + uw / 2;
-			*y = n.inner.y + cr * uh + uh / 2;
-		} else {
-			*x = n.rect.x + n.rect.w / 2;
-			*y = n.rect.y + n.rect.h / 2;
+		if (found.len() == 0 && !has_at) return string::tformat("nothing matches %s", sel);
+		if (found.len() > 0) {
+			CtlNode* n = &g_ctl.nodes[found[0]];
+			sz cc;
+			sz cr;
+			if (try has = obj_pair(o, "cell", &cc, &cr) && has) {
+				*x = n.inner.x + cc * uw + uw / 2;
+				*y = n.inner.y + cr * uh + uh / 2;
+			} else {
+				*x = n.rect.x + n.rect.w / 2;
+				*y = n.rect.y + n.rect.h / 2;
+			}
+			return "";
 		}
-		return "";
 	}
-	sz col;
-	sz row;
-	if (try has = obj_pair(o, "at", &col, &row) && has) {
+	if (has_at) {
+		// A negative place is outside the program, where a pointer that
+		// left it is.
+		if (col < 0 || row < 0) {
+			*x = -1;
+			*y = -1;
+			return "";
+		}
 		*x = col * uw + uw / 2;
 		*y = row * uh + uh / 2;
 		return "";
@@ -1191,18 +1225,24 @@ fn void ctl_emit(String json) @local {
 	}
 }
 
-// ctl_where adds an event's place: the cell of the screen, and the target
-// and cell within it when the pointer is over one.
+// ctl_where adds an event's place, as a request takes it: the target the
+// pointer is over and the cell within it, when there is one, and the cell
+// of the screen, [-1, -1] outside the program.
 fn void ctl_where(DString* out, sz x, sz y) @local {
 	sz uw = ctl_uw();
 	sz uh = ctl_uh();
-	out.appendf(",\"at\":[%d,%d]", xray::floor_cell(x, uw), xray::floor_cell(y, uh));
+	if (x < 0 || y < 0) {
+		out.append_string(",\"at\":[-1,-1]");
+		return;
+	}
 	sz t = ctl_target(x, y);
-	if (t < 0) return;
-	CtlNode* n = &g_ctl.nodes[t];
-	out.append_string(",\"target\":{\"select\":");
-	json_string(out, ctl_describe(t));
-	out.appendf(",\"cell\":[%d,%d]}", xray::floor_cell(x - n.inner.x, uw), xray::floor_cell(y - n.inner.y, uh));
+	if (t >= 0) {
+		CtlNode* n = &g_ctl.nodes[t];
+		out.append_string(",\"select\":");
+		json_string(out, ctl_describe(t));
+		out.appendf(",\"cell\":[%d,%d]", xray::floor_cell(x - n.inner.x, uw), xray::floor_cell(y - n.inner.y, uh));
+	}
+	out.appendf(",\"at\":[%d,%d]", xray::floor_cell(x, uw), xray::floor_cell(y, uh));
 }
 
 // control_pointer_event tells subscribers about pointer input: "press",
@@ -1225,8 +1265,8 @@ fn void control_pointer_event(String type, sz x, sz y) {
 	g_ctl.event_y = y;
 	@pool() {
 		DString out = dstring::temp();
-		out.appendf("{\"event\":\"input\",\"type\":\"%s\"", type);
-		if (x >= 0 && y >= 0) ctl_where(&out, x, y);
+		out.appendf("{\"event\":\"%s\"", type);
+		ctl_where(&out, x, y);
 		out.append_char('}');
 		ctl_emit(out.str_view());
 	};
@@ -1239,7 +1279,7 @@ fn void control_msg_event(Msg m) {
 	@pool() {
 		DString out = dstring::temp();
 		if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE) {
-			out.append_string("{\"event\":\"input\",\"type\":\"key\",\"key\":");
+			out.append_string("{\"event\":\"key\",\"key\":");
 			json_string(&out, key_spec(m.key));
 			out.append_char('}');
 			ctl_emit(out.str_view());
@@ -1256,9 +1296,16 @@ fn void control_msg_event(Msg m) {
 			dy = -(double)m.mouse.scroll_dy / (double)ctl_uh();
 			dx = -(double)m.mouse.scroll_dx / (double)ctl_uw();
 		}
-		out.appendf("{\"event\":\"input\",\"type\":\"scroll\",\"dy\":%.2f", dy);
+		out.appendf("{\"event\":\"scroll\",\"dy\":%.2f", dy);
 		if (dx != 0) out.appendf(",\"dx\":%.2f", dx);
-		ctl_where(&out, g_ctl.event_x, g_ctl.event_y);
+		// In a terminal the message says where the wheel turned, in cells,
+		// which are its layout units; a window has moved the pointer there
+		// first.
+		if (g_ctl.hooks.pointer) {
+			ctl_where(&out, g_ctl.event_x, g_ctl.event_y);
+		} else {
+			ctl_where(&out, m.mouse.col, m.mouse.row);
+		}
 		out.append_char('}');
 		ctl_emit(out.str_view());
 	};
@@ -1327,17 +1374,17 @@ fn String key_spec(KeyMsg k) {
 // failed.
 fn int control_client(String[] args) {
 	if (args.len == 0) {
-		io::eprintn("usage: ctl SOCKET [REQUEST...]");
+		ctl_complain("usage: ctl SOCKET [REQUEST...]");
 		return 2;
 	}
 	CtlAddr a;
 	if (!ctl_addr(&a, args[0])) {
-		io::eprintfn("ctl: socket path too long: %s", args[0]);
+		ctl_complain("ctl: socket path too long: %s", args[0]);
 		return 2;
 	}
 	os::NativeSocket fd = os::socket(os::AF_UNIX, os::SOCK_STREAM, (os::AIProtocol)0);
 	if ((CInt)fd < 0 || os::connect(fd, (os::SockAddrPtr)&a, (os::Socklen_t)CtlAddr::size) != 0) {
-		io::eprintfn("ctl: cannot connect to %s", args[0]);
+		ctl_complain("ctl: cannot connect to %s: %s", args[0], libc::strerror(libc::errno()));
 		return 2;
 	}
 	defer (void)libc::close((CInt)fd);
@@ -1359,7 +1406,7 @@ fn int control_client(String[] args) {
 			}
 			String reply = ctl_call(fd, &pending, req);
 			if (reply.len == 0) {
-				io::eprintn("ctl: the program closed the socket");
+				ctl_complain("ctl: the program closed the socket");
 				status = 1;
 				break;
 			}

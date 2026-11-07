@@ -76,6 +76,7 @@ the same as with a real mouse or keyboard.
 
 `at` is `[col, row]` on the screen, in cells. `select` picks the first match
 and points at its middle, or at `cell`, a `[col, row]` within its content.
+When a request has both and the selector matches nothing, `at` is used.
 
 `wait` answers once:
 
@@ -136,17 +137,27 @@ These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is matched 
 After `subscribe`, input arrives as lines of its own:
 
 ```json
-{"event":"input","type":"press","at":[13,12],
- "target":{"select":"sidebar file[key=\"src/\"]","cell":[11,0]}}
-{"event":"input","type":"key","key":"ctrl+b"}
-{"event":"input","type":"scroll","dy":3.00,"at":[63,15],"target":{...}}
+{"event":"press","select":"sidebar file[key=\"src/\"]","cell":[11,0],"at":[13,12]}
+{"event":"key","key":"ctrl+b"}
+{"event":"scroll","dy":3.00,"select":"editor","cell":[26,10],"at":[53,12]}
 ```
 
-The event types are `move`, `press`, `release`, `key` and `scroll`. A
-`target` is a selector that finds the node under the pointer again, with
-the cell within it. Sending it back as a request repeats the input on
-another copy of the program, however differently that copy is laid out, so
-one window can drive another.
+The events are `move`, `press`, `release`, `key` and `scroll`. `select` is a
+selector that finds the node under the pointer again, and `cell` is the
+place within it. `at` is the place on screen, and is `[-1,-1]` when the
+pointer has left the program.
+
+Each event is also the request that repeats it: the socket takes `"event"`
+where it would take `"cmd"`, and passes over lines that are replies. So
+piping one program's events into another's socket makes the second do what
+the first does:
+
+```sh
+ted ctl $A subscribe | ted ctl $B > /dev/null
+```
+
+The selector finds the same node in B however differently B is laid out, a
+window next to a terminal, say. When nothing in B matches it, B uses `at`.
 
 `["frame"]` sends `{"event":"frame","n":42}` after each frame is drawn.
 
