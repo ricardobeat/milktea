@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the character-width range tables used by xray and glaze.
+"""Generate the character-width range tables behind utf8::width.
 
 Terminal cell width is decided per codepoint: 0 for combining marks and other
 zero-advance characters, 2 for East Asian Wide/Fullwidth characters, 1 for
@@ -24,8 +24,7 @@ Sources, via Python's unicodedata (UCD 15.0):
   width 2 — east_asian_width in {W, F}.
 
 Run `just gen-width` after changing this file; it rewrites the generated block
-in xray/width.c3 and glaze/style.c3 in place. The two tables are identical by
-construction, and test_glaze_and_xray_widths_agree proves it at build time.
+in src/utf8/width.c3 in place.
 """
 
 import re
@@ -84,12 +83,8 @@ def ranges_for(target: int):
     return out
 
 
-def emit(zero, wide, prefix: str) -> str:
-    """Render the ranges plus a binary-search lookup, as C3 source.
-
-    `prefix` distinguishes the two copies' private symbols so the modules can
-    be compiled together (as the test target does) without colliding.
-    """
+def emit(zero, wide) -> str:
+    """Render the ranges plus a binary-search lookup, as C3 source."""
 
     def table(name, rs):
         lines = [f"const CodepointRange[{len(rs)}] {name} @local = {{"]
@@ -98,24 +93,20 @@ def emit(zero, wide, prefix: str) -> str:
         lines.append("};")
         return "\n".join(lines)
 
-    zero_name = f"{prefix}_ZERO_RANGES"
-    wide_name = f"{prefix}_WIDE_RANGES"
-    search = f"{prefix.lower()}_in_ranges"
-
     return "\n".join(
         [
-            "// A half-open-free inclusive codepoint range, sorted ascending.",
-            "struct CodepointRange { uint lo; uint hi; }",
+            "// An inclusive codepoint range, sorted ascending.",
+            "struct CodepointRange @local { uint lo; uint hi; }",
             "",
-            table(zero_name, zero),
+            table("ZERO_WIDTH", zero),
             "",
-            table(wide_name, wide),
+            table("WIDE", wide),
             "",
-            f"fn bool {search}(CodepointRange[] ranges, uint cp) @local {{",
-            "\tusz lo = 0;",
-            "\tusz hi = ranges.len;",
+            "fn bool in_ranges(CodepointRange[] ranges, uint cp) @local {",
+            "\tsz lo = 0;",
+            "\tsz hi = ranges.len;",
             "\twhile (lo < hi) {",
-            "\t\tusz mid = lo + (hi - lo) / 2;",
+            "\t\tsz mid = lo + (hi - lo) / 2;",
             "\t\tif (cp < ranges[mid].lo) {",
             "\t\t\thi = mid;",
             "\t\t} else if (cp > ranges[mid].hi) {",
@@ -127,12 +118,12 @@ def emit(zero, wide, prefix: str) -> str:
             "\treturn false;",
             "}",
             "",
-            f"fn sz {prefix.lower()}_lookup(uint cp) @local {{",
-            "\t// Fast path: ASCII is by far the most common input and is",
-            "\t// entirely width 1 apart from NUL, which the zero table covers.",
+            "fn sz width(uint cp) {",
+            "\t// ASCII is by far the most common input, and all of it is one",
+            "\t// column apart from the controls, which the zero table covers.",
             "\tif (cp >= 0x20 && cp < 0x7F) return 1;",
-            f"\tif ({search}({zero_name}[..], cp)) return 0;",
-            f"\tif ({search}({wide_name}[..], cp)) return 2;",
+            "\tif (in_ranges(ZERO_WIDTH[..], cp)) return 0;",
+            "\tif (in_ranges(WIDE[..], cp)) return 2;",
             "\treturn 1;",
             "}",
         ]
@@ -161,10 +152,7 @@ def main() -> int:
     print(f"zero-width ranges: {len(zero)}   wide ranges: {len(wide)}")
 
     root = Path(__file__).resolve().parent.parent
-    ok = True
-    for rel, prefix in (("xray/width.c3", "XRAY_WIDTH"), ("glaze/style.c3", "GLAZE_WIDTH")):
-        ok &= splice(root / rel, emit(zero, wide, prefix))
-    return 0 if ok else 1
+    return 0 if splice(root / "src/utf8/width.c3", emit(zero, wide)) else 1
 
 
 if __name__ == "__main__":
