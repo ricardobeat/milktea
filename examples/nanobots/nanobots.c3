@@ -9,7 +9,6 @@ import std::collections;
 
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn long c3_time_ms_long();
 
 // Rendered `milktea` from `figlet -f phm-slanted.flf` (Philippe Majerus,
 // https://github.com/PhMajerus/FIGfonts). The font uses Unicode 13 sextant
@@ -659,7 +658,7 @@ fn xray::Color gradient_color(Model* self, sz col) {
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
-	srand((uint)c3_time_ms_long());
+	srand((uint)milktea::wall_time_ms());
 	self.w = 80;
 	self.h = 24;
 	self.frame = 0;

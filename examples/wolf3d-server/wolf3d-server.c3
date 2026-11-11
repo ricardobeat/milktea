@@ -992,7 +992,6 @@ fn void render_cells_to(xray::Cell[] cells, sz width, sz height, TcpSocket* s) {
 }
 
 extern fn void* signal(int signum, void* handler);
-extern fn long c3_time_ms_long();
 const sz SIGPIPE   = 13;
 const void* SIG_IGN = (void*)(uptr)1;
 
@@ -1006,8 +1005,8 @@ fn bool wait_for_naws(TcpSocket* s, sz* out_w, sz* out_h) {
 	char[32] buf;
 	sz pos      = 0;
 	sz deadline = 500; // 500ms timeout
-	sz start    = (sz)c3_time_ms_long();
-	while ((sz)c3_time_ms_long() - start < deadline) {
+	sz start    = (sz)milktea::time_ms();
+	while ((sz)milktea::time_ms() - start < deadline) {
 		sz? r = s.read(buf[pos..]);
 		if (catch err = r) return false;
 		if (r > 0) {

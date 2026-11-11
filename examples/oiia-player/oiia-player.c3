@@ -16,8 +16,6 @@ extern fn int fork();
 extern fn int execvp(char* file, char** argv);
 extern fn int kill(int pid, int sig);
 
-extern fn double c3_sin(double x);
-extern fn double c3_cos(double x);
 
 // ── Vec3 ─────────────────────────────────────────────────────────────────────
 

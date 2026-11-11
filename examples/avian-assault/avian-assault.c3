@@ -11,7 +11,6 @@ import std::core::mem;
 
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn long c3_time_ms_long();
 
 // ── Game Constants ─────────────────────────────────────────────────────────────
 
@@ -650,7 +649,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 // ── Tea Model Callbacks ───────────────────────────────────────────────────────
 
 fn milktea::Cmd AvianAssaultModel.init(AvianAssaultModel* self) @dynamic {
-	ulong seed = (ulong)c3_time_ms_long();
+	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
 
 	self.state = GameState.INTRO;

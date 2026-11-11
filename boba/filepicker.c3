@@ -4,6 +4,7 @@ import milktea;
 import xray;
 import glaze;
 import std::io;
+import std::os::posix;
 import std::core::dstring;
 import std::core::mem;
 
@@ -99,40 +100,20 @@ fn void FilePicker.load_dir(&self, String path) {
 	self.current_dir = dir.str_view();
 
 	@pool() {
-		char[512] path_buf;
-		// Truncate rather than overflow: the loop stops at 511, so the
-		// terminator must be clamped too. ENTER appends "/name" per directory
-		// level with no bound, so long paths are reachable in normal use.
-		sz path_len = path.len < 511 ? path.len : 511;
-		for (sz i = 0; i < path_len; i++) {
-			path_buf[i] = path[i];
-		}
-		path_buf[path_len] = 0;
-
-		char[64 * 64] name_buf;
-		int[64] dir_flags;
-
-		sz n = c3_list_dir(&path_buf[0], &name_buf[0], &dir_flags[0], 64);
-
-		for (sz i = 0; i < n && self.count < 64; i++) {
-			self.is_dirs[self.count] = (dir_flags[i] != 0);
-
-			sz offset = i * 64;
-			sz j       = 0;
-			while (j < 63 && name_buf[offset + j] != 0) {
-				self.names[self.count][j] = name_buf[offset + j];
-				j++;
-			}
-			self.names[self.count][j] = 0;
-			self.name_lens[self.count] = (sz)j;
-
+		DIRPtr d = posix::opendir(path.zstr_tcopy());
+		if (!d) return;
+		defer posix::closedir(d);
+		Posix_dirent* ent;
+		while (self.count < 64 && (ent = posix::readdir(d))) {
+			String name = ((ZString)&ent.name).str_view();
 			// Hidden files are left out, and so is ".", which is the
 			// directory already shown; ".." stays, as the way up.
-			if (j > 0 && self.names[self.count][0] == '.'
-				&& !(j == 2 && self.names[self.count][1] == '.')) {
-				continue;
-			}
-
+			if (name.len == 0 || (name[0] == '.' && name != "..")) continue;
+			sz j = name.len < 63 ? name.len : 63;
+			self.names[self.count][:j] = name[:j];
+			self.names[self.count][j] = 0;
+			self.name_lens[self.count] = j;
+			self.is_dirs[self.count] = ent.d_type == posix::DT_DIR;
 			self.count++;
 		}
 	};
@@ -172,8 +153,6 @@ fn bool FilePicker.before(&self, sz a, sz b) {
 	}
 	return na.len < nb.len;
 }
-
-extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
 
 // clear_selection drops the row a click chose. Navigating with the arrows
 // means the cursor is the current row again, and a list showing two

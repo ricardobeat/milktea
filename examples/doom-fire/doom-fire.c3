@@ -7,7 +7,6 @@ import std::core::string;
 
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn long c3_time_ms_long();
 
 const sz MAX_W = 400;
 const sz MAX_H = 400;
@@ -85,9 +84,9 @@ fn void init_fire_cells() {
 }
 
 fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
-	ulong seed = (ulong)c3_time_ms_long();
+	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
-	self.startTime = c3_time_ms_long();
+	self.startTime = milktea::wall_time_ms();
 	self.width = 80;
 	self.height = 48;
 	self.fire = mem::new_array(sz, MAX_W * MAX_H);

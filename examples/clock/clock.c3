@@ -4,7 +4,6 @@ import milktea;
 import xray;
 import std::io;
 
-extern fn long c3_time_ms_long();
 
 const String BLK   = "\xe2\x96\x88";
 const String HBLK  = "\xe2\x96\x80";
@@ -379,7 +378,7 @@ fn milktea::Node* ClockModel.view(ClockModel* self) @dynamic {
 		}
 	}
 
-	sz now  = (sz)c3_time_ms_long();
+	sz now  = (sz)milktea::wall_time_ms();
 	sz secs = now / 1000;
 	sz h    = (secs / 3600) % 24;
 	sz m    = (secs / 60) % 60;

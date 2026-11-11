@@ -1,4 +1,5 @@
 module splash;
+import std::math;
 
 import milktea;
 import xray;
@@ -6,8 +7,6 @@ import glaze;
 import std::io;
 import std::core::string;
 
-extern fn double c3_sin(double x);
-extern fn double c3_cos(double x);
 
 
 struct SplashModel {
@@ -121,13 +120,13 @@ fn milktea::Node* SplashModel.view(SplashModel* self) @dynamic {
 		for (sz x = 0; x < w; x++) {
 			double fx = (double)x / (double)w;
 
-			double ca = c3_cos(angle);
-			double sa = c3_sin(angle);
+			double ca = math::cos(angle);
+			double sa = math::sin(angle);
 
 			// Top pixel color
 			double yt     = (double)fy_top / (double)pixel_rows;
 			double proj_t = (fx - 0.5) * ca + (yt - 0.5) * sa + 0.5;
-			double vt     = 0.6 + 0.4 * c3_sin(fx * 3.0 + t * 0.7 + yt * 2.0);
+			double vt     = 0.6 + 0.4 * math::sin(fx * 3.0 + t * 0.7 + yt * 2.0);
 			double ht     = (proj_t * 0.4 + t * 0.1) % 1.0;
 			if (ht < 0) ht += 1.0;
 			RgbColor top = hsv_to_rgb(ht, 0.8, vt);
@@ -135,7 +134,7 @@ fn milktea::Node* SplashModel.view(SplashModel* self) @dynamic {
 			// Bottom pixel color
 			double yb     = (double)fy_bot / (double)pixel_rows;
 			double proj_b = (fx - 0.5) * ca + (yb - 0.5) * sa + 0.5;
-			double vb     = 0.6 + 0.4 * c3_sin(fx * 3.0 + t * 0.7 + yb * 2.0);
+			double vb     = 0.6 + 0.4 * math::sin(fx * 3.0 + t * 0.7 + yb * 2.0);
 			double hb     = (proj_b * 0.4 + t * 0.1) % 1.0;
 			if (hb < 0) hb += 1.0;
 			RgbColor bot = hsv_to_rgb(hb, 0.8, vb);

@@ -1,6 +1,8 @@
 module milktea;
 import std::atomic;
 import libc;
+import std::time;
+import std::time::clock;
 
 faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;
 
@@ -35,14 +37,8 @@ extern fn sz read(int fd, void* buf, sz nbytes);
 extern fn sz write(int fd, void* buf, sz nbytes);
 extern fn int c3_get_winsize(int fd, ushort* row, ushort* col);
 extern fn int c3_get_winsize_px(int fd, ushort* xpx, ushort* ypx);
-extern fn sz c3_time_ms();
-extern fn sz c3_monotonic_ms();
-extern fn double c3_sin(double x);
-extern fn double c3_cos(double x);
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn int c3_list_dir(char* path, char* names, int* is_dirs, int max_entries);
-extern fn long c3_time_ms_long();
 extern fn void* signal(int signum, void* handler);
 extern fn char* getenv(char* name);
 extern fn int raise(int signum);
@@ -593,14 +589,14 @@ fn void raw_mode_restore(TtyState saved) @private {
 // does: an NTP or DST step backwards would stall every armed timer for the
 // length of the step, and a step forwards would fire them all at once.
 fn sz time_ms() {
-	return (sz)c3_monotonic_ms();
+	return (sz)(clock::now() / 1_000_000);
 }
 
 // wall_time_ms returns milliseconds since the Unix epoch. Used only by
 // every(), which deliberately snaps its deadline to calendar boundaries so a
 // 1s display ticks exactly on :00.
 fn sz wall_time_ms() {
-	return (sz)c3_time_ms();
+	return (sz)(time::now() / 1_000);
 }
 
 fn sz read_stdin_timeout(char[] buf, sz timeout_ms) @private {

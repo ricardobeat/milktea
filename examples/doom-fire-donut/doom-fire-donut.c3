@@ -8,7 +8,6 @@ import std::math;
 
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn long c3_time_ms_long();
 
 // ── Fire ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ fn void spread_pixel(Model* m, sz idx) {
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
-	ulong seed = (ulong)c3_time_ms_long();
+	ulong seed = (ulong)milktea::wall_time_ms();
 
 	srand((uint)seed);
 

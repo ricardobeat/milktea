@@ -7,7 +7,6 @@ import std::math;
 
 extern fn int rand();
 extern fn void srand(uint seed);
-extern fn long c3_time_ms_long();
 
 struct Vec3 {
 	float x;
@@ -235,7 +234,7 @@ fn void build_render_voxels(Fire3DModel* self) {
 }
 
 fn milktea::Cmd Fire3DModel.init(Fire3DModel* self) @dynamic {
-	ulong seed = (ulong)c3_time_ms_long();
+	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
 	self.width = 80;
 	self.height = 24;
