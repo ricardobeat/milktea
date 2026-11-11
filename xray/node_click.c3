@@ -1,7 +1,7 @@
 module xray;
 
 import std::io;
-import std::collections::list;
+import xray::vec;
 
 // ClickTarget is one node's mouse hooks plus its solved rect, extracted from
 // a tree after solve() so the hooks can be fired against a later mouse event
@@ -35,7 +35,7 @@ struct ClickTarget {
 //
 // out is caller-owned (Program keeps one across frames) and is appended to;
 // it grows as needed, so a busy screen never loses targets.
-fn void collect_click_targets(Node* n, List{ClickTarget}* out) {
+fn void collect_click_targets(Node* n, Vec{ClickTarget}* out) {
 	if (n == null) return;
 	if (n.on_click_fn != null || n.on_click_outside_fn != null
 		|| n.on_hover_in_fn != null || n.on_hover_out_fn != null || n.on_drag_fn != null
@@ -86,25 +86,16 @@ fn sz pointer_floor(ClickTarget[] targets, sz col, sz row) @local {
 // Returns the index of the target the press landed on, or -1: a target with
 // on_drag counts as hit even without on_click, so the caller can hold on to
 // it for the drag that may follow (see ClickTarget.drag).
-fn sz dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
-	if (dbg) io::eprintfn("[dispatch] (%d,%d) against %d targets", col, row, targets.len);
+fn sz dispatch_click(ClickTarget[] targets, sz col, sz row) {
 	sz hit = -1;
 	for (sz i = (sz)targets.len - 1; i >= 0; i--) {
-		if (dbg) {
-			Rect r = targets[i].rect;
-			io::eprintfn("  [%d] rect x=%d y=%d w=%d h=%d hit=%s click=%s id=%s",
-				i, r.x, r.y, r.w, r.h, r.contains(col, row), targets[i].on_click != null,
-				targets[i].id_str.len > 0 ? targets[i].id_str : "(ptr)");
-		}
 		bool takes = targets[i].on_click != null || targets[i].on_drag != null;
 		if (!takes && targets[i].blocks && targets[i].rect.contains(col, row)) {
-			if (dbg) io::eprintfn("  -> blocked by [%d]", i);
 			break;
 		}
 		if (takes && targets[i].rect.contains(col, row)) {
 			hit = i;
 			if (targets[i].on_click == null) break;
-			if (dbg) io::eprintfn("  -> firing on_click of [%d]", i);
 			sz lc;
 			sz lr;
 			targets[i].local(col, row, &lc, &lr);
@@ -114,7 +105,6 @@ fn sz dispatch_click(ClickTarget[] targets, sz col, sz row, bool dbg) {
 	}
 	foreach (i, t : targets) {
 		if (t.on_click_outside != null && !t.rect.contains(col, row)) {
-			if (dbg) io::eprintfn("  -> firing on_click_OUTSIDE of [%d]", i);
 			t.on_click_outside(t.id_ptr, t.id_str, floor_cell(col, t.metrics.unit_w()), floor_cell(row, t.metrics.unit_h()));
 		}
 	}
@@ -162,7 +152,7 @@ fn void ClickTarget.drag(&self, sz col, sz row) {
 // Returns whether anything that reacts to the pointer — a hover callback or
 // a hover style — went in or out, which is when the screen needs redrawing.
 fn bool dispatch_hover(ClickTarget[] targets, sz col, sz row,
-		ClickTarget[] prev, sz prev_count, sz prev_col, sz prev_row, bool dbg) {
+		ClickTarget[] prev, sz prev_count, sz prev_col, sz prev_row) {
 	if (col == prev_col && row == prev_row) return false;
 	bool changed = false;
 	// A target under a blocking one is not hovered while the pointer is over
@@ -175,11 +165,9 @@ fn bool dispatch_hover(ClickTarget[] targets, sz col, sz row,
 		bool inside_prev = (sz)i >= floor_prev && t.rect.contains(prev_col, prev_row);
 		if (inside_now != inside_prev) changed = true;
 		if (inside_now && !inside_prev && t.on_hover_in != null) {
-			if (dbg) io::eprintfn("  -> firing on_hover_in of [%d]", i);
 			t.on_hover_in(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
 				floor_cell(row - t.rect.y - t.inset_y, t.metrics.unit_h()));
 		} else if (!inside_now && inside_prev && t.on_hover_out != null) {
-			if (dbg) io::eprintfn("  -> firing on_hover_out of [%d]", i);
 			t.on_hover_out(t.id_ptr, t.id_str, floor_cell(col - t.rect.x - t.inset_x, t.metrics.unit_w()),
 				floor_cell(row - t.rect.y - t.inset_y, t.metrics.unit_h()));
 		}
@@ -195,7 +183,7 @@ fn bool dispatch_hover(ClickTarget[] targets, sz col, sz row,
 // keeps them easy to read together.
 //
 // out is caller-owned and appended to.
-fn void collect_drag_regions(Node* n, List{Rect}* out) {
+fn void collect_drag_regions(Node* n, Vec{Rect}* out) {
 	if (n == null) return;
 	if (n.window_drag_area) out.push(n.computed_rect);
 	for (sz i = 0; i < n.child_count; i++) {

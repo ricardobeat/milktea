@@ -662,10 +662,11 @@ draws one frame offscreen, with no window, and writes it out, which is how
 with no window buttons: the app takes its terminal path, drawn in the window.
 See `gui/gui.c3` for the rest of `GuiOptions`.
 
-A program is itself drivable from the command line: pipe lines to its stdin
-and it answers on its stdout. The command language, the nodes, the tree and
-the streaming of input are in [docs/CONTROL.md](docs/CONTROL.md). It is part
-of every binary, terminal and window alike, and costs little.
+Another program, such as an agent, can drive any milktea program: read its
+tree and screen, and click, scroll and type. Pipe commands to its stdin, or
+send them to one already running with `<program> --cmd ...`. See
+[docs/CONTROL.md](docs/CONTROL.md). It is part of every binary, terminal and
+window alike, for about 20 KB; `-D NO_CONTROL` leaves it out.
 
 ---
 

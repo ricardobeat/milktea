@@ -1,6 +1,6 @@
 module xray;
 
-import std::collections::list;
+import xray::vec;
 import std::core::mem;
 
 // Keyboard focus: which focusable node (see Node.focusable) has the keyboard,
@@ -30,7 +30,7 @@ struct FocusState @private {
 	void* ptr;
 	char[64] buf;
 	usz len;
-	List{FocusTarget} targets;
+	Vec{FocusTarget} targets;
 	// A node that blocks the pointer (a modal) was on screen: focus stays in it.
 	bool trapped;
 }

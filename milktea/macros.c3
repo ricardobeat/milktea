@@ -39,7 +39,8 @@ macro @run_program(#model, Options opts = {}) {
 macro @run(#model, Options opts = {}) {
 	Program p = { .model = (Model)#model, .options = opts };
 	if (catch err = p.run()) {
-		io::eprintfn("Error: %s", err);
+		io::eprint("Error: ");
+		io::eprintn(err.description);
 		return 1;
 	}
 	return 0;

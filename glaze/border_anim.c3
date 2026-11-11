@@ -2,6 +2,7 @@ module glaze;
 
 import std::math;
 import std::core::dstring;
+import dye;
 
 // ── Tick interval for each animation type ────────────────────────────────────
 
@@ -213,9 +214,10 @@ fn String _border_cell_color(String ch, sz pos, sz total, BorderAnimation anim, 
 	}
 
 	s.append_string("\x1b[38;2;");
-	s.appendf("%d;%d;%d", (sz)c.r, (sz)c.g, (sz)c.b);
+	dye::write_rgb(&s, c.r, c.g, c.b);
 	if (bg.kind == ColorKind.TRUECOLOR) {
-		s.appendf(";48;2;%d;%d;%d", (sz)bg.r, (sz)bg.g, (sz)bg.b);
+		s.append_string(";48;2;");
+		dye::write_rgb(&s, bg.r, bg.g, bg.b);
 	}
 	s.append_char('m');
 	s.append_string(ch);

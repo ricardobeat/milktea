@@ -1,9 +1,11 @@
 module xray;
 
+import num;
+
 import std::core::dstring;
 import std::math;
 import glaze;
-import std::collections::list;
+import xray::vec;
 import utf8;
 
 // ============================================================
@@ -29,7 +31,7 @@ struct ScreenBuffer {
 	sz paint_seq;
 	sz pointer_floor;
 	Color inherit_fg;
-	List{PaintOp} paint_ops;
+	Vec{PaintOp} paint_ops;
 	Cell[] cells; // flat grid: width * height
 	Cell[] prev_cells; // previous frame for diffing
 	sz width;
@@ -407,22 +409,24 @@ fn sz ScreenBuffer.term_col_of(&self, sz row, sz buf_col) {
 // the block's top-left, and every emit keeps `cur_row`/`cur_col` in sync.
 fn void ScreenBuffer.move_to(&self, DString* out, sz row, sz col) {
 	if (self.position_mode == PositionMode.ABSOLUTE) {
-		out.append_string(string::tformat("\x1b[%d;%dH", row + 1, col + 1));
+		out.append_string(num::csi(row + 1, ';'));
+		num::write(out, col + 1);
+		out.append_char('H');
 		return;
 	}
 
 	// Vertical: CUU/CUD by the row delta.
 	if (row > self.cur_row) {
-		out.append_string(string::tformat("\x1b[%dB", row - self.cur_row));
+		out.append_string(num::csi(row - self.cur_row, 'B'));
 	} else if (row < self.cur_row) {
-		out.append_string(string::tformat("\x1b[%dA", self.cur_row - row));
+		out.append_string(num::csi(self.cur_row - row, 'A'));
 	}
 	// Horizontal: absolute within the line — CR to column 0, then CUF. This
 	// is immune to the tracked column having drifted from the terminal's
 	// real one (a wrapped write advances the cursor without our seeing it),
 	// which a relative CUB/CUF from cur_col would not be.
 	out.append_char('\r');
-	if (col > 0) out.append_string(string::tformat("\x1b[%dC", col));
+	if (col > 0) out.append_string(num::csi(col, 'C'));
 	self.cur_row = row;
 	self.cur_col = col;
 }

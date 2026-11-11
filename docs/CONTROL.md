@@ -1,161 +1,101 @@
-# Driving a program from the command line
+# Driving a program from outside
 
-A milktea program is itself its own command line: when its stdin is not a
-terminal, each line of stdin is a command and each reply is a line on
-stdout. No socket, no client program, no JSON.
+Any milktea program, terminal or window, can be driven by another program,
+such as an agent: it reads what the program shows and sends it the clicks
+and keys a person would. Commands are lines of text. Each is answered with
+its output and then `ok`, or with one line `err ...`.
 
-This is automatic. A terminal program whose stdin is piped takes commands;
-a window program (a `milktea_gui` app) always takes them, because its input
-comes from the window, not stdin, so you can drive it from the terminal you
-launched it in.
+There are two ways in.
 
-```sh
-printf 'ping\nquit\n' | ted
-echo 'tree' | milktea-gui
-```
-
-A command answers with its output and then `ok`, or with one line
-`err ...` when it fails. So a script reads lines until it sees `ok` or
-`err`.
-
-## Commands
-
-| command | does |
-|---|---|
-| `ping` | answers |
-| `tree [SEL]` | the tree, from the root, or each match's subtree |
-| `list SEL` | each node a selector matches, one a line |
-| `match PATTERN` | nodes whose on-screen text matches the pattern |
-| `click SEL` or `@c,r` | moves there, presses and releases |
-| `press`, `release`, `move` | one of those |
-| `drag FROM TO` | each a selector or `@c,r` |
-| `scroll [WHERE] [dy=N] [dx=N]` | in rows; positive scrolls towards the end |
-| `key SPEC` | `ctrl+b`, `enter`, `shift+tab`, `a` |
-| `type TEXT` | the rest of the line, spaces included, one key per character |
-| `select SEL TEXT` or `/PAT/ [N]` | drags across text on screen; see below |
-| `screen [PATTERN]` | the text on screen, or the lines that match |
-| `stream` | echo the input the program gets as commands |
-| `quit` | quits the program |
-
-`SEL` is a [selector](#selectors); the command targets the middle of the
-first node it matches. `@c,r` is a cell of the screen; `@-1,-1` is outside
-the program. Where a node is and what it shows are read from the last
-drawn frame.
-
-A selector holding a space travels in quotes, with single quotes around the
-value inside: `list "list-item[text='a b']"`.
-
-Commands are handled between frames, on the program's own thread, and input
-goes through the same path real input takes, so hover, focus and clicks
-behave the same as with a real mouse or keyboard.
-
-A command that sends input answers `ok` once the frame that input draws is
-on screen, and the commands after it wait for that, so a `screen` that
-follows a `click` shows what the click did.
-
-## Driving a program that is already running
-
-Piped stdin drives a program nobody is looking at. One that is on screen
-and in use takes commands from the same binary, run again with `--cmd`:
+**Piped stdin.** When a program's stdin is not a terminal, each line of it is
+a command, answered on stdout. A window app always takes commands on stdin,
+since its input comes from the window, so it can be driven from the terminal
+that launched it.
 
 ```sh
-ted                                    # in one terminal: runs as usual
-ted --cmd click 'button[key="save"]'   # from anywhere else
-ted --cmd screen
+printf 'screen\nclick $Save\nscreen\nquit\n' | ted
 ```
 
-`--cmd` takes the rest of the command line as one command, prints the reply
-and exits 0 on `ok` or 1 on `err`. It goes to the most recently started
-`ted`; `MILKTEA_PID=<pid>` picks another. Any number of `--cmd` calls can
-run at once.
+When stdin runs out, a program with nothing left to do exits on its own.
 
-`ted --repl` is the same with a prompt: it reads commands a line at a time,
-sends each one and prints the reply, `ok` in green and `err` in red on a
-terminal (`NO_COLOR` turns that off). It asks to be allowed when it starts,
-so the prompt appears once the program has said yes, and it ends at the end
-of input, at `exit`, or after `quit`. Lines are sent as they are, so quotes
-need no shell escaping.
+**`--cmd`, for a program already running.** Run the same binary again with
+`--cmd` and a command, from anywhere:
 
-The first `--cmd` (or `--repl`) has to be allowed by whoever is at the program. It shows
+```sh
+ted                       # in one terminal, as usual
+ted --cmd tree            # from another
+ted --cmd click '$Save'
+```
+
+`--cmd` sends the rest of its command line as one command, prints the reply,
+and exits 0 on `ok`, 1 on `err`. It drives the most recently started `ted`;
+`MILKTEA_PID=<pid>` picks another. Quote a `$key` so the shell leaves it alone.
+
+The first `--cmd` has to be allowed by whoever is at the program, which shows
 
 ```
 Allow remote control?  [yes]  [no]
 ```
 
-at the bottom of the screen, over whatever it was drawing, and `--cmd` waits
-up to a minute for the answer. Click one, or choose with left, right or tab
-and answer with enter; esc says no. It starts on "no" and letters answer
-nothing, so someone who was typing when it came up cannot say yes by
-accident. A refusal ends `--cmd` with exit 1.
-
-From then until the program exits it takes commands, and a white dot on red
-sits in its bottom left corner, which says "remote control on" under the
-pointer.
-
-How a program is started decides this ahead of time:
+at the bottom of the screen, and `--cmd` waits up to a minute for the answer.
+Left, right or tab choose, enter answers, esc says no, and so does a click.
+It starts on "no" and letters answer nothing, so someone typing when it comes
+up cannot say yes by accident. A refusal answers
+`err remote control was refused`, and the next `--cmd` asks again. Once
+allowed, a white dot on red sits in the bottom left corner.
 
 | started with | |
 |---|---|
-| `MILKTEA_CONTROL=1` | takes commands at once and asks nobody: for a program an agent starts itself |
+| `MILKTEA_CONTROL=1` | takes `--cmd` at once without asking: for a program an agent starts itself |
 | nothing | asks on the first `--cmd` |
-| `MILKTEA_CONTROL=0` | cannot be driven or asked |
+| `MILKTEA_CONTROL=0` | cannot be driven with `--cmd` or asked |
 
-A program keeps what this needs in `$TMPDIR/milktea-<uid>/`, a directory
-only you can enter, and removes it when it exits. `stream` has nowhere to
-write in a program drawing on a terminal, so it is for piped and window
-programs.
+## Commands
 
-## A session
+| command | does |
+|---|---|
+| `tree` | the nodes on screen, one a line, indented by depth |
+| `screen` | the text on screen, one line a row |
+| `click T` | moves to T, presses and releases |
+| `move T` | moves to T, which hovers it |
+| `drag T1 T2` | presses at T1, moves to T2 and releases there |
+| `scroll T N` | scrolls N rows at T; positive scrolls towards the end |
+| `key SPEC...` | sends keys: `ctrl+b`, `enter`, `shift+tab`, `a`, `space`, `f5` |
+| `type TEXT` | sends the rest of the line, a key a character |
+| `quit` | quits the program |
 
-```sh
-$ printf 'screen\nlist :clickable\nclick button[key="save"]\nscreen\nquit\n' | ted
-[the lines of the screen]
-button[key="save"] @12,14 12x1 :clickable
-ok
-[the lines of the screen, after the click]
-ok
-```
+Commands run between frames, against the frame on screen, and input goes the
+way real input does, so hover, focus and clicks behave as they do for a
+person. A command that sends input answers `ok` once a frame showing its
+effect has been drawn, and the commands after it wait for that: a `screen`
+after a `click` shows what the click did.
 
-With a window app the replies appear in the launching terminal while the
-program's window shows what is driven. On `quit` the window closes.
+## Targets
 
-When the pipe runs out, a program that has nothing left to do exits on its
-own, so `quit` is only needed to stop one that keeps going (a clock).
+| target | is |
+|---|---|
+| `@12,3` | the cell at column 12, row 3, counting from 0 (`screen` rows line up); `@-1,-1` is outside the program |
+| `$Save` | the node whose key is `Save`; `$"Save as"` with spaces |
+| `button` | a node whose id, role or type is `button`; if none, one that shows the text `button` |
+| `button$OK` | both: a button whose key is `OK` |
+| `"Save as"` | a node that shows that text |
 
-## Selecting text
+When several nodes match, the topmost is the one, and the command acts on its
+middle.
 
-`select` selects text the way a person would. It looks for the `n`th
-occurrence of `TEXT`, counting from 0, or the `n`th match of the pattern
-`/PAT/`, in what the target shows on screen, and drags from where it starts
-to just past where it ends. Only text on screen can be found, so scroll to
-it first.
-
-```
-select editor "import boba;"
-select editor /fn \w+/
-```
-
-## The pattern language
-
-The pattern matcher is deliberately tiny: literals, `.`, the escapes `\d`,
-`\w` and `\s`, the quantifiers `*`, `+` and `?`, and the anchors `^` and
-`$`. There are no groups, no alternation and no character classes. A pattern
-matches anywhere in the text unless it starts with `^`.
-
-## Nodes and the tree
-
-One node on its own line:
+## The tree
 
 ```
-file [key="src/"] @1,11 23x1 :clickable :focusable
+* @0,0 80x24
+  menubar @0,0 80x1
+    menu $File @0,0 6x1 clickable "File"
 ```
 
-The name is the node's `id`, else its `role`, else its content `type`, else
-`*`. Then the node's `key`, its place on screen as `@col,row WxH`, its state
-as `:clickable`, `:focusable` and `:focused`, and, for a leaf, its text
-quoted. `tree` indents by depth; `list` and `match` print flat.
+Each line is a node: its id, else its role, else its content type, else `*`;
+its key; its place as `@col,row` and size; `clickable` and `focused` when it
+is; and for a node with nothing inside it, the text it shows.
 
-Name the things a script will look for:
+Name what a script will look for:
 
 ```c3
 row.id("file").key(name).role(LIST_ITEM)
@@ -165,49 +105,8 @@ row.id("file").key(name).role(LIST_ITEM)
 tells them apart by something a person would recognise, such as a name or a
 label. `role` comes from a fixed list close to the one accessibility uses.
 
-## Selectors
-
-| selector | matches |
-|---|---|
-| `file` | a node whose id, role or type is `file` |
-| `*` | any node |
-| `$src/` | key equal to `src/`, short for `[key="src/"]`; it can follow a word too, as in `button$OK`; `$"New file"` holds spaces, and a bare name ends at a space or a `:state`. A shell expands a bare `$name`, so in `--cmd` write `'$OK'` |
-| `[key="src/"]` | key equal to `src/`; `id`, `role`, `type` and `text` work too. The quotes are optional when the value has no `]` or space: `[key=src/]` |
-| `[text*="Save"]` | text containing `Save`; `^=` is starts with |
-| `:focused`, `:clickable` | a node in that state |
-| `:nth(2)` | the third match of the whole selector; `list` and `tree` then show only that one |
-| `sidebar file` | a `file` inside `sidebar` |
-
-These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is
-matched with its spaces trimmed off both ends.
-
-## Streaming input
-
-`stream` turns the input the program gets into commands, so another copy of
-the program can do what it does:
-
-```
-key ctrl+b
-move @5,3
-press @5,3
-release @5,3
-scroll @5,3 dy=1.00
-```
-
-These are commands in the same language, so the output of one program's
-`stream` can be piped into another's stdin. `stream` answers `stream on` or
-`stream off`.
-
-## Not yet
-
-- The model's own state cannot be read; only what is on screen.
-- Keys can be sent but not released, and the mouse has only the left
-  button.
-- There is no screenshot over the command line (but `MILKTEA_GUI_SHOT`
-  takes one of a GUI app).
-
 ## Leaving it out
 
 Build with `-D NO_CONTROL` (or `"features": ["NO_CONTROL"]` in a target in
-`project.json`) and none of this is in the binary: piped stdin is keys
-again, and `--cmd`, `--repl` and the remote control dialog are gone.
+`project.json`) and none of this is in the binary: piped stdin is keys again,
+and `--cmd` and the dialog are gone. Control costs about 20 KB.

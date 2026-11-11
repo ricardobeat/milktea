@@ -128,7 +128,7 @@ struct Gui {
 	long test_key_frame;
 	bool test_key_armed;
 	int buttons_right;
-	List{xray::Rect} drag_regions;
+	vec::Vec{xray::Rect} drag_regions;
 }
 
 Gui g @private = { .font_ratio = 1.0f, .buttons_right = CHROME_BUTTONS_RIGHT, .ptr_x = -1, .ptr_y = -1 };
@@ -265,7 +265,6 @@ fn bool dispatch(milktea::Msg msg) @private {
 	g.dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
 	if (msg.kind == milktea::MsgKind.KEY && milktea::control_remote_key(msg.key)) return false;
-	milktea::control_msg_event(msg);
 	if (msg.kind == milktea::MsgKind.KEY && milktea::dispatch_focus_key(msg.key)) return false;
 	milktea::g_program.stamp_now();
 	milktea::Cmd c = g.m.update(msg);
@@ -908,9 +907,8 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// command line: drive the app from the terminal it was launched in, or
 	// from a pipe, in headless and headed runs alike.
 	milktea::control_client();
-	milktea::control_start();
+	milktea::control_start(true);
 	milktea::control_announce();
-	if (milktea::control_pipe_wanted()) milktea::control_pipe_open();
 	// MILKTEA_GUI_SHOT=<path> takes a screenshot of any GUI app, the way
 	// screenshot_path does, without the app asking for one.
 	if (opts.screenshot_path.len == 0) {
@@ -958,7 +956,6 @@ fn void run_headless() @private {
 // programmatic API (milktea::test_click and friends); these are the shortest
 // way to ask a running app from the shell what a click or key does.
 fn void read_debug_env() @private {
-	if (try dbg = env::tget_var("MILKTEA_DEBUG_MOUSE")) milktea::set_debug_mouse(dbg.len > 0);
 	if (try at = env::tget_var("MILKTEA_DEBUG_CLICK_AT")) {
 		sz col; sz row; long delay;
 		if (parse_at(at, &col, &row, &delay)) milktea::test_click(col, row, delay);

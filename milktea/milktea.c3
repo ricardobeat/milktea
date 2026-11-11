@@ -6,6 +6,7 @@ import std::collections::list;
 import std::core::mem::allocators;
 import std::thread;
 import std::atomic;
+import num;
 import std::time;
 import std::io;
 import xray;
@@ -245,7 +246,7 @@ struct Program {
 	// rather than the app re-deriving widget geometry by hand. It grows as
 	// needed: a fixed cap dropped the last targets of a busy screen, which
 	// are the topmost ones (a dialog's buttons over a long list).
-	List{xray::ClickTarget} click_targets;
+	vec::Vec{xray::ClickTarget} click_targets;
 	// Last pointer position and last hovered targets, used by dispatch_hover
 	// to fire on_hover_in / on_hover_out only on real edge crossings. Targets
 	// themselves are not stored — the same click_targets list is filtered each
@@ -282,12 +283,6 @@ struct Program {
 	char[MAX_MOUSE_CURSOR_LEN] want_mouse_cursor_buf;
 	sz want_mouse_cursor_len;
 	bool debug;
-	// debug_mouse turns on the framework's mouse-event tracing: every click
-	// dispatch prints its target list, every hover edge print which targets
-	// gained or lost hover. Both the GUI backend and xray::node_click read
-	// this — one source of truth instead of separate env-var checks per
-	// file. Set with milktea::set_debug_mouse().
-	bool debug_mouse;
 	// frame_no increments once per view() call. Test scripts use it to
 	// schedule fake clicks / pointer moves at a deterministic frame; the
 	// GUI backend exposes the same number internally for the same purpose.
@@ -481,21 +476,6 @@ fn void input_queue_wake(InputQueue* q) @private {
 	q.mu.unlock();
 }
 
-// input_queue_room is how many more bytes the ring holds before it drops.
-fn sz input_queue_room(InputQueue* q) @private {
-	q.mu.lock();
-	sz used = (q.head - q.tail + INPUT_BUF_SIZE) % INPUT_BUF_SIZE;
-	q.mu.unlock();
-	return INPUT_BUF_SIZE - 1 - used;
-}
-
-fn bool input_queue_is_empty(InputQueue* q) @private {
-	q.mu.lock();
-	bool e = q.head == q.tail;
-	q.mu.unlock();
-	return e;
-}
-
 fn bool input_queue_is_closed(InputQueue* q) @private {
 	q.mu.lock();
 	bool c = q.closed;
@@ -515,54 +495,33 @@ fn int input_reader_fn(void* arg) @private {
 	// A piped stdin drives the program from the command line: whole lines go
 	// to the control stream, not the key parser. So do the lines of the
 	// command pipe, if the program has one (see control_pipe.c3).
+	// A piped stdin is commands, which the loop reads itself (control_poll),
+	// as it does the command pipe: this thread only wakes it when they have
+	// something.
 	bool cli = CONTROL_ON && !stdin_is_tty();
-	LineAsm stdin_lines;
-	LineAsm pipe_lines;
-	bool asked = false;
 
 	while (!input_queue_is_closed(q)) {
-		// The command pipe may open while the program runs, once remote
-		// control is allowed. A request for that wakes the loop, which shows
-		// the dialog.
-		int pipe_fd = control_pipe_fd();
-		bool asked_now = control_ask_pending();
-		if (asked_now != asked) {
-			asked = asked_now;
+		PollFd[3] pfds;
+		sz n = 0;
+		if (!cli) pfds[n++] = { .fd = STDIN_FILENO, .events = POLLIN };
+		sz first_ctl = n;
+		n += control_watch(pfds[n..]);
+		if (poll(&pfds, (ulong)n, 50) <= 0) continue;
+		for (sz i = first_ctl; i < n; i++) {
+			if (pfds[i].revents == 0) continue;
+			control_disarm();
 			input_queue_wake(q);
+			break;
 		}
-		PollFd[2] pfds = { { .fd = STDIN_FILENO, .events = POLLIN }, { .fd = pipe_fd, .events = POLLIN } };
-
-		sz r = poll(&pfds, pipe_fd >= 0 ? 2 : 1, 50); // 50ms timeout
-		if (r <= 0) continue;
-
-		if (pipe_fd >= 0 && pfds[1].revents != 0) {
-			sz pn = read(pipe_fd, &tmp[0], 256);
-			if (pn > 0) pipe_lines.feed(tmp[:pn], true);
-		}
-		if (pfds[0].revents == 0) continue;
-
-		sz n = read(STDIN_FILENO, &tmp[0], 256);
-		if (n <= 0) {
+		if (cli || pfds[0].revents == 0) continue;
+		sz got = read(STDIN_FILENO, &tmp[0], 256);
+		if (got <= 0) {
 			// EOF or a hard read error: no further input can ever arrive.
-			// Mark the queue closed rather than just returning — otherwise the
-			// event loop keeps blocking in input_queue_wait for up to a second
-			// per iteration, forever, with nothing left to wake it. Closing
-			// also broadcasts, so a waiter is released immediately.
-			if (cli) {
-				// Flush the last partial line, then say the command stream
-				// ended so the program can run down once it has settled.
-				stdin_lines.flush(true);
-				control_stdin_eof();
-			}
+			// Closing the queue also releases the loop's wait at once.
 			input_queue_close(q);
 			break;
 		}
-		if (!cli) {
-			input_queue_push(q, tmp[:n]);
-			continue;
-		}
-		// Line mode: a whole line is one command.
-		stdin_lines.feed(tmp[:n], true);
+		input_queue_push(q, tmp[:got]);
 	}
 	return 0;
 }
@@ -616,10 +575,9 @@ fn xray::Rect layout_area() {
 // Dispatch coordinates use backend layout units; callbacks receive text cells.
 fn void dispatch_click(sz col, sz row) {
 	if (g_program == null) return;
-	control_pointer_event("press", col, row);
 	if (xray::g_focus_runtime != null) xray::g_focus_runtime.click(col, row);
 	xray::ClickTarget[] targs = g_program.click_targets.array_view();
-	sz hit = xray::dispatch_click(targs, col, row, g_program.debug_mouse);
+	sz hit = xray::dispatch_click(targs, col, row);
 	g_program.dragging = hit >= 0 && targs[hit].on_drag != null;
 	if (g_program.dragging) g_program.drag_target = targs[hit];
 }
@@ -644,7 +602,6 @@ fn bool dispatch_drag(sz col, sz row) {
 fn void end_drag() {
 	if (g_program == null) return;
 	g_program.dragging = false;
-	control_pointer_event("release", -2, -2);
 }
 
 // dispatch_hover walks the last drawn frame's click targets and fires
@@ -657,11 +614,10 @@ fn void end_drag() {
 // the only way a bare pointer move changes the screen.
 fn bool dispatch_hover(sz col, sz row) {
 	if (g_program == null) return false;
-	control_pointer_event("move", col, row);
 	xray::ClickTarget[] targs = g_program.click_targets.array_view();
 	sz pc = g_program.hover_has_prev ? g_program.hover_prev_col : -1;
 	sz pr = g_program.hover_has_prev ? g_program.hover_prev_row : -1;
-	bool changed = xray::dispatch_hover(targs, col, row, targs, (sz)targs.len, pc, pr, g_program.debug_mouse);
+	bool changed = xray::dispatch_hover(targs, col, row, targs, (sz)targs.len, pc, pr);
 	g_program.hover_prev_col = col;
 	g_program.hover_prev_row = row;
 	g_program.hover_has_prev = true;
@@ -697,19 +653,6 @@ fn bool dispatch_focus_key(KeyMsg k) {
 	if (xray::g_focus_runtime == null || k.code != KeyCode.TAB || k.ctrl || k.alt) return false;
 	return xray::g_focus_runtime.step(k.shift);
 }
-
-// set_debug_mouse turns mouse-event tracing on or off for the running
-// program. When on, both the GUI backend and xray::node_click print every
-// dispatch_hover / dispatch_click's target list to stderr. Apps usually set
-// it from a CLI flag or env var at startup; tests toggle it per assertion.
-fn void set_debug_mouse(bool on) {
-	if (g_program == null) return;
-	g_program.debug_mouse = on;
-}
-
-// debug_mouse reports whether mouse tracing is currently on. Useful for
-// conditional logging in app code that wants to be quiet in production.
-fn bool debug_mouse() => g_program != null && g_program.debug_mouse;
 
 // frame_no returns how many times the running program has rendered the
 // model's view. Tests use it to schedule fake clicks / pointer moves at a
@@ -793,12 +736,14 @@ fn void set_mouse_cursor(String name) {
 // Only writes when the running program has debug=true; silently swallows all
 // I/O errors so a logging failure never disrupts the TUI surface.
 // Never touches stdout/stderr — those are the terminal rendering surface.
-fn void debug_warn(String msg) @local {
+fn void debug_warn(String msg, String detail = "") @local {
 	if (g_program == null || !g_program.debug) return;
 	// Open in append mode so successive calls accumulate in one file.
 	File? f = io::file::open("milktea-debug.log", "a");
 	if (catch f) return;
 	(void)f.write((char[])msg);
+	(void)f.write((char[])" ");
+	(void)f.write((char[])detail);
 	(void)f.write((char[])"\n");
 	(void)f.close();
 }
@@ -1045,7 +990,6 @@ fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
 	// The "allow remote control?" dialog has the keyboard while it is up.
 	if (m.kind == MsgKind.KEY && control_remote_key(m.key)) return false;
-	control_msg_event(m);
 	if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE && dispatch_focus_key(m.key)) return false;
 	// A wheel notch arrives as a press, but it scrolls; it clicks nothing.
 	if (m.kind == MsgKind.MOUSE && m.mouse.action == MouseAction.MOUSE_PRESS
@@ -1151,7 +1095,7 @@ fn void arm_timer(sz deadline, Cmd callback, void* owner, String what) @private 
 			return;
 		}
 	}
-	debug_warn(string::tformat("timer table full; %s dropped", what));
+	debug_warn("timer table full; dropped", what);
 }
 
 // tick registers a timer that fires after delay_ms.
@@ -1238,15 +1182,12 @@ fn void? Program.run(Program* self) {
 	if (!self.test_mode) control_client();
 	stdin_probe();
 	bool cli_mode = CONTROL_ON && !self.test_mode && !stdin_is_tty();
-	if (cli_mode) control_start_piped();
+	if (cli_mode) control_start(true);
 	// A program on a terminal takes commands too, from a pipe of its own
 	// that the reader thread watches beside stdin.
 	// Asked to at once (MILKTEA_CONTROL=1), or later with the say-so of
 	// whoever is at the program (see control_remote.c3).
-	if (!self.test_mode && !cli_mode) {
-		control_announce();
-		if (control_pipe_wanted() && control_pipe_open()) control_start_piped();
-	}
+	if (!self.test_mode && !cli_mode && control_announce()) control_start(false);
 	// No OSC 22 emitted yet, which is indistinguishable from having emitted
 	// the empty (reset) name — so a first frame with no cursor stays silent.
 	self.last_mouse_cursor_len = 0;
@@ -1331,7 +1272,9 @@ fn void? Program.run(Program* self) {
 			// relative move: the block's absolute position is unknown, and
 			// assuming it starts at row 1 would jump into unrelated output.
 			if (!self.in_alt_screen && self.last_content_rows > 0) {
-				write_stdout((char[])string::tformat("\x1b[m\x1b[%dB\r\n", self.last_content_rows - 1));
+				write_stdout((char[])"\x1b[m");
+				write_stdout((char[])num::csi(self.last_content_rows - 1, 'B'));
+				write_stdout((char[])"\r\n");
 			}
 			// Stop dereferencing this frame's fields from signal handlers before
 			// it goes away — Program is a stack local in every entry point.
@@ -1526,8 +1469,7 @@ fn void? Program.run(Program* self) {
 			sz idropped = input_queue_take_dropped(&g_input_queue);
 			if (idropped > 0) {
 				@pool() {
-					debug_warn(string::tformat(
-						"input ring full; %d byte(s) dropped by reader thread", idropped));
+					debug_warn("input ring full; bytes dropped by the reader thread:", num::str(idropped));
 				};
 			}
 		}
@@ -1566,8 +1508,7 @@ fn void? Program.run(Program* self) {
 			// arrived faster than the parser can consume it.
 			if (copied < n) {
 				@pool() {
-					debug_warn(string::tformat(
-						"pending buffer full; %d input byte(s) dropped", n - copied));
+					debug_warn("pending buffer full; input bytes dropped:", num::str(n - copied));
 				};
 			}
 		}
@@ -1811,7 +1752,7 @@ fn void? Program.run(Program* self) {
 		// can arrive, so blocking again would spin — input_queue_wait returns
 		// immediately once the queue is closed. Timers still keep the program
 		// alive, so an animation driven purely by tick() is unaffected.
-		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
+		if (!self.test_mode && (input_queue_is_closed(&g_input_queue) || control_ended()) && self.pending_len == 0
 			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()
 			&& !control_busy()) {
 			return;
@@ -1819,7 +1760,7 @@ fn void? Program.run(Program* self) {
 
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
-			// A command line wakes the loop as a key does (control_feed_line),
+			// A command line wakes the loop as a key does (control_watch),
 			// so it only stays awake while commands are still to be handled.
 			// A message a command sent (quit) is handled on the next pass.
 			sz wait_ms = control_busy() || self.redraw_wanted || self.send_head != self.send_tail ? 0 : 1000;
@@ -2006,7 +1947,7 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 		DString grow = dstring::temp();
 		for (sz i = old_rows; i < rows; i++) grow.append_char('\n');
 		// Come back up to the top-left of the (now taller) block.
-		if (rows > 1) grow.append_string(string::tformat("\x1b[%dA", rows - 1));
+		if (rows > 1) grow.append_string(num::csi(rows - 1, 'A'));
 		grow.append_char('\r');
 		write_stdout((char[])grow.str_view());
 	} else if (rows < old_rows) {
@@ -2014,9 +1955,9 @@ fn void Program.resize_inline(Program* self, xray::Renderer* r, sz rows, sz cols
 		// about them, or their content would linger above the prompt.
 		DString shrink = dstring::temp();
 		for (sz i = rows; i < old_rows; i++) {
-			shrink.append_string(string::tformat("\x1b[%dB\r\x1b[K", 1));
+			shrink.append_string("\x1b[1B\r\x1b[K");
 		}
-		if (old_rows > rows) shrink.append_string(string::tformat("\x1b[%dA", old_rows - rows));
+		if (old_rows > rows) shrink.append_string(num::csi(old_rows - rows, 'A'));
 		shrink.append_char('\r');
 		write_stdout((char[])shrink.str_view());
 	}

@@ -1,6 +1,7 @@
 module dye;
 
 import std::core::dstring;
+import num;
 
 // ============================================================
 // Color — supports basic ANSI (16), 256-color palette, and
@@ -127,35 +128,63 @@ fn String Color.to_sgr_bg(&self) {
 // slot takes the extended forms only, so a basic ANSI colour is written as its
 // palette index.
 fn String Color.to_sgr_underline(&self) {
+	DString s = dstring::temp();
 	switch (self.kind) {
 		case ColorKind.ANSI:
 		case ColorKind.ANSI256:
-			return string::tformat("\x1b[58;5;%dm", (int)self.index);
+			s.append_string("\x1b[58;5;");
+			num::write(&s, (sz)self.index);
 		case ColorKind.TRUECOLOR:
-			return string::tformat("\x1b[58;2;%d;%d;%dm", (int)self.r, (int)self.g, (int)self.b);
+			s.append_string("\x1b[58;2;");
+			write_rgb(&s, self.r, self.g, self.b);
 		default:
 			return "";
 	}
+	s.append_char('m');
+	return s.str_view();
 }
 
 // to_sgr emits the escape sequence that selects this color. background picks
 // the background variant of each code.
 fn String Color.to_sgr(&self, bool background) {
+	DString s = dstring::temp();
+	s.append_string("\x1b[");
+	self.write_sgr_params(&s, !background);
+	if (s.len() == 2) return "";
+	s.append_char('m');
+	return s.str_view();
+}
+
+// write_rgb appends "r;g;b".
+fn void write_rgb(DString* out, sz r, sz g, sz b) {
+	num::write(out, r);
+	out.append_char(';');
+	num::write(out, g);
+	out.append_char(';');
+	num::write(out, b);
+}
+
+// write_sgr_params appends this color's SGR parameters to out, without the
+// surrounding CSI or final `m` — the caller is assembling a longer sequence.
+// 
+// NONE writes nothing (the terminal keeps its default), and so does
+// TRANSPARENT: it means "inherit from the layer below", which is a compositing
+// idea with no SGR spelling.
+fn void Color.write_sgr_params(self, DString* out, bool foreground) {
 	switch (self.kind) {
-		case ColorKind.NONE:
-			return "";
-		case ColorKind.ANSI: {
-			if (self.index < 8) {
-				return string::tformat("\x1b[%dm", (background ? 40 : 30) + (int)self.index);
-			}
-			return string::tformat("\x1b[%dm", (background ? 100 : 90) + (int)(self.index - 8));
-		}
-		case ColorKind.ANSI256:
-			return string::tformat("\x1b[%d;5;%dm", background ? 48 : 38, (int)self.index);
-		case ColorKind.TRUECOLOR:
-			return string::tformat("\x1b[%d;2;%d;%d;%dm", background ? 48 : 38, (int)self.r, (int)self.g, (int)self.b);
-		default:
-			return "";
+		case NONE:
+		case TRANSPARENT:
+			break;
+		case ANSI:
+			// 30-37 and 40-47, then the bright 90-97 and 100-107.
+			sz base = self.index < 8 ? (foreground ? 30 : 40) : (foreground ? 90 - 8 : 100 - 8);
+			num::write(out, base + (sz)self.index);
+		case ANSI256:
+			out.append_string(foreground ? "38;5;" : "48;5;");
+			num::write(out, (sz)self.index);
+		case TRUECOLOR:
+			out.append_string(foreground ? "38;2;" : "48;2;");
+			write_rgb(out, self.r, self.g, self.b);
 	}
 }
 

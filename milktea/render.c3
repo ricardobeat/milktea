@@ -1,6 +1,7 @@
 module milktea;
 
 import std::core::dstring;
+import num;
 import xray;
 
 const String SGR_HIDE_CURSOR      @private = "\x1b[?25l";
@@ -27,17 +28,28 @@ const String SGR_MOUSE_PIXELS_OFF @private = "\x1b[?1016l";
 const String SGR_CURSOR_BLINK_OFF @private = "\x1b[?12l";
 const String SGR_CURSOR_BLINK_ON  @private = "\x1b[?12h";
 
+// osc is the operating system command ESC ] code ; value ST, on tmem.
+fn String osc(String code, String value) @private {
+	DString s = dstring::temp();
+	s.append_string("\x1b]");
+	s.append_string(code);
+	s.append_char(';');
+	s.append_string(value);
+	s.append_string("\x1b\\");
+	return s.str_view();
+}
+
 // OSC 22 — set/reset the mouse pointer shape (xterm, kitty, most modern terminals).
 // name: any CSS cursor keyword, e.g. "crosshair", "text", "pointer", "default".
 fn String mouse_cursor_seq(String name) @private {
-	return string::tformat("\x1b]22;%s\x1b\\", name);
+	return osc("22", name);
 }
 const String OSC_MOUSE_CURSOR_RESET @private = "\x1b]22;\x1b\\";
 
 // OSC 12 — set the terminal cursor color.
 // color: CSS/X11 color name or hex, e.g. "#ff6600" or "red".
 fn String cursor_color_seq(String color) @private {
-	return string::tformat("\x1b]12;%s\x1b\\", color);
+	return osc("12", color);
 }
 // Reset cursor color to terminal default.
 const String OSC_CURSOR_COLOR_RESET @private = "\x1b]112\x1b\\";
@@ -47,7 +59,10 @@ const String OSC_CURSOR_COLOR_RESET @private = "\x1b]112\x1b\\";
 fn String cursor_style_seq(CursorShape shape, bool blink) @private {
 	sz style = ((sz)shape * 2) + 1;
 	if (!blink) style++;
-	return string::tformat("\x1b[%d q", style);
+	DString s = dstring::temp();
+	s.append_string(num::csi(style, ' '));
+	s.append_char('q');
+	return s.str_view();
 }
 
 // cells_to_string flattens a cell view into an ANSI string, one line per row.
@@ -230,5 +245,11 @@ fn void disable_mouse_pixels() @private {
 }
 
 fn String cursor_to(sz row, sz col) @private {
-	return string::tformat("\x1b[%d;%dH", row, col);
+	DString s = dstring::temp();
+	s.append_string("\x1b[");
+	num::write(&s, row);
+	s.append_char(';');
+	num::write(&s, col);
+	s.append_char('H');
+	return s.str_view();
 }

@@ -106,25 +106,25 @@ fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 		.ref(&hit).on_click(&clicked).on_hover_in(&entered).on_hover_out(&left);
 	xray::Node* root = xray::root().decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(3, 2, 1, 4)).add(child);
 	root.solve({ .w = 200, .h = 100 }, test_pixels());
-	List{xray::ClickTarget} list;
-	list.tinit();
+	vec::Vec{xray::ClickTarget} list;
+	list.init(tmem);
 	xray::collect_click_targets(root, &list);
 	xray::ClickTarget[] targets = list.array_view();
 	sz count = (sz)targets.len;
 	assert(count == 1);
-	xray::dispatch_click(targets[:count], 3, 3, false);
+	xray::dispatch_click(targets[:count], 3, 3);
 	assert(hit.count == 0);
-	xray::dispatch_click(targets[:count], 4, 3, false);
+	xray::dispatch_click(targets[:count], 4, 3);
 	assert(hit.count == 1 && hit.col == 0 && hit.row == 0);
-	xray::dispatch_click(targets[:count], 13, 22, false);
+	xray::dispatch_click(targets[:count], 13, 22);
 	assert(hit.count == 2 && hit.col == 0 && hit.row == 0);
-	xray::dispatch_click(targets[:count], 14, 3, false);
+	xray::dispatch_click(targets[:count], 14, 3);
 	assert(hit.count == 3 && hit.col == 1);
-	xray::dispatch_click(targets[:count], 34, 3, false);
-	xray::dispatch_click(targets[:count], 4, 23, false);
+	xray::dispatch_click(targets[:count], 34, 3);
+	xray::dispatch_click(targets[:count], 4, 23);
 	assert(hit.count == 3);
-	xray::dispatch_hover(targets[:count], 4, 3, {}, 0, 3, 3, false);
-	xray::dispatch_hover(targets[:count], 3, 3, {}, 0, 4, 3, false);
+	xray::dispatch_hover(targets[:count], 4, 3, {}, 0, 3, 3);
+	xray::dispatch_hover(targets[:count], 3, 3, {}, 0, 4, 3);
 	assert(hit.entered == 1 && hit.left == 1);
 	child.decorate(xray::solid(xray::color_rgb(0, 0, 0)).padding(1, 2, 3, 4));
 	root.solve({ .w = 200, .h = 100 }, test_pixels());
@@ -132,9 +132,9 @@ fn void test_pixel_hit_boundaries_and_content_local_cells() @test {
 	xray::collect_click_targets(root, &list);
 	targets = list.array_view();
 	count = (sz)targets.len;
-	xray::dispatch_click(targets[:count], 17, 4, false);
+	xray::dispatch_click(targets[:count], 17, 4);
 	assert(hit.col == 0 && hit.row == 0);
-	xray::dispatch_click(targets[:count], 18, 4, false);
+	xray::dispatch_click(targets[:count], 18, 4);
 	assert(hit.col == 1);
 }
 
@@ -290,22 +290,22 @@ fn void test_block_pointer_covers_what_is_beneath() @test {
 	xray::Node* root = xray::root().add(under).add(modal);
 	root.solve(xray::new_rect(0, 0, 20, 10));
 
-	List{xray::ClickTarget} list;
-	list.tinit();
+	vec::Vec{xray::ClickTarget} list;
+	list.init(tmem);
 	xray::collect_click_targets(root, &list);
 	xray::ClickTarget[] targets = list.array_view();
 
 	// Under the modal: no click, no hover.
-	xray::dispatch_click(targets, 2, 0, false);
+	xray::dispatch_click(targets, 2, 0);
 	assert(hit.count == 0, "the click stops at the modal");
-	xray::dispatch_hover(targets, 2, 0, {}, 0, 15, 5, false);
+	xray::dispatch_hover(targets, 2, 0, {}, 0, 15, 5);
 	assert(hit.entered == 0, "no hover under the modal");
 
 	// Beside it, the row behaves as before.
-	xray::dispatch_click(targets, 7, 0, false);
+	xray::dispatch_click(targets, 7, 0);
 	assert(hit.count == 1, "the row still takes clicks outside the modal");
-	xray::dispatch_hover(targets, 7, 0, {}, 0, 2, 0, false);
+	xray::dispatch_hover(targets, 7, 0, {}, 0, 2, 0);
 	assert(hit.entered == 1, "moving off the modal onto the row hovers it");
-	xray::dispatch_hover(targets, 2, 0, {}, 0, 7, 0, false);
+	xray::dispatch_hover(targets, 2, 0, {}, 0, 7, 0);
 	assert(hit.left == 1, "moving onto the modal leaves the row");
 }
