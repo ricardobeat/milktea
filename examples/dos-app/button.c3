@@ -73,6 +73,7 @@ fn xray::Node* Button.focus_node(&self, void* id) {
 		.width(milktea::cells(self.measure_width(2)))
 		.height(milktea::cells(2))
 		.ref(id)
+		.key(self.label.trim()).role(BUTTON)
 		.focusable();
 }
 
