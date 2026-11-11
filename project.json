@@ -8,6 +8,9 @@
   "linked-libraries": [
     "z"
   ],
+  "link-args": [
+    "-Wl,-dead_strip"
+  ],
   "sources": [
     "milktea/**",
     "glaze/**",
