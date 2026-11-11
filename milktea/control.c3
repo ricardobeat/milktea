@@ -1,4 +1,5 @@
-module milktea;
+// Left out of a build with -D NO_CONTROL (see control_off.c3).
+module milktea @feat(!NO_CONTROL);
 
 import xray;
 import std::core::dstring;

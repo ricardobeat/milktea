@@ -15,6 +15,10 @@ const int STDOUT_FILENO @private = 1;
 // dropped. stdin_probe() must run before anything writes.
 bool g_stdin_tty @private;
 
+// CONTROL_ON is false in a build with -D NO_CONTROL, which leaves out
+// driving a program from outside (control.c3) and keeps piped stdin as keys.
+const bool CONTROL_ON @private = !$feat(NO_CONTROL);
+
 fn void stdin_probe() {
 	g_stdin_tty = isatty(STDIN_FILENO) != 0;
 }
@@ -623,7 +627,7 @@ fn void write_stdout(char[] bytes) {
 	// A program whose stdin is not a terminal is being driven from the
 	// command line: stdin is commands, and stdout carries only the replies,
 	// so render output is dropped. stdin_probe() has run by now.
-	if (!g_stdin_tty) return;
+	if (CONTROL_ON && !g_stdin_tty) return;
 	sz written = 0;
 	while (written < bytes.len) {
 		sz n = write(STDOUT_FILENO, &bytes[written], bytes.len - written);

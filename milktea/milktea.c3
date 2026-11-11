@@ -514,7 +514,7 @@ fn int input_reader_fn(void* arg) @private {
 	// A piped stdin drives the program from the command line: whole lines go
 	// to the control stream, not the key parser. So do the lines of the
 	// command pipe, if the program has one (see control_pipe.c3).
-	bool cli = !stdin_is_tty();
+	bool cli = CONTROL_ON && !stdin_is_tty();
 	LineAsm stdin_lines;
 	LineAsm pipe_lines;
 	bool asked = false;
@@ -833,6 +833,12 @@ fn Cmd quit() @nodiscard {
 // may be midway through a dispatch).
 //
 // Returns false when nothing is running to receive it.
+// request_redraw has the running program draw a frame on its next pass,
+// for a change that reached the screen by no message.
+fn void request_redraw() {
+	if (g_program != null) g_program.redraw_wanted = true;
+}
+
 fn bool request_quit() {
 	if (g_program == null) return false;
 	g_program.send(make_quit_msg());
@@ -1230,7 +1236,7 @@ fn void? Program.run(Program* self) {
 	// command and exits here.
 	if (!self.test_mode) control_client();
 	stdin_probe();
-	bool cli_mode = !self.test_mode && !stdin_is_tty();
+	bool cli_mode = CONTROL_ON && !self.test_mode && !stdin_is_tty();
 	if (cli_mode) control_start_piped();
 	// A program on a terminal takes commands too, from a pipe of its own
 	// that the reader thread watches beside stdin.

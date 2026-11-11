@@ -1,4 +1,5 @@
-module milktea;
+// Left out of a build with -D NO_CONTROL (see control_off.c3).
+module milktea @feat(!NO_CONTROL);
 
 import glaze;
 import xray;
@@ -26,12 +27,6 @@ struct Remote @local {
 }
 
 Remote g_remote @local;
-
-// request_redraw has the running program draw a frame on its next pass,
-// for a change that reached the screen by no message.
-fn void request_redraw() {
-	if (g_program != null) g_program.redraw_wanted = true;
-}
 
 // control_remote_poll looks for a request, or for one taken back. Backends
 // reach it through control_poll, once a pass.

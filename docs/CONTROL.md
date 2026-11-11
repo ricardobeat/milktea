@@ -205,3 +205,9 @@ These are commands in the same language, so the output of one program's
   button.
 - There is no screenshot over the command line (but `MILKTEA_GUI_SHOT`
   takes one of a GUI app).
+
+## Leaving it out
+
+Build with `-D NO_CONTROL` (or `"features": ["NO_CONTROL"]` in a target in
+`project.json`) and none of this is in the binary: piped stdin is keys
+again, and `--cmd`, `--repl` and the remote control dialog are gone.
