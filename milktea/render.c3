@@ -120,40 +120,18 @@ fn void render_view_to(View v, DString* out) {
 		out.append_char(frame[i]);
 	}
 
-	// Position cursor if the View requests it.
-	// Cursor x,y are 0-indexed relative to the content's top-left corner.
-	// After SGR_CLEAR_HOME, content starts at terminal position (1,1),
-	// so we add 1 to convert to 1-indexed terminal coordinates.
-	if (v.has_cursor) {
-		sz term_row = v.cursor.y + 1;
-		sz term_col = v.cursor.x + 1;
-		out.append_string(cursor_to(term_row, term_col));
-
-		// Set cursor color via OSC 12
-		if (v.cursor.color.len > 0) {
-			out.append_string(cursor_color_seq(v.cursor.color));
-		} else {
-			out.append_string(OSC_CURSOR_COLOR_RESET);
-		}
-
-		// Set cursor shape and blink
-		out.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
-		if (v.cursor.blink) {
-			out.append_string(SGR_CURSOR_BLINK_ON);
-		} else {
-			out.append_string(SGR_CURSOR_BLINK_OFF);
-		}
-	}
-
+	if (v.has_cursor) append_cursor(out, v);
 	// Show cursor
 	out.append_string(SGR_SHOW_CURSOR);
 }
 
-// render_view renders a View to stdout.
-fn void render_view(View v) {
-	DString out = dstring::temp();
-	render_view_to(v, &out);
-	write_stdout((char[])out.str_view());
+// append_cursor places the cursor the view asks for and sets its colour,
+// shape and blink. The view's top-left is the terminal's (1,1).
+fn void append_cursor(DString* out, View v) @private {
+	out.append_string(cursor_to(v.cursor.y + 1, v.cursor.x + 1));
+	out.append_string(v.cursor.color.len > 0 ? cursor_color_seq(v.cursor.color) : OSC_CURSOR_COLOR_RESET);
+	out.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
+	out.append_string(v.cursor.blink ? SGR_CURSOR_BLINK_ON : SGR_CURSOR_BLINK_OFF);
 }
 
 // g_manual_alt_screen records that enter_alt_screen() was called outside of a

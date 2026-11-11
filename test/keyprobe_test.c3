@@ -382,6 +382,19 @@ fn void test_tilde_sequence_modifiers_are_reported() @test {
 	assert(r.key.shift);
 }
 
+fn void test_tilde_sequence_keys() @test {
+	assert(parse_key((char[])"\x1b[2~").key.code == KeyCode.INSERT);
+	assert(parse_key((char[])"\x1b[6~").key.code == KeyCode.PAGE_DOWN);
+	assert(parse_key((char[])"\x1b[11~").key.code == KeyCode.F1);
+	assert(parse_key((char[])"\x1b[17~").key.code == KeyCode.F6);
+	assert(parse_key((char[])"\x1b[24~").key.code == KeyCode.F12);
+	// The gaps and anything past the table are no key, but still consumed.
+	foreach (String s : { "\x1b[4~", "\x1b[16~", "\x1b[25~", "\x1b[99~" }) {
+		ParseResult r = parse_key((char[])s);
+		assert(r.key.code == KeyCode.NONE && r.consumed == s.len);
+	}
+}
+
 // ============================================================
 // Malformed / adversarial input
 // ============================================================

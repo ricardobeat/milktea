@@ -1149,6 +1149,27 @@ fn void cancel(void* owner) {
 	}
 }
 
+// close_send stops send() and frees its queue, at the end of run().
+fn void Program.close_send(Program* self) {
+	// Mirror image of send()'s handshake: stop accepting, then wait for
+	// senders already past their check to finish. Clearing the flag alone
+	// only prevents *new* entrants — a sender that had already passed the
+	// check would go on to lock a mutex we had destroyed.
+	//
+	// The wait is bounded in practice: an in-flight sender holds the lock
+	// only for a ring-buffer push, and the main thread is not holding it
+	// here. Spinning with a yield is appropriate for a wait this short and
+	// avoids needing a second condvar purely for teardown.
+	self.send_accepting.store(false);
+	while (self.send_inflight.load() > 0) {
+		thread::yield();
+	}
+	self.send_mu.destroy();
+	alloc::free(&allocators::LIBC_ALLOCATOR, self.send_queue.ptr);
+	self.send_queue = {};
+	g_program = null;
+}
+
 // leave_tty puts the terminal back as run() found it.
 fn void Program.leave_tty(Program* self, TtyState saved) {
 	if (self.mouse_pixels) {
@@ -1243,25 +1264,7 @@ fn void? Program.run(Program* self) {
 	self.send_mu.init()!;
 	self.send_queue = alloc::new_array(&allocators::LIBC_ALLOCATOR, Msg, INITIAL_SEND_CAPACITY);
 	self.send_accepting.store(true);
-	defer {
-		// Mirror image of send()'s handshake: stop accepting, then wait for
-		// senders already past their check to finish. Clearing the flag alone
-		// only prevents *new* entrants — a sender that had already passed the
-		// check would go on to lock a mutex we had destroyed.
-		//
-		// The wait is bounded in practice: an in-flight sender holds the lock
-		// only for a ring-buffer push, and the main thread is not holding it
-		// here. Spinning with a yield is appropriate for a wait this short and
-		// avoids needing a second condvar purely for teardown.
-		self.send_accepting.store(false);
-		while (self.send_inflight.load() > 0) {
-			thread::yield();
-		}
-		self.send_mu.destroy();
-		alloc::free(&allocators::LIBC_ALLOCATOR, self.send_queue.ptr);
-		self.send_queue = {};
-		g_program = null;
-	}
+	defer self.close_send();
 
 	TtyState saved;
 	// Initialise paste accumulation buffer; freed in the cleanup defer.
@@ -1571,10 +1574,7 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 					}
 					// Consume bytes before + the terminator itself.
 					sz consume = term_pos + PASTE_TERM_LEN;
-					for (sz i = consume; i < self.pending_len; i++) {
-						self.pending[i - consume] = self.pending[i];
-					}
-					self.pending_len -= consume;
+					self.drop_pending(consume);
 
 					// Emit ONE PASTE message; str_view is valid during dispatch
 					// because paste_buf is not touched again until after return.
@@ -1622,10 +1622,7 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 							debug_warn("bracketed paste exceeded 1 MB; bytes dropped");
 							safe = self.pending_len; // consume all to make progress
 						}
-						for (sz i = safe; i < self.pending_len; i++) {
-							self.pending[i - safe] = self.pending[i];
-						}
-						self.pending_len -= safe;
+						self.drop_pending(safe);
 					} else {
 						// The entire pending buffer is a potential terminator prefix;
 						// leave it in place and wait for more input.
@@ -1645,8 +1642,7 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 						prefix = 2;
 					}
 					sz consumed = prefix + self.terminal_reply.consume(self.pending[prefix:self.pending_len-prefix]);
-					for (sz i = consumed; i < self.pending_len; i++) self.pending[i-consumed] = self.pending[i];
-					self.pending_len -= consumed;
+					self.drop_pending(consumed);
 					if (self.terminal_reply.active) { stuck = true; break; }
 					continue;
 				}
@@ -1656,10 +1652,7 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 					break;
 				}
 
-				for (sz i = pr.consumed; i < self.pending_len; i++) {
-					self.pending[i - pr.consumed] = self.pending[i];
-				}
-				self.pending_len -= pr.consumed;
+				self.drop_pending(pr.consumed);
 
 				if (pr.kind == MsgKind.PASTE_START) {
 					// Enter paste accumulation mode; inner loop above handles the rest.
@@ -1714,10 +1707,7 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 					: now >= self.esc_deadline_ms;
 				if (flush) {
 					self.esc_deadline_ms = 0;
-					for (sz i = 1; i < self.pending_len; i++) {
-						self.pending[i - 1] = self.pending[i];
-					}
-					self.pending_len--;
+					self.drop_pending(1);
 					Msg em = { .kind = MsgKind.KEY, .key = { KeyCode.ESC, 0, false, false, false, KeyAction.KEY_PRESS, false } };
 					if (dispatch(self, self.model, em)) return;
 					dirty   = true;
@@ -1786,6 +1776,12 @@ fn void Program.event_loop(Program* self, bool cli_mode) {
 			}
 		}
 	}
+}
+
+// drop_pending removes the first n bytes of pending, which were handled.
+fn void Program.drop_pending(Program* self, sz n) {
+	self.pending_len -= n;
+	mem::move(&self.pending, &self.pending[n], self.pending_len);
 }
 
 fn bool Program.test_armed(Program* self) @inline => self.test_click_armed || self.test_pointer_armed;
@@ -2108,24 +2104,15 @@ fn void Program.render_current_view(Program* self) {
 					if (rows > (sz)r.screen.dirty_lines.len) rows = (sz)r.screen.dirty_lines.len;
 
 					if (rows > 0 && cols > 0) {
-						if (cols == r.screen.width && src_w == r.screen.width) {
-							// Fast path: identical stride on both sides, so the
-							// region is contiguous and copies in one go.
-							mem::copy(r.screen.cells.ptr, v.cells.ptr, rows * cols * xray::Cell::size);
-							for (sz row = 0; row < rows; row++) {
-								r.screen.dirty_lines[row] = true;
+						// Strided copy row-by-row
+						sz row_bytes = cols * xray::Cell::size;
+						xray::Cell empty = xray::empty_cell();
+						for (sz row = 0; row < rows; row++) {
+							mem::copy(r.screen.cells.ptr + row * r.screen.width, v.cells.ptr + row * src_w, row_bytes);
+							for (sz col = cols; col < r.screen.width; col++) {
+								r.screen.cells[row * r.screen.width + col] = empty;
 							}
-						} else {
-							// Strided copy row-by-row
-							sz row_bytes = cols * xray::Cell::size;
-							xray::Cell empty = xray::empty_cell();
-							for (sz row = 0; row < rows; row++) {
-								mem::copy(r.screen.cells.ptr + row * r.screen.width, v.cells.ptr + row * src_w, row_bytes);
-								for (sz col = cols; col < r.screen.width; col++) {
-									r.screen.cells[row * r.screen.width + col] = empty;
-								}
-								r.screen.dirty_lines[row] = true;
-							}
+							r.screen.dirty_lines[row] = true;
 						}
 					}
 
@@ -2176,31 +2163,15 @@ fn void Program.render_current_view(Program* self) {
 				// Emit cursor positioning and shape after the diff frame
 				if (v.has_cursor) {
 					DString cursor_seq = dstring::temp();
-					sz term_row       = v.cursor.y + 1;
-					sz term_col       = v.cursor.x + 1;
-					cursor_seq.append_string(cursor_to(term_row, term_col));
-					// Set cursor color via OSC 12
-					if (v.cursor.color.len > 0) {
-						cursor_seq.append_string(cursor_color_seq(v.cursor.color));
-					} else {
-						cursor_seq.append_string(OSC_CURSOR_COLOR_RESET);
-					}
-					cursor_seq.append_string(cursor_style_seq(v.cursor.shape, v.cursor.blink));
-					if (v.cursor.blink) {
-						cursor_seq.append_string(SGR_CURSOR_BLINK_ON);
-					} else {
-						cursor_seq.append_string(SGR_CURSOR_BLINK_OFF);
-					}
+					append_cursor(&cursor_seq, v);
 					cursor_seq.append_string(SGR_SHOW_CURSOR);
 					write_stdout((char[])cursor_seq.str_view());
 				} else if (self.options.alt_screen) {
 					// Park the hidden cursor at top-left to prevent artifacts in some terminals
 					write_stdout("\x1b[1;1H");
 				}
-			} else {
-				// Fallback: no renderer (shouldn't happen in non-test mode)
-				render_view(v);
 			}
+			// No renderer means CLI mode, where stdout carries only replies.
 		}
 	};
 }

@@ -287,14 +287,23 @@ fn KeyAction decode_kitty_event(CSIParse csi, sz idx) @private {
 	}
 }
 
-fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) @private {
-	return {
-		MsgKind.KEY,
-		{ code, rune, ctrl, alt, shift, KEY_PRESS, false },
-		{ MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE },
-		consumed
-	};
+fn ParseResult make_key(KeyCode code, uint rune, bool ctrl, bool alt, bool shift, sz consumed) @private
+	=> make_key_action(code, rune, ctrl, alt, shift, KEY_PRESS, consumed);
+
+// make_event is a result that is no key and no mouse event: focus, blur, or
+// a paste marker.
+fn ParseResult make_event(MsgKind kind, sz consumed) @private {
+	ParseResult pr = make_key(NONE, 0, false, false, false, consumed);
+	pr.kind = kind;
+	return pr;
 }
+
+// TILDE_KEYS are the keys of CSI n ~, by n.
+const KeyCode[25] TILDE_KEYS @private = {
+	[2] = INSERT, [3] = DELETE, [5] = PAGE_UP, [6] = PAGE_DOWN,
+	[11] = F1, [12] = F2, [13] = F3, [14] = F4, [15] = F5,
+	[17] = F6, [18] = F7, [19] = F8, [20] = F9, [21] = F10, [23] = F11, [24] = F12,
+};
 
 // make_key_action is like make_key but sets a KeyAction other than the default
 // press. Used exclusively by the kitty keyboard protocol 'u' path when the app
@@ -527,20 +536,10 @@ fn ParseResult parse_key(char[] buf) {
 
 			// Focus in / Focus out (xterm focus reporting: ESC [ I / ESC [ O)
 			if (fb == 'I' && csi.param_count == 0 && csi.private_prefix == 0) {
-				ParseResult pr;
-				pr.kind = FOCUS;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
-				pr.consumed = total;
-				return pr;
+				return make_event(FOCUS, total);
 			}
 			if (fb == 'O' && csi.param_count == 0 && csi.private_prefix == 0) {
-				ParseResult pr;
-				pr.kind = BLUR;
-				pr.key = { NONE, 0, false, false, false, KEY_PRESS, false };
-				pr.mouse = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
-				pr.consumed = total;
-				return pr;
+				return make_event(BLUR, total);
 			}
 
 			// Tilde sequences: PgUp, PgDn, Ins, Del, F-keys, and bracketed paste markers.
@@ -551,43 +550,13 @@ fn ParseResult parse_key(char[] buf) {
 				// thrown away, making Ctrl+Delete indistinguishable from Delete.
 				KeyMods tm = decode_xterm_mods(csi_param(csi, 1, 1));
 				KeyAction ta = decode_kitty_event(csi, 1);
-				switch (p1) {
-					case 2: return make_key_action(INSERT, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 3: return make_key_action(DELETE, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 5: return make_key_action(PAGE_UP, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 6: return make_key_action(PAGE_DOWN, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 11: return make_key_action(F1, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 12: return make_key_action(F2, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 13: return make_key_action(F3, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 14: return make_key_action(F4, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 15: return make_key_action(F5, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 17: return make_key_action(F6, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 18: return make_key_action(F7, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 19: return make_key_action(F8, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 20: return make_key_action(F9, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 21: return make_key_action(F10, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 23: return make_key_action(F11, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					case 24: return make_key_action(F12, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
-					// Bracketed paste markers — returned as internal sentinels consumed
-					// by Program.run(); never forwarded to model.update().
-					case 200: {
-						ParseResult pr;
-						pr.kind     = MsgKind.PASTE_START;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
-						pr.consumed = total;
-						return pr;
-					}
-					case 201: {
-						ParseResult pr;
-						pr.kind     = MsgKind.PASTE_END;
-						pr.key      = { NONE, 0, false, false, false, KEY_PRESS, false };
-						pr.mouse    = { MOUSE_NONE, MOUSE_PRESS, 0, 0, false, false, false, 0, 0, 0, 0, false, ScrollPhase.NONE };
-						pr.consumed = total;
-						return pr;
-					}
-					default: return make_key(NONE, 0, false, false, false, total);
-				}
+				// Bracketed paste markers are internal: the event loop takes them,
+				// and update() never sees them.
+				if (p1 == 200) return make_event(PASTE_START, total);
+				if (p1 == 201) return make_event(PASTE_END, total);
+				KeyCode code = p1 < TILDE_KEYS.len ? TILDE_KEYS[p1] : NONE;
+				if (code == NONE) return make_key(NONE, 0, false, false, false, total);
+				return make_key_action(code, 0, tm.ctrl, tm.alt, tm.shift, ta, total);
 			}
 
 			// Shift+Tab: ESC [ Z
