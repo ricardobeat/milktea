@@ -31,7 +31,7 @@ A command answers with its output and then `ok`, or with one line
 | `drag FROM TO` | each a selector or `@c,r` |
 | `scroll [WHERE] [dy=N] [dx=N]` | in rows; positive scrolls towards the end |
 | `key SPEC` | `ctrl+b`, `enter`, `shift+tab`, `a` |
-| `type TEXT` | the rest of the line, one key per character |
+| `type TEXT` | the rest of the line, spaces included, one key per character |
 | `select SEL TEXT` or `/PAT/ [N]` | drags across text on screen; see below |
 | `screen [PATTERN]` | the text on screen, or the lines that match |
 | `stream` | echo the input the program gets as commands |
@@ -42,11 +42,16 @@ first node it matches. `@c,r` is a cell of the screen; `@-1,-1` is outside
 the program. Where a node is and what it shows are read from the last
 drawn frame.
 
-A selector holding a space travels in quotes: `list "list-item[text='a b']"`.
+A selector holding a space travels in quotes, with single quotes around the
+value inside: `list "list-item[text='a b']"`.
 
 Commands are handled between frames, on the program's own thread, and input
 goes through the same path real input takes, so hover, focus and clicks
 behave the same as with a real mouse or keyboard.
+
+A command that sends input answers `ok` once the input is sent. The commands
+after it wait for the next frame, so a `screen` that follows a `click` shows
+what the click did.
 
 ## A session
 
@@ -117,7 +122,7 @@ label. `role` comes from a fixed list close to the one accessibility uses.
 | `[key="src/"]` | key equal to `src/`; `id`, `role`, `type` and `text` work too |
 | `[text*="Save"]` | text containing `Save`; `^=` is starts with |
 | `:focused`, `:clickable` | a node in that state |
-| `:nth(2)` | the third match of the whole selector |
+| `:nth(2)` | the third match of the whole selector; `list` and `tree` then show only that one |
 | `sidebar file` | a `file` inside `sidebar` |
 
 These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is
@@ -130,7 +135,9 @@ the program can do what it does:
 
 ```
 key ctrl+b
-click @5,3
+move @5,3
+press @5,3
+release @5,3
 scroll @5,3 dy=1.00
 ```
 

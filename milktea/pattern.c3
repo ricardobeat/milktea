@@ -88,6 +88,8 @@ fn bool pattern_find(String pattern, String text, sz nth, sz* start, sz* end) {
 					return true;
 				}
 				count++;
+				// An anchored pattern matches at the start or not at all.
+				if (anchored) break;
 				at = stop;
 				continue;
 			}

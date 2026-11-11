@@ -385,6 +385,8 @@ struct InputQueue @private {
 	thread::Mutex mu;
 	thread::ConditionVariable cond;
 	bool closed;
+	// Something other than bytes wants the loop awake (see input_queue_wake).
+	bool woken;
 	// Bytes silently dropped because the ring was full; accumulated under mu.
 	// Drained by the main loop via input_queue_take_dropped().
 	sz dropped;
@@ -459,10 +461,36 @@ fn sz input_queue_drain(InputQueue* q, char[] out) @private {
 // Called with the queue unlocked; returns with queue unlocked.
 fn void input_queue_wait(InputQueue* q, sz timeout_ms) @private {
 	q.mu.lock();
-	if (q.tail == q.head && !q.closed) {
+	if (q.tail == q.head && !q.closed && !q.woken) {
 		(void)q.cond.wait_timeout(&q.mu, (time::Duration)((long)timeout_ms * time::MS));
 	}
+	q.woken = false;
 	q.mu.unlock();
+}
+
+// input_queue_wake ends the loop's wait without giving it bytes. The flag
+// outlives the call, so a wake that lands just before the loop starts to
+// wait is not lost.
+fn void input_queue_wake(InputQueue* q) @private {
+	q.mu.lock();
+	q.woken = true;
+	q.cond.broadcast();
+	q.mu.unlock();
+}
+
+// input_queue_room is how many more bytes the ring holds before it drops.
+fn sz input_queue_room(InputQueue* q) @private {
+	q.mu.lock();
+	sz used = (q.head - q.tail + INPUT_BUF_SIZE) % INPUT_BUF_SIZE;
+	q.mu.unlock();
+	return INPUT_BUF_SIZE - 1 - used;
+}
+
+fn bool input_queue_is_empty(InputQueue* q) @private {
+	q.mu.lock();
+	bool e = q.head == q.tail;
+	q.mu.unlock();
+	return e;
 }
 
 fn bool input_queue_is_closed(InputQueue* q) @private {
@@ -1762,14 +1790,16 @@ fn void? Program.run(Program* self) {
 		// immediately once the queue is closed. Timers still keep the program
 		// alive, so an animation driven purely by tick() is unaffected.
 		if (!self.test_mode && input_queue_is_closed(&g_input_queue) && self.pending_len == 0
-			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()) {
+			&& !self.has_active_timer() && self.send_head == self.send_tail && !self.test_armed()
+			&& !control_busy()) {
 			return;
 		}
 
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
-			// An open control socket is polled, not waited on.
-			sz wait_ms = control_active() ? 10 : 1000;
+			// A command line wakes the loop as a key does (control_feed_line),
+			// so it only stays awake while commands are still to be handled.
+			sz wait_ms = control_busy() ? 0 : 1000;
 			now = time_ms();
 			for (sz i = 0; i < MAX_TIMERS; i++) {
 				if (self.timers[i].active) {

@@ -81,7 +81,7 @@ struct Gui {
 	GuiOptions opts;
 	milktea::Program prog;
 	bool headless;
-	// The input on_event is handling came from the control socket.
+	// The input on_event is handling came from the command stream.
 	bool controlled;
 	float scale;
 	int fb_w;
@@ -532,7 +532,7 @@ fn void control_point(sz x, sz y, float* px, float* py) @private {
 	*py = g.cells ? (float)(y * g.opts.cell_h + g.opts.cell_h / 2) : (float)y;
 }
 
-// control_pointer and control_scroll take input from the control socket
+// control_pointer and control_scroll take input from the command stream
 // (see milktea::control) through on_event, as if the window had sent it. A
 // press made this way never starts moving the window.
 fn void control_pointer(milktea::MouseAction action, sz x, sz y) @private {

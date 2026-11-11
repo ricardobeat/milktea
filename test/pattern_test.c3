@@ -10,6 +10,13 @@ fn void test_literal_finds_substring() @test {
 	assert(a == 6 && b == 10, "span 6..10, got %d..%d", a, b);
 }
 
+fn void test_anchored_matches_once() @test {
+	// "^a" matches the first a of "aa" and no other.
+	sz a, b;
+	assert(milktea::pattern_find("^a", "aa", 0, &a, &b));
+	assert(!milktea::pattern_find("^a", "aa", 1, &a, &b));
+}
+
 fn void test_dot_matches_any_char() @test {
 	sz a, b;
 	assert(milktea::pattern_find("s.ve", "save", 0, &a, &b));

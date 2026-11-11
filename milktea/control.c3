@@ -4,6 +4,7 @@ import xray;
 import std::core::dstring;
 import std::core::string;
 import std::math;
+import std::thread;
 
 // Control drives a running program from the command line. When the program's
 // stdin is not a terminal, each line of stdin is a command and each reply a
@@ -93,6 +94,11 @@ struct Control @local {
 	bool stream;
 	ControlHooks hooks;
 	bool pressed;
+	// A command sent input: the lines after it wait for the frame that shows
+	// what it did, so they act on that frame and not the one before.
+	bool waiting;
+	sz wait_frame;
+	sz wait_passes;
 	// The snapshot of the last drawn frame: a node array and the string pool
 	// its spans point into, both exact-size (control_on_draw counts first).
 	CtlNode[] nodes;
@@ -109,10 +115,6 @@ struct Control @local {
 
 Control g_ctl @local;
 
-// control_active reports whether the command stream is open, so a loop that
-// would sleep for long wakes often enough to serve it.
-fn bool control_active() => g_ctl.on;
-
 // control_start turns the command stream on: stdin is commands, stdout
 // replies. The GUI calls it, and a terminal program whose stdin is piped.
 fn void control_start() {
@@ -121,6 +123,9 @@ fn void control_start() {
 	if (catch input_queue_init(&g_ctl.queue)) return;
 	g_ctl.inbuf.init(mem);
 	g_ctl.on = true;
+	// The first commands wait for the first frame: there is nothing to
+	// select or read before it.
+	ctl_await_frame();
 }
 
 // control_start_piped is control_start for a terminal program whose stdin
@@ -132,7 +137,43 @@ fn void control_start_piped() {
 
 // control_feed_line gives the reader thread's handoff for one command line.
 fn void control_feed_line(String line) {
-	if (g_ctl.on) input_queue_push(&g_ctl.queue, (char[])line);
+	if (!g_ctl.on) return;
+	// The queue is a ring that drops what does not fit, so a script piped in
+	// faster than the loop reads it waits here for room. The loop closing its
+	// input queue, on the way out, ends the wait.
+	while (input_queue_room(&g_ctl.queue) < line.len && !input_queue_is_closed(&g_input_queue)) {
+		thread::sleep_ms(1);
+	}
+	input_queue_push(&g_ctl.queue, (char[])line);
+	// The loop waits on its own input queue, which gets nothing in this mode.
+	input_queue_wake(&g_input_queue);
+}
+
+// control_busy reports whether commands are still to be handled, so a loop
+// whose stdin has ended does not stop with some unread.
+fn bool control_busy() {
+	if (!g_ctl.on) return false;
+	return g_ctl.waiting || g_ctl.inbuf.len() > 0 || (g_ctl.from_queue && !input_queue_is_empty(&g_ctl.queue));
+}
+
+// ctl_await_frame holds the lines after a command that sent input until the
+// next frame is drawn.
+fn void ctl_await_frame() @local {
+	g_ctl.waiting = true;
+	g_ctl.wait_frame = g_ctl.frame;
+	g_ctl.wait_passes = 0;
+}
+
+// ctl_settled says whether the frame a command is waiting for has come. Both
+// loops draw in the pass that handles the input, so input that is all handled
+// and has drawn nothing a pass later changed nothing, and the wait is over.
+fn bool ctl_settled() @local {
+	if (!g_ctl.waiting) return true;
+	bool drawn = g_ctl.frame != g_ctl.wait_frame;
+	bool handled = g_program == null || g_program.send_head == g_program.send_tail;
+	if (!drawn && !(handled && ++g_ctl.wait_passes >= 2)) return false;
+	g_ctl.waiting = false;
+	return true;
 }
 
 // control_stdin_eof says the command stream has ended.
@@ -146,6 +187,7 @@ fn void control_stdin_eof() {
 fn void control_poll() {
 	if (!g_ctl.started) return;
 	if (!g_ctl.on) return;
+	if (!ctl_settled()) return;
 	@pool() {
 		if (g_ctl.from_queue) {
 			ctl_drain_queue();
@@ -168,8 +210,8 @@ fn void ctl_drain_queue() @local {
 // ctl_read_stdin reads whatever lines arrived on stdin since the last pass.
 // A GUI's stdin sits in canonical mode, so a line arrives whole after Enter.
 fn void ctl_read_stdin() @local {
-	if (g_ctl.stdin_eof) return;
-	for (;;) {
+	// Lines read before the end of stdin may still be waiting on a frame.
+	while (!g_ctl.stdin_eof) {
 		PollFd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
 		if (poll(&pfd, 1, 0) <= 0) break;
 		char[1024] chunk;
@@ -184,8 +226,10 @@ fn void ctl_read_stdin() @local {
 	ctl_handle_lines();
 }
 
+// ctl_handle_lines handles the whole lines read so far, up to and including
+// one that sends input; the rest wait for the next frame (see ctl_settled).
 fn void ctl_handle_lines() @local {
-	for (;;) {
+	while (!g_ctl.waiting) {
 		String s = g_ctl.inbuf.str_view();
 		sz? nl = s.index_of_char('\n');
 		if (catch nl) break;
@@ -457,6 +501,9 @@ fn bool sel_word_char(char ch) @local {
 	return ch.is_alnum() || ch == '_' || ch == '-' || ch == '.' || ch == '*';
 }
 
+// An attribute's name stops at the * of "*=".
+fn bool sel_attr_char(char ch) @local => ch.is_alnum() || ch == '_' || ch == '-';
+
 // ctl_parse_sel turns a selector into its compounds, outermost first.
 fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 	*count = 0;
@@ -472,7 +519,7 @@ fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 			if (s[i] == '[') {
 				i++;
 				sz ns = i;
-				while (i < s.len && sel_word_char(s[i])) i++;
+				while (i < s.len && sel_attr_char(s[i])) i++;
 				CtlAttr a = { .name = s[ns:i - ns] };
 				if (i + 1 < s.len && s[i] == '*' && s[i + 1] == '=') {
 					a.op = CONTAINS;
@@ -486,10 +533,13 @@ fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 				} else {
 					return false;
 				}
-				if (i >= s.len || s[i] != '"') return false;
+				// Either quote holds the value, so a selector that travels in
+				// double quotes can use single ones inside.
+				if (i >= s.len || (s[i] != '"' && s[i] != '\'')) return false;
+				char quote = s[i];
 				i++;
 				DString v = dstring::temp();
-				while (i < s.len && s[i] != '"') {
+				while (i < s.len && s[i] != quote) {
 					if (s[i] == '\\' && i + 1 < s.len) i++;
 					v.append_char(s[i]);
 					i++;
@@ -567,7 +617,7 @@ fn bool sel_matches(sz i, CtlCompound[] cs) @local {
 }
 
 // ctl_find is the nth node a selector matches, in paint order: the :nth(n)
-// of the selector, else the nth given. -1 when there is no such node.
+// of the selector, else the nth given. NOT_FOUND when there is no such node.
 fn sz? ctl_find(String sel, sz nth) @local {
 	CtlCompound[CTL_MAX_COMPOUNDS] cs;
 	sz count;
@@ -581,7 +631,7 @@ fn sz? ctl_find(String sel, sz nth) @local {
 			k++;
 		}
 	}
-	return -1;
+	return NOT_FOUND~;
 }
 
 // ── tree / list / match / screen ───────────────────────────────────────────
@@ -642,8 +692,11 @@ fn void ctl_tree(String[] toks, sz n) @local {
 			return;
 		}
 		bool found = false;
+		sz nth = cs[count - 1].nth;
+		sz k = 0;
 		for (sz i = 0; i < g_ctl.nodes.len; i++) {
 			if (!sel_matches(i, cs[:count])) continue;
+			if (nth >= 0 && k++ != nth) continue;
 			found = true;
 			ctl_subtree(i, 0);
 		}
@@ -668,8 +721,12 @@ fn void ctl_list(String[] toks, sz n) @local {
 		ctl_err(string::tformat("bad selector: %s", toks[1]));
 		return;
 	}
+	sz nth = cs[count - 1].nth;
+	sz k = 0;
 	for (sz i = 0; i < g_ctl.nodes.len; i++) {
-		if (sel_matches(i, cs[:count])) ctl_node_line(i, 0);
+		if (!sel_matches(i, cs[:count])) continue;
+		if (nth >= 0 && k++ != nth) continue;
+		ctl_node_line(i, 0);
 	}
 	ctl_ok();
 }
@@ -682,7 +739,8 @@ fn void ctl_match(String[] toks, sz n) @local {
 	sz start;
 	sz end;
 	for (sz i = 0; i < g_ctl.nodes.len; i++) {
-		String text = ctl_text(i);
+		// Trimmed, as a selector's text is, so ^ and $ mean the text's ends.
+		String text = ctl_text(i).trim();
 		if (text.len == 0) continue;
 		if (pattern_find(toks[1], text, 0, &start, &end)) ctl_node_line(i, 0);
 	}
@@ -757,6 +815,7 @@ fn bool ctl_place_tok(String tok, sz* x, sz* y) @local {
 fn void ctl_inject(MouseAction action, sz x, sz y) @local {
 	if (action == MOUSE_PRESS) g_ctl.pressed = true;
 	if (action == MOUSE_RELEASE) g_ctl.pressed = false;
+	ctl_await_frame();
 	if (g_ctl.hooks.pointer) {
 		g_ctl.hooks.pointer(action, x, y);
 		return;
@@ -833,6 +892,7 @@ fn void ctl_scroll(String[] toks, sz n) @local {
 			}
 		}
 	}
+	ctl_await_frame();
 	if (g_ctl.hooks.scroll) {
 		g_ctl.hooks.scroll(x, y, dx, dy);
 	} else if (g_program != null) {
@@ -929,6 +989,7 @@ fn void ctl_key(String[] toks, sz n) @local {
 		ctl_err(string::tformat("unknown key \"%s\"", toks[1]));
 		return;
 	}
+	ctl_await_frame();
 	if (g_program != null) g_program.send({ .kind = MsgKind.KEY, .key = k });
 	ctl_ok();
 }
@@ -938,14 +999,19 @@ fn void ctl_type(String line, String[] toks, sz n) @local {
 		ctl_err("type needs text");
 		return;
 	}
-	// Everything after the command word, as keys. A line that said
-	// `type "a b"` has its quotes already eaten by ctl_tokens.
-	String text = toks[1];
+	// Everything after the command word, as keys, spaces and all. A line that
+	// is one quoted word, `type "a b"`, is that word without its quotes.
+	sz at = 0;
+	while (at < line.len && line[at] == ' ') at++;
+	at += toks[0].len;
+	while (at < line.len && line[at] == ' ') at++;
+	String text = n == 2 && line[at] == '"' ? toks[1] : line[at..];
 	Char32[]? runes = text.to_temp_utf32();
 	if (catch runes) {
 		ctl_err("text is not UTF-8");
 		return;
 	}
+	ctl_await_frame();
 	if (g_program != null) {
 		foreach (r : runes) {
 			KeyMsg k = r == '\n' ? (KeyMsg){ .code = ENTER } : (KeyMsg){ .code = RUNE, .rune = r };
@@ -1102,7 +1168,7 @@ fn void ctl_select_text(String[] toks, sz n) @local {
 // was. dispatch_click, end_drag and dispatch_hover call it, which both
 // backends go through.
 fn void control_pointer_event(String type, sz x, sz y) {
-	if (!g_ctl.on || !g_ctl.stream) return;
+	if (!g_ctl.on) return;
 	// A release comes with no place of its own: it is where the pointer was.
 	if (x == -2) {
 		x = g_ctl.event_x;
@@ -1112,14 +1178,18 @@ fn void control_pointer_event(String type, sz x, sz y) {
 		x = -1;
 		y = -1;
 	}
-	if (type == "move" && x == g_ctl.event_x && y == g_ctl.event_y) return;
+	// Where the pointer is is kept whether or not anyone streams: a scroll
+	// that names no place happens there.
+	bool moved = x != g_ctl.event_x || y != g_ctl.event_y;
 	g_ctl.event_x = x;
 	g_ctl.event_y = y;
+	if (!g_ctl.stream) return;
+	if (type == "move" && !moved) return;
 	@pool() {
 		DString out = dstring::temp();
 		out.append_string(type);
 		out.appendf(" @%d,%d", xray::floor_cell(x, ctl_uw()), xray::floor_cell(y, ctl_uh()));
-		ctl_emit(out.str_view());
+		ctl_line(out.str_view());
 	};
 }
 
@@ -1132,7 +1202,7 @@ fn void control_msg_event(Msg m) {
 		if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE) {
 			out.append_string("key ");
 			out.append_string(key_spec(m.key));
-			ctl_emit(out.str_view());
+			ctl_line(out.str_view());
 			return;
 		}
 		if (m.kind != MsgKind.MOUSE || m.mouse.action != MOUSE_PRESS) return;
@@ -1152,17 +1222,7 @@ fn void control_msg_event(Msg m) {
 		}
 		out.appendf("scroll @%d,%d dy=%.2f", xray::floor_cell(cx, ctl_uw()), xray::floor_cell(cy, ctl_uh()), dy);
 		if (dx != 0) out.appendf(" dx=%.2f", dx);
-		ctl_emit(out.str_view());
-	};
-}
-
-fn void ctl_emit(String s) @local {
-	@pool() {
-		DString out = dstring::temp();
-		out.append_string(s);
-		out.append_char('\n');
-		String v = out.str_view();
-		(void)write(1, v.ptr, v.len);
+		ctl_line(out.str_view());
 	};
 }
 
