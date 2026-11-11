@@ -3,11 +3,6 @@ module glaze;
 import std::core::dstring;
 import utf8;
 
-// Stack capacity for Style.render's per-call line table. Content beyond this
-// falls back to a heap allocation rather than being truncated — the array is
-// sized to the actual line count either way.
-const sz STACK_RENDER_LINES = 256;
-
 // BorderAnimation selects an animated border rendering mode.
 enum BorderAnimation : char {
 	NONE,    // static border (default)
@@ -372,6 +367,29 @@ fn Style Style.with_max_width(self, sz w) {
 	return s;
 }
 
+// write_sgr writes one SGR sequence that turns on what it is given, or
+// nothing when that is nothing.
+fn void write_sgr(DString* out, bool bold, bool italic, bool underline, Color fg, Color bg) @local {
+	out.append_string("\x1b[");
+	sz start = out.len();
+	if (bold) out.append_string("1;");
+	if (italic) out.append_string("3;");
+	if (underline) out.append_string("4;");
+	if (fg.kind != ColorKind.NONE) {
+		fg.write_sgr_params(out, true);
+		out.append_char(';');
+	}
+	if (bg.kind != ColorKind.NONE) {
+		bg.write_sgr_params(out, false);
+		out.append_char(';');
+	}
+	if (out.len() == start) {
+		out.chop(start - 2);
+	} else {
+		(*out)[out.len() - 1] = 'm';
+	}
+}
+
 fn String Style.render(self, String input) {
 	DString out = dstring::temp();
 
@@ -388,35 +406,9 @@ fn String Style.render(self, String input) {
 		input = wrap_text(input, self.width - self.frame_width());
 	}
 
-	// Split input into lines. The line table is sized to the actual line
-	// count: a fixed stack array would silently truncate content beyond its
-	// capacity, and rendering a long log or file is an ordinary thing to ask
-	// for. Count first, then use a stack buffer when it fits, falling back to
-	// a heap allocation only for unusually long content.
 	sz line_count = 1;
 	for (sz i = 0; i < input.len; i++) {
 		if (input[i] == '\n') line_count++;
-	}
-
-	String[STACK_RENDER_LINES] stack_lines;
-	String* lines = stack_lines[..].ptr;
-	String* heap_lines = null;
-	if (line_count > STACK_RENDER_LINES) {
-		heap_lines = mem::new_array(String, line_count).ptr;
-		lines = heap_lines;
-	}
-	defer {
-		if (heap_lines != null) mem::free(heap_lines);
-	}
-
-	sz line_index = 0;
-	sz line_start = 0;
-	for (sz i = 0; i <= input.len; i++) {
-		if (i == input.len || input[i] == '\n') {
-			lines[line_index] = input[line_start:i - line_start];
-			line_index++;
-			line_start = i + 1;
-		}
 	}
 
 	// Determine target width.
@@ -424,12 +416,7 @@ fn String Style.render(self, String input) {
 	// So we subtract border and padding from the requested width to get the
 	// content area width.
 	sz border_h = 0;
-	bool border_is_empty = self.border.top.len == 0 && self.border.bottom.len == 0 && self.border.left.len == 0
-		&& self.border.right.len == 0
-		&& self.border.top_left.len == 0
-		&& self.border.top_right.len == 0
-		&& self.border.bottom_left.len == 0
-		&& self.border.bottom_right.len == 0;
+	bool border_is_empty = self.border.is_empty();
 	if (!border_is_empty) {
 		border_h = 2; // left + right border chars
 	}
@@ -441,11 +428,7 @@ fn String Style.render(self, String input) {
 		if (target_width < 1) target_width = 1;
 	} else {
 		// Auto-size to widest line
-		target_width = 0;
-		for (sz i = 0; i < line_count; i++) {
-			sz line_width = string_width(lines[i]);
-			if (line_width > target_width) target_width = line_width;
-		}
+		target_width = widest_line(input);
 	}
 
 	bool has_attrs = self.fg.kind != ColorKind.NONE || self.bg.kind != ColorKind.NONE || self.bold || self.italic
@@ -454,37 +437,9 @@ fn String Style.render(self, String input) {
 
 	// The prefix that opens the content depends only on the style, so it is
 	// built once rather than rebuilt for every line.
-	String sgr_prefix = "";
-	if (has_attrs) {
-		DString prefix = dstring::temp();
-		prefix.append_string("\x1b[");
-		bool first = true;
-		if (self.bold) {
-			prefix.append_string("1");
-			first = false;
-		}
-		if (self.italic) {
-			if (!first) prefix.append_char(';');
-			prefix.append_string("3");
-			first = false;
-		}
-		if (self.underline) {
-			if (!first) prefix.append_char(';');
-			prefix.append_string("4");
-			first = false;
-		}
-		if (self.fg.kind != ColorKind.NONE) {
-			if (!first) prefix.append_char(';');
-			self.fg.write_sgr_params(&prefix, true);
-			first = false;
-		}
-		if (has_bg) {
-			if (!first) prefix.append_char(';');
-			self.bg.write_sgr_params(&prefix, false);
-		}
-		prefix.append_string("m");
-		sgr_prefix = prefix.str_view();
-	}
+	DString prefix = dstring::temp();
+	write_sgr(&prefix, self.bold, self.italic, self.underline, self.fg, self.bg);
+	String sgr_prefix = prefix.str_view();
 
 	// Total line width = content + padding (border is applied after)
 	sz line_width = target_width + self.pad_left + self.pad_right;
@@ -499,8 +454,11 @@ fn String Style.render(self, String input) {
 	}
 
 	// Content lines.
-	for (sz i = 0; i < line_count; i++) {
-		String line = lines[i];
+	for (sz start = 0; start <= input.len;) {
+		sz end = start;
+		while (end < input.len && input[end] != '\n') end++;
+		String line = input[start:end - start];
+		start = end + 1;
 
 		// Build styled line: pad_left + [align_h lead] + content + fill + pad_right.
 		sz content_w   = string_width(line);
@@ -549,17 +507,9 @@ fn String Style.render(self, String input) {
 							sets_fg = sets_fg || nfg;
 							sets_bg = sets_bg || nbg;
 						}
-						if (self.bold && !sets_fg) body.append_string("\x1b[1m");
-						if (self.fg.kind != ColorKind.NONE && !sets_fg) {
-							body.append_string("\x1b[");
-							self.fg.write_sgr_params(&body, true);
-							body.append_string("m");
-						}
-						if (has_bg && !sets_bg) {
-							body.append_string("\x1b[");
-							self.bg.write_sgr_params(&body, false);
-							body.append_string("m");
-						}
+						Color none = { .kind = ColorKind.NONE };
+						write_sgr(&body, self.bold && !sets_fg, false, false,
+							sets_fg ? none : self.fg, sets_bg ? none : self.bg);
 					}
 				} else {
 					body.append_char(line[li]);

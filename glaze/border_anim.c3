@@ -102,12 +102,7 @@ fn Color _color_lerp(Color base, Color target, sz t255) @local {
 fn String Border.wrap_animated(self, sz content_w, sz content_h, BorderAnimation anim, Style style, sz time_ms) {
 	if (anim == BorderAnimation.NONE) return self.wrap_with_color("", style.border_color);
 
-	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
-		&& self.top_left.len == 0
-		&& self.top_right.len == 0
-		&& self.bottom_left.len == 0
-		&& self.bottom_right.len == 0;
-	if (is_empty) return "";
+	if (self.is_empty()) return "";
 
 	// Total perimeter cells in clockwise order.
 	sz cw          = content_w;

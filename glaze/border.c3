@@ -13,6 +13,12 @@ struct Border {
 	String bottom_right;
 }
 
+// is_empty reports a border with no edges and no corners: no border at all.
+fn bool Border.is_empty(&self) {
+	return self.top.len + self.bottom.len + self.left.len + self.right.len + self.top_left.len
+		+ self.top_right.len + self.bottom_left.len + self.bottom_right.len == 0;
+}
+
 // Border presets. These are plain values, so they can be named directly in a
 // style literal: { .border = glaze::ROUNDED }. A custom shape fills in the
 // eight strings itself.
@@ -92,12 +98,7 @@ fn String Border.wrap(self, String input) {
 // border_to on the bottom one, blended in LUV; a corner_fg of its own stays
 // fixed.
 fn String Border.wrap_with_color(self, String input, Color border_fg, Color border_bg = { .kind = ColorKind.NONE }, Color corner_fg = { .kind = ColorKind.NONE }, Color border_to = { .kind = ColorKind.NONE }) {
-	bool is_empty = self.top.len == 0 && self.bottom.len == 0 && self.left.len == 0 && self.right.len == 0
-		&& self.top_left.len == 0
-		&& self.top_right.len == 0
-		&& self.bottom_left.len == 0
-		&& self.bottom_right.len == 0;
-	if (is_empty) return input.tcopy();
+	if (self.is_empty()) return input.tcopy();
 
 	bool graded = border_to.kind == ColorKind.TRUECOLOR && border_fg.kind == ColorKind.TRUECOLOR;
 
