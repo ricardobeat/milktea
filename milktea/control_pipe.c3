@@ -1,6 +1,7 @@
 module milktea;
 
 import std::io;
+import glaze;
 import std::core::dstring;
 import std::core::string;
 
@@ -246,21 +247,206 @@ fn void control_write(int fd, String s) @private {
 
 // ── The client: <program> --cmd ... ────────────────────────────────────────
 
-// control_client is the whole of a run that was given --cmd: it sends the
-// command to the running program, prints the reply and exits. Any other run
-// returns from it at once. run() calls it before it touches the terminal.
+// A client prints in colour only in --repl on a terminal.
+bool g_client_color @local;
+
+struct ClientTarget @local {
+	String name;
+	String dir;
+	ZString target;
+}
+
+// client_connect finds the program to drive and, when it is not taking
+// commands yet, asks whoever is at it to allow that, waiting for the answer.
+// It exits when there is no program or the answer is no.
+fn ClientTarget client_connect(String name) @local {
+	ClientTarget t = { .name = name, .dir = pipe_dir() };
+	// Which program: the one MILKTEA_PID names, else the most recently
+	// started, whose pid the link holds.
+	String pid;
+	char* named = getenv("MILKTEA_PID");
+	if (named != null && ((ZString)named).len() > 0) {
+		pid = ((ZString)named).str_view();
+	} else {
+		char[] buf = mem::talloc_array(char, 32);
+		sz n = readlink(string::tformat("%s/%s.pid", t.dir, name).zstr_tcopy(), buf.ptr, buf.len);
+		if (n > 0) pid = (String)buf[:n];
+	}
+	int pid_no = pid.to_int() ?? 0;
+	if (pid_no <= 0 || kill(pid_no, 0) != 0) {
+		io::eprintfn("%s: no %s is running that can be driven", name, name);
+		exit(1);
+	}
+	t.target = string::tformat("%s/%s.%s", t.dir, name, pid).zstr_tcopy();
+	// With nobody reading the pipe this fails, so a program that is not
+	// listening is told apart from one that is.
+	int to = open(t.target, O_WRONLY | O_NONBLOCK);
+	if (to < 0) {
+		// Not listening: ask. The request is a file the program removes when
+		// it is answered, having opened its pipe first if the answer was yes.
+		ZString ask = string::tformat("%s/%s.%s.ask", t.dir, name, pid).zstr_tcopy();
+		int made = open(ask, O_CREAT | O_WRONLY, 0o600);
+		if (made < 0) {
+			io::eprintfn("%s: cannot ask %s to be driven", name, name);
+			exit(1);
+		}
+		close(made);
+		io::eprintfn("%s: asked for remote control; answer in the program", name);
+		for (int waited = 0; to < 0; waited += 50) {
+			if (waited >= CLIENT_ASK_MS || kill(pid_no, 0) != 0) {
+				unlink(ask);
+				io::eprintfn("%s: no answer", name);
+				exit(1);
+			}
+			poll(null, 0, 50);
+			to = open(t.target, O_WRONLY | O_NONBLOCK);
+			if (to < 0 && access(ask, 0) != 0) {
+				// Answered, and the pipe is opened before the request goes,
+				// so one more look settles it.
+				to = open(t.target, O_WRONLY | O_NONBLOCK);
+				if (to >= 0) break;
+				io::eprintfn("%s: remote control was refused", name);
+				exit(1);
+			}
+		}
+	}
+	close(to);
+	return t;
+}
+
+// client_last prints the line that ends a reply, green for ok, red for err.
+fn void client_last(String line) @local {
+	String out = line;
+	if (g_client_color) out = glaze::style().with_fg(line.starts_with("err") ? "#ff5f5f" : "#5fd787").render(line);
+	(void)write(STDOUT_FILENO, out.ptr, out.len);
+	(void)write(STDOUT_FILENO, "\n", 1);
+}
+
+// client_send sends one command and prints the reply. Returns 0 for ok, 1
+// for err or a failure to get an answer, 2 for a command too long.
+fn int client_send(ClientTarget* t, String cmd) @local {
+	int to = open(t.target, O_WRONLY | O_NONBLOCK);
+	if (to < 0) {
+		io::eprintfn("%s: no longer taking commands", t.name);
+		return 1;
+	}
+	ZString reply = string::tformat("%s/.reply.%d", t.dir, getpid()).zstr_tcopy();
+	unlink(reply);
+	int from = mkfifo(reply, 0o600) == 0 ? open(reply, O_RDWR) : -1;
+	if (from < 0) {
+		close(to);
+		io::eprintfn("%s: cannot make a pipe for the reply", t.name);
+		return 1;
+	}
+	String line = string::tformat(">%s\t%s\n", reply, cmd);
+	if (line.len > PIPE_LINE_MAX) {
+		close(to);
+		close(from);
+		unlink(reply);
+		io::eprintfn("%s: command too long", t.name);
+		return 2;
+	}
+	(void)write(to, line.ptr, line.len);
+	close(to);
+
+	DString got = dstring::temp();
+	int code = 1;
+	for (bool done = false; !done;) {
+		PollFd p = { .fd = from, .events = POLLIN };
+		if (poll(&p, 1, CLIENT_WAIT_MS) <= 0) {
+			io::eprintfn("%s: no answer", t.name);
+			break;
+		}
+		char[1024] chunk;
+		sz n = read(from, &chunk, chunk.len);
+		if (n <= 0) continue;
+		got.append_bytes(chunk[:n]);
+		for (;;) {
+			String s = got.str_view();
+			sz? nl = s.index_of_char('\n');
+			if (catch nl) break;
+			if (s[0] == REPLY_END) {
+				String last = s[1:nl - 1];
+				client_last(last);
+				code = last.starts_with("err") ? 1 : 0;
+				done = true;
+				break;
+			}
+			(void)write(STDOUT_FILENO, s.ptr, nl + 1);
+			got.delete(0, nl + 1);
+		}
+	}
+	close(from);
+	unlink(reply);
+	return code;
+}
+
+// client_repl reads commands a line at a time and sends each one. It asks
+// to be allowed first, so the prompt appears once the program has said yes.
+// It ends at the end of input, at "exit", or when the program is told to quit.
+fn int client_repl(String name) @local {
+	ClientTarget t = client_connect(name);
+	bool tty = isatty(STDIN_FILENO) != 0;
+	g_client_color = isatty(STDOUT_FILENO) != 0 && getenv("NO_COLOR") == null;
+	String prompt = g_client_color ? glaze::style().with_fg("#5fd7ff").render("> ") : "> ";
+	DString buf = dstring::temp();
+	bool eof = false;
+	for (;;) {
+		if (tty) (void)write(STDOUT_FILENO, prompt.ptr, prompt.len);
+		// Read until a whole line is in, or there is no more.
+		sz at = -1;
+		for (;;) {
+			sz? nl = buf.str_view().index_of_char('\n');
+			if (try found = nl) {
+				at = found;
+				break;
+			}
+			if (eof) break;
+			char[1024] chunk;
+			sz n = read(STDIN_FILENO, &chunk, chunk.len);
+			if (n <= 0) {
+				eof = true;
+			} else {
+				buf.append_bytes(chunk[:n]);
+			}
+		}
+		String line;
+		if (at >= 0) {
+			line = buf.str_view()[:at].tcopy();
+			buf.delete(0, at + 1);
+		} else {
+			// The end of input, with perhaps a last line that had no newline.
+			line = buf.str_view().tcopy();
+			buf.clear();
+			if (line.trim().len == 0) return 0;
+		}
+		line = line.trim();
+		if (line.len == 0) continue;
+		if (line == "exit") return 0;
+		client_send(&t, line);
+		if (line == "quit") return 0;
+	}
+}
+
+// control_client is the whole of a run that was given --cmd or --repl: it
+// sends commands to the running program, prints the replies and exits. Any
+// other run returns from it at once. run() calls it before it touches the
+// terminal.
 fn void control_client() {
 	@pool() {
 		String[] args = program_args();
 		sz at = -1;
+		bool repl = false;
 		for (sz i = 1; i < args.len; i++) {
-			if (args[i] == "--cmd") {
+			if (args[i] == "--cmd" || args[i] == "--repl") {
 				at = i;
+				repl = args[i] == "--repl";
 				break;
 			}
 		}
 		if (at < 0) return;
 		String name = base_name(args[0]);
+		if (repl) exit(client_repl(name));
 		DString cmd = dstring::temp();
 		for (sz i = at + 1; i < args.len; i++) {
 			if (cmd.len() > 0) cmd.append_char(' ');
@@ -270,97 +456,7 @@ fn void control_client() {
 			io::eprintfn("%s: --cmd needs a command", name);
 			exit(2);
 		}
-		String dir = pipe_dir();
-		// Which program: the one MILKTEA_PID names, else the most recently
-		// started, whose pid the link holds.
-		String pid;
-		char* named = getenv("MILKTEA_PID");
-		if (named != null && ((ZString)named).len() > 0) {
-			pid = ((ZString)named).str_view();
-		} else {
-			char[] buf = mem::talloc_array(char, 32);
-			sz n = readlink(string::tformat("%s/%s.pid", dir, name).zstr_tcopy(), buf.ptr, buf.len);
-			if (n > 0) pid = (String)buf[:n];
-		}
-		int pid_no = pid.to_int() ?? 0;
-		if (pid_no <= 0 || kill(pid_no, 0) != 0) {
-			io::eprintfn("%s: no %s is running that can be driven", name, name);
-			exit(1);
-		}
-		ZString target = string::tformat("%s/%s.%s", dir, name, pid).zstr_tcopy();
-		// With nobody reading the pipe this fails, so a program that is not
-		// listening is told apart from one that is.
-		int to = open(target, O_WRONLY | O_NONBLOCK);
-		if (to < 0) {
-			// Not listening: ask whoever is at it. The request is a file the
-			// program removes when it is answered, having opened its pipe
-			// first if the answer was yes.
-			ZString ask = string::tformat("%s/%s.%s.ask", dir, name, pid).zstr_tcopy();
-			int made = open(ask, O_CREAT | O_WRONLY, 0o600);
-			if (made < 0) {
-				io::eprintfn("%s: cannot ask %s to be driven", name, name);
-				exit(1);
-			}
-			close(made);
-			io::eprintfn("%s: asked for remote control; answer in the program", name);
-			for (int waited = 0; to < 0; waited += 50) {
-				if (waited >= CLIENT_ASK_MS || kill(pid_no, 0) != 0) {
-					unlink(ask);
-					io::eprintfn("%s: no answer", name);
-					exit(1);
-				}
-				poll(null, 0, 50);
-				to = open(target, O_WRONLY | O_NONBLOCK);
-				if (to < 0 && access(ask, 0) != 0) {
-					// Answered, and the pipe is opened before the request
-					// goes, so one more look settles it.
-					to = open(target, O_WRONLY | O_NONBLOCK);
-					if (to >= 0) break;
-					io::eprintfn("%s: remote control was refused", name);
-					exit(1);
-				}
-			}
-		}
-		ZString reply = string::tformat("%s/.reply.%d", dir, getpid()).zstr_tcopy();
-		unlink(reply);
-		int from = mkfifo(reply, 0o600) == 0 ? open(reply, O_RDWR) : -1;
-		if (from < 0) {
-			io::eprintfn("%s: cannot make a pipe for the reply", name);
-			exit(1);
-		}
-		String line = string::tformat(">%s\t%s\n", reply, cmd.str_view());
-		if (line.len > PIPE_LINE_MAX) {
-			unlink(reply);
-			io::eprintfn("%s: command too long", name);
-			exit(2);
-		}
-		(void)write(to, line.ptr, line.len);
-		close(to);
-
-		DString got = dstring::temp();
-		for (;;) {
-			PollFd p = { .fd = from, .events = POLLIN };
-			if (poll(&p, 1, CLIENT_WAIT_MS) <= 0) {
-				unlink(reply);
-				io::eprintfn("%s: no answer", name);
-				exit(1);
-			}
-			char[1024] chunk;
-			sz n = read(from, &chunk, chunk.len);
-			if (n <= 0) continue;
-			got.append_bytes(chunk[:n]);
-			for (;;) {
-				String s = got.str_view();
-				sz? nl = s.index_of_char('\n');
-				if (catch nl) break;
-				if (s[0] == REPLY_END) {
-					(void)write(STDOUT_FILENO, s.ptr + 1, nl);
-					unlink(reply);
-					exit(s[1:nl - 1].starts_with("err") ? 1 : 0);
-				}
-				(void)write(STDOUT_FILENO, s.ptr, nl + 1);
-				got.delete(0, nl + 1);
-			}
-		}
+		ClientTarget t = client_connect(name);
+		exit(client_send(&t, cmd.str_view()));
 	};
 }

@@ -14,7 +14,8 @@ import std::thread;
 //   tree [SEL]            the tree, from the root or each match's subtree
 //   list SEL              the nodes a selector matches, one a line
 //   match PATTERN         nodes whose on-screen text matches the pattern
-//   click SEL | @c,r      move there, press and release
+//   click SEL | @c,r      move there, press and release; $name is a node's
+//                         key ($"two words" holds spaces)
 //   press, release, move SEL | @c,r
 //   drag FROM TO          each a selector or @c,r
 //   scroll [WHERE] [dy=N] [dx=N]
@@ -36,6 +37,8 @@ import std::thread;
 //                 type (View) is word; * is any node
 //   [key="v"]     its key, id, role, type or on-screen text: = is equal,
 //                 *= contains, ^= starts with
+//   $v            a node whose key is v, as [key="v"]; $"a b" for spaces;
+//                 after a word too: button$v
 //   :focused      it has keyboard focus; :clickable, it takes clicks
 //   :nth(n)       the nth match, from 0, of the whole selector
 //   a b           b inside a
@@ -401,8 +404,17 @@ fn sz ctl_tokens(String s, String[] out) @local {
 			continue;
 		}
 		sz start = i;
-		while (i < s.len && s[i] != ' ') {
-			if (s[i] == '\\' && i + 1 < s.len) i++;
+		// A key shortcut may hold a quoted name with spaces: $"New file", or
+		// button$"New file".
+		char quote = 0;
+		while (i < s.len && (quote != 0 || s[i] != ' ')) {
+			if (s[i] == '\\' && i + 1 < s.len) {
+				i++;
+			} else if (quote != 0) {
+				if (s[i] == quote) quote = 0;
+			} else if (i > start && s[i - 1] == '$' && (s[i] == '"' || s[i] == '\'')) {
+				quote = s[i];
+			}
 			i++;
 		}
 		if (n < out.len) out[n++] = s[start:i - start];
@@ -617,8 +629,38 @@ fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 		if (i >= s.len) break;
 		CtlCompound c = { .nth = -1 };
 		sz start = i;
-		while (i < s.len && sel_word_char(s[i])) i++;
-		c.word = i > start ? s[start:i - start] : "*";
+		// A word may be followed by $name, or be only that: button$OK is
+		// button[key="OK"], and $OK is any node with that key.
+		if (s[i] == '$') {
+			c.word = "*";
+		} else {
+			while (i < s.len && sel_word_char(s[i])) i++;
+			c.word = i > start ? s[start:i - start] : "*";
+		}
+		if (i < s.len && s[i] == '$') {
+			// $"a name" in quotes holds spaces; a bare name ends at a space or
+			// a :state.
+			i++;
+			DString kv = dstring::temp();
+			if (i < s.len && (s[i] == '"' || s[i] == '\'')) {
+				char kq = s[i];
+				i++;
+				while (i < s.len && s[i] != kq) {
+					if (s[i] == '\\' && i + 1 < s.len) i++;
+					kv.append_char(s[i]);
+					i++;
+				}
+				if (i >= s.len) return false;
+				i++;
+			} else {
+				while (i < s.len && s[i] != ' ' && s[i] != ':') {
+					kv.append_char(s[i]);
+					i++;
+				}
+			}
+			if (kv.len() == 0) return false;
+			c.attrs[c.attrs_len++] = { .name = "key", .op = EQUALS, .value = kv.str_view() };
+		}
 		while (i < s.len && (s[i] == '[' || s[i] == ':')) {
 			if (s[i] == '[') {
 				i++;
@@ -637,19 +679,29 @@ fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 				} else {
 					return false;
 				}
-				// Either quote holds the value, so a selector that travels in
-				// double quotes can use single ones inside.
-				if (i >= s.len || (s[i] != '"' && s[i] != '\'')) return false;
-				char quote = s[i];
-				i++;
+				// A value is quoted, with either quote so a selector that
+				// travels in double quotes can use single ones inside, or bare,
+				// running to the closing ]: a shell or xargs in between may
+				// strip the quotes.
 				DString v = dstring::temp();
-				while (i < s.len && s[i] != quote) {
-					if (s[i] == '\\' && i + 1 < s.len) i++;
-					v.append_char(s[i]);
+				if (i < s.len && (s[i] == '"' || s[i] == '\'')) {
+					char quote = s[i];
+					i++;
+					while (i < s.len && s[i] != quote) {
+						if (s[i] == '\\' && i + 1 < s.len) i++;
+						v.append_char(s[i]);
+						i++;
+					}
+					if (i + 1 >= s.len || s[i + 1] != ']') return false;
+					i += 2;
+				} else {
+					while (i < s.len && s[i] != ']') {
+						v.append_char(s[i]);
+						i++;
+					}
+					if (i >= s.len) return false;
 					i++;
 				}
-				if (i + 1 >= s.len || s[i + 1] != ']') return false;
-				i += 2;
 				a.value = v.str_view();
 				if (c.attrs_len < c.attrs.len) c.attrs[c.attrs_len++] = a;
 			} else {
@@ -805,7 +857,7 @@ fn void ctl_tree(String[] toks, sz n) @local {
 			ctl_subtree(i, 0);
 		}
 		if (!found) {
-			ctl_err(string::tformat("nothing matches %s", toks[1]));
+			ctl_err(string::tformat("no node matches %s", toks[1]));
 			return;
 		}
 	} else {
@@ -881,12 +933,41 @@ fn void ctl_screen(String[] toks, sz n) @local {
 
 // ── Input ──────────────────────────────────────────────────────────────────
 
+// ctl_is_cell says whether a word is a cell, @col,row with each a whole
+// number, which a leading - makes the outside of the program, and not a key.
+fn bool ctl_is_cell(String tok) @local {
+	if (tok.len < 4 || tok[0] != '@') return false;
+	sz comma = -1;
+	for (sz i = 1; i < tok.len; i++) {
+		char ch = tok[i];
+		if (ch == ',' && comma < 0 && i > 1) {
+			comma = i;
+		} else if (!ch.is_digit() && !(ch == '-' && (i == 1 || i == comma + 1))) {
+			return false;
+		}
+	}
+	return comma > 1 && comma < tok.len - 1;
+}
+
+// ctl_place_err says why a word does not point anywhere: it is not a
+// selector, or it is one that matches nothing on screen.
+fn void ctl_place_err(String tok) @local {
+	CtlCompound[CTL_MAX_COMPOUNDS] cs;
+	sz count;
+	if (!ctl_parse_sel(tok, &cs[0], CTL_MAX_COMPOUNDS, &count)) {
+		ctl_err(string::tformat("bad selector: %s", tok));
+		return;
+	}
+	ctl_err(string::tformat("no node matches %s", tok));
+}
+
 // ctl_place_tok works out where a word points, in layout units: a selector's
 // first match's middle, else a cell "@col,row" of the screen.
 fn bool ctl_place_tok(String tok, sz* x, sz* y) @local {
 	sz uw = ctl_uw();
 	sz uh = ctl_uh();
-	if (tok.len > 0 && tok[0] == '@') {
+	// @col,row is a cell; any other @word is a key, found as a selector.
+	if (ctl_is_cell(tok)) {
 		sz comma = tok.len;
 		for (sz i = 1; i < tok.len; i++) {
 			if (tok[i] == ',') {
@@ -943,7 +1024,7 @@ fn void ctl_pointer(String[] toks, sz n, String cmd) @local {
 	sz x;
 	sz y;
 	if (!ctl_place_tok(toks[1], &x, &y)) {
-		ctl_err(string::tformat("bad place: %s", toks[1]));
+		ctl_place_err(toks[1]);
 		return;
 	}
 	switch (cmd) {
@@ -967,8 +1048,12 @@ fn void ctl_drag(String[] toks, sz n) @local {
 	sz y0;
 	sz x1;
 	sz y1;
-	if (!ctl_place_tok(toks[1], &x0, &y0) || !ctl_place_tok(toks[2], &x1, &y1)) {
-		ctl_err("bad place in drag");
+	if (!ctl_place_tok(toks[1], &x0, &y0)) {
+		ctl_place_err(toks[1]);
+		return;
+	}
+	if (!ctl_place_tok(toks[2], &x1, &y1)) {
+		ctl_place_err(toks[2]);
 		return;
 	}
 	ctl_inject(MOUSE_MOTION, x0, y0);
@@ -991,7 +1076,7 @@ fn void ctl_scroll(String[] toks, sz n) @local {
 			dx = t[3..].to_double() ?? 0;
 		} else {
 			if (!ctl_place_tok(t, &x, &y)) {
-				ctl_err(string::tformat("bad place: %s", t));
+				ctl_place_err(t);
 				return;
 			}
 		}
@@ -1217,7 +1302,7 @@ fn void ctl_select_text(String[] toks, sz n) @local {
 	}
 	sz? t = ctl_find(toks[1], 0);
 	if (catch t) {
-		ctl_err(string::tformat("nothing matches %s", toks[1]));
+		ctl_place_err(toks[1]);
 		return;
 	}
 	CtlScreenText st = ctl_screen_text(t);

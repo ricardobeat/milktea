@@ -69,7 +69,14 @@ and exits 0 on `ok` or 1 on `err`. It goes to the most recently started
 `ted`; `MILKTEA_PID=<pid>` picks another. Any number of `--cmd` calls can
 run at once.
 
-The first `--cmd` has to be allowed by whoever is at the program. It shows
+`ted --repl` is the same with a prompt: it reads commands a line at a time,
+sends each one and prints the reply, `ok` in green and `err` in red on a
+terminal (`NO_COLOR` turns that off). It asks to be allowed when it starts,
+so the prompt appears once the program has said yes, and it ends at the end
+of input, at `exit`, or after `quit`. Lines are sent as they are, so quotes
+need no shell escaping.
+
+The first `--cmd` (or `--repl`) has to be allowed by whoever is at the program. It shows
 
 ```
 Allow remote control?  [yes]  [no]
@@ -164,7 +171,8 @@ label. `role` comes from a fixed list close to the one accessibility uses.
 |---|---|
 | `file` | a node whose id, role or type is `file` |
 | `*` | any node |
-| `[key="src/"]` | key equal to `src/`; `id`, `role`, `type` and `text` work too |
+| `$src/` | key equal to `src/`, short for `[key="src/"]`; it can follow a word too, as in `button$OK`; `$"New file"` holds spaces, and a bare name ends at a space or a `:state`. A shell expands a bare `$name`, so in `--cmd` write `'$OK'` |
+| `[key="src/"]` | key equal to `src/`; `id`, `role`, `type` and `text` work too. The quotes are optional when the value has no `]` or space: `[key=src/]` |
 | `[text*="Save"]` | text containing `Save`; `^=` is starts with |
 | `:focused`, `:clickable` | a node in that state |
 | `:nth(2)` | the third match of the whole selector; `list` and `tree` then show only that one |
