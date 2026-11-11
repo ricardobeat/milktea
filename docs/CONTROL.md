@@ -13,7 +13,7 @@ since its input comes from the window, so it can be driven from the terminal
 that launched it.
 
 ```sh
-printf 'screen\nclick $Save\nscreen\nquit\n' | ted
+printf 'screen\nclick Save\nscreen\nquit\n' | ted
 ```
 
 When stdin runs out, a program with nothing left to do exits on its own.
@@ -24,12 +24,12 @@ When stdin runs out, a program with nothing left to do exits on its own.
 ```sh
 ted                       # in one terminal, as usual
 ted --cmd tree            # from another
-ted --cmd click '$Save'
+ted --cmd click Save
 ```
 
 `--cmd` sends the rest of its command line as one command, prints the reply,
 and exits 0 on `ok`, 1 on `err`. It drives the most recently started `ted`;
-`MILKTEA_PID=<pid>` picks another. Quote a `$key` so the shell leaves it alone.
+`MILKTEA_PID=<pid>` picks another.
 
 The first `--cmd` has to be allowed by whoever is at the program, which shows
 
@@ -75,9 +75,7 @@ after a `click` shows what the click did.
 | target | is |
 |---|---|
 | `@12,3` | the cell at column 12, row 3, counting from 0 (`screen` rows line up); `@-1,-1` is outside the program |
-| `$Save` | the node whose key is `Save`; `$"Save as"` with spaces |
-| `button` | a node whose id, role or type is `button`; if none, one that shows the text `button` |
-| `button$OK` | both: a button whose key is `OK` |
+| `Save` | a node whose id, role, type or key is `Save`; if none, one that shows the text `Save` |
 | `"Save as"` | a node that shows that text |
 
 When several nodes match, the topmost is the one, and the command acts on its
@@ -88,7 +86,7 @@ middle.
 ```
 * @0,0 80x24
   menubar @0,0 80x1
-    menu $File @0,0 6x1 clickable "File"
+    menu key=File @0,0 6x1 clickable "File"
 ```
 
 Each line is a node: its id, else its role, else its content type, else `*`;

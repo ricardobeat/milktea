@@ -11,7 +11,7 @@ import utf8;
 // it shows, and send it the input a person would. A command is a line, and is
 // answered with its output and then "ok", or with one line "err ...".
 //
-//   tree            the nodes on screen: name $key @col,row WxH, state, text
+//   tree            the nodes on screen: name key=K @col,row WxH, state, text
 //   screen          the text on screen, a line a row
 //   click T         move to T, press and release
 //   move T          move to T, which hovers it
@@ -21,10 +21,9 @@ import utf8;
 //   type TEXT       the rest of the line, a key a character
 //   quit
 //
-// A target T is a cell, @col,row; a node's key, $name ($"a name" with
-// spaces); a word, which is a node's id, role or type, or else text it shows;
-// both, as button$OK; or text it shows, in quotes: "Save as". Of the nodes
-// that match, the topmost.
+// A target T is a cell, @col,row; a word, which is a node's id, role, type
+// or key, or else text it shows; or text it shows, in quotes: "Save as". Of
+// the nodes that match, the topmost.
 //
 // Commands come from stdin when it is not a terminal (always, in a window
 // app), answered on stdout; and from `<program> --cmd COMMAND`, run anywhere
@@ -401,7 +400,7 @@ fn void ctl_node(xray::Node* n, sz depth) @local {
 	}
 	if (n.key_str.len > 0) {
 		bool q = ctl_index(n.key_str, " ") >= 0;
-		o.append_string(ctl_cat(q ? " $\"" : " $", n.key_str, q ? "\"" : ""));
+		o.append_string(ctl_cat(q ? " key=\"" : " key=", n.key_str, q ? "\"" : ""));
 	}
 	xray::Rect r = ctl_cells(n.computed_rect);
 	o.append_string(ctl_cat(" @", num::str(r.x), ",", num::str(r.y), " ", num::str(r.w), "x", num::str(r.h)));
@@ -421,7 +420,6 @@ fn void ctl_node(xray::Node* n, sz depth) @local {
 // the topmost, that has it.
 struct CtlFind @local {
 	String word;
-	String key;
 	String text;
 	xray::Node* found;
 }
@@ -429,8 +427,7 @@ struct CtlFind @local {
 fn void ctl_find(CtlFind* f, xray::Node* n) @local {
 	if (n == null || n.alpha_value == 0) return;
 	String w = f.word;
-	bool ok = w.len == 0 || w == n.id_str || w == n.type_name || w == ROLE_NAMES[(int)n.role_value];
-	ok = ok && (f.key.len == 0 || f.key == n.key_str);
+	bool ok = w.len == 0 || w == n.id_str || w == n.key_str || w == n.type_name || w == ROLE_NAMES[(int)n.role_value];
 	if (ok && (f.text.len == 0 || ctl_index(ctl_text(n), f.text) >= 0)) f.found = n;
 	for (sz i = 0; i < n.child_count; i++) ctl_find(f, n.children[i]);
 }
@@ -462,13 +459,11 @@ fn bool ctl_target(String t, sz* x, sz* y) @local {
 	if (t[0] == '"' || t[0] == '\'') {
 		f.text = ctl_unquote(t);
 	} else {
-		sz d = ctl_index(t, "$");
-		f.word = d < 0 ? t : t[:d];
-		if (d >= 0) f.key = ctl_unquote(t[d + 1..]);
+		f.word = t;
 	}
 	ctl_find(&f, g_ctl.root);
 	// A word that names no node may be text one shows.
-	if (f.found == null && f.key.len == 0 && f.word.len > 0) {
+	if (f.found == null && f.word.len > 0) {
 		f.text = f.word;
 		f.word = "";
 		ctl_find(&f, g_ctl.root);
