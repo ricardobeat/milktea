@@ -25,6 +25,9 @@ import std::thread;
 //   stream                echo the input the program gets as commands
 //   quit
 //
+// A program started with MILKTEA_CONTROL=1 also takes commands while it runs
+// as usual, sent by `<program> --cmd ...` (see control_pipe.c3).
+//
 // A command answers with its output, then "ok"; a failure answers one line
 // "err ...". A node is picked by selector, matched against the last drawn
 // frame:
@@ -89,6 +92,18 @@ struct Control @local {
 	// read from stdin here, which is what a GUI does with its spare stdin.
 	bool from_queue;
 	bool stdin_eof;
+	// Where replies go: stdout, or nowhere for a program drawing on the
+	// terminal that stdout is. A command from --cmd names a pipe of its own
+	// for the one reply (reply_piped), closed when the reply ends.
+	int reply_default;
+	int reply_fd;
+	bool reply_piped;
+	// An input command's "ok" waits for the frame its input draws.
+	bool ok_owed;
+	// The loop itself reads stdin and the command pipe (a GUI): their lines
+	// are put together here.
+	LineAsm stdin_lines;
+	LineAsm pipe_lines;
 	DString inbuf;
 	InputQueue queue;
 	bool stream;
@@ -122,6 +137,8 @@ fn void control_start() {
 	g_ctl.started = true;
 	if (catch input_queue_init(&g_ctl.queue)) return;
 	g_ctl.inbuf.init(mem);
+	g_ctl.reply_default = STDOUT_FILENO;
+	g_ctl.reply_fd = STDOUT_FILENO;
 	g_ctl.on = true;
 	// The first commands wait for the first frame: there is nothing to
 	// select or read before it.
@@ -133,6 +150,41 @@ fn void control_start() {
 fn void control_start_piped() {
 	control_start();
 	g_ctl.from_queue = true;
+	// On a terminal stdout is the screen, so only --cmd gets replies.
+	if (stdin_is_tty()) {
+		g_ctl.reply_default = -1;
+		g_ctl.reply_fd = -1;
+	}
+}
+
+// LineAsm puts the bytes of a stream together into lines. A whole line goes
+// to the reader thread's queue (to_queue) or, read by the loop itself,
+// straight to the lines waiting to be handled.
+struct LineAsm @private {
+	char[1024] buf;
+	sz len;
+}
+
+fn void LineAsm.feed(&self, char[] bytes, bool to_queue) {
+	foreach (ch : bytes) {
+		if (ch == '\n') {
+			self.flush(to_queue);
+		} else if (self.len < self.buf.len - 1) {
+			self.buf[self.len++] = ch;
+		}
+	}
+}
+
+fn void LineAsm.flush(&self, bool to_queue) {
+	if (self.len == 0) return;
+	self.buf[self.len++] = '\n';
+	String line = (String)self.buf[:self.len];
+	self.len = 0;
+	if (to_queue) {
+		control_feed_line(line);
+	} else {
+		g_ctl.inbuf.append_string(line);
+	}
 }
 
 // control_feed_line gives the reader thread's handoff for one command line.
@@ -173,6 +225,11 @@ fn bool ctl_settled() @local {
 	bool handled = g_program == null || g_program.send_head == g_program.send_tail;
 	if (!drawn && !(handled && ++g_ctl.wait_passes >= 2)) return false;
 	g_ctl.waiting = false;
+	if (g_ctl.ok_owed) {
+		g_ctl.ok_owed = false;
+		ctl_ok();
+	}
+	ctl_reply_end();
 	return true;
 }
 
@@ -207,9 +264,18 @@ fn void ctl_drain_queue() @local {
 	ctl_handle_lines();
 }
 
-// ctl_read_stdin reads whatever lines arrived on stdin since the last pass.
-// A GUI's stdin sits in canonical mode, so a line arrives whole after Enter.
+// ctl_read_stdin reads whatever lines arrived on stdin, and on the command
+// pipe if there is one, since the last pass.
 fn void ctl_read_stdin() @local {
+	int pipe_fd = control_pipe_fd();
+	while (pipe_fd >= 0) {
+		PollFd pfd = { .fd = pipe_fd, .events = POLLIN };
+		if (poll(&pfd, 1, 0) <= 0) break;
+		char[1024] chunk;
+		sz n = read(pipe_fd, &chunk, chunk.len);
+		if (n <= 0) break;
+		g_ctl.pipe_lines.feed(chunk[:n], false);
+	}
 	// Lines read before the end of stdin may still be waiting on a frame.
 	while (!g_ctl.stdin_eof) {
 		PollFd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
@@ -217,11 +283,12 @@ fn void ctl_read_stdin() @local {
 		char[1024] chunk;
 		sz n = read(STDIN_FILENO, &chunk, chunk.len);
 		if (n == 0) {
+			g_ctl.stdin_lines.flush(false);
 			g_ctl.stdin_eof = true;
 			break;
 		}
 		if (n < 0) break;
-		g_ctl.inbuf.append_bytes(chunk[:n]);
+		g_ctl.stdin_lines.feed(chunk[:n], false);
 	}
 	ctl_handle_lines();
 }
@@ -235,7 +302,16 @@ fn void ctl_handle_lines() @local {
 		if (catch nl) break;
 		String line = s[:nl].tcopy();
 		g_ctl.inbuf.delete(0, nl + 1);
+		// ">PATH<tab>COMMAND" is a command from --cmd, answered on PATH.
+		if (line.len > 0 && line[0] == '>') {
+			sz? tab = line.index_of_char('\t');
+			if (catch tab) continue;
+			g_ctl.reply_fd = control_reply_open(line[1:tab - 1]);
+			g_ctl.reply_piped = true;
+			line = line[tab + 1..];
+		}
 		if (line.trim().len > 0) ctl_handle(line);
+		if (!g_ctl.waiting) ctl_reply_end();
 	}
 }
 
@@ -243,19 +319,43 @@ fn void ctl_handle_lines() @local {
 
 // ctl_line writes one reply line to stdout in a single write, so the lines
 // of two writers at once cannot interleave mid-line.
-fn void ctl_line(String s) @local {
+fn void ctl_line_to(int fd, String s) @local {
+	if (fd < 0) return;
 	@pool() {
 		DString out = dstring::temp();
 		out.append_string(s);
 		out.append_char('\n');
-		String v = out.str_view();
-		(void)write(1, v.ptr, v.len);
+		control_write(fd, out.str_view());
 	};
 }
 
-fn void ctl_ok() @local => ctl_line("ok");
+fn void ctl_line(String s) @local => ctl_line_to(g_ctl.reply_fd, s);
 
-fn void ctl_err(String message) @local => ctl_line(string::tformat("err %s", message));
+// ctl_last_line is the line a reply ends with, marked as such for --cmd.
+fn void ctl_last_line(String s) @local {
+	ctl_line(g_ctl.reply_piped ? string::tformat("%c%s", REPLY_END, s) : s);
+}
+
+// ctl_ok ends a reply. After a command that sent input it waits for the
+// frame that input draws, so "ok" means the screen shows what was done.
+fn void ctl_ok() @local {
+	if (g_ctl.waiting) {
+		g_ctl.ok_owed = true;
+		return;
+	}
+	ctl_last_line("ok");
+}
+
+fn void ctl_err(String message) @local => ctl_last_line(string::tformat("err %s", message));
+
+// ctl_reply_end closes the pipe a --cmd reply went to; later replies go
+// where they usually do.
+fn void ctl_reply_end() @local {
+	if (!g_ctl.reply_piped) return;
+	if (g_ctl.reply_fd >= 0) control_reply_close(g_ctl.reply_fd);
+	g_ctl.reply_fd = g_ctl.reply_default;
+	g_ctl.reply_piped = false;
+}
 
 // ctl_quote appends s as a double-quoted string, escapes intact.
 fn void ctl_quote(DString* out, String s) @local {
@@ -1189,7 +1289,7 @@ fn void control_pointer_event(String type, sz x, sz y) {
 		DString out = dstring::temp();
 		out.append_string(type);
 		out.appendf(" @%d,%d", xray::floor_cell(x, ctl_uw()), xray::floor_cell(y, ctl_uh()));
-		ctl_line(out.str_view());
+		ctl_line_to(g_ctl.reply_default, out.str_view());
 	};
 }
 
@@ -1202,7 +1302,7 @@ fn void control_msg_event(Msg m) {
 		if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE) {
 			out.append_string("key ");
 			out.append_string(key_spec(m.key));
-			ctl_line(out.str_view());
+			ctl_line_to(g_ctl.reply_default, out.str_view());
 			return;
 		}
 		if (m.kind != MsgKind.MOUSE || m.mouse.action != MOUSE_PRESS) return;
@@ -1222,7 +1322,7 @@ fn void control_msg_event(Msg m) {
 		}
 		out.appendf("scroll @%d,%d dy=%.2f", xray::floor_cell(cx, ctl_uw()), xray::floor_cell(cy, ctl_uh()), dy);
 		if (dx != 0) out.appendf(" dx=%.2f", dx);
-		ctl_line(out.str_view());
+		ctl_line_to(g_ctl.reply_default, out.str_view());
 	};
 }
 

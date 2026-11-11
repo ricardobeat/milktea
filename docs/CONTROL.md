@@ -49,9 +49,31 @@ Commands are handled between frames, on the program's own thread, and input
 goes through the same path real input takes, so hover, focus and clicks
 behave the same as with a real mouse or keyboard.
 
-A command that sends input answers `ok` once the input is sent. The commands
-after it wait for the next frame, so a `screen` that follows a `click` shows
-what the click did.
+A command that sends input answers `ok` once the frame that input draws is
+on screen, and the commands after it wait for that, so a `screen` that
+follows a `click` shows what the click did.
+
+## Driving a program that is already running
+
+Piped stdin drives a program nobody is looking at. To drive one that is on
+screen and in use, start it with `MILKTEA_CONTROL=1` and send it commands
+with the same binary:
+
+```sh
+MILKTEA_CONTROL=1 ted            # in one terminal: runs as usual
+ted --cmd click 'button[key="save"]'   # from anywhere else
+ted --cmd screen
+```
+
+`--cmd` takes the rest of the command line as one command, prints the reply
+and exits 0 on `ok` or 1 on `err`. It goes to the most recently started
+`ted` that is listening; `MILKTEA_PID=<pid>` picks another. Any number of
+`--cmd` calls can run at once.
+
+A program only listens when asked to. It then keeps a named pipe in
+`$TMPDIR/milktea-<uid>/`, a directory only you can enter, and removes it
+when it exits. `stream` has nowhere to write in a program drawing on a
+terminal, so it is for piped and window programs.
 
 ## A session
 

@@ -510,19 +510,24 @@ fn int input_reader_fn(void* arg) @private {
 	InputQueue* q = (InputQueue*)arg;
 	char[256] tmp;
 	// A piped stdin drives the program from the command line: whole lines go
-	// to the control stream, not the key parser.
+	// to the control stream, not the key parser. So do the lines of the
+	// command pipe, if the program has one (see control_pipe.c3).
 	bool cli = !stdin_is_tty();
-	char[1024] line;
-	sz line_len = 0;
+	LineAsm stdin_lines;
+	LineAsm pipe_lines;
+	int pipe_fd = control_pipe_fd();
 
 	while (!input_queue_is_closed(q)) {
-		PollFd pfd;
-		pfd.fd = STDIN_FILENO;
-		pfd.events = POLLIN;
-		pfd.revents = 0;
+		PollFd[2] pfds = { { .fd = STDIN_FILENO, .events = POLLIN }, { .fd = pipe_fd, .events = POLLIN } };
 
-		sz r = poll(&pfd, 1, 50); // 50ms timeout
+		sz r = poll(&pfds, pipe_fd >= 0 ? 2 : 1, 50); // 50ms timeout
 		if (r <= 0) continue;
+
+		if (pipe_fd >= 0 && pfds[1].revents != 0) {
+			sz pn = read(pipe_fd, &tmp[0], 256);
+			if (pn > 0) pipe_lines.feed(tmp[:pn], true);
+		}
+		if (pfds[0].revents == 0) continue;
 
 		sz n = read(STDIN_FILENO, &tmp[0], 256);
 		if (n <= 0) {
@@ -534,11 +539,7 @@ fn int input_reader_fn(void* arg) @private {
 			if (cli) {
 				// Flush the last partial line, then say the command stream
 				// ended so the program can run down once it has settled.
-				if (line_len > 0) {
-					line[line_len++] = '\n';
-					control_feed_line((String)line[:line_len]);
-					line_len = 0;
-				}
+				stdin_lines.flush(true);
 				control_stdin_eof();
 			}
 			input_queue_close(q);
@@ -549,18 +550,7 @@ fn int input_reader_fn(void* arg) @private {
 			continue;
 		}
 		// Line mode: a whole line is one command.
-		for (sz i = 0; i < n; i++) {
-			char ch = tmp[i];
-			if (ch == '\n') {
-				if (line_len > 0) {
-					line[line_len++] = '\n';
-					control_feed_line((String)line[:line_len]);
-					line_len = 0;
-				}
-				continue;
-			}
-			if (line_len < line.len - 1) line[line_len++] = ch;
-		}
+		stdin_lines.feed(tmp[:n], true);
 	}
 	return 0;
 }
@@ -1223,9 +1213,15 @@ fn void? Program.run(Program* self) {
 	// stream of commands and stdout carries only the replies, so there is no
 	// terminal to set raw, no probe, and no render output. The reader thread
 	// hands whole lines to the control stream.
+	// A run given --cmd is a client of one already running: it sends the
+	// command and exits here.
+	if (!self.test_mode) control_client();
 	stdin_probe();
 	bool cli_mode = !self.test_mode && !stdin_is_tty();
 	if (cli_mode) control_start_piped();
+	// Asked to, a program on a terminal takes commands too, from a pipe of
+	// its own that the reader thread watches beside stdin.
+	if (!self.test_mode && control_pipe_wanted() && control_pipe_open()) control_start_piped();
 	// No OSC 22 emitted yet, which is indistinguishable from having emitted
 	// the empty (reset) name — so a first frame with no cursor stays silent.
 	self.last_mouse_cursor_len = 0;
@@ -1799,7 +1795,8 @@ fn void? Program.run(Program* self) {
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
 			// A command line wakes the loop as a key does (control_feed_line),
 			// so it only stays awake while commands are still to be handled.
-			sz wait_ms = control_busy() ? 0 : 1000;
+			// A message a command sent (quit) is handled on the next pass.
+			sz wait_ms = control_busy() || self.send_head != self.send_tail ? 0 : 1000;
 			now = time_ms();
 			for (sz i = 0; i < MAX_TIMERS; i++) {
 				if (self.timers[i].active) {
