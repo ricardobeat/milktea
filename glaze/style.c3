@@ -1,6 +1,7 @@
 module glaze;
 
 import std::core::dstring;
+import utf8;
 
 // Stack capacity for Style.render's per-call line table. Content beyond this
 // falls back to a heap allocation rather than being truncated — the array is
@@ -595,43 +596,14 @@ fn String truncate_to_width(String s, sz max_width) {
 			i = skip_escape(s, i);
 			continue;
 		}
-		sz char_len = utf8_sequence_len(s, i);
-		uint cp     = decode_codepoint(s, i, char_len);
-		sz cw      = codepoint_width(cp);
+		uint cp;
+		sz char_len = utf8::decode(s[i..], &cp);
+		sz cw       = codepoint_width(cp);
 		if (w + cw > max_width) break;
 		w += cw;
 		i += char_len;
 	}
 	return s[:i];
-}
-
-// utf8_sequence_len returns the byte length of the UTF-8 sequence at `i`,
-// clamped to the end of the string. Always at least 1, so callers advance.
-fn sz utf8_sequence_len(String s, sz i) {
-	char b = s[i];
-	sz n   = 1;
-	if ((b & 0xe0) == 0xc0) {
-		n = 2;
-	} else if ((b & 0xf0) == 0xe0) {
-		n = 3;
-	} else if ((b & 0xf8) == 0xf0) {
-		n = 4;
-	}
-	return i + n > s.len ? s.len - i : n;
-}
-
-// decode_codepoint decodes the `len`-byte UTF-8 sequence starting at `i`.
-fn uint decode_codepoint(String s, sz i, sz len) @local {
-	char b = s[i];
-	switch (len) {
-		case 2: return ((uint)(b & 0x1f) << 6) | (uint)(s[i + 1] & 0x3f);
-		case 3:
-			return ((uint)(b & 0x0f) << 12) | ((uint)(s[i + 1] & 0x3f) << 6) | (uint)(s[i + 2] & 0x3f);
-		case 4:
-			return ((uint)(b & 0x07) << 18) | ((uint)(s[i + 1] & 0x3f) << 12)
-				| ((uint)(s[i + 2] & 0x3f) << 6) | (uint)(s[i + 3] & 0x3f);
-		default: return (uint)b;
-	}
 }
 
 // utf8_width_at returns the display width of the UTF-8 sequence starting at
@@ -640,7 +612,9 @@ fn uint decode_codepoint(String s, sz i, sz len) @local {
 // emoji) occupies two terminal columns, so counting it once misaligns
 // selection and padding on lines that contain one.
 fn sz utf8_width_at(String s, sz i) {
-	return codepoint_width(decode_codepoint(s, i, utf8_sequence_len(s, i)));
+	uint cp;
+	utf8::decode(s[i..], &cp);
+	return codepoint_width(cp);
 }
 
 // string_width returns the terminal display width of a string, skipping ANSI
@@ -654,49 +628,13 @@ fn sz string_width(String s) {
 			continue;
 		}
 
-		// Decode UTF-8 codepoint
-		uint cp = 0;
-		char b  = s[i];
-		if ((b & 0x80) == 0) {
-			cp = (uint)b;
-			i++;
-		} else if ((b & 0xe0) == 0xc0) {
-			cp = (uint)(b & 0x1f);
-			i++;
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-		} else if ((b & 0xf0) == 0xe0) {
-			cp = (uint)(b & 0x0f);
-			i++;
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-		} else if ((b & 0xf8) == 0xf0) {
-			cp = (uint)(b & 0x07);
-			i++;
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-			if (i < s.len) {
-				cp = (cp << 6) | (uint)(s[i] & 0x3f);
-				i++;
-			}
-		} else {
+		// A byte that cannot start a character takes no width.
+		if (!utf8::is_lead(s[i])) {
 			i++;
 			continue;
 		}
+		uint cp;
+		i += utf8::decode(s[i..], &cp);
 
 		w += codepoint_width(cp);
 	}

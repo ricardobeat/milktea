@@ -5,6 +5,7 @@ import glaze;
 import std::io;
 import std::core::string;
 import std::core::dstring;
+import utf8;
 
 const sz BUF_SIZE = 512;
 
@@ -66,7 +67,7 @@ fn milktea::Cmd ChatModel.update(ChatModel* self, milktea::Msg msg) @dynamic {
 			if (k.rune == 'q' && self.input_len == 0) return milktea::quit();
 			// rune is a codepoint — encode as UTF-8 before inserting into the byte buffer
 			char[4] enc;
-			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			sz n = utf8::encode(k.rune, enc[..]);
 			if (self.input_len + n < BUF_SIZE) {
 				for (sz i = self.input_len; i > self.input_cursor; i--) {
 					self.input_buf[i + n - 1] = self.input_buf[i - 1];

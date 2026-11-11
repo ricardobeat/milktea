@@ -4,6 +4,7 @@ import milktea;
 import glaze;
 import std::core::string;
 import std::core::dstring;
+import utf8;
 
 // KeyBinding defines a mapping from key conditions to named actions.
 struct KeyBinding {
@@ -88,7 +89,7 @@ fn String key_match_string(milktea::KeyMsg k) {
 			if (k.rune == ' ') return "space";
 			// rune is a codepoint — encode as UTF-8 rather than %c on a single byte
 			char[4] enc;
-			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			sz n = utf8::encode(k.rune, enc[..]);
 			return string::tformat("%s", (String)enc[:n]);
 		default: return "";
 	}

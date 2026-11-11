@@ -7,6 +7,7 @@ import milktea;
 import xray;
 import std::collections::list;
 import std::math;
+import utf8;
 
 struct Rgba {
 	char r;
@@ -222,7 +223,7 @@ fn void Painter.cell(&self, xray::Cell cell, sz col, sz row, bool ordered,
 	Rgba fg = to_rgba(cell.style.fg, WHITE);
 	String text = cell.content_str();
 	uint cp;
-	sz n = xray::utf8_decode(text, &cp);
+	sz n = utf8::decode(text, &cp);
 	if (self.block_glyph(cp, px, py, fg)) return;
 	bool rule = self.rule_split && is_rule_glyph(cp);
 	CellFit fit = rule ? self.rule_fit : self.text_fit;
@@ -233,7 +234,7 @@ fn void Painter.cell(&self, xray::Cell cell, sz col, sz row, bool ordered,
 	// A cell can hold a base character and the marks that combine with it.
 	sz i = 0;
 	while (i < text.len) {
-		n = xray::utf8_decode(text[i..], &cp);
+		n = utf8::decode(text[i..], &cp);
 		if (n < 1) break;
 		x += self.glyph(face, cp, x, y, fg);
 		i += n;

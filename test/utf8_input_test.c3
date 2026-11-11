@@ -3,6 +3,7 @@ module utf8_input_test @test;
 import milktea;
 import boba;
 import xray;
+import utf8;
 
 // ============================================================
 // UTF-8 keyboard input: parse_key decodes multi-byte sequences
@@ -73,10 +74,10 @@ fn void test_parse_key_utf8_stray_continuation() @test {
 
 fn void test_utf8_encode_roundtrip() @test {
 	char[4] enc;
-	assert(milktea::utf8_encode('a', enc[..]) == 1 && enc[0] == 'a');
-	assert(milktea::utf8_encode(0xE9, enc[..]) == 2 && enc[0] == 0xC3 && enc[1] == 0xA9);
-	assert(milktea::utf8_encode(0x4E2D, enc[..]) == 3 && enc[0] == 0xE4 && enc[1] == 0xB8 && enc[2] == 0xAD);
-	sz n = milktea::utf8_encode(0x1F600, enc[..]);
+	assert(utf8::encode('a', enc[..]) == 1 && enc[0] == 'a');
+	assert(utf8::encode(0xE9, enc[..]) == 2 && enc[0] == 0xC3 && enc[1] == 0xA9);
+	assert(utf8::encode(0x4E2D, enc[..]) == 3 && enc[0] == 0xE4 && enc[1] == 0xB8 && enc[2] == 0xAD);
+	sz n = utf8::encode(0x1F600, enc[..]);
 	assert(n == 4 && enc[0] == 0xF0 && enc[1] == 0x9F && enc[2] == 0x98 && enc[3] == 0x80);
 }
 
@@ -114,35 +115,35 @@ fn void test_textarea_utf8_rune() @test {
 
 fn void test_overlong_encoding_rejected() @test {
 	uint cp;
-	xray::utf8_decode((String)(char[])"\xc0\x80", &cp);
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)(char[])"\xc0\x80", &cp);
+	assert(cp == utf8::REPLACEMENT);
 
-	xray::utf8_decode((String)(char[])"\xe0\x80\x80", &cp);
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)(char[])"\xe0\x80\x80", &cp);
+	assert(cp == utf8::REPLACEMENT);
 }
 
 fn void test_surrogate_halves_rejected() @test {
 	uint cp;
-	xray::utf8_decode((String)(char[])"\xed\xa0\x80", &cp); // U+D800
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)(char[])"\xed\xa0\x80", &cp); // U+D800
+	assert(cp == utf8::REPLACEMENT);
 
-	xray::utf8_decode((String)(char[])"\xed\xbf\xbf", &cp); // U+DFFF
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)(char[])"\xed\xbf\xbf", &cp); // U+DFFF
+	assert(cp == utf8::REPLACEMENT);
 }
 
 fn void test_codepoint_above_max_rejected() @test {
 	uint cp;
-	xray::utf8_decode((String)(char[])"\xf4\x90\x80\x80", &cp); // U+110000
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)(char[])"\xf4\x90\x80\x80", &cp); // U+110000
+	assert(cp == utf8::REPLACEMENT);
 }
 
 fn void test_valid_sequences_still_decode() @test {
 	uint cp;
-	xray::utf8_decode("é", &cp);
+	utf8::decode("é", &cp);
 	assert(cp == 0xE9);
-	xray::utf8_decode("日", &cp);
+	utf8::decode("日", &cp);
 	assert(cp == 0x65E5);
-	xray::utf8_decode("😀", &cp);
+	utf8::decode("😀", &cp);
 	assert(cp == 0x1F600);
 }
 
@@ -151,23 +152,23 @@ fn void test_utf8_encode_rejects_invalid_codepoints() @test {
 	// used to emit a lead byte past 0xF7 — bytes that are not UTF-8 and that
 	// utf8_decode reads back as a single '?'.
 	char[4] out;
-	sz n = milktea::utf8_encode(0x200000, out[..]);
+	sz n = utf8::encode(0x200000, out[..]);
 	uint cp;
-	xray::utf8_decode((String)out[:n], &cp);
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	utf8::decode((String)out[:n], &cp);
+	assert(cp == utf8::REPLACEMENT);
 
-	n = milktea::utf8_encode(0xD800, out[..]);
-	xray::utf8_decode((String)out[:n], &cp);
-	assert(cp == xray::UNICODE_REPLACEMENT);
+	n = utf8::encode(0xD800, out[..]);
+	utf8::decode((String)out[:n], &cp);
+	assert(cp == utf8::REPLACEMENT);
 }
 
 fn void test_utf8_encode_decode_round_trip() @test {
 	uint[] cases = { 'a', 0xE9, 0x65E5, 0x1F600, 0x10FFFF };
 	foreach (want : cases) {
 		char[4] out;
-		sz n = milktea::utf8_encode(want, out[..]);
+		sz n = utf8::encode(want, out[..]);
 		uint got;
-		sz consumed = xray::utf8_decode((String)out[:n], &got);
+		sz consumed = utf8::decode((String)out[:n], &got);
 		assert(consumed == n);
 		assert(got == want);
 	}

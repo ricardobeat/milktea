@@ -6,6 +6,7 @@ import xray;
 import std::core::dstring;
 import std::core::string;
 import glaze;
+import utf8;
 
 // ============================================================
 // UTF-8 boundary helpers
@@ -14,25 +15,25 @@ import glaze;
 fn void test_utf8_prev_boundary_walks_whole_sequence() @test {
 	// "aé" = 61 c3 a9 — from offset 3 the previous boundary is 1, not 2.
 	char[3] buf = { 'a', 0xc3, 0xa9 };
-	assert(boba::utf8_prev_boundary(buf[..], 3) == 1);
-	assert(boba::utf8_prev_boundary(buf[..], 1) == 0);
-	assert(boba::utf8_prev_boundary(buf[..], 0) == 0);
+	assert(utf8::prev(buf[..], 3) == 1);
+	assert(utf8::prev(buf[..], 1) == 0);
+	assert(utf8::prev(buf[..], 0) == 0);
 }
 
 fn void test_utf8_next_boundary_walks_whole_sequence() @test {
 	// "日X" = e6 97 a5 58
 	char[4] buf = { 0xe6, 0x97, 0xa5, 'X' };
-	assert(boba::utf8_next_boundary(buf[..], 0) == 3);
-	assert(boba::utf8_next_boundary(buf[..], 3) == 4);
-	assert(boba::utf8_next_boundary(buf[..], 4) == 4);
+	assert(utf8::next(buf[..], 0) == 3);
+	assert(utf8::next(buf[..], 3) == 4);
+	assert(utf8::next(buf[..], 4) == 4);
 }
 
 fn void test_utf8_boundaries_terminate_on_malformed_input() @test {
 	// A buffer that starts with stray continuation bytes must not loop or
 	// walk off either end.
 	char[3] buf = { 0x80, 0x80, 0x80 };
-	assert(boba::utf8_prev_boundary(buf[..], 3) == 0);
-	assert(boba::utf8_next_boundary(buf[..], 0) == 3);
+	assert(utf8::prev(buf[..], 3) == 0);
+	assert(utf8::next(buf[..], 0) == 3);
 }
 
 // ============================================================

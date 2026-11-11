@@ -9,6 +9,7 @@ import std::atomic;
 import std::time;
 import std::io;
 import xray;
+import utf8;
 
 // Cursor shapes (matches Go tea.CursorShape constants)
 enum CursorShape : int {
@@ -1983,7 +1984,7 @@ fn sz view_content_cols(View v) @private {
 		}
 		// Count display columns, not bytes: a wide glyph takes two.
 		uint cp;
-		sz n = xray::utf8_decode(v.content[i..], &cp);
+		sz n = utf8::decode(v.content[i..], &cp);
 		if (n <= 0) n = 1;
 		cur += xray::char_width(cp);
 		i += n;

@@ -7,6 +7,7 @@ import std::core::dstring;
 import std::core::mem;
 import std::math;
 import std::collections::list;
+import utf8;
 
 struct Viewport (xray::Content) {
 	sz offset;
@@ -342,7 +343,7 @@ fn sz column_to_byte(String line, sz col) @local {
 	sz w = 0;
 	sz i = 0;
 	while (i < line.len) {
-		sz next = utf8_next_boundary(line, i);
+		sz next = utf8::next(line, i);
 		sz cw   = glaze::string_width(line[i:next - i]);
 		if (w + cw > col) break;
 		w += cw;
@@ -477,11 +478,12 @@ fn String Viewport.render_line_with_selection(&self, sz row, String line, sz pad
 	// it.
 	sz i = 0;
 	while (i < line.len) {
-		sz char_len = glaze::utf8_sequence_len(line, i);
+		uint cp;
+		sz char_len = utf8::decode(line[i..], &cp);
 		String ch   = line[i:char_len];
 		glaze::Style s = self.is_in_selection(row, col) ? self.selection_style : self.content_style;
 		out.append_string(s.render(ch));
-		col += glaze::utf8_width_at(line, i);
+		col += glaze::codepoint_width(cp);
 		i += char_len;
 	}
 

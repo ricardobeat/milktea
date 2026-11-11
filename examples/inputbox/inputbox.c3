@@ -8,6 +8,7 @@ import glaze;
 import xray::layout;
 import std::io;
 import std::core::dstring;
+import utf8;
 
 struct Model {
 	DString input;
@@ -44,7 +45,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			if (k.rune == 'q' && self.input.len() == 0) return milktea::quit();
 			// rune is a codepoint — encode as UTF-8 before appending
 			char[4] enc;
-			sz n = milktea::utf8_encode(k.rune, enc[..]);
+			sz n = utf8::encode(k.rune, enc[..]);
 			self.input.append_string((String)enc[:n]);
 		default:
 	}

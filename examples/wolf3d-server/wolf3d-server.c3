@@ -29,6 +29,7 @@ import std::net::tcp;
 import std::thread;
 import std::core::dstring;
 import sqlite3;
+import utf8;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 			if (k.code == milktea::KeyCode.RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
-				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				sz n = utf8::encode(k.rune, enc[..]);
 				if (self.name_len + n <= 31) {
 					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
@@ -255,7 +256,7 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 			if (k.code == milktea::KeyCode.RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
-				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				sz n = utf8::encode(k.rune, enc[..]);
 				if (self.name_len + n <= 31) {
 					for (sz i = 0; i < n; i++) self.name_buf[self.name_len++] = enc[i];
 				}
@@ -289,7 +290,7 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 			if (k.code == milktea::KeyCode.RUNE) {
 				// rune is a codepoint — encode as UTF-8 before appending
 				char[4] enc;
-				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				sz n = utf8::encode(k.rune, enc[..]);
 				if (self.tag_len + n <= 79) {
 					for (sz i = 0; i < n; i++) self.tag_buf[self.tag_len++] = enc[i];
 				}

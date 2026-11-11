@@ -1,6 +1,7 @@
 module glaze;
 
 import std::core::dstring;
+import utf8;
 
 // wrap_text breaks s into lines no wider than width display cells, the way a
 // CSS box flows text: at spaces where it can, and inside a word only when the
@@ -75,8 +76,9 @@ fn void wrap_line(DString* out, String line, sz width) @local {
 				j = e;
 				continue;
 			}
-			sz n = utf8_sequence_len(word, j);
-			sz cw = utf8_width_at(word, j);
+			uint cp;
+			sz n = utf8::decode(word[j..], &cp);
+			sz cw = codepoint_width(cp);
 			if (col > 0 && col + cw > width) {
 				out.append_char('\n');
 				col = 0;

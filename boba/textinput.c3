@@ -4,6 +4,7 @@ import milktea;
 import xray;
 import glaze;
 import std::core::dstring;
+import utf8;
 
 // TextInput is a single-line text input component.
 struct TextInput (xray::Content) {
@@ -83,7 +84,7 @@ fn void TextInput.insert(&self, char c) {
 // Checked up front so a full buffer can't truncate a sequence mid-way.
 fn void TextInput.insert_rune(&self, uint cp) {
 	char[4] enc;
-	sz n = milktea::utf8_encode(cp, enc[..]);
+	sz n = utf8::encode(cp, enc[..]);
 	if (self.len + n >= self.buf.len) return;
 	for (sz i = 0; i < n; i++) self.insert(enc[i]);
 }
@@ -113,7 +114,7 @@ fn void TextInput.insert_string(&self, String s) {
 // invalid UTF-8 and renders as garbage for the rest of the buffer.
 fn void TextInput.backspace(&self) {
 	if (self.cursor_pos == 0) return;
-	sz start = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+	sz start = utf8::prev(self.buf[:self.len], self.cursor_pos);
 	sz n     = self.cursor_pos - start;
 	for (sz i = self.cursor_pos; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
@@ -125,7 +126,7 @@ fn void TextInput.backspace(&self) {
 // delete_char deletes the character at the cursor, sequence and all.
 fn void TextInput.delete_char(&self) {
 	if (self.cursor_pos >= self.len) return;
-	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+	sz next = utf8::next(self.buf[:self.len], self.cursor_pos);
 	sz n    = next - self.cursor_pos;
 	for (sz i = next; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
@@ -145,7 +146,7 @@ fn String TextInput.display_text(&self) {
 		// One bullet per codepoint, not per byte: masking a multi-byte
 		// character as several dots also gives away its length.
 		DString hidden = dstring::temp();
-		for (sz i = 0; i < self.len; i = utf8_next_boundary(self.buf[:self.len], i)) {
+		for (sz i = 0; i < self.len; i = utf8::next(self.buf[:self.len], i)) {
 			hidden.append_string("\xe2\x80\xa2"); // •
 		}
 		return hidden.str_view();
@@ -161,7 +162,7 @@ fn sz TextInput.cursor_col(&self) {
 	if (self.is_password) {
 		// display_text draws one bullet per codepoint.
 		sz dots = 0;
-		for (sz i = 0; i < end; i = utf8_next_boundary(self.buf[:self.len], i)) dots++;
+		for (sz i = 0; i < end; i = utf8::next(self.buf[:self.len], i)) dots++;
 		return dots;
 	}
 	return glaze::string_width((String)self.buf[:end]);
@@ -173,10 +174,10 @@ fn bool TextInput.handle_key(&self, milktea::KeyMsg k) {
 		case milktea::KeyCode.LEFT:
 			// Step a whole codepoint: landing mid-sequence would make the
 			// next backspace or insert split a character.
-			self.cursor_pos = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+			self.cursor_pos = utf8::prev(self.buf[:self.len], self.cursor_pos);
 			return true;
 		case milktea::KeyCode.RIGHT:
-			self.cursor_pos = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+			self.cursor_pos = utf8::next(self.buf[:self.len], self.cursor_pos);
 			return true;
 		case milktea::KeyCode.HOME:
 			self.cursor_pos = 0;

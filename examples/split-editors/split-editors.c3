@@ -6,6 +6,7 @@ import xray;
 import std::io;
 import std::core::string;
 import std::core::dstring;
+import utf8;
 
 const sz MAX_EDITORS = 4;
 const sz BUF_SIZE    = 4096;
@@ -245,7 +246,7 @@ fn milktea::Cmd SplitModel.update(SplitModel* self, milktea::Msg msg) @dynamic {
 			} else {
 				// rune is a codepoint — encode as UTF-8 before inserting byte-wise
 				char[4] enc;
-				sz n = milktea::utf8_encode(k.rune, enc[..]);
+				sz n = utf8::encode(k.rune, enc[..]);
 				for (sz i = 0; i < n; i++) self.editors[self.focus].insert(enc[i]);
 			}
 		default:

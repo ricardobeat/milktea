@@ -2,14 +2,7 @@ module glaze;
 
 import std::core::string;
 import std::core::dstring;
-
-fn sz _utf8_char_len(char b) @local {
-	if ((b & 0x80) == 0)    return 1;
-	if ((b & 0xe0) == 0xc0) return 2;
-	if ((b & 0xf0) == 0xe0) return 3;
-	if ((b & 0xf8) == 0xf0) return 4;
-	return 1;
-}
+import utf8;
 
 fn String gradient_text(String text, Color from, Color to, bool bold = true) {
 	sz width = string_width(text);
@@ -19,7 +12,7 @@ fn String gradient_text(String text, Color from, Color to, bool bold = true) {
 	sz i = 0;
 	sz col = 0;
 	while (i < text.len) {
-		sz clen = _utf8_char_len(text[i]);
+		sz clen = utf8::seq_len(text[i]);
 		if (clen > text.len - i) clen = text.len - i;
 		String ch = text[i..i + clen - 1];
 		sz ch_w = string_width(ch);

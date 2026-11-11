@@ -3,6 +3,7 @@ module xray @test;
 import std::core::dstring;
 import std::io;
 import glaze;
+import utf8;
 
 // ============================================================
 // Color tests
@@ -395,7 +396,7 @@ fn void test_screen_buffer_resize() @test {
 
 fn void test_utf8_ascii() @test {
 	uint cp;
-	sz len = utf8_decode("A", &cp);
+	sz len = utf8::decode("A", &cp);
 	assert(len == 1);
 	assert(cp == 65);
 }
@@ -403,7 +404,7 @@ fn void test_utf8_ascii() @test {
 fn void test_utf8_2byte() @test {
 	// U+00E9 = é = 0xC3 0xA9
 	uint cp;
-	sz len = utf8_decode("\xc3\xa9", &cp);
+	sz len = utf8::decode("\xc3\xa9", &cp);
 	assert(len == 2);
 	assert(cp == 0xE9);
 }
@@ -411,7 +412,7 @@ fn void test_utf8_2byte() @test {
 fn void test_utf8_3byte() @test {
 	// U+4E2D = 中 = 0xE4 0xB8 0xAD
 	uint cp;
-	sz len = utf8_decode("\xe4\xb8\xad", &cp);
+	sz len = utf8::decode("\xe4\xb8\xad", &cp);
 	assert(len == 3);
 	assert(cp == 0x4E2D);
 }

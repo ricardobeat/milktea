@@ -8,6 +8,7 @@ import std::core::mem;
 import std::atomic;
 import std::thread::channel;
 import llm;
+import utf8;
 
 const sz INPUT_BUF_SIZE = 4096;
 const sz MAX_HISTORY = 64;
@@ -45,7 +46,7 @@ fn void Editor.clear(&self) {
 // overflow the buffer is dropped.
 fn void Editor.insert(&self, uint rune) {
 	char[4] enc;
-	sz n = milktea::utf8_encode(rune, enc[..]);
+	sz n = utf8::encode(rune, enc[..]);
 	if (self.len + n >= INPUT_BUF_SIZE) return;
 	for (sz i = self.len; i > self.cursor; i--) {
 		self.buf[i + n - 1] = self.buf[i - 1];
@@ -86,7 +87,7 @@ fn void Editor.left(&self) {
 
 fn void Editor.right(&self) {
 	if (self.cursor >= self.len) return;
-	self.cursor += glaze::utf8_sequence_len(self.text(), self.cursor);
+	self.cursor = utf8::next(self.text(), self.cursor);
 	if (self.cursor > self.len) self.cursor = self.len;
 }
 

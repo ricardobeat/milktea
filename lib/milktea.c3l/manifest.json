@@ -6,7 +6,8 @@
 		"../../xray/**",
 		"../../dye/**",
 		"../../tgp/**",
-		"../../boba/**"
+		"../../boba/**",
+		"../../src/utf8/**"
 	],
 	"c-sources": ["../../milktea/tty_winsize.c"],
 	"targets": {

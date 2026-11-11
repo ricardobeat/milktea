@@ -29,6 +29,7 @@ import milktea;
 import std::core::string;
 import std::core::dstring;
 import std::core::mem;
+import utf8;
 
 faultdef SESSION_FULL, INVALID_GLYPH, NO_SUCH_INSTANCE;
 
@@ -443,12 +444,12 @@ const uint[297] DIACRITICS = {
 // these.
 fn void append_placeholder_cell(DString* d, sz row, sz col) {
 	char[4] cp;
-	sz cp_len = milktea::utf8_encode(PLACEHOLDER_CP, cp[..]);
+	sz cp_len = utf8::encode(PLACEHOLDER_CP, cp[..]);
 	d.append_string((String)cp[:cp_len]);
 	char[4] enc;
-	sz n = milktea::utf8_encode(DIACRITICS[row % 297], enc[..]);
+	sz n = utf8::encode(DIACRITICS[row % 297], enc[..]);
 	d.append_string((String)enc[:n]);
-	n = milktea::utf8_encode(DIACRITICS[col % 297], enc[..]);
+	n = utf8::encode(DIACRITICS[col % 297], enc[..]);
 	d.append_string((String)enc[:n]);
 }
 

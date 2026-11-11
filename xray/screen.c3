@@ -4,6 +4,7 @@ import std::core::dstring;
 import std::math;
 import glaze;
 import std::collections::list;
+import utf8;
 
 // ============================================================
 // ScreenBuffer — cell grid with diff-based rendering.
@@ -163,7 +164,7 @@ fn Cell* ScreenBuffer.cell_at(&self, sz col, sz row) {
 // with their fg color, so fg acts as the effective background.
 fn bool is_block_char(Cell* cell) @local {
 	uint cp;
-	utf8_decode(cell.content_str(), &cp);
+	utf8::decode(cell.content_str(), &cp);
 	return cp >= 0x2580 && cp <= 0x259F;
 }
 
@@ -302,7 +303,7 @@ fn void ScreenBuffer.set_string(&self, sz col, sz row, String text, Style style)
 
 		// Decode UTF-8 codepoint to get display width
 		uint cp;
-		sz char_len = utf8_decode(text[i..], &cp);
+		sz char_len = utf8::decode(text[i..], &cp);
 
 		sz cw = char_width(cp);
 
@@ -591,66 +592,6 @@ fn String ScreenBuffer.render_ansi(&self) {
 }
 
 // ============================================================
-// UTF-8 decode helper
-// ============================================================
-
-// U+FFFD REPLACEMENT CHARACTER, substituted for any byte sequence that is
-// well-formed in shape but does not encode a valid Unicode scalar value.
-const uint UNICODE_REPLACEMENT = 0xFFFD;
-// Highest valid Unicode codepoint.
-const uint UNICODE_MAX = 0x10FFFF;
-
-// utf8_decode reads one UTF-8 sequence from `s`, storing the codepoint in
-// `out_cp` and returning the number of bytes consumed.
-//
-// Sequences that are structurally valid but semantically invalid — overlong
-// encodings (C0 80 for NUL), UTF-16 surrogate halves (ED A0 80), and values
-// above U+10FFFF — decode to U+FFFD rather than passing through. Otherwise a
-// terminal could smuggle a rune == 0 that never came from a NUL byte, and
-// callers that re-encode the value would emit bytes that are not UTF-8.
-fn sz utf8_decode(String s, uint* out_cp) {
-	if (s.len == 0) {
-		*out_cp = 0;
-		return 0;
-	}
-
-	char b0 = s[0];
-	if (b0 < 0x80) {
-		*out_cp = (uint)b0;
-		return 1;
-	} else if ((b0 & 0xE0) == 0xC0) {
-		if (s.len < 2) {
-			*out_cp = '?';
-			return 1;
-		}
-		uint cp = ((uint)(b0 & 0x1F) << 6) | (uint)(s[1] & 0x3F);
-		*out_cp = cp < 0x80 ? UNICODE_REPLACEMENT : cp; // reject overlong
-		return 2;
-	} else if ((b0 & 0xF0) == 0xE0) {
-		if (s.len < 3) {
-			*out_cp = '?';
-			return 1;
-		}
-		uint cp = ((uint)(b0 & 0x0F) << 12) | ((uint)(s[1] & 0x3F) << 6) | (uint)(s[2] & 0x3F);
-		// Reject overlong forms and UTF-16 surrogate halves, which are not
-		// valid scalar values and must never reach a model as KeyMsg.rune.
-		*out_cp = (cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF)) ? UNICODE_REPLACEMENT : cp;
-		return 3;
-	} else if ((b0 & 0xF8) == 0xF0) {
-		if (s.len < 4) {
-			*out_cp = '?';
-			return 1;
-		}
-		uint cp = ((uint)(b0 & 0x07) << 18) | ((uint)(s[1] & 0x3F) << 12) | ((uint)(s[2] & 0x3F) << 6)
-			| (uint)(s[3] & 0x3F);
-		*out_cp = (cp < 0x10000 || cp > UNICODE_MAX) ? UNICODE_REPLACEMENT : cp;
-		return 4;
-	}
-	*out_cp = '?';
-	return 1;
-}
-
-// ============================================================
 // ANSI escape sequence parser — renders styled strings into
 // the screen buffer. Handles SGR (colors, attributes) and
 // basic cursor movement. All other CSI sequences are skipped.
@@ -782,7 +723,7 @@ fn void ScreenBuffer.render_ansi_string(
 		}
 
 		uint cp;
-		sz char_len = utf8_decode(text[i..], &cp);
+		sz char_len = utf8::decode(text[i..], &cp);
 		if (char_len == 0) break;
 
 		sz cw = char_width(cp);
@@ -1031,7 +972,7 @@ fn void ScreenBuffer.draw_string_in_rect(&self, Rect r, String text, Style style
 		}
 
 		uint cp;
-		sz char_len = utf8_decode(text[i..], &cp);
+		sz char_len = utf8::decode(text[i..], &cp);
 		if (char_len == 0) break;
 
 		char w = (char)char_width(cp);

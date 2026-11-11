@@ -498,7 +498,7 @@ These understand embedded ANSI, so already-styled strings stack correctly.
 horizontal names share one enum, and `CENTER` serves both axes.
 
 Measurement and text: `string_width(s)` (ANSI-aware, wide- and zero-width
-correct), `truncate_to_width(s, n)`, `utf8_sequence_len`, `utf8_width_at`,
+correct), `truncate_to_width(s, n)`, `utf8_width_at`,
 `codepoint_width(cp)`, `clip_lines(s, max)`, `gradient_text(s, from, to, bold)`,
 `progress_bar(...)`.
 

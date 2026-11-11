@@ -6,6 +6,7 @@ import std::io;
 import std::io::file;
 import std::core::mem;
 import std::core::dstring;
+import utf8;
 
 struct JsModel {
 	Runtime rt;
@@ -193,7 +194,7 @@ fn String debug_event_str(DebugEvent* e) {
 				} else {
 					// rune is a codepoint — encode as UTF-8 for display
 					char[4] enc;
-					sz n = milktea::utf8_encode(e.key_rune, enc[..]);
+					sz n = utf8::encode(e.key_rune, enc[..]);
 					ds.append_string((String)enc[:n]);
 				}
 			default: ds.append_string("??");

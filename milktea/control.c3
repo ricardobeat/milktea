@@ -5,6 +5,7 @@ import xray;
 import std::core::dstring;
 import std::core::string;
 import std::math;
+import utf8;
 
 // Control drives a running program from the command line. When the program's
 // stdin is not a terminal, each line of stdin is a command and each reply a
@@ -1180,7 +1181,7 @@ fn KeyMsg? parse_key_spec(String spec) @local {
 		}
 	}
 	uint r;
-	if (xray::utf8_decode(name, &r) != name.len) return NOT_FOUND~;
+	if (utf8::decode(name, &r) != name.len) return NOT_FOUND~;
 	if (k.ctrl && r >= 'A' && r <= 'Z') r += 32;
 	k.rune = r;
 	if (k.ctrl && r == 'c' && !k.alt && !k.shift && !k.super) {
@@ -1220,7 +1221,7 @@ fn void ctl_type(String line, String[] toks, sz n) @local {
 	ctl_await_frame();
 	for (sz i = 0; g_program != null && i < text.len;) {
 		uint r;
-		i += xray::utf8_decode(text[i..], &r);
+		i += utf8::decode(text[i..], &r);
 		KeyMsg k = r == '\n' ? (KeyMsg){ .code = ENTER } : (KeyMsg){ .code = RUNE, .rune = r };
 		g_program.send({ .kind = MsgKind.KEY, .key = k });
 	}
@@ -1445,7 +1446,7 @@ fn String key_spec(KeyMsg k) @local {
 		s.append_string("space");
 	} else {
 		char[4] b;
-		s.append_string((String)b[:utf8_encode(k.rune, b[..])]);
+		s.append_string((String)b[:utf8::encode(k.rune, b[..])]);
 	}
 	return s.str_view();
 }

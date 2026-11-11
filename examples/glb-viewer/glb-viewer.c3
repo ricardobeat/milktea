@@ -9,6 +9,7 @@ import std::math;
 import std::os;
 import std::core::dstring;
 import std::core::string;
+import utf8;
 
 // ── Tea model callbacks ──────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ fn milktea::Node* glb::GlbModel.view(glb::GlbModel* self) @dynamic {
 				.set_fg(xray::color_rgb(gamma[r / count], gamma[g / count], gamma[b / count]))
 				.set_bg(xray::color_none());
 			char[4] glyph;
-			sz len = milktea::utf8_encode(0x2800 + mask, glyph[..]);
+			sz len = utf8::encode(0x2800 + mask, glyph[..]);
 			cells[ty * w + tx] = xray::new_cell((String)glyph[:len], 1, style);
 		}
 	}

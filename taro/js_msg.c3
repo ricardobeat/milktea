@@ -1,5 +1,6 @@
 module taro;
 import milktea;
+import utf8;
 
 // msg_to_js converts a milktea::Msg to a JS object.
 // Returns a JS object with a "kind" property and message-specific data.
@@ -103,7 +104,7 @@ fn String keycode_to_string(milktea::KeyCode code, uint rune) {
 		case milktea::KeyCode.RUNE:
 			// rune is a codepoint — encode as UTF-8 rather than %c on a single byte
 			char[4] enc;
-			sz n = milktea::utf8_encode(rune, enc[..]);
+			sz n = utf8::encode(rune, enc[..]);
 			return string::tformat("%s", (String)enc[:n]);
 
 		case milktea::KeyCode.ENTER:

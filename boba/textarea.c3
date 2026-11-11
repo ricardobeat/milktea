@@ -5,6 +5,7 @@ import xray;
 import glaze;
 import std::core::dstring;
 import std::core::mem;
+import utf8;
 
 // Textarea is a multi-line text input component.
 struct Textarea (xray::Content) {
@@ -154,7 +155,7 @@ fn void Textarea.set_cursor(&self, sz row, sz col) {
 	// runes, stopping at the newline or buffer end.
 	sz walked = 0;
 	while (walked < col && pos < self.len && self.buf[pos] != '\n') {
-		sz next = utf8_next_boundary(self.buf[:self.len], pos);
+		sz next = utf8::next(self.buf[:self.len], pos);
 		if (next <= pos) break;
 		pos = next;
 		walked++;
@@ -314,7 +315,7 @@ fn void Textarea.insert(&self, char c) {
 // Checked up front so a full buffer can't truncate a sequence mid-way.
 fn void Textarea.insert_rune(&self, uint cp) {
 	char[4] enc;
-	sz n = milktea::utf8_encode(cp, enc[..]);
+	sz n = utf8::encode(cp, enc[..]);
 	if (self.len + n >= self.buf.len) return;
 	for (sz i = 0; i < n; i++) self.insert(enc[i]);
 }
@@ -335,7 +336,7 @@ fn void Textarea.backspace(&self) {
 	if (self.cursor_pos == 0) return;
 
 	char prev = self.buf[self.cursor_pos - 1];
-	sz start  = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+	sz start  = utf8::prev(self.buf[:self.len], self.cursor_pos);
 	sz n      = self.cursor_pos - start;
 	for (sz i = self.cursor_pos; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
@@ -356,7 +357,7 @@ fn void Textarea.backspace(&self) {
 // delete_char deletes the character at the cursor, sequence and all.
 fn void Textarea.delete_char(&self) {
 	if (self.cursor_pos >= self.len) return;
-	sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+	sz next = utf8::next(self.buf[:self.len], self.cursor_pos);
 	sz n    = next - self.cursor_pos;
 	for (sz i = next; i < self.len; i++) {
 		self.buf[i - n] = self.buf[i];
@@ -376,7 +377,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 			if (self.cursor_pos > 0) {
 				// Step a whole codepoint, so the cursor never lands inside a
 				// multi-byte character and split it on the next edit.
-				sz prev = utf8_prev_boundary(self.buf[:self.len], self.cursor_pos);
+				sz prev = utf8::prev(self.buf[:self.len], self.cursor_pos);
 				if (self.buf[prev] == '\n' && self.cursor_row > 0) self.cursor_row--;
 				self.cursor_pos = prev;
 				self.cursor_col = (sz)(self.cursor_pos - self.line_start_at(self.cursor_pos));
@@ -385,7 +386,7 @@ fn bool Textarea.handle_key(&self, milktea::KeyMsg k) {
 		case milktea::KeyCode.RIGHT:
 			if (self.cursor_pos < self.len) {
 				bool at_newline = self.buf[self.cursor_pos] == '\n';
-				sz next = utf8_next_boundary(self.buf[:self.len], self.cursor_pos);
+				sz next = utf8::next(self.buf[:self.len], self.cursor_pos);
 				self.cursor_pos = next;
 				if (at_newline) {
 					self.cursor_row++;

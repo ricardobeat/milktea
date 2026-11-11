@@ -52,8 +52,9 @@ acts on. glaze renders to a string with no layer beneath it, so it treats
   `KeyMsg.rune` is a `uint` Unicode codepoint, not a byte: `parse_key()`
   decodes multi-byte UTF-8 input (validating lead/continuation bytes,
   waiting for the full sequence) into a single RUNE key, and
-  `milktea::utf8_encode()` converts a codepoint back into 1-4 bytes for
-  byte-oriented text buffers. Mouse input arrives via SGR (mode 1006) or
+  `utf8::encode()` converts a codepoint back into 1-4 bytes for
+  byte-oriented text buffers. All UTF-8 handling lives in one module,
+  `utf8` (`src/utf8/utf8.c3`), which every other module uses. Mouse input arrives via SGR (mode 1006) or
   legacy X10 encoding, both handled in `parse_key()` (`input.c3`).
 - `Cmd` — `alias Cmd = fn Msg()`. `null` means "no command." There is no
   batch-command buffer in the current code: `update()` returns one `Cmd`,

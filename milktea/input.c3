@@ -1,6 +1,7 @@
 module milktea;
 
 import xray;
+import utf8;
 
 enum KeyCode : int {
 	NONE,
@@ -716,69 +717,24 @@ fn ParseResult parse_key(char[] buf) {
 		return make_key(RUNE, rune_char, true, false, false, 1);
 	}
 
-	// UTF-8 lead byte: decode a multi-byte codepoint into a RUNE key.
-	// Expected length is checked here because xray::utf8_decode maps
-	// truncated sequences to '?' instead of reporting "need more data".
+	// UTF-8 lead byte: decode a multi-byte codepoint into a RUNE key. The
+	// length is checked here because utf8::decode reads a sequence cut short
+	// as '?' instead of saying it needs more data.
 	if (b >= 0x80) {
-		sz need;
-		if ((b & 0xE0) == 0xC0) {
-			need = 2;
-		} else if ((b & 0xF0) == 0xE0) {
-			need = 3;
-		} else if ((b & 0xF8) == 0xF0) {
-			need = 4;
-		} else {
-			// Invalid lead (stray continuation or 0xF8+) — consume to make progress
-			return make_key(NONE, 0, false, false, false, 1);
-		}
-		if (buf.len < need) {
-			// Incomplete sequence — need more data
-			return make_key(NONE, 0, false, false, false, 0);
-		}
+		sz need = utf8::seq_len(b);
+		// Invalid lead (stray continuation or 0xF8+): consume to make progress.
+		if (need == 1) return make_key(NONE, 0, false, false, false, 1);
+		// Incomplete sequence: need more data.
+		if (buf.len < need) return make_key(NONE, 0, false, false, false, 0);
 		for (sz i = 1; i < need; i++) {
-			// Invalid continuation byte — consume the lead only
-			if ((buf[i] & 0xC0) != 0x80) {
-				return make_key(NONE, 0, false, false, false, 1);
-			}
+			// Invalid continuation byte: consume the lead only.
+			if (!utf8::is_cont(buf[i])) return make_key(NONE, 0, false, false, false, 1);
 		}
 		uint cp;
-		xray::utf8_decode((String)buf[:need], &cp);
+		utf8::decode((String)buf[:need], &cp);
 		return make_key(RUNE, cp, false, false, false, need);
 	}
 
 	// Anything else: consume to make progress
 	return make_key(NONE, 0, false, false, false, 1);
-}
-
-// utf8_encode writes a codepoint as UTF-8 into out (room for 4 bytes required).
-// Returns the number of bytes written (1-4). Counterpart to xray::utf8_decode,
-// for consumers that store KeyMsg.rune into byte-oriented text buffers.
-fn sz utf8_encode(uint cp, char[] out) {
-	// The 4-byte form below is the fallback branch, so without this guard a
-	// codepoint above U+10FFFF would produce a lead byte past 0xF7 — bytes
-	// that are not UTF-8 and that utf8_decode reads back as a single '?'.
-	// Surrogate halves are likewise not encodable scalar values.
-	if (cp > xray::UNICODE_MAX || (cp >= 0xD800 && cp <= 0xDFFF)) {
-		cp = xray::UNICODE_REPLACEMENT;
-	}
-	if (cp < 0x80) {
-		out[0] = (char)cp;
-		return 1;
-	}
-	if (cp < 0x800) {
-		out[0] = (char)(0xC0 | (cp >> 6));
-		out[1] = (char)(0x80 | (cp & 0x3F));
-		return 2;
-	}
-	if (cp < 0x10000) {
-		out[0] = (char)(0xE0 | (cp >> 12));
-		out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
-		out[2] = (char)(0x80 | (cp & 0x3F));
-		return 3;
-	}
-	out[0] = (char)(0xF0 | (cp >> 18));
-	out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-	out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
-	out[3] = (char)(0x80 | (cp & 0x3F));
-	return 4;
 }
