@@ -11,12 +11,23 @@ import std::core::string;
 //   ted --cmd click save          another process sends it one command
 //   ted --cmd screen              prints the reply, exits 0 on ok, 1 on err
 //
-// Listening is opt-in. The pipes live in a directory only the user can
-// enter, <tmp>/milktea-<uid>/: <name>.<pid> is a program's command pipe and
-// <name> a link to the most recently started one, which is where --cmd
-// sends unless MILKTEA_PID names another. Each --cmd makes a pipe of its own
-// for the reply and names it in front of the command, so any number can ask
-// at once.
+// A program not started that way can still be driven, once whoever is at it
+// allows it: --cmd leaves a request, the program asks on screen (see
+// control_remote.c3), and on "yes" opens its pipe. MILKTEA_CONTROL=0 makes a
+// program that cannot be driven or asked.
+//
+// Everything lives in a directory only the user can enter,
+// <tmp>/milktea-<uid>/:
+//
+//   <name>.pid        a link whose target is the pid of the most recently
+//                     started <name>, which is where --cmd sends unless
+//                     MILKTEA_PID names another
+//   <name>.<pid>      that program's command pipe, once it listens
+//   <name>.<pid>.ask  a request to be allowed, made by --cmd and removed
+//                     by the program when it is answered
+//
+// Each --cmd makes a pipe of its own for the reply and names it in front of
+// the command, so any number can ask at once.
 
 extern fn int mkfifo(char* path, uint mode) @local;
 extern fn int mkdir(char* path, uint mode) @local;
@@ -28,10 +39,12 @@ extern fn int unlink(char* path) @local;
 extern fn uint getuid() @local;
 extern fn int atexit(void* handler) @local;
 extern fn void exit(int code) @local;
+extern fn int access(char* path, int mode) @local;
 
 const int O_WRONLY @local = 1;
 const int O_RDWR @local = 2;
 const int O_NONBLOCK @local = env::LINUX ? 0x800 : 0x4;
+const int O_CREAT @local = env::LINUX ? 0x40 : 0x200;
 const int SIGPIPE @local = 13;
 const short POLLOUT @local = 4;
 const short POLLERR @local = 8;
@@ -40,8 +53,9 @@ const short POLLHUP @local = 16;
 // Short writes to a pipe arrive whole, so two clients' lines never mix. This
 // is the smallest such size any system promises.
 const sz PIPE_LINE_MAX @local = 512;
-// How long --cmd waits for its answer.
+// How long --cmd waits for its answer, and for a person to allow it.
 const int CLIENT_WAIT_MS @local = 5000;
+const int CLIENT_ASK_MS @local = 60000;
 // What starts the last line of a reply to --cmd, so a line of the screen
 // that reads "ok" does not end it.
 const char REPLY_END = '\x1e';
@@ -105,16 +119,20 @@ fn String pipe_dir() @local {
 struct ControlPipe @local {
 	int fd;
 	bool open;
+	// The program has said where it is, so it can be asked (control_announce).
+	bool announced;
 	ZString path;
 	ZString link;
 	ZString target;
+	ZString ask;
 	// The directory and a slash: a reply pipe must be inside it.
 	String prefix;
 }
 
 ControlPipe g_pipe @local;
 
-// control_pipe_wanted says whether the program was asked to listen.
+// control_pipe_wanted says whether the program was started to listen at
+// once, and control_pipe_refused whether it was started never to.
 fn bool control_pipe_wanted() {
 	char* v = getenv("MILKTEA_CONTROL");
 	if (v == null) return false;
@@ -122,51 +140,78 @@ fn bool control_pipe_wanted() {
 	return s.len > 0 && s != "0";
 }
 
-// control_pipe_open makes the program's command pipe and points the link at
-// it. Returns false, and the program runs on without one, when it cannot.
-fn bool control_pipe_open() {
-	if (g_pipe.open) return true;
-	String[] args;
-	String name;
+fn bool control_pipe_refused() @local {
+	char* v = getenv("MILKTEA_CONTROL");
+	return v != null && ((ZString)v).str_view() == "0";
+}
+
+// control_announce says where the program is, by pointing <name>.pid at it,
+// so that --cmd can find it: to send to, or to ask. Backends call it as
+// they start.
+fn void control_announce() {
+	if (g_pipe.announced || control_pipe_refused()) return;
 	@pool() {
-		args = program_args();
-		if (args.len == 0) return false;
-		name = base_name(args[0]);
+		String[] args = program_args();
+		if (args.len == 0) return;
+		String name = base_name(args[0]);
 		String dir = pipe_dir();
 		mkdir(dir.zstr_tcopy(), 0o700);
-		g_pipe.target = string::format(mem, "%s.%d", name, getpid()).zstr_copy(mem);
+		g_pipe.target = string::format(mem, "%d", getpid()).zstr_copy(mem);
 		g_pipe.path = string::format(mem, "%s/%s.%d", dir, name, getpid()).zstr_copy(mem);
-		g_pipe.link = string::format(mem, "%s/%s", dir, name).zstr_copy(mem);
+		g_pipe.ask = string::format(mem, "%s/%s.%d.ask", dir, name, getpid()).zstr_copy(mem);
+		g_pipe.link = string::format(mem, "%s/%s.pid", dir, name).zstr_copy(mem);
 		g_pipe.prefix = string::format(mem, "%s/", dir);
-		unlink(g_pipe.path);
-		if (mkfifo(g_pipe.path, 0o600) != 0) return false;
-		// Open for reading and writing, so the pipe never reads as ended when
-		// a client goes away, and opening does not wait for one.
-		g_pipe.fd = open(g_pipe.path, O_RDWR | O_NONBLOCK);
-		if (g_pipe.fd < 0) {
-			unlink(g_pipe.path);
-			return false;
-		}
+		unlink(g_pipe.ask);
 		unlink(g_pipe.link);
-		symlink(g_pipe.target, g_pipe.link);
-		// A client that goes away mid-reply must not take the program with it.
-		signal(SIGPIPE, (void*)(uptr)1);
+		if (symlink(g_pipe.target, g_pipe.link) != 0) return;
 		atexit(&control_pipe_close);
-		g_pipe.open = true;
-		return true;
+		g_pipe.announced = true;
 	};
+}
+
+// control_ask_possible: the program can be asked. control_ask_pending: it
+// is being asked now. control_ask_done: the request has its answer, and
+// going is how --cmd hears of it.
+fn bool control_ask_possible() @private => g_pipe.announced;
+fn bool control_ask_pending() @private => g_pipe.announced && access(g_pipe.ask, 0) == 0;
+fn void control_ask_done() @private {
+	if (g_pipe.announced) unlink(g_pipe.ask);
+}
+
+// control_pipe_open makes the program's command pipe. Returns false, and
+// the program runs on without one, when it cannot.
+fn bool control_pipe_open() {
+	if (g_pipe.open) return true;
+	if (!g_pipe.announced) return false;
+	unlink(g_pipe.path);
+	if (mkfifo(g_pipe.path, 0o600) != 0) return false;
+	// Open for reading and writing, so the pipe never reads as ended when a
+	// client goes away, and opening does not wait for one.
+	g_pipe.fd = open(g_pipe.path, O_RDWR | O_NONBLOCK);
+	if (g_pipe.fd < 0) {
+		unlink(g_pipe.path);
+		return false;
+	}
+	// A client that goes away mid-reply must not take the program with it.
+	signal(SIGPIPE, (void*)(uptr)1);
+	g_pipe.open = true;
+	return true;
 }
 
 fn int control_pipe_fd() => g_pipe.open ? g_pipe.fd : -1;
 
-// control_pipe_close removes the pipe, and the link if it still points here:
-// a program started later has taken it over.
+// control_pipe_close removes what the program left in the directory. The
+// link goes only if it still points here: a program started later has taken
+// it over.
 fn void control_pipe_close() {
-	if (!g_pipe.open) return;
-	g_pipe.open = false;
-	char[256] buf;
+	if (!g_pipe.announced) return;
+	g_pipe.announced = false;
+	char[32] buf;
 	sz n = readlink(g_pipe.link, &buf, buf.len);
 	if (n > 0 && (String)buf[:n] == g_pipe.target.str_view()) unlink(g_pipe.link);
+	unlink(g_pipe.ask);
+	if (!g_pipe.open) return;
+	g_pipe.open = false;
 	close(g_pipe.fd);
 	unlink(g_pipe.path);
 }
@@ -226,15 +271,55 @@ fn void control_client() {
 			exit(2);
 		}
 		String dir = pipe_dir();
-		String target = string::tformat("%s/%s", dir, name);
-		char* pid = getenv("MILKTEA_PID");
-		if (pid != null && ((ZString)pid).len() > 0) target = string::tformat("%s.%s", target, (ZString)pid);
-		// With nobody reading the pipe this fails, so a program that has gone
-		// and left its pipe behind is told apart from one that is running.
-		int to = open(target.zstr_tcopy(), O_WRONLY | O_NONBLOCK);
-		if (to < 0) {
-			io::eprintfn("%s: no running %s is taking commands (start it with MILKTEA_CONTROL=1)", name, name);
+		// Which program: the one MILKTEA_PID names, else the most recently
+		// started, whose pid the link holds.
+		String pid;
+		char* named = getenv("MILKTEA_PID");
+		if (named != null && ((ZString)named).len() > 0) {
+			pid = ((ZString)named).str_view();
+		} else {
+			char[] buf = mem::talloc_array(char, 32);
+			sz n = readlink(string::tformat("%s/%s.pid", dir, name).zstr_tcopy(), buf.ptr, buf.len);
+			if (n > 0) pid = (String)buf[:n];
+		}
+		int pid_no = pid.to_int() ?? 0;
+		if (pid_no <= 0 || kill(pid_no, 0) != 0) {
+			io::eprintfn("%s: no %s is running that can be driven", name, name);
 			exit(1);
+		}
+		ZString target = string::tformat("%s/%s.%s", dir, name, pid).zstr_tcopy();
+		// With nobody reading the pipe this fails, so a program that is not
+		// listening is told apart from one that is.
+		int to = open(target, O_WRONLY | O_NONBLOCK);
+		if (to < 0) {
+			// Not listening: ask whoever is at it. The request is a file the
+			// program removes when it is answered, having opened its pipe
+			// first if the answer was yes.
+			ZString ask = string::tformat("%s/%s.%s.ask", dir, name, pid).zstr_tcopy();
+			int made = open(ask, O_CREAT | O_WRONLY, 0o600);
+			if (made < 0) {
+				io::eprintfn("%s: cannot ask %s to be driven", name, name);
+				exit(1);
+			}
+			close(made);
+			io::eprintfn("%s: asked for remote control; answer in the program", name);
+			for (int waited = 0; to < 0; waited += 50) {
+				if (waited >= CLIENT_ASK_MS || kill(pid_no, 0) != 0) {
+					unlink(ask);
+					io::eprintfn("%s: no answer", name);
+					exit(1);
+				}
+				poll(null, 0, 50);
+				to = open(target, O_WRONLY | O_NONBLOCK);
+				if (to < 0 && access(ask, 0) != 0) {
+					// Answered, and the pipe is opened before the request
+					// goes, so one more look settles it.
+					to = open(target, O_WRONLY | O_NONBLOCK);
+					if (to >= 0) break;
+					io::eprintfn("%s: remote control was refused", name);
+					exit(1);
+				}
+			}
 		}
 		ZString reply = string::tformat("%s/.reply.%d", dir, getpid()).zstr_tcopy();
 		unlink(reply);

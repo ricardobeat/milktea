@@ -205,6 +205,7 @@ fn View draw_in(Node* root, sz w, sz h, bool alt) @local {
 	// and freed when the program stops. A view is rebuilt on every keystroke;
 	// a fresh grid each time would churn the heap.
 	if (root == null || w < 1 || h < 1 || g_program == null) return {};
+	root = control_overlay(root);
 
 	xray::LayoutMetrics metrics = g_program.layout_metrics;
 	xray::Rect area = xray::new_rect(0, 0, w, h);

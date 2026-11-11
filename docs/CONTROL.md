@@ -55,25 +55,48 @@ follows a `click` shows what the click did.
 
 ## Driving a program that is already running
 
-Piped stdin drives a program nobody is looking at. To drive one that is on
-screen and in use, start it with `MILKTEA_CONTROL=1` and send it commands
-with the same binary:
+Piped stdin drives a program nobody is looking at. One that is on screen
+and in use takes commands from the same binary, run again with `--cmd`:
 
 ```sh
-MILKTEA_CONTROL=1 ted            # in one terminal: runs as usual
+ted                                    # in one terminal: runs as usual
 ted --cmd click 'button[key="save"]'   # from anywhere else
 ted --cmd screen
 ```
 
 `--cmd` takes the rest of the command line as one command, prints the reply
 and exits 0 on `ok` or 1 on `err`. It goes to the most recently started
-`ted` that is listening; `MILKTEA_PID=<pid>` picks another. Any number of
-`--cmd` calls can run at once.
+`ted`; `MILKTEA_PID=<pid>` picks another. Any number of `--cmd` calls can
+run at once.
 
-A program only listens when asked to. It then keeps a named pipe in
-`$TMPDIR/milktea-<uid>/`, a directory only you can enter, and removes it
-when it exits. `stream` has nowhere to write in a program drawing on a
-terminal, so it is for piped and window programs.
+The first `--cmd` has to be allowed by whoever is at the program. It shows
+
+```
+Allow remote control?  [yes]  [no]
+```
+
+at the bottom of the screen, over whatever it was drawing, and `--cmd` waits
+up to a minute for the answer. Click one, or choose with left, right or tab
+and answer with enter; esc says no. It starts on "no" and letters answer
+nothing, so someone who was typing when it came up cannot say yes by
+accident. A refusal ends `--cmd` with exit 1.
+
+From then until the program exits it takes commands, and a white dot on red
+sits in its bottom left corner, which says "remote control on" under the
+pointer.
+
+How a program is started decides this ahead of time:
+
+| started with | |
+|---|---|
+| `MILKTEA_CONTROL=1` | takes commands at once and asks nobody: for a program an agent starts itself |
+| nothing | asks on the first `--cmd` |
+| `MILKTEA_CONTROL=0` | cannot be driven or asked |
+
+A program keeps what this needs in `$TMPDIR/milktea-<uid>/`, a directory
+only you can enter, and removes it when it exits. `stream` has nowhere to
+write in a program drawing on a terminal, so it is for piped and window
+programs.
 
 ## A session
 

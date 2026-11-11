@@ -55,6 +55,9 @@ struct ControlHooks {
 	ControlScrollFn scroll;
 }
 
+// A window installs hooks; a terminal has none.
+fn bool g_ctl_is_window() @private => g_ctl.hooks.pointer != null;
+
 // install_control_hooks is for backends whose input does not go through the
 // message queue (see the GUI).
 fn void install_control_hooks(ControlHooks hooks) {
@@ -242,6 +245,7 @@ fn void control_stdin_eof() {
 // control_poll serves the command stream: new lines, replies. Backends call
 // it once a pass of their loop.
 fn void control_poll() {
+	control_remote_poll();
 	if (!g_ctl.started) return;
 	if (!g_ctl.on) return;
 	if (!ctl_settled()) return;

@@ -264,6 +264,7 @@ fn CellFit cell_fit(Face face, int font_size, float ratio) @private {
 fn bool dispatch(milktea::Msg msg) @private {
 	g.dirty = true;
 	if (msg.kind == milktea::MsgKind.QUIT) return true;
+	if (msg.kind == milktea::MsgKind.KEY && milktea::control_remote_key(msg.key)) return false;
 	milktea::control_msg_event(msg);
 	if (msg.kind == milktea::MsgKind.KEY && milktea::dispatch_focus_key(msg.key)) return false;
 	milktea::g_program.stamp_now();
@@ -725,6 +726,10 @@ fn bool step() @private {
 	}
 	if (g.quit) return false;
 
+	if (p.redraw_wanted) {
+		p.redraw_wanted = false;
+		g.dirty = true;
+	}
 	if (g.dirty) {
 		g.dirty = false;
 		p.stamp_now();
@@ -904,6 +909,7 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	// from a pipe, in headless and headed runs alike.
 	milktea::control_client();
 	milktea::control_start();
+	milktea::control_announce();
 	if (milktea::control_pipe_wanted()) milktea::control_pipe_open();
 	// MILKTEA_GUI_SHOT=<path> takes a screenshot of any GUI app, the way
 	// screenshot_path does, without the app asking for one.

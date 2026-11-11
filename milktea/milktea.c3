@@ -257,6 +257,8 @@ struct Program {
 	// and the target asked for drags (see xray::Node.on_drag).
 	xray::ClickTarget drag_target;
 	bool dragging;
+	// A frame is owed for a change no message brought (see request_redraw).
+	bool redraw_wanted;
 	// on_draw, when set, sees every tree draw() has just solved and painted.
 	// A backend reads what it needs from the frame here — the GUI collects
 	// its window drag handles — so the terminal links none of that.
@@ -515,9 +517,18 @@ fn int input_reader_fn(void* arg) @private {
 	bool cli = !stdin_is_tty();
 	LineAsm stdin_lines;
 	LineAsm pipe_lines;
-	int pipe_fd = control_pipe_fd();
+	bool asked = false;
 
 	while (!input_queue_is_closed(q)) {
+		// The command pipe may open while the program runs, once remote
+		// control is allowed. A request for that wakes the loop, which shows
+		// the dialog.
+		int pipe_fd = control_pipe_fd();
+		bool asked_now = control_ask_pending();
+		if (asked_now != asked) {
+			asked = asked_now;
+			input_queue_wake(q);
+		}
 		PollFd[2] pfds = { { .fd = STDIN_FILENO, .events = POLLIN }, { .fd = pipe_fd, .events = POLLIN } };
 
 		sz r = poll(&pfds, pipe_fd >= 0 ? 2 : 1, 50); // 50ms timeout
@@ -1025,6 +1036,8 @@ fn bool Program.send_recv(Program* self, Msg* out) {
 // ever crashing or blocking the event loop.
 fn bool dispatch(Program* self, Model model, Msg m) @local {
 	if (m.kind == MsgKind.QUIT) return true;
+	// The "allow remote control?" dialog has the keyboard while it is up.
+	if (m.kind == MsgKind.KEY && control_remote_key(m.key)) return false;
 	control_msg_event(m);
 	if (m.kind == MsgKind.KEY && m.key.action != KeyAction.KEY_RELEASE && dispatch_focus_key(m.key)) return false;
 	// A wheel notch arrives as a press, but it scrolls; it clicks nothing.
@@ -1219,9 +1232,14 @@ fn void? Program.run(Program* self) {
 	stdin_probe();
 	bool cli_mode = !self.test_mode && !stdin_is_tty();
 	if (cli_mode) control_start_piped();
-	// Asked to, a program on a terminal takes commands too, from a pipe of
-	// its own that the reader thread watches beside stdin.
-	if (!self.test_mode && control_pipe_wanted() && control_pipe_open()) control_start_piped();
+	// A program on a terminal takes commands too, from a pipe of its own
+	// that the reader thread watches beside stdin.
+	// Asked to at once (MILKTEA_CONTROL=1), or later with the say-so of
+	// whoever is at the program (see control_remote.c3).
+	if (!self.test_mode && !cli_mode) {
+		control_announce();
+		if (control_pipe_wanted() && control_pipe_open()) control_start_piped();
+	}
 	// No OSC 22 emitted yet, which is indistinguishable from having emitted
 	// the empty (reset) name — so a first frame with no cursor stays silent.
 	self.last_mouse_cursor_len = 0;
@@ -1473,7 +1491,8 @@ fn void? Program.run(Program* self) {
 
 	while (true) {
 		// Fire expired timers
-		bool dirty = false;
+		bool dirty = self.redraw_wanted;
+		self.redraw_wanted = false;
 		sz now     = time_ms();
 		for (sz i = 0; i < MAX_TIMERS; i++) {
 			if (self.timers[i].active && now >= self.timers[i].deadline_ms) {
@@ -1796,7 +1815,7 @@ fn void? Program.run(Program* self) {
 			// A command line wakes the loop as a key does (control_feed_line),
 			// so it only stays awake while commands are still to be handled.
 			// A message a command sent (quit) is handled on the next pass.
-			sz wait_ms = control_busy() || self.send_head != self.send_tail ? 0 : 1000;
+			sz wait_ms = control_busy() || self.redraw_wanted || self.send_head != self.send_tail ? 0 : 1000;
 			now = time_ms();
 			for (sz i = 0; i < MAX_TIMERS; i++) {
 				if (self.timers[i].active) {
