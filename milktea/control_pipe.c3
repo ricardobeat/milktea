@@ -273,7 +273,7 @@ fn ClientTarget client_connect(String name) @local {
 		sz n = readlink(string::tformat("%s/%s.pid", t.dir, name).zstr_tcopy(), buf.ptr, buf.len);
 		if (n > 0) pid = (String)buf[:n];
 	}
-	int pid_no = pid.to_int() ?? 0;
+	int pid_no = (int)ctl_int(pid);
 	if (pid_no <= 0 || kill(pid_no, 0) != 0) {
 		io::eprintfn("%s: no %s is running that can be driven", name, name);
 		exit(1);

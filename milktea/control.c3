@@ -5,7 +5,6 @@ import xray;
 import std::core::dstring;
 import std::core::string;
 import std::math;
-import std::thread;
 
 // Control drives a running program from the command line. When the program's
 // stdin is not a terminal, each line of stdin is a command and each reply a
@@ -201,7 +200,7 @@ fn void control_feed_line(String line) {
 	// faster than the loop reads it waits here for room. The loop closing its
 	// input queue, on the way out, ends the wait.
 	while (input_queue_room(&g_ctl.queue) < line.len && !input_queue_is_closed(&g_input_queue)) {
-		thread::sleep_ms(1);
+		poll(null, 0, 1);
 	}
 	input_queue_push(&g_ctl.queue, (char[])line);
 	// The loop waits on its own input queue, which gets nothing in this mode.
@@ -565,27 +564,13 @@ fn String ctl_text(sz i) @local {
 	return out.str_view()[:keep];
 }
 
-fn String role_name(xray::Role r) {
-	switch (r) {
-		case NONE: return "";
-		case GROUP: return "group";
-		case BUTTON: return "button";
-		case LINK: return "link";
-		case CHECKBOX: return "checkbox";
-		case TEXT: return "text";
-		case TEXT_FIELD: return "text-field";
-		case LIST: return "list";
-		case LIST_ITEM: return "list-item";
-		case MENU_BAR: return "menu-bar";
-		case MENU: return "menu";
-		case MENU_ITEM: return "menu-item";
-		case DIALOG: return "dialog";
-		case TAB: return "tab";
-		case SCROLLBAR: return "scrollbar";
-		case STATUS: return "status";
-		case IMAGE: return "image";
-	}
-}
+// The names roles go by, in xray::Role's order.
+const String[*] ROLE_NAMES @private = {
+	"", "group", "button", "link", "checkbox", "text", "text-field", "list", "list-item",
+	"menu-bar", "menu", "menu-item", "dialog", "tab", "scrollbar", "status", "image",
+};
+
+fn String role_name(xray::Role r) => ROLE_NAMES[(int)r];
 
 // ── Selectors ──────────────────────────────────────────────────────────────
 
@@ -719,7 +704,7 @@ fn bool ctl_parse_sel(String s, CtlCompound* cs, sz cap, sz* count) @local {
 						sz ds = i;
 						while (i < s.len && s[i].is_digit()) i++;
 						if (i >= s.len || s[i] != ')' || i == ds) return false;
-						c.nth = (sz)(s[ds:i - ds].to_int() ?? 0);
+						c.nth = ctl_int(s[ds:i - ds]);
 						i++;
 					default: return false;
 				}
@@ -977,8 +962,8 @@ fn bool ctl_place_tok(String tok, sz* x, sz* y) @local {
 			}
 		}
 		if (comma == tok.len) return false;
-		sz col = (sz)(tok[1:comma - 1].to_int() ?? 0);
-		sz row = (sz)(tok[comma + 1..].to_int() ?? 0);
+		sz col = ctl_int(tok[1:comma - 1]);
+		sz row = ctl_int(tok[comma + 1..]);
 		// A negative place is outside the program, where a pointer that left
 		// it is.
 		if (col < 0 || row < 0) {
@@ -1072,9 +1057,9 @@ fn void ctl_scroll(String[] toks, sz n) @local {
 	for (sz k = 1; k < n; k++) {
 		String t = toks[k];
 		if (t.starts_with("dy=")) {
-			dy = t[3..].to_double() ?? 0;
+			dy = ctl_num(t[3..]);
 		} else if (t.starts_with("dx=")) {
-			dx = t[3..].to_double() ?? 0;
+			dx = ctl_num(t[3..]);
 		} else {
 			if (!ctl_place_tok(t, &x, &y)) {
 				ctl_place_err(t);
@@ -1099,72 +1084,108 @@ fn void ctl_scroll(String[] toks, sz n) @local {
 	ctl_ok();
 }
 
-fn KeyMsg? parse_key_spec(String spec) @local {
-	KeyMsg k = { .code = RUNE };
-	String[] parts = spec.tsplit("+");
-	if (parts.len == 0) return NOT_FOUND~;
-	String name = parts[^1];
-	sz mods = parts.len - 1;
-	if (spec.len > 1 && spec.ends_with("++")) {
-		name = "+";
-		mods = parts.len - 2;
-	} else if (spec == "+") {
-		name = "+";
-		mods = 0;
+// The names keys go by, in KeyCode's order: what key_spec writes and
+// parse_key_spec reads. CTRL_C is "c" with ctrl.
+const String[*] KEY_NAMES @private = {
+	"", "", "enter", "backspace", "esc", "tab", "up", "down", "left", "right", "home", "end",
+	"delete", "pageup", "pagedown", "insert", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8",
+	"f9", "f10", "f11", "f12", "c",
+};
+
+// ctl_ieq: a and b are equal, ASCII letters in either case.
+fn bool ctl_ieq(String a, String b) @private {
+	if (a.len != b.len) return false;
+	for (sz i = 0; i < a.len; i++) {
+		char x = a[i];
+		char y = b[i];
+		if (x >= 'A' && x <= 'Z') x += 32;
+		if (y >= 'A' && y <= 'Z') y += 32;
+		if (x != y) return false;
 	}
-	for (sz i = 0; i < mods; i++) {
-		switch (parts[i].to_lower_tcopy()) {
-			case "ctrl": k.ctrl = true;
-			case "alt":
-			case "opt":
-			case "option": k.alt = true;
-			case "shift": k.shift = true;
-			case "cmd":
-			case "super": k.super = true;
-			default: return NOT_FOUND~;
+	return true;
+}
+
+// ctl_int reads a whole number, perhaps with a leading -, or gives def.
+fn sz ctl_int(String s, sz def = 0) @private {
+	sz i = s.len > 0 && s[0] == '-' ? 1 : 0;
+	if (i >= s.len) return def;
+	sz v = 0;
+	for (; i < s.len; i++) {
+		if (!s[i].is_digit()) return def;
+		v = v * 10 + (sz)(s[i] - '0');
+	}
+	return s[0] == '-' ? -v : v;
+}
+
+// ctl_num reads a decimal number such as -1.25, or gives 0.
+fn double ctl_num(String s) @private {
+	sz dot = s.len;
+	for (sz i = 0; i < s.len; i++) {
+		if (s[i] == '.') {
+			dot = i;
+			break;
 		}
 	}
-	String lower = name.to_lower_tcopy();
-	switch (lower) {
-		case "enter":
-		case "return": k.code = ENTER;
-		case "esc":
-		case "escape": k.code = ESC;
-		case "tab": k.code = TAB;
-		case "backspace": k.code = BACKSPACE;
-		case "delete": k.code = DELETE;
-		case "up": k.code = UP;
-		case "down": k.code = DOWN;
-		case "left": k.code = LEFT;
-		case "right": k.code = RIGHT;
-		case "home": k.code = HOME;
-		case "end": k.code = END;
-		case "pageup": k.code = PAGE_UP;
-		case "pagedown": k.code = PAGE_DOWN;
-		case "insert": k.code = INSERT;
-		case "space": k.rune = ' ';
-		case "f1": k.code = F1;
-		case "f2": k.code = F2;
-		case "f3": k.code = F3;
-		case "f4": k.code = F4;
-		case "f5": k.code = F5;
-		case "f6": k.code = F6;
-		case "f7": k.code = F7;
-		case "f8": k.code = F8;
-		case "f9": k.code = F9;
-		case "f10": k.code = F10;
-		case "f11": k.code = F11;
-		case "f12": k.code = F12;
-		default:
-			Char32[]? runes = name.to_temp_utf32();
-			if (catch runes) return NOT_FOUND~;
-			if (runes.len != 1) return NOT_FOUND~;
-			k.rune = runes[0];
-			if (k.ctrl && k.rune >= 'A' && k.rune <= 'Z') k.rune += 'a' - 'A';
-			if (k.ctrl && k.rune == 'c' && !k.alt && !k.shift && !k.super) {
-				k.code = CTRL_C;
-				k.rune = 0;
+	bool neg = s.len > 0 && s[0] == '-';
+	String whole = s[(neg ? 1 : 0):dot - (neg ? 1 : 0)];
+	double v = whole.len > 0 ? (double)ctl_int(whole) : 0;
+	double scale = 1;
+	for (sz i = dot + 1; i < s.len; i++) {
+		if (!s[i].is_digit()) return 0;
+		scale /= 10;
+		v += (double)(s[i] - '0') * scale;
+	}
+	return neg ? -v : v;
+}
+
+fn KeyMsg? parse_key_spec(String spec) @local {
+	KeyMsg k = { .code = RUNE };
+	// Modifiers come before the last + that is not the key itself, so
+	// "ctrl++" is ctrl and the + key.
+	sz cut = -1;
+	for (sz i = spec.len - 2; i >= 0; i--) {
+		if (spec[i] == '+') {
+			cut = i;
+			break;
+		}
+	}
+	for (sz at = 0; at < cut;) {
+		sz e = at;
+		while (e < cut && spec[e] != '+') e++;
+		String m = spec[at:e - at];
+		if (ctl_ieq(m, "ctrl")) {
+			k.ctrl = true;
+		} else if (ctl_ieq(m, "alt") || ctl_ieq(m, "opt") || ctl_ieq(m, "option")) {
+			k.alt = true;
+		} else if (ctl_ieq(m, "shift")) {
+			k.shift = true;
+		} else if (ctl_ieq(m, "cmd") || ctl_ieq(m, "super")) {
+			k.super = true;
+		} else {
+			return NOT_FOUND~;
+		}
+		at = e + 1;
+	}
+	String name = spec[cut + 1..];
+	if (name.len == 0) return NOT_FOUND~;
+	if (ctl_ieq(name, "return")) name = "enter";
+	if (ctl_ieq(name, "escape")) name = "esc";
+	if (ctl_ieq(name, "space")) name = " ";
+	if (name.len > 1) {
+		for (int c = (int)KeyCode.ENTER; c < (int)KeyCode.CTRL_C; c++) {
+			if (ctl_ieq(name, KEY_NAMES[c])) {
+				k.code = (KeyCode)c;
+				return k;
 			}
+		}
+	}
+	uint r;
+	if (xray::utf8_decode(name, &r) != name.len) return NOT_FOUND~;
+	if (k.ctrl && r >= 'A' && r <= 'Z') r += 32;
+	k.rune = r;
+	if (k.ctrl && r == 'c' && !k.alt && !k.shift && !k.super) {
+		k.code = CTRL_C;
+		k.rune = 0;
 	}
 	return k;
 }
@@ -1196,17 +1217,12 @@ fn void ctl_type(String line, String[] toks, sz n) @local {
 	at += toks[0].len;
 	while (at < line.len && line[at] == ' ') at++;
 	String text = n == 2 && line[at] == '"' ? toks[1] : line[at..];
-	Char32[]? runes = text.to_temp_utf32();
-	if (catch runes) {
-		ctl_err("text is not UTF-8");
-		return;
-	}
 	ctl_await_frame();
-	if (g_program != null) {
-		foreach (r : runes) {
-			KeyMsg k = r == '\n' ? (KeyMsg){ .code = ENTER } : (KeyMsg){ .code = RUNE, .rune = r };
-			g_program.send({ .kind = MsgKind.KEY, .key = k });
-		}
+	for (sz i = 0; g_program != null && i < text.len;) {
+		uint r;
+		i += xray::utf8_decode(text[i..], &r);
+		KeyMsg k = r == '\n' ? (KeyMsg){ .code = ENTER } : (KeyMsg){ .code = RUNE, .rune = r };
+		g_program.send({ .kind = MsgKind.KEY, .key = k });
 	}
 	ctl_ok();
 }
@@ -1284,12 +1300,12 @@ fn CtlScreenText ctl_screen_text(sz i) @local {
 // counting overlapping ones, from 0.
 fn sz? ctl_occurrence(String hay, String needle, sz nth) @local {
 	if (needle.len == 0) return NOT_FOUND~;
-	sz from = 0;
-	for (sz k = 0; ; k++) {
-		sz at = hay[from..].index_of(needle)!;
-		if (k == nth) return from + at;
-		from += at + 1;
+	sz k = 0;
+	for (sz at = 0; at + needle.len <= hay.len; at++) {
+		if (hay[at:needle.len] != needle) continue;
+		if (k++ == nth) return at;
 	}
+	return NOT_FOUND~;
 }
 
 // ctl_select_text selects text the way a person would: it finds the text in
@@ -1307,7 +1323,7 @@ fn void ctl_select_text(String[] toks, sz n) @local {
 		return;
 	}
 	CtlScreenText st = ctl_screen_text(t);
-	sz nth = n >= 4 ? (sz)(toks[3].to_int() ?? 0) : 0;
+	sz nth = n >= 4 ? ctl_int(toks[3]) : 0;
 	sz start;
 	sz end;
 	String what = toks[2];
@@ -1416,49 +1432,20 @@ fn void control_msg_event(Msg m) {
 	};
 }
 
-// key_spec writes a key the way parse_key reads it.
+// key_spec writes a key the way parse_key_spec reads it.
 fn String key_spec(KeyMsg k) @local {
 	DString s = dstring::temp();
 	if (k.ctrl || k.code == CTRL_C) s.append_string("ctrl+");
 	if (k.alt) s.append_string("alt+");
 	if (k.shift) s.append_string("shift+");
 	if (k.super) s.append_string("cmd+");
-	switch (k.code) {
-		case ENTER: s.append_string("enter");
-		case ESC: s.append_string("esc");
-		case TAB: s.append_string("tab");
-		case BACKSPACE: s.append_string("backspace");
-		case DELETE: s.append_string("delete");
-		case UP: s.append_string("up");
-		case DOWN: s.append_string("down");
-		case LEFT: s.append_string("left");
-		case RIGHT: s.append_string("right");
-		case HOME: s.append_string("home");
-		case END: s.append_string("end");
-		case PAGE_UP: s.append_string("pageup");
-		case PAGE_DOWN: s.append_string("pagedown");
-		case INSERT: s.append_string("insert");
-		case CTRL_C: s.append_char('c');
-		case F1: s.append_string("f1");
-		case F2: s.append_string("f2");
-		case F3: s.append_string("f3");
-		case F4: s.append_string("f4");
-		case F5: s.append_string("f5");
-		case F6: s.append_string("f6");
-		case F7: s.append_string("f7");
-		case F8: s.append_string("f8");
-		case F9: s.append_string("f9");
-		case F10: s.append_string("f10");
-		case F11: s.append_string("f11");
-		case F12: s.append_string("f12");
-		default:
-			if (k.rune == ' ') {
-				s.append_string("space");
-			} else if (k.rune == '+') {
-				s.append_string("+");
-			} else {
-				s.append_char32(k.rune);
-			}
+	if (k.code != RUNE && k.code != NONE) {
+		s.append_string(KEY_NAMES[(int)k.code]);
+	} else if (k.rune == ' ') {
+		s.append_string("space");
+	} else {
+		char[4] b;
+		s.append_string((String)b[:utf8_encode(k.rune, b[..])]);
 	}
 	return s.str_view();
 }
