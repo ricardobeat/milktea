@@ -302,15 +302,7 @@ fn void ScreenBuffer.paint_translucent_box(&self, Rect r, glaze::Style box, char
 		own.destroy();
 		mem::free(own);
 	}
-	if (scratch == null) scratch = &own;
-	ScreenBuffer* tmp = *scratch;
-	if (tmp == null) {
-		tmp = new_screen_buffer(r.w, r.h);
-		*scratch = tmp;
-	} else if (tmp.width < r.w || tmp.height < r.h) {
-		tmp.resize(tmp.width > r.w ? tmp.width : r.w, tmp.height > r.h ? tmp.height : r.h);
-	}
-	tmp.clear();
+	ScreenBuffer* tmp = scratch_for(scratch != null ? scratch : &own, r.w, r.h);
 	tmp.render_ansi_string(0, 0, s, default_style());
 	for (sz y = 0; y < r.h; y++) {
 		for (sz x = 0; x < r.w; x++) {
@@ -341,15 +333,39 @@ fn void ScreenBuffer.paint_string(&self, Rect r, String s, char alpha, ScreenBuf
 		return;
 	}
 	if (!self.recording() && (r.x + r.w <= 0 || r.y + r.h <= 0)) return;
-	// Clipped to the rect: a string is not always the size it was asked to
-	// be, and one that is not would spill into its neighbours.
+	self.render_clipped(r, s, see_through(fg));
+}
+
+// see_through is the style text starts from: no background of its own unless
+// it sets one, as in CSS, so what is painted beneath shows around its glyphs;
+// and fg, the colour inherited from the tree, when there is one.
+fn Style see_through(Color fg) @local {
+	Style base = default_style().set_bg(color_transparent());
+	if (fg.kind != ColorKind.NONE) base.fg = fg;
+	return base;
+}
+
+// render_clipped renders s at r, clipped to it: a string is not always the
+// size it was asked to be, and one that is not would spill into its
+// neighbours.
+fn void ScreenBuffer.render_clipped(&self, Rect r, String s, Style base) {
 	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
 	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
-	// Text has no background of its own unless it sets one, as in CSS: where
-	// it does not, what is painted beneath shows through around its glyphs.
-	Style see_through = default_style().set_bg(color_transparent());
-	if (fg.kind != ColorKind.NONE) see_through.fg = fg;
-	self.render_ansi_string((sz)r.x, (sz)r.y, s, see_through, max_row, max_col);
+	self.render_ansi_string(r.x, r.y, s, base, max_row, max_col);
+}
+
+// scratch_for is *s, made or grown to at least w×h, and empty: the scratch is
+// shared across nodes and frames, so a previous node's content would bleed
+// through.
+fn ScreenBuffer* scratch_for(ScreenBuffer** s, sz w, sz h) @local {
+	ScreenBuffer* tmp = *s;
+	if (tmp == null) {
+		tmp = *s = new_screen_buffer(w, h);
+	} else if (tmp.width < w || tmp.height < h) {
+		tmp.resize(tmp.width > w ? tmp.width : w, tmp.height > h ? tmp.height : h);
+	}
+	tmp.clear();
+	return tmp;
 }
 
 // paint_string_shifted paints s, which has one row more than r, shift layout
@@ -361,11 +377,8 @@ fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz
 	self.record_clip(area);
 	sz old_dy = self.paint_dy;
 	self.paint_dy -= shift;
-	Style base = default_style().set_bg(color_transparent());
-	if (fg.kind != ColorKind.NONE) base.fg = fg;
-	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
-	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
-	self.render_ansi_string((sz)r.x, (sz)r.y, s, base, max_row, max_col);
+	Style base = see_through(fg);
+	self.render_clipped(r, s, base);
 	// The extra row, rendered aside and recorded at the row below r.
 	ScreenBuffer* tmp = new_screen_buffer(r.w, r.h + 1);
 	defer {
@@ -373,13 +386,7 @@ fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz
 		mem::free(tmp);
 	}
 	tmp.render_ansi_string(0, 0, s, base);
-	for (sz x = 0; x < r.w; x++) {
-		Cell c = tmp.cells[r.h * tmp.width + x];
-		// A cell the string never reached has no background of its own; it
-		// shows what is beneath, as the rows above do.
-		if (c.style.bg.kind == ColorKind.NONE) c.style.bg = color_transparent();
-		self.record_cell(r.x + x, r.y + r.h, c);
-	}
+	for (sz x = 0; x < r.w; x++) self.record_scratch_cell(tmp, x, r.h, r.x + x, r.y + r.h);
 	self.paint_dy = old_dy;
 	self.record_clip({});
 }
@@ -392,8 +399,7 @@ fn void ScreenBuffer.paint_string_shifted(&self, Rect r, Rect area, String s, sz
 // recording them, and every recorded cell comes from a scratch render.
 fn void ScreenBuffer.paint_string_scrolled(&self, Rect r, Rect area, String s, sz dy, sz dx,
 		sz left, sz right, Color fg) {
-	Style base = default_style().set_bg(color_transparent());
-	if (fg.kind != ColorKind.NONE) base.fg = fg;
+	Style base = see_through(fg);
 	sz w = r.w + 1;
 	sz h = dy > 0 ? r.h + 1 : r.h;
 	if (left + right > r.w) right = r.w - left;
@@ -401,9 +407,7 @@ fn void ScreenBuffer.paint_string_scrolled(&self, Rect r, Rect area, String s, s
 
 	bool rec = self.record_paint;
 	self.record_paint = false;
-	sz max_row = r.y + r.h < self.height ? r.y + r.h : self.height;
-	sz max_col = r.x + r.w < self.width ? r.x + r.w : self.width;
-	self.render_ansi_string((sz)r.x, (sz)r.y, s, base, max_row, max_col);
+	self.render_clipped(r, s, base);
 	self.record_paint = rec;
 
 	ScreenBuffer* tmp = new_screen_buffer(w, h);
@@ -484,18 +488,7 @@ fn void ScreenBuffer.overlay(&self, sz x, sz y, sz w, sz h, String s, char alpha
 // That is what makes a translucent panel dim the screen behind it instead of
 // erasing it.
 fn void ScreenBuffer.paint_blended(&self, Rect r, String content, char alpha, ScreenBuffer** scratch, Color fg = {}) {
-	ScreenBuffer* tmp = *scratch;
-	if (tmp == null) {
-		tmp = new_screen_buffer((sz)r.w, (sz)r.h);
-		*scratch = tmp;
-	} else if (tmp.width < (sz)r.w || tmp.height < (sz)r.h) {
-		sz w = tmp.width < (sz)r.w ? (sz)r.w : tmp.width;
-		sz h = tmp.height < (sz)r.h ? (sz)r.h : tmp.height;
-		tmp.resize(w, h);
-	}
-	// The scratch is shared across nodes and frames, so it has to start
-	// empty or a previous node's content bleeds through.
-	tmp.clear();
+	ScreenBuffer* tmp = scratch_for(scratch, r.w, r.h);
 	Style base = default_style();
 	if (fg.kind != ColorKind.NONE) base.fg = fg;
 	tmp.render_ansi_string(0, 0, content, base);

@@ -191,6 +191,15 @@ fn bool Cell.can_half_block(&self) {
 	return self.style.attrs == none;
 }
 
+// tint_cell lays a translucent colour over a cell, background and text.
+fn void ScreenBuffer.tint_cell(&self, sz col, sz row, Color c) {
+	Cell* dst = &self.cells[row * self.width + col];
+	self.record_tint(col, row, c);
+	dst.style.bg = c.blend_over(dst.style.bg);
+	dst.style.fg = c.blend_over(dst.style.fg);
+	self.dirty_lines[row] = true;
+}
+
 fn void ScreenBuffer.render_inner_shadow(&self, sz x, sz y, sz w, sz h, InnerShadow s) {
 	if (!s.enabled || s.opacity == 0) return;
 
@@ -229,13 +238,9 @@ fn void ScreenBuffer.render_inner_shadow(&self, sz x, sz y, sz w, sz h, InnerSha
 			int alpha = (int)((sz)s.opacity * t * t / (max_edge * max_edge));
 			if (alpha <= 0) continue;
 
-			Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
-			Color c   = s.color;
+			Color c = s.color;
 			c.a = (char)alpha;
-			self.record_tint(col, row, c);
-			dst.style.bg = c.blend_over(dst.style.bg);
-			dst.style.fg = c.blend_over(dst.style.fg);
-			self.dirty_lines[(sz)row] = true;
+			self.tint_cell(col, row, c);
 		}
 	}
 }
@@ -261,11 +266,7 @@ fn void ScreenBuffer.render_shadow(&self, sz x, sz y, sz w, sz h, Shadow s) {
 				if (col >= x && col < x + w && row >= y && row < y + h) continue;
 				if (col < 0 || row < 0 || col >= (sz)self.width || row >= (sz)self.height) continue;
 
-				Cell* dst = &self.cells[(sz)row * self.width + (sz)col];
-				self.record_tint(col, row, blend_color);
-				dst.style.bg = blend_color.blend_over(dst.style.bg);
-				dst.style.fg = blend_color.blend_over(dst.style.fg);
-				self.dirty_lines[(sz)row] = true;
+				self.tint_cell(col, row, blend_color);
 			}
 		}
 		return;
@@ -336,10 +337,7 @@ fn void ScreenBuffer.render_shadow(&self, sz x, sz y, sz w, sz h, Shadow s) {
 
 			Color c = s.color;
 			c.a = (char)flat;
-			self.record_tint(col, row, c);
-			dst.style.bg = c.blend_over(dst.style.bg);
-			dst.style.fg = c.blend_over(dst.style.fg);
-			self.dirty_lines[(sz)row] = true;
+			self.tint_cell(col, row, c);
 		}
 	}
 }
