@@ -9,7 +9,9 @@
     "z"
   ],
   "link-args": [
-    "-Wl,-dead_strip"
+    "-Wl,-dead_strip",
+    "-Wl,-exported_symbol,_main",
+    "-Wl,-x"
   ],
   "sources": [
     "milktea/**",
