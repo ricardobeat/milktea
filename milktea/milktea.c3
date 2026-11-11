@@ -1149,6 +1149,42 @@ fn void cancel(void* owner) {
 	}
 }
 
+// leave_tty puts the terminal back as run() found it.
+fn void Program.leave_tty(Program* self, TtyState saved) {
+	if (self.mouse_pixels) {
+		disable_mouse_pixels();
+		self.mouse_pixels = false;
+	}
+	// Mirror the frame-level transition: an all-motion program turned on
+	// mode 1003 rather than 1000/1002, so it needs the all-motion off
+	// sequence; otherwise the terminal keeps reporting every pointer
+	// move after the program exits.
+	disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
+	disable_bracketed_paste();
+	disable_focus();
+	show_cursor();
+	// Registered cleanups (e.g. kitty-graphics tile deletion) run while
+	// the terminal is still usable, before raw mode is restored.
+	if (g_cleanup_fn != null) g_cleanup_fn();
+	write_stdout((char[])OSC_CURSOR_COLOR_RESET);
+	write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
+	// For inline (non-alt-screen) mode the cursor is parked at the
+	// top-left of the content block. Walk it down past the last
+	// rendered row so the shell prompt lands on a clean line below,
+	// leaving the block itself intact in the scrollback. This is a
+	// relative move: the block's absolute position is unknown, and
+	// assuming it starts at row 1 would jump into unrelated output.
+	if (!self.in_alt_screen && self.last_content_rows > 0) {
+		write_stdout((char[])"\x1b[m");
+		write_stdout((char[])num::csi(self.last_content_rows - 1, 'B'));
+		write_stdout((char[])"\r\n");
+	}
+	// Stop dereferencing this frame's fields from signal handlers before
+	// it goes away — Program is a stack local in every entry point.
+	teardown_signals();
+	raw_mode_restore(saved);
+}
+
 // run executes the event loop for the program.
 fn void? Program.run(Program* self) {
 	// run() owns the alt screen: it enters when a view asks for it and exits on
@@ -1246,42 +1282,8 @@ fn void? Program.run(Program* self) {
 	}
 
 	// Armed immediately: from here on, every exit path restores the terminal.
-	defer {
-		if (tty_raw) {
-			if (self.mouse_pixels) {
-				disable_mouse_pixels();
-				self.mouse_pixels = false;
-			}
-			// Mirror the frame-level transition: an all-motion program turned on
-			// mode 1003 rather than 1000/1002, so it needs the all-motion off
-			// sequence; otherwise the terminal keeps reporting every pointer
-			// move after the program exits.
-			disable_mouse(self.mouse_mode == MOUSE_MODE_ALL_MOTION);
-			disable_bracketed_paste();
-			disable_focus();
-			show_cursor();
-			// Registered cleanups (e.g. kitty-graphics tile deletion) run while
-			// the terminal is still usable, before raw mode is restored.
-			if (g_cleanup_fn != null) g_cleanup_fn();
-			write_stdout((char[])OSC_CURSOR_COLOR_RESET);
-			write_stdout((char[])OSC_MOUSE_CURSOR_RESET);
-			// For inline (non-alt-screen) mode the cursor is parked at the
-			// top-left of the content block. Walk it down past the last
-			// rendered row so the shell prompt lands on a clean line below,
-			// leaving the block itself intact in the scrollback. This is a
-			// relative move: the block's absolute position is unknown, and
-			// assuming it starts at row 1 would jump into unrelated output.
-			if (!self.in_alt_screen && self.last_content_rows > 0) {
-				write_stdout((char[])"\x1b[m");
-				write_stdout((char[])num::csi(self.last_content_rows - 1, 'B'));
-				write_stdout((char[])"\r\n");
-			}
-			// Stop dereferencing this frame's fields from signal handlers before
-			// it goes away — Program is a stack local in every entry point.
-			teardown_signals();
-			raw_mode_restore(saved);
-		}
-	}
+	// The defer is a call, since C3 copies a defer to every exit.
+	defer if (tty_raw) self.leave_tty(saved);
 
 	if (!self.test_mode && !cli_mode) {
 		hide_cursor();
@@ -1294,20 +1296,13 @@ fn void? Program.run(Program* self) {
 		char[64] probe_leftover;
 		sz probe_leftover_len = probe_terminal_caps(probe_leftover[..]);
 
-		setup_signals(saved, &self.in_alt_screen);
-
-		// Start the reader thread so stdin reads never block the event loop.
-		input_queue_init(&g_input_queue)!;
-		queue_created = true;
-		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
-		reader_running = true;
-
 		for (sz i = 0; i < probe_leftover_len; i++) {
 			self.pending[self.pending_len++] = probe_leftover[i];
 		}
-	} else if (!self.test_mode) {
-		// CLI mode: no terminal to probe, but signals and the reader thread
-		// (which turns piped bytes into command lines) still apply.
+	}
+	// In CLI mode too there are signals, and the reader thread turns piped
+	// bytes into command lines. It starts after the probe, which owns stdin.
+	if (!self.test_mode) {
 		setup_signals(saved, &self.in_alt_screen);
 		input_queue_init(&g_input_queue)!;
 		queue_created = true;
@@ -1391,6 +1386,13 @@ fn void? Program.run(Program* self) {
 	set_report_key_events(self.options.report_key_events);
 	set_mouse_cursor(self.options.mouse_cursor);
 
+	self.event_loop(cli_mode);
+}
+
+// event_loop runs the program from init until it quits or its input ends.
+// It is apart from run() because C3 copies run()'s teardown defers to every
+// return, and this loop has a dozen.
+fn void Program.event_loop(Program* self, bool cli_mode) {
 	self.stamp_now();
 	Cmd c0 = null;
 	if (&self.model.init) c0 = self.model.init();
