@@ -92,8 +92,6 @@ OVERRIDES = {
         "linked_libraries": ["sqlite3"],
         "linker_search_paths": ["/opt/homebrew/lib"],
     },
-    "cursors": {"opt": "O0", "strip_unused": False},
-    "inputbox": {"opt": "O0", "strip_unused": False},
     "doom-fire": {
         "sources": ["examples/doom-fire/doom-fire.c3"],
     },

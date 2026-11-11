@@ -291,12 +291,14 @@
     "examples/cursors": {
       "type": "executable",
       "sources": ["examples/cursors/**"],
-      "opt": "O0"
+      "opt": "Os",
+      "strip-unused": true
     },
     "examples/inputbox": {
       "type": "executable",
       "sources": ["examples/inputbox/**"],
-      "opt": "O0"
+      "opt": "Os",
+      "strip-unused": true
     },
     "examples/color-swatches": {
       "type": "executable",
