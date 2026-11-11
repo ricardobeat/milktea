@@ -899,6 +899,10 @@ fn void run(milktea::Model m, GuiOptions opts = default_options()) {
 	g.opts = opts;
 	g.quit = false;
 	g.dirty = true;
+	// A window's input comes from the window, not stdin, so stdin is a spare
+	// command line: drive the app from the terminal it was launched in, or
+	// from a pipe, in headless and headed runs alike.
+	milktea::control_start();
 	// MILKTEA_GUI_SHOT=<path> takes a screenshot of any GUI app, the way
 	// screenshot_path does, without the app asking for one.
 	if (opts.screenshot_path.len == 0) {

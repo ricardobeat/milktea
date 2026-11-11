@@ -1,126 +1,102 @@
-# Driving a program from outside
+# Driving a program from the command line
 
-A milktea program can be driven by another process: a test, a script, a
-second copy of the app. Start it with `MILKTEA_CONTROL` set to a socket path:
+A milktea program is itself its own command line: when its stdin is not a
+terminal, each line of stdin is a command and each reply is a line on
+stdout. No socket, no client program, no JSON.
 
-```sh
-MILKTEA_CONTROL=/tmp/app.sock ./app
-```
-
-It then listens on that Unix socket, which only your user can open. Without
-the variable nothing is opened. It works the same in a terminal and in a
-window.
-
-Through the socket you can read the tree the program last drew, send it
-clicks, keys and scrolls, select text, wait for it to settle, and follow the
-input it gets.
-
-## From the shell
-
-A program can hand `ctl` arguments to `milktea::control_client`, so the app
-is its own client. ted does:
-
-```c3
-if (args.len > 1 && args[1] == "ctl") return milktea::control_client(args[2..]);
-```
-
-Then:
+This is automatic. A terminal program whose stdin is piped takes commands;
+a window program (a `milktea_gui` app) always takes them, because its input
+comes from the window, not stdin, so you can drive it from the terminal you
+launched it in.
 
 ```sh
-ted ctl /tmp/app.sock find 'file[key="src/"]'
-ted ctl /tmp/app.sock click 'file[key="src/"]' wait idle find statusbar
-ted ctl /tmp/app.sock key ctrl+b type 'hello' key enter
-ted ctl /tmp/app.sock select editor 'import boba;'
-ted ctl /tmp/app.sock select editor '/fn [a-z_]+/'
-ted ctl /tmp/app.sock subscribe
+printf 'ping\nquit\n' | ted
+echo 'tree' | milktea-gui
 ```
 
-Each request is either a command followed by its arguments, or a JSON
-object. They run in order, and each reply is printed on its own line. The
-exit status is 1 if any request failed. `subscribe` keeps printing events
-until the program exits.
+A command answers with its output and then `ok`, or with one line
+`err ...` when it fails. So a script reads lines until it sees `ok` or
+`err`.
 
-With only the socket path given, `ctl` reads requests from stdin, one per
-line, and prints the replies and events, which is handy for piping.
+## Commands
 
-## The protocol
+| command | does |
+|---|---|
+| `ping` | answers |
+| `tree [SEL]` | the tree, from the root, or each match's subtree |
+| `list SEL` | each node a selector matches, one a line |
+| `match PATTERN` | nodes whose on-screen text matches the pattern |
+| `click SEL` or `@c,r` | moves there, presses and releases |
+| `press`, `release`, `move` | one of those |
+| `drag FROM TO` | each a selector or `@c,r` |
+| `scroll [WHERE] [dy=N] [dx=N]` | in rows; positive scrolls towards the end |
+| `key SPEC` | `ctrl+b`, `enter`, `shift+tab`, `a` |
+| `type TEXT` | the rest of the line, one key per character |
+| `select SEL TEXT` or `/PAT/ [N]` | drags across text on screen; see below |
+| `screen [PATTERN]` | the text on screen, or the lines that match |
+| `stream` | echo the input the program gets as commands |
+| `quit` | quits the program |
 
-Each request is one line of JSON, and each reply is one line back. A
-request's `"id"` comes back in its reply:
+`SEL` is a [selector](#selectors); the command targets the middle of the
+first node it matches. `@c,r` is a cell of the screen; `@-1,-1` is outside
+the program. Where a node is and what it shows are read from the last
+drawn frame.
 
-```
-→ {"id":1,"cmd":"click","target":"menu[key=\"File\"]"}
-← {"id":1,"ok":true}
-→ {"id":2,"cmd":"find","target":"nope"}
-← {"id":2,"ok":true,"nodes":[]}
-→ {"id":3,"cmd":"click","target":"nope"}
-← {"id":3,"ok":false,"error":"nothing matches nope"}
-```
+A selector holding a space travels in quotes: `list "list-item[text='a b']"`.
 
-Requests are handled between frames, on the program's own thread. Input goes
-through the same path real input takes, so hover, focus and clicks behave
-the same as with a real mouse or keyboard.
+Commands are handled between frames, on the program's own thread, and input
+goes through the same path real input takes, so hover, focus and clicks
+behave the same as with a real mouse or keyboard.
 
-| cmd | fields | does |
-|---|---|---|
-| `ping` | | answers |
-| `tree` | `target`, `depth` | the tree from the root, or from each match |
-| `find` | `target` | the matching nodes, as a flat list |
-| `click` | `target` or `at`, `cell` | moves there, presses and releases |
-| `move`, `press`, `release` | `target` or `at`, `cell` | one of those |
-| `drag` | `from`, `to` | each is `{target or at, cell}` |
-| `scroll` | `target` or `at`, `dy`, `dx` | in rows; positive scrolls towards the end |
-| `key` | `key` | `"ctrl+b"`, `"enter"`, `"shift+tab"`, `"a"` |
-| `type` | `text` | one key per character |
-| `select` | `target`, `text` or `match`, `nth` | drags across text on screen; see below |
-| `wait` | `frames`, `target` or nothing, `timeout_ms` | see below |
-| `subscribe` | `events` | `["input"]` (the default), `["frame"]` |
-| `unsubscribe` | `events` | |
+## A session
 
-`target` is a [selector](#selectors). A request points at the middle of the
-first node it matches, or at `cell`, a `[col, row]` within its content. `at`
-is `[col, row]` on the screen, in cells. When a request has both and the
-target matches nothing, `at` is used.
-
-`select` selects text the way a person would. It looks for the `nth`
-occurrence of `text`, counting from 0, or the `nth` match of the regular
-expression `match`, in what the target shows on screen, and drags from where
-it starts to just past where it ends. The reply has the text it dragged
-across. Only text on screen can be found, so scroll to it first. The screen
-is read a row to a line, with whatever else is drawn there, such as line
-numbers, so text across lines is better matched one line at a time.
-
-Patterns are POSIX extended, with `\w`, `\s`, `\d` and `\b`; `^`, `$` and
-`.` work line by line. On the command line, a pattern goes between slashes.
-
-`wait` answers once:
-
-- with `frames: n`, n more frames have been drawn;
-- with `target`, something matches it;
-- with neither, the program is idle: nothing is queued, nothing is
-  animating, and the input sent before has been drawn.
-
-It gives up after `timeout_ms`, which defaults to 5000.
-
-## Nodes
-
-A node in a reply looks like this:
-
-```json
-{"id":"file","key":"src/","role":"list-item","type":"StyledText",
- "rect":[1,11,23,1],"clickable":true,"text":" src/"}
+```sh
+$ printf 'screen\nlist :clickable\nclick button[key="save"]\nscreen\nquit\n' | ted
+[the lines of the screen]
+button[key="save"] @12,14 12x1 :clickable
+ok
+[the lines of the screen, after the click]
+ok
 ```
 
-The fields are:
+With a window app the replies appear in the launching terminal while the
+program's window shows what is driven. On `quit` the window closes.
 
-- `id`, `key` and `role` are what the program set with `.id()`, `.key()`
-  and `.role()`.
-- `type` is the content's type, for nodes made with `content_node`.
-- `rect` is `[col, row, width, height]` in cells.
-- `text` is what the node shows on screen. `tree` gives it only for leaves,
-  and `find` gives it for every match.
+When the pipe runs out, a program that has nothing left to do exits on its
+own, so `quit` is only needed to stop one that keeps going (a clock).
 
-Fields that are empty are left out.
+## Selecting text
+
+`select` selects text the way a person would. It looks for the `n`th
+occurrence of `TEXT`, counting from 0, or the `n`th match of the pattern
+`/PAT/`, in what the target shows on screen, and drags from where it starts
+to just past where it ends. Only text on screen can be found, so scroll to
+it first.
+
+```
+select editor "import boba;"
+select editor /fn \w+/
+```
+
+## The pattern language
+
+The pattern matcher is deliberately tiny: literals, `.`, the escapes `\d`,
+`\w` and `\s`, the quantifiers `*`, `+` and `?`, and the anchors `^` and
+`$`. There are no groups, no alternation and no character classes. A pattern
+matches anywhere in the text unless it starts with `^`.
+
+## Nodes and the tree
+
+One node on its own line:
+
+```
+file [key="src/"] @1,11 23x1 :clickable :focusable
+```
+
+The name is the node's `id`, else its `role`, else its content `type`, else
+`*`. Then the node's `key`, its place on screen as `@col,row WxH`, its state
+as `:clickable`, `:focusable` and `:focused`, and, for a leaf, its text
+quoted. `tree` indents by depth; `list` and `match` print flat.
 
 Name the things a script will look for:
 
@@ -129,9 +105,8 @@ row.id("file").key(name).role(LIST_ITEM)
 ```
 
 `id` says what kind of thing a node is, so many nodes can share one. `key`
-tells them apart by something a person would recognise, such as a name or
-a label. `role` comes from a fixed list close to the one accessibility uses.
-`ref()` is separate: it is the private pointer your callbacks get back.
+tells them apart by something a person would recognise, such as a name or a
+label. `role` comes from a fixed list close to the one accessibility uses.
 
 ## Selectors
 
@@ -148,40 +123,25 @@ a label. `role` comes from a fixed list close to the one accessibility uses.
 These can be combined: `sidebar list-item[text^="src"]:nth(0)`. Text is
 matched with its spaces trimmed off both ends.
 
-## Events
+## Streaming input
 
-After `subscribe`, input arrives as lines of its own:
+`stream` turns the input the program gets into commands, so another copy of
+the program can do what it does:
 
-```json
-{"event":"press","target":"sidebar file[key=\"src/\"]","cell":[11,0],"at":[13,12]}
-{"event":"key","key":"ctrl+b"}
-{"event":"scroll","dy":3.00,"target":"editor","cell":[26,10],"at":[53,12]}
+```
+key ctrl+b
+click @5,3
+scroll @5,3 dy=1.00
 ```
 
-The events are `move`, `press`, `release`, `key` and `scroll`.
-`target` is a selector that finds the node under the pointer again, and
-`cell` is the place within it. `at` is the place on screen, and is `[-1,-1]`
-when the pointer has left the program.
-
-Each event is also the request that repeats it: the socket takes `"event"`
-where it would take `"cmd"`, and passes over lines that are replies. So
-piping one program's events into another's socket makes the second do what
-the first does:
-
-```sh
-ted ctl $A subscribe | ted ctl $B > /dev/null
-```
-
-The target finds the same node in B however B is laid out, and when nothing
-in B matches it, B uses `at`. Within the node the place is a cell, so the
-same cell shows the same thing only if the node's content is laid out and
-scrolled the same in both.
-
-`["frame"]` sends `{"event":"frame","n":42}` after each frame is drawn.
+These are commands in the same language, so the output of one program's
+`stream` can be piped into another's stdin. `stream` answers `stream on` or
+`stream off`.
 
 ## Not yet
 
 - The model's own state cannot be read; only what is on screen.
 - Keys can be sent but not released, and the mouse has only the left
   button.
-- A screenshot over the socket.
+- There is no screenshot over the command line (but `MILKTEA_GUI_SHOT`
+  takes one of a GUI app).

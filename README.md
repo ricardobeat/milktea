@@ -662,9 +662,10 @@ draws one frame offscreen, with no window, and writes it out, which is how
 with no window buttons: the app takes its terminal path, drawn in the window.
 See `gui/gui.c3` for the rest of `GuiOptions`.
 
-`MILKTEA_CONTROL=<socket>` lets another process read what the program
-draws and drive it, in a window or a terminal: see
-[docs/CONTROL.md](docs/CONTROL.md).
+A program is itself drivable from the command line: pipe lines to its stdin
+and it answers on its stdout. The command language, the nodes, the tree and
+the streaming of input are in [docs/CONTROL.md](docs/CONTROL.md). It is part
+of every binary, terminal and window alike, and costs little.
 
 ---
 

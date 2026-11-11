@@ -6,6 +6,18 @@ faultdef TTY_GETATTR_FAILED, TTY_SETATTR_FAILED, ALT_SCREEN_ALREADY_ENTERED;
 
 const int STDIN_FILENO  @private = 0;
 const int STDOUT_FILENO @private = 1;
+
+// g_stdin_tty says whether stdin is a terminal. A program whose stdin is
+// not one is being driven from the command line: its stdin is a stream of
+// commands and its stdout carries only the replies, so render output is
+// dropped. stdin_probe() must run before anything writes.
+bool g_stdin_tty @private;
+
+fn void stdin_probe() {
+	g_stdin_tty = isatty(STDIN_FILENO) != 0;
+}
+
+fn bool stdin_is_tty() @private => g_stdin_tty;
 const int TCSANOW       @private = 0;
 const short POLLIN      = 1;
 
@@ -17,6 +29,7 @@ const int SIGWINCH @private = libc::SIGWINCH;
 extern fn int tcgetattr(int fd, char* termios_buf);
 extern fn int tcsetattr(int fd, int flags, char* termios_buf);
 extern fn int cfmakeraw(char* termios_buf);
+extern fn int isatty(int fd);
 extern fn int poll(void* fds, ulong nfds, int timeout);
 extern fn sz read(int fd, void* buf, sz nbytes);
 extern fn sz write(int fd, void* buf, sz nbytes);
@@ -611,6 +624,10 @@ fn sz read_stdin(char[] buf) @private {
 }
 
 fn void write_stdout(char[] bytes) {
+	// A program whose stdin is not a terminal is being driven from the
+	// command line: stdin is commands, and stdout carries only the replies,
+	// so render output is dropped. stdin_probe() has run by now.
+	if (!g_stdin_tty) return;
 	sz written = 0;
 	while (written < bytes.len) {
 		sz n = write(STDOUT_FILENO, &bytes[written], bytes.len - written);

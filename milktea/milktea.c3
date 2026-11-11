@@ -481,6 +481,11 @@ fn bool input_queue_is_closed(InputQueue* q) @private {
 fn int input_reader_fn(void* arg) @private {
 	InputQueue* q = (InputQueue*)arg;
 	char[256] tmp;
+	// A piped stdin drives the program from the command line: whole lines go
+	// to the control stream, not the key parser.
+	bool cli = !stdin_is_tty();
+	char[1024] line;
+	sz line_len = 0;
 
 	while (!input_queue_is_closed(q)) {
 		PollFd pfd;
@@ -498,11 +503,36 @@ fn int input_reader_fn(void* arg) @private {
 			// event loop keeps blocking in input_queue_wait for up to a second
 			// per iteration, forever, with nothing left to wake it. Closing
 			// also broadcasts, so a waiter is released immediately.
+			if (cli) {
+				// Flush the last partial line, then say the command stream
+				// ended so the program can run down once it has settled.
+				if (line_len > 0) {
+					line[line_len++] = '\n';
+					control_feed_line((String)line[:line_len]);
+					line_len = 0;
+				}
+				control_stdin_eof();
+			}
 			input_queue_close(q);
 			break;
 		}
-
-		input_queue_push(q, tmp[:n]);
+		if (!cli) {
+			input_queue_push(q, tmp[:n]);
+			continue;
+		}
+		// Line mode: a whole line is one command.
+		for (sz i = 0; i < n; i++) {
+			char ch = tmp[i];
+			if (ch == '\n') {
+				if (line_len > 0) {
+					line[line_len++] = '\n';
+					control_feed_line((String)line[:line_len]);
+					line_len = 0;
+				}
+				continue;
+			}
+			if (line_len < line.len - 1) line[line_len++] = ch;
+		}
 	}
 	return 0;
 }
@@ -1160,6 +1190,14 @@ fn void? Program.run(Program* self) {
 	self.pending_len = 0;
 	self.terminal_reply = {};
 	self.in_alt_screen = false;
+
+	// A piped stdin drives the program from the command line: stdin is a
+	// stream of commands and stdout carries only the replies, so there is no
+	// terminal to set raw, no probe, and no render output. The reader thread
+	// hands whole lines to the control stream.
+	stdin_probe();
+	bool cli_mode = !self.test_mode && !stdin_is_tty();
+	if (cli_mode) control_start_piped();
 	// No OSC 22 emitted yet, which is indistinguishable from having emitted
 	// the empty (reset) name — so a first frame with no cursor stays silent.
 	self.last_mouse_cursor_len = 0;
@@ -1212,7 +1250,7 @@ fn void? Program.run(Program* self) {
 	bool queue_created = false;
 	bool reader_running = false;
 
-	if (!self.test_mode) {
+	if (!self.test_mode && !cli_mode) {
 		saved = raw_mode_enter()!;
 		tty_raw = true;
 	}
@@ -1253,7 +1291,7 @@ fn void? Program.run(Program* self) {
 		}
 	}
 
-	if (!self.test_mode) {
+	if (!self.test_mode && !cli_mode) {
 		hide_cursor();
 		enable_focus();
 		enable_bracketed_paste();
@@ -1275,6 +1313,14 @@ fn void? Program.run(Program* self) {
 		for (sz i = 0; i < probe_leftover_len; i++) {
 			self.pending[self.pending_len++] = probe_leftover[i];
 		}
+	} else if (!self.test_mode) {
+		// CLI mode: no terminal to probe, but signals and the reader thread
+		// (which turns piped bytes into command lines) still apply.
+		setup_signals(saved, &self.in_alt_screen);
+		input_queue_init(&g_input_queue)!;
+		queue_created = true;
+		thread::Thread.create(&self.reader_thread, &input_reader_fn, &g_input_queue)!;
+		reader_running = true;
 	}
 
 	// Defers live at function scope so they run after the event loop exits,
@@ -1341,12 +1387,12 @@ fn void? Program.run(Program* self) {
 	// output (graphics images die on a screen switch) from its first frame.
 	// The defer above owns the matching exit, and setup_signals() has the
 	// address of in_alt_screen so a fatal signal exits too.
-	if (self.options.alt_screen) {
+	if (self.options.alt_screen && !cli_mode) {
 		self.emit_sgr(SGR_ALT_ON);
 		self.in_alt_screen = true;
 	}
 
-	if (!self.test_mode) enable_kitty_keyboard();
+	if (!self.test_mode && !cli_mode) enable_kitty_keyboard();
 
 	set_mouse_mode(self.options.mouse_mode);
 	set_mouse_pixels(self.options.mouse_pixels);
@@ -1381,8 +1427,8 @@ fn void? Program.run(Program* self) {
 	}
 	self.cached_ws = initial_ws;
 
-	// Create xray renderer for differential rendering (non-test mode only)
-	if (!self.test_mode) {
+	// Create xray renderer for differential rendering (non-test, non-CLI mode)
+	if (!self.test_mode && !cli_mode) {
 		// Start at a single row. The first frame resizes to whatever the view
 		// actually needs — growing from 1 costs one newline burst, whereas
 		// starting at full terminal height would make an inline app shrink
@@ -1708,6 +1754,8 @@ fn void? Program.run(Program* self) {
 			return;
 		}
 
+		control_poll();
+
 		// Stdin reached EOF (piped input exhausted, or the terminal went away)
 		// and everything already received has been processed. No further input
 		// can arrive, so blocking again would spin — input_queue_wait returns
@@ -1718,7 +1766,6 @@ fn void? Program.run(Program* self) {
 			return;
 		}
 
-		control_poll();
 		// Block until input arrives or the next timer fires — avoids busy-waiting.
 		if (!self.test_mode && (self.pending_len == 0 || stuck)) {
 			// An open control socket is polled, not waited on.
