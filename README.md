@@ -6,18 +6,6 @@ https://github.com/user-attachments/assets/91fd086f-4904-495d-85dd-6c8294a681de
 
 ## Getting started
 
-These modules provide:
-
-| Module | Role |
-|--------|------|
-| `milktea` | Runtime, event loop, message types |
-| `glaze` | Styles, colors, borders, text layout |
-| `xray` | Cell grid, screen buffer, constraint solver |
-| `tgp` | Kitty-graphics images (see "Images with tgp") |
-| `xray::layout` | `vertical` / `horizontal` rect-splitting helpers |
-
-You only need to import what you use. A simple app needs just `milktea` and `glaze`.
-
 ## The model
 
 Every milktea program is a struct that implements `update` and `view`, plus an optional `init`. This is the [Elm Architecture](https://guide.elm-lang.org/architecture/) — also known as TEA.
@@ -35,16 +23,6 @@ struct Counter {
 ```
 
 Store application state in the model.
-
-## init
-
-`init` is optional. If defined, it runs once when the program starts. Return a `Cmd` to kick off background work (timers, ticks, async IO), or `null` to do nothing.
-
-```c3
-fn milktea::Cmd Counter.init(Counter* self) @dynamic {
-    return null;
-}
-```
 
 ## update
 
@@ -117,6 +95,16 @@ fn int main() {
 `@run` handles errors by printing to stderr and returning 1. If you need to do something after the program exits (print a message, free heap memory), write the boilerplate by hand instead.
 
 ---
+
+Milktea exports three modules:
+
+|  | Role |
+|--------|------|
+| `milktea` | Runtime, event loop, message types |
+| `glaze` | Styles, colors, borders, text layout |
+| `xray` | Cell grid, screen buffer, constraint solver |
+
+A simple app only needs `milktea` and `glaze` for styles.
 
 ## Styling with glaze
 
