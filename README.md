@@ -1,6 +1,6 @@
 # milktea
 
-A terminal UI library for [C3](https://c3-lang.org), built on the Elm Architecture. Write your app as a data model, an update function, and a view — milktea handles the event loop, rendering, and terminal management.
+A terminal UI library for [C3](https://c3-lang.org). Write your app as a data model, an update function, and a view — milktea handles the event loop, rendering, and terminal management.
 
 <img width="720" alt="terminal examples" src="https://github.com/user-attachments/assets/f3a990c9-3f1c-4d5e-9f73-7af488351b5c" />
 
@@ -525,25 +525,23 @@ if (msg.kind == milktea::MsgKind.MOUSE) {
 
 ### Hover and focus styles
 
-A node's style can change while the pointer is over it, or while it has
-keyboard focus, without any state in the model:
+Nodes support `hover` (with mouse enabled) and `focus` styles natively:
 
 ```c3
 xray::hstack().style(item, hover: { .bg = th.accent }, focus: { .bg = th.ink, .fg = th.text })
 ```
 
-Only colours apply, so nothing moves. In a window, `.decorate(xray::solid().round(4))`
-gives the same background rounded corners: a decoration without a colour of its
-own is filled with the node's background, hover and focus included. Text that sets no `fg` of its own
-takes the nearest ancestor's, so a hover or focus `fg` recolours a whole row.
-Terminal hover needs `MOUSE_MODE_ALL_MOTION`; in a window it always works.
+### Focus management
 
-A node with an id takes keyboard focus with `.focusable()`. Tab and
-Shift-Tab move focus in paint order, a click focuses the node under it, and
-while a node with `.block_pointer()` is on screen focus stays inside it.
-Read and set focus from `update` with `milktea::is_focused(ptr)`,
-`is_focused_named("id")`, `focus(ptr)`, `focus_named("id")` and `blur()`.
-Tab only reaches `update` when nothing on screen is focusable.
+Focus management is built-in, by giving nodes an `.id()` and setting `.focusable()`. Tab / shift-tab moves focus in paint order, click focuses on an element, and `.block_pointer()` can be used to trap focus within a modal.
+
+```
+milktea::is_focused(ptr)
+milktea::is_focused_named("id")
+milktea::focus(ptr)
+milktea::focus_named("id")
+milktea::blur()
+```
 
 ---
 
@@ -593,7 +591,19 @@ fn void Model.on_destroy(&self) @dynamic {
 
 ## Examples
 
-The `examples/` directory has runnable demos for most features:
+The `examples/` directory has runnable demos for most features. Here's a few you should try:
+
+- `c3c run examples/spinner`: simple animated spinner
+- `c3c run examples/color-swatches` LUV color blending, custom cursor effects
+- `c3c run examples/layers`: layered rendering
+- `c3c run examples/doom-fire`: cell rendering
+- `c3c run examples/spotlight`: cursor movement
+- `c3c run examples/nanobots`: animation and timers
+- `c3c run examples/modal`: Tween animation
+- `c3c run examples/dos-app`: DOS-style GUI with mouse support
+- `c3c run examples/avian-assault`: a full game with keyboard & mouse support
+
+You can run them with `c3c run examples/spinner`
 
 | Example | What it shows |
 |---------|---------------|
@@ -616,46 +626,6 @@ c3c run
 
 ---
 
-## Running in a window
-
-The same model runs in a native window instead of a terminal through
-`milktea_gui` (macOS for now). It draws on the GPU: text from the system's
-font rasteriser, and decorations (fills, gradients, borders, shadows) worked
-out per pixel. List it next to milktea:
-
-```json
-"dependency-search-paths": ["path/to/milktea/lib"],
-"dependencies": ["milktea", "milktea_gui"],
-"macos-min-version": "14.0"
-```
-
-It needs macOS 14 or later: the frame loop runs on `CADisplayLink`.
-
-and call it from `main` in place of `milktea::@run`:
-
-```c3
-milktea_gui::run(&model, {
-    .title = "my app",
-    .cols = 80, .rows = 24,
-    .cell_w = 10, .cell_h = 19, .font_size = 17,
-});
-```
-
-`MILKTEA_FONT` picks the font (a file or a font name). `MILKTEA_GUI_SHOT=out.png`
-draws one frame offscreen, with no window, and writes it out, which is how
-`examples/dos-app-gui` and `scripts/gui-paint-test` are checked.
-`MILKTEA_CELLS=1` lays the window out in whole cells, as a terminal would,
-with no window buttons: the app takes its terminal path, drawn in the window.
-See `gui/gui.c3` for the rest of `GuiOptions`.
-
-Another program, such as an agent, can drive any milktea program: read its
-tree and screen, and click, scroll and type. Pipe commands to its stdin, or
-send them to one already running with `<program> --cmd ...`. See
-[docs/CONTROL.md](docs/CONTROL.md). It is part of every binary, terminal and
-window alike, for about 20 KB; `-D NO_CONTROL` leaves it out.
-
----
-
 ## Testing
 
 All tests live in `test/` — unit and integration tests plus snapshot tests for each module. Run them with:
@@ -674,7 +644,7 @@ just update-snapshots    # or: UPDATE_SNAPSHOTS=1 c3c test
 
 ## Credits
 
-milktea is built on the [Elm Architecture](https://guide.elm-lang.org/architecture/), and its shape for terminal applications follows the approach popularized by [Bubble Tea](https://github.com/charmbracelet/bubbletea) from [Charm](https://charm.sh). milktea is an independent implementation, written from scratch in C3, and is not affiliated with or endorsed by Charmbracelet, Inc.
+milktea was inspired by [Bubble Tea](https://github.com/charmbracelet/bubbletea), though it has evolved into something of its own! A heartfelt thanks to [Charm](https://charm.sh) for writing amazing software (milktea was partially developed with Crush).
 
 ## License
 
