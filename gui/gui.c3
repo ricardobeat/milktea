@@ -349,7 +349,8 @@ fn sz layout_y(float y) @private => g.cells ? cell_of(y, g.opts.cell_h) : y < 0 
 
 fn milktea::MouseMsg mouse_at(milktea::MouseButton b, milktea::MouseAction a) @private {
 	return { .button = b, .action = a,
-		.row = cell_of(g.ptr_y, g.opts.cell_h), .col = cell_of(g.ptr_x, g.opts.cell_w) };
+		.row = cell_of(g.ptr_y, g.opts.cell_h), .col = cell_of(g.ptr_x, g.opts.cell_w),
+		.px = g.ptr_x < 0 ? 0 : (sz)g.ptr_x, .py = g.ptr_y < 0 ? 0 : (sz)g.ptr_y };
 }
 
 // ---- keys -------------------------------------------------------------------
@@ -510,11 +511,11 @@ fn void on_event(MtEvent* e) @private {
 			g.scroll_dx += e.scroll_x * unit;
 			g.scroll_dy += e.scroll_y * unit;
 			g.scroll_precise = e.precise != 0;
+			// The phase of this event, NONE for a wheel: one left over from an
+			// earlier trackpad gesture would take a wheel for that gesture.
 			milktea::ScrollPhase ph = (milktea::ScrollPhase)e.phase;
-			if (ph != NONE) {
-				g.scroll_phase = ph;
-				g.scroll_pending = true;
-			}
+			g.scroll_phase = ph;
+			if (ph != NONE) g.scroll_pending = true;
 		case RESIZED:
 		case FOCUSED:
 		case UNFOCUSED:

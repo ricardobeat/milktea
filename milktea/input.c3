@@ -97,7 +97,8 @@ struct MouseMsg {
 	bool ctrl;
 	// px, py: raw 0-based pixel coordinates from DEC mode 1016 (SGR-Pixels).
 	// Both are 0 unless the app opted in via set_mouse_pixels and the
-	// terminal actually reported pixel coordinates for this event.
+	// terminal actually reported pixel coordinates for this event. A window
+	// always fills them in, in layout units (points).
 	sz px;
 	sz py;
 	// Wheel messages from a GUI also carry the scroll as it really was: the

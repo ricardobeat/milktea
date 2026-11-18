@@ -117,6 +117,17 @@ fn void test_viewport_overscroll_resists_and_springs_back() @test {
 	assert(v.scroll.springing, "lifting the fingers past an end springs back");
 }
 
+// A smooth wheel sends points but no gesture, so nothing would spring it
+// back: it stays within the content.
+fn void test_viewport_smooth_wheel_stays_in_content() @test {
+	boba::Viewport v = viewport100();
+	defer v.free();
+	v.scroll_pixels(5, true, milktea::ScrollPhase.NONE);
+	assert(v.offset == 0 && v.scroll.pos_px == 0 && !v.scroll.springing);
+	v.scroll_pixels(-5000, true, milktea::ScrollPhase.NONE);
+	assert(v.offset == 90, "the last page, got %d", v.offset);
+}
+
 // Momentum after the fingers lift must not undo the spring back from an end.
 fn void test_viewport_momentum_does_not_undo_spring() @test {
 	boba::Viewport v = viewport100();
