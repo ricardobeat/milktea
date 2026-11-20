@@ -229,7 +229,7 @@
 	<span class="ink-s3">Model</span> model;
 	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(<span class="ink-s2">&amp;</span>model, {
 		<span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true,
-		<span class="ink-s2">.</span>mouse_mode <span class="ink-s2">=</span> milktea::<span class="ink-s3">MouseMode</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MODE_ALL_MOTION</span>,
+		<span class="ink-s2">.</span>mouse_mode <span class="ink-s2">=</span> <span class="ink-s6">MOUSE_MODE_ALL_MOTION</span>,
 	})) {
 		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
 		<span class="ink-s2">return</span> 1;

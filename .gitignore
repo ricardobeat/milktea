@@ -11,3 +11,6 @@ tags.db*
 *.c3l
 !lib/milktea.c3l/
 !lib/milktea_gui.c3l/
+
+# Staging dir for `just publish-site`
+.site/

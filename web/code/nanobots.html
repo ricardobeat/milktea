@@ -9,7 +9,6 @@
 
 <span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">rand</span>();
 <span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">srand</span>(<span class="ink-s3">uint</span> seed);
-<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">c3_time_ms_long</span>();
 
 <span class="ink-s0">// Rendered `milktea` from `figlet -f phm-slanted.flf` (Philippe Majerus,</span>
 <span class="ink-s0">// https://github.com/PhMajerus/FIGfonts). The font uses Unicode 13 sextant</span>
@@ -505,7 +504,7 @@
 	self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> 0;
 	self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
 	self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> <span class="ink-s6">EMIT_COOLDOWN</span>;
-	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">BUILD</span>;
 	self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
 	self<span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>();
 	self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
@@ -523,7 +522,7 @@
 			p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0;
 			<span class="ink-s2">continue</span>;
 		}
-		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BLOW</span>) {
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s6">BLOW</span>) {
 			<span class="ink-s0">// No pull, no walls — coast outward until off screen, then retire.</span>
 			p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> <span class="ink-s4">decay</span>(0.995f);
 			p<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> <span class="ink-s4">decay</span>(0.995f);
@@ -618,7 +617,7 @@
 }
 
 <span class="ink-s2">fn</span> glaze::<span class="ink-s3">Color</span> <span class="ink-s4">to_glaze</span>(xray::<span class="ink-s3">Color</span> c) {
-	<span class="ink-s2">return</span> { <span class="ink-s2">.</span>kind <span class="ink-s2">=</span> glaze::<span class="ink-s3">ColorKind</span><span class="ink-s2">.</span><span class="ink-s6">TRUECOLOR</span>, <span class="ink-s2">.</span>r <span class="ink-s2">=</span> c<span class="ink-s2">.</span>r, <span class="ink-s2">.</span>g <span class="ink-s2">=</span> c<span class="ink-s2">.</span>g, <span class="ink-s2">.</span>b <span class="ink-s2">=</span> c<span class="ink-s2">.</span>b };
+	<span class="ink-s2">return</span> { <span class="ink-s2">.</span>kind <span class="ink-s2">=</span> <span class="ink-s6">TRUECOLOR</span>, <span class="ink-s2">.</span>r <span class="ink-s2">=</span> c<span class="ink-s2">.</span>r, <span class="ink-s2">.</span>g <span class="ink-s2">=</span> c<span class="ink-s2">.</span>g, <span class="ink-s2">.</span>b <span class="ink-s2">=</span> c<span class="ink-s2">.</span>b };
 }
 
 <span class="ink-s0">// Like gradient_color but samples at an arbitrary, wrapping offset — used</span>
@@ -659,12 +658,12 @@
 }
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
-	<span class="ink-s4">srand</span>((<span class="ink-s3">uint</span>)<span class="ink-s4">c3_time_ms_long</span>());
+	<span class="ink-s4">srand</span>((<span class="ink-s3">uint</span>)milktea::<span class="ink-s4">wall_time_ms</span>());
 	self<span class="ink-s2">.</span>w <span class="ink-s2">=</span> 80;
 	self<span class="ink-s2">.</span>h <span class="ink-s2">=</span> 24;
 	self<span class="ink-s2">.</span>frame <span class="ink-s2">=</span> 0;
 	self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> <span class="ink-s2">-</span><span class="ink-s6">EMIT_COOLDOWN</span>;
-	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">BUILD</span>;
 	self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> 0;
 	self<span class="ink-s2">.</span>cycle <span class="ink-s2">=</span> 0;
 	self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
@@ -712,20 +711,20 @@
 	}
 	self<span class="ink-s2">.</span><span class="ink-s4">update_physics</span>();
 		<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>phase) {
-			<span class="ink-s2">case</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>:
+			<span class="ink-s2">case</span> <span class="ink-s6">BUILD</span>:
 				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total
 						<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">&gt;=</span> <span class="ink-s6">EMIT_COOLDOWN</span>) {
 					self<span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>();
 					self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
 				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span><span class="ink-s4">all_settled</span>()) {
-					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">HOLD</span>;
 					self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
 				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">&gt;</span> <span class="ink-s6">BUILD_TIMEOUT</span>) {
 					self<span class="ink-s2">.</span><span class="ink-s4">snap_stragglers</span>();
-					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">HOLD</span>;
 					self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
 				}
-			<span class="ink-s2">case</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>:
+			<span class="ink-s2">case</span> <span class="ink-s6">HOLD</span>:
 				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>preview_at <span class="ink-s2">==</span> 0
 						<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">&gt;=</span> <span class="ink-s6">HOLD_DURATION</span>) {
 					self<span class="ink-s2">.</span><span class="ink-s4">start_exit</span>();
@@ -735,13 +734,13 @@
 }
 
 <span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
-	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> <span class="ink-s6">WINDOW_SIZE</span>) {
 		self<span class="ink-s2">.</span>w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
 		self<span class="ink-s2">.</span>h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
 		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>canvas <span class="ink-s2">!=</span> <span class="ink-s6">null</span>) self<span class="ink-s2">.</span>canvas<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
 		self<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>w, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>h);
 		self<span class="ink-s2">.</span><span class="ink-s4">alloc_half_buffers</span>();
-		self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+		self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">BUILD</span>;
 		self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
 		self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
 		self<span class="ink-s2">.</span><span class="ink-s4">parse_text</span>();
@@ -751,7 +750,7 @@
 		<span class="ink-s2">return</span> <span class="ink-s4">arm_tick</span>(self);
 	}
 
-	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> <span class="ink-s6">TICK</span>) {
 		<span class="ink-s0">// Holding space runs extra steps per frame rather than shortening the</span>
 		<span class="ink-s0">// frame, so the frame rate stays put and only the sim speeds up.</span>
 		<span class="ink-s3">sz</span> steps <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>turbo_until <span class="ink-s2">?</span> <span class="ink-s6">BASE_STEPS</span> <span class="ink-s2">*</span> 4 <span class="ink-s2">:</span> <span class="ink-s6">BASE_STEPS</span>;
@@ -759,11 +758,11 @@
 		<span class="ink-s2">return</span> <span class="ink-s4">arm_tick</span>(self);
 	}
 
-	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> <span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
 	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
 	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
-		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
-		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">TAB</span>:
+		<span class="ink-s2">case</span> <span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> <span class="ink-s6">TAB</span>:
 			<span class="ink-s0">// Step to the next effect. If a preview is already queued and</span>
 			<span class="ink-s0">// waiting out its delay, step from *that* rather than from the</span>
 			<span class="ink-s0">// last effect actually run — otherwise every TAB during the</span>
@@ -773,7 +772,7 @@
 			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>exit_previewed <span class="ink-s2">||</span> self<span class="ink-s2">.</span>has_last_exit) {
 				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> (<span class="ink-s3">Exit</span>)(((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>last_exit <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">EXIT_COUNT</span>);
 			} <span class="ink-s2">else</span> {
-				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">EXPLODE</span>;
+				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> <span class="ink-s6">EXPLODE</span>;
 			}
 			self<span class="ink-s2">.</span>exit_forced <span class="ink-s2">=</span> true;
 			self<span class="ink-s2">.</span>exit_previewed <span class="ink-s2">=</span> true;
@@ -790,12 +789,12 @@
 			<span class="ink-s0">// enough to read the badge and see the word whole, without the</span>
 			<span class="ink-s0">// full rebuild that would make the key useless for comparing.</span>
 			self<span class="ink-s2">.</span><span class="ink-s4">snap_stragglers</span>();
-			self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+			self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s6">HOLD</span>;
 			self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
 			self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s4">@dur</span>(40);
 			self<span class="ink-s2">.</span>badge_until <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s6">BADGE_DURATION</span>;
 			<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
-		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+		<span class="ink-s2">case</span> <span class="ink-s6">RUNE</span>:
 			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
 			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'R') {
 				self<span class="ink-s2">.</span><span class="ink-s4">restart_cycle</span>();
@@ -809,12 +808,12 @@
 				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
 			}
 			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'b' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'B') {
-				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>) {
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s6">BUILD</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s6">HOLD</span>) {
 					self<span class="ink-s2">.</span><span class="ink-s4">start_exit</span>();
 				}
 				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
 			}
-		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> <span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
 		<span class="ink-s2">default</span>:
 	}
 	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
@@ -822,19 +821,19 @@
 
 <span class="ink-s2">fn</span> <span class="ink-s3">String</span> <span class="ink-s4">exit_name</span>(<span class="ink-s3">Exit</span> e) {
 	<span class="ink-s2">switch</span> (e) {
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">EXPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;EXPLODE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">COLLAPSE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;COLLAPSE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SLICE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SLICE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">VORTEX</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;VORTEX&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">DISSOLVE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;DISSOLVE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SHEAR</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SHEAR&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">TOPPLE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;TOPPLE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">IMPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;IMPLODE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SPLAT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPLAT&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">FIRE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;FIRE&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SPHERES</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPHERES&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">RAINBOW</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;RAINBOW&quot;</span>;
-		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">GRADIENT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;GRADIENT&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">EXPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;EXPLODE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">COLLAPSE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;COLLAPSE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">SLICE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SLICE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">VORTEX</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;VORTEX&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">DISSOLVE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;DISSOLVE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">SHEAR</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SHEAR&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">TOPPLE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;TOPPLE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">IMPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;IMPLODE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">SPLAT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPLAT&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">FIRE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;FIRE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">SPHERES</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPHERES&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">RAINBOW</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;RAINBOW&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s6">GRADIENT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;GRADIENT&quot;</span>;
 		<span class="ink-s2">default</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;?&quot;</span>;
 	}
 }

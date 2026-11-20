@@ -63,3 +63,15 @@ web-test:
 # Compile only the reusable engine for JavaScript programs.
 web-engine:
     python3 scripts/build_web.py --engine
+
+# Build the web gallery and publish web/ to https://tomasi.studio/milktea/ (goes live immediately)
+publish-site: web-build
+    rm -rf .site && mkdir -p .site/milktea
+    rsync -rL --exclude='.*' --exclude='/test/' --exclude='*.md' --exclude='*.c3' --exclude='*.wasm.gz' --exclude='package.json' web/ .site/milktea/
+    scripts/publish-site.sh milktea milktea .site
+    rm -rf .site
+
+# Roll https://tomasi.studio/milktea/ back to the previous deploy
+rollback-site:
+    bunny sites deployments publish --previous --force --site milktea
+    scripts/publish-site.sh milktea milktea
