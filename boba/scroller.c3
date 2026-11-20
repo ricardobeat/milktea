@@ -6,7 +6,7 @@
 // In a window a trackpad moves it by the pixel, the platform's momentum keeps
 // it going, and with rubber_band on a gesture can pull it past either end,
 // with growing resistance, to spring back when the fingers lift. A wheel moves
-// it by rows and stays within the content. In a terminal a row is one layout
+// it by rows, or by points for a smooth one, and stays within the content. In a terminal a row is one layout
 // unit, so everything still works, by whole rows.
 //
 // top_row() can be negative or past the last full screen while it is pulled
@@ -48,11 +48,22 @@ struct Scroller {
 // ScrollbarStyle is how scrollbar() draws: a track down the whole height
 // and a thumb, both rounded and width layout units wide. An unset track
 // colour leaves the track out. The thumb is never shorter than min_thumb.
+//
+// hit_width, when wider than width, widens the bar for the pointer: it is
+// that wide, with the visible track and thumb in its middle.
+//
+// on_thumb and on_track, when set, make the thumb and the rest of the track
+// click targets, with ref as their context: a press on the thumb starts a
+// drag (see drag_thumb), one on the track pages towards it.
 struct ScrollbarStyle {
 	xray::Color track;
 	xray::Color thumb;
 	sz width;
 	sz min_thumb;
+	sz hit_width;
+	void* ref;
+	xray::ClickFn on_thumb;
+	xray::ClickFn on_track;
 }
 
 fn Scroller scroller(bool rubber_band = true) => { .rubber_band = rubber_band };
@@ -131,9 +142,7 @@ fn xray::Node* Scroller.scrollbar(&self, sz height, ScrollbarStyle style) {
 	if (!milktea::layout_metrics().pixels || height <= 0) return null;
 	if (self.rows <= self.visible || self.rows <= 0) return null;
 	float track = (float)height;
-	float thumb = track * (float)self.visible / (float)self.rows;
-	if (thumb < (float)style.min_thumb) thumb = (float)style.min_thumb;
-	if (thumb > track) thumb = track;
+	float thumb = self.thumb_len(height, style);
 	// Pulled past an end, the thumb shrinks against that end rather than
 	// leaving the track.
 	float max = self.max_px();
@@ -148,13 +157,49 @@ fn xray::Node* Scroller.scrollbar(&self, sz height, ScrollbarStyle style) {
 	float y = max > 0 ? (track - thumb) * pos / max : 0;
 	float radius = (float)style.width / 2.0f;
 
-	xray::Node* bar = xray::zstack().width(xray::pixels(style.width)).height(xray::pixels(height))
+	sz w = math::max(style.width, style.hit_width);
+	sz inset = (w - style.width) / 2;
+	sz len = (sz)math::round(thumb);
+	xray::Node* bar = xray::zstack().width(xray::pixels(w)).height(xray::pixels(height))
 		.id("scrollbar").role(SCROLLBAR);
-	if (!style.track.is_none()) bar.decorate(xray::solid(style.track).round(radius));
-	bar.add(xray::vstack().width(xray::pixels(style.width)).height(xray::pixels((sz)math::round(thumb)))
-		.at(0, (sz)math::round(y), xray::Unit.PX)
-		.decorate(xray::solid(style.thumb).round(radius)));
+	if (style.on_track) bar.ref(style.ref).on_click(style.on_track);
+	if (!style.track.is_none()) {
+		bar.add(xray::vstack().width(xray::pixels(style.width)).height(xray::pixels(height))
+			.at(inset, 0, xray::Unit.PX).decorate(xray::solid(style.track).round(radius)));
+	}
+	xray::Node* t = xray::zstack().width(xray::pixels(w)).height(xray::pixels(len))
+		.at(0, (sz)math::round(y), xray::Unit.PX);
+	t.add(xray::vstack().width(xray::pixels(style.width)).height(xray::pixels(len))
+		.at(inset, 0, xray::Unit.PX).decorate(xray::solid(style.thumb).round(radius)));
+	if (style.on_thumb) t.id("scrollbar-thumb").ref(style.ref).on_click(style.on_thumb);
+	bar.add(t);
 	return bar;
+}
+
+// thumb_len is the thumb's length on a track height long, within the content.
+fn float Scroller.thumb_len(&self, sz height, ScrollbarStyle style) {
+	float track = (float)height;
+	if (self.rows <= 0) return track;
+	float thumb = track * (float)self.visible / (float)self.rows;
+	if (thumb < (float)style.min_thumb) thumb = (float)style.min_thumb;
+	return thumb > track ? track : thumb;
+}
+
+// drag_thumb puts the view where dragging the thumb dy layout units from
+// where it was at from_px leaves it, within the content.
+fn void Scroller.drag_thumb(&self, float from_px, float dy, sz height, ScrollbarStyle style) {
+	float room = (float)height - self.thumb_len(height, style);
+	float max = self.max_px();
+	self.springing = false;
+	self.pos_px = room > 0 ? clampf(clampf(from_px, 0, max) + dy * max / room, 0, max) : 0;
+}
+
+// thumb_mid is the middle of the thumb, from the top of a track height long.
+fn float Scroller.thumb_mid(&self, sz height, ScrollbarStyle style) {
+	float len = self.thumb_len(height, style);
+	float max = self.max_px();
+	float pos = clampf(self.pos_px, 0, max);
+	return (max > 0 ? ((float)height - len) * pos / max : 0) + len / 2;
 }
 
 // sync_row puts it at row when the view was moved by rows some other way
@@ -187,7 +232,9 @@ fn void Scroller.scroll_pixels(&self, float dy, bool precise, milktea::ScrollPha
 	float max = self.max_px();
 	float delta = -dy;
 	self.springing = false;
-	if (!precise || !self.rubber_band) {
+	// Only a gesture can pull past an end: nothing would end it otherwise.
+	// A wheel, even a smooth one sending points, has no phase and stays in.
+	if (!precise || !self.rubber_band || phase == milktea::ScrollPhase.NONE) {
 		self.pos_px = clampf(pos + delta, 0, max);
 		return;
 	}
