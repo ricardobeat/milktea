@@ -1,0 +1,155 @@
+<pre class="ink"><span class="ink-s2">module</span> splash;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::string;
+
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s4">c3_sin</span>(<span class="ink-s3">double</span> x);
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">double</span> <span class="ink-s4">c3_cos</span>(<span class="ink-s3">double</span> x);
+
+
+<span class="ink-s2">struct</span> <span class="ink-s3">SplashModel</span> {
+	<span class="ink-s3">sz</span> frame;
+	<span class="ink-s3">sz</span> width;
+	<span class="ink-s3">sz</span> height;
+	<span class="ink-s0">// Cell grid for direct rendering</span>
+	xray::<span class="ink-s3">Cell</span>[] view_cells;
+	<span class="ink-s3">sz</span> view_cells_len;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>();
+}
+
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+		self<span class="ink-s2">.</span>width <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
+		self<span class="ink-s2">.</span>height <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
+		<span class="ink-s0">// Reallocate cell grid</span>
+		mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>view_cells<span class="ink-s2">.</span>ptr);
+		<span class="ink-s3">sz</span> rows <span class="ink-s2">=</span> self<span class="ink-s2">.</span>height;
+		self<span class="ink-s2">.</span>view_cells_len <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>width <span class="ink-s2">*</span> (<span class="ink-s3">sz</span>)rows;
+		self<span class="ink-s2">.</span>view_cells <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(xray::<span class="ink-s3">Cell</span>, self<span class="ink-s2">.</span>view_cells_len);
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		self<span class="ink-s2">.</span>frame<span class="ink-s2">++</span>;
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>();
+	}
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">sz</span> <span class="ink-s4">clamp_color</span>(<span class="ink-s3">sz</span> v) {
+	<span class="ink-s2">if</span> (v <span class="ink-s2">&lt;</span> 0) <span class="ink-s2">return</span> 0;
+	<span class="ink-s2">if</span> (v <span class="ink-s2">&gt;</span> 255) <span class="ink-s2">return</span> 255;
+	<span class="ink-s2">return</span> v;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">RgbColor</span> {
+	<span class="ink-s3">sz</span> r;
+	<span class="ink-s3">sz</span> g;
+	<span class="ink-s3">sz</span> b;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">RgbColor</span> <span class="ink-s4">hsv_to_rgb</span>(<span class="ink-s3">double</span> h, <span class="ink-s3">double</span> s, <span class="ink-s3">double</span> v) {
+	<span class="ink-s3">double</span> hh <span class="ink-s2">=</span> h <span class="ink-s2">*</span> 6.0;
+	<span class="ink-s2">if</span> (hh <span class="ink-s2">&lt;</span> 0) hh <span class="ink-s2">=</span> 0;
+	<span class="ink-s3">sz</span> i     <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)hh;
+	<span class="ink-s3">double</span> ff <span class="ink-s2">=</span> hh <span class="ink-s2">-</span> (<span class="ink-s3">double</span>)i;
+	<span class="ink-s3">double</span> p  <span class="ink-s2">=</span> v <span class="ink-s2">*</span> (1.0 <span class="ink-s2">-</span> s);
+	<span class="ink-s3">double</span> q  <span class="ink-s2">=</span> v <span class="ink-s2">*</span> (1.0 <span class="ink-s2">-</span> s <span class="ink-s2">*</span> ff);
+	<span class="ink-s3">double</span> t  <span class="ink-s2">=</span> v <span class="ink-s2">*</span> (1.0 <span class="ink-s2">-</span> s <span class="ink-s2">*</span> (1.0 <span class="ink-s2">-</span> ff));
+
+	<span class="ink-s3">double</span> r <span class="ink-s2">=</span> 0;
+	<span class="ink-s3">double</span> g <span class="ink-s2">=</span> 0;
+	<span class="ink-s3">double</span> b <span class="ink-s2">=</span> 0;
+
+	<span class="ink-s2">switch</span> (i <span class="ink-s2">%</span> 6) {
+		<span class="ink-s2">case</span> 0: r <span class="ink-s2">=</span> v; g <span class="ink-s2">=</span> t; b <span class="ink-s2">=</span> p;
+		<span class="ink-s2">case</span> 1: r <span class="ink-s2">=</span> q; g <span class="ink-s2">=</span> v; b <span class="ink-s2">=</span> p;
+		<span class="ink-s2">case</span> 2: r <span class="ink-s2">=</span> p; g <span class="ink-s2">=</span> v; b <span class="ink-s2">=</span> t;
+		<span class="ink-s2">case</span> 3: r <span class="ink-s2">=</span> p; g <span class="ink-s2">=</span> q; b <span class="ink-s2">=</span> v;
+		<span class="ink-s2">case</span> 4: r <span class="ink-s2">=</span> t; g <span class="ink-s2">=</span> p; b <span class="ink-s2">=</span> v;
+		<span class="ink-s2">case</span> 5: r <span class="ink-s2">=</span> v; g <span class="ink-s2">=</span> p; b <span class="ink-s2">=</span> q;
+		<span class="ink-s2">default</span>: r <span class="ink-s2">=</span> v; g <span class="ink-s2">=</span> p; b <span class="ink-s2">=</span> p;
+	}
+
+	<span class="ink-s2">return</span> { <span class="ink-s2">.</span>r <span class="ink-s2">=</span> <span class="ink-s4">clamp_color</span>((<span class="ink-s3">sz</span>)(r <span class="ink-s2">*</span> 255)), <span class="ink-s2">.</span>g <span class="ink-s2">=</span> <span class="ink-s4">clamp_color</span>((<span class="ink-s3">sz</span>)(g <span class="ink-s2">*</span> 255)), <span class="ink-s2">.</span>b <span class="ink-s2">=</span> <span class="ink-s4">clamp_color</span>((<span class="ink-s3">sz</span>)(b <span class="ink-s2">*</span> 255)) };
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">on_mount</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">on_destroy</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">on_focus</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">on_blur</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">SplashModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">SplashModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">sz</span> w <span class="ink-s2">=</span> self<span class="ink-s2">.</span>width;
+	<span class="ink-s3">sz</span> h <span class="ink-s2">=</span> self<span class="ink-s2">.</span>height;
+	<span class="ink-s2">if</span> (w <span class="ink-s2">&lt;</span> 2) w <span class="ink-s2">=</span> 80;
+	<span class="ink-s2">if</span> (h <span class="ink-s2">&lt;</span> 2) h <span class="ink-s2">=</span> 24;
+
+	<span class="ink-s3">double</span> t     <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)self<span class="ink-s2">.</span>frame <span class="ink-s2">*</span> 0.03;
+	<span class="ink-s3">double</span> angle <span class="ink-s2">=</span> 0.7854 <span class="ink-s2">+</span> t <span class="ink-s2">*</span> 0.1;
+
+	<span class="ink-s3">sz</span> rows <span class="ink-s2">=</span> h;
+
+	<span class="ink-s0">// Reallocate if size changed</span>
+	<span class="ink-s3">sz</span> needed <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)w <span class="ink-s2">*</span> (<span class="ink-s3">sz</span>)rows;
+	<span class="ink-s2">if</span> (needed <span class="ink-s2">!=</span> self<span class="ink-s2">.</span>view_cells_len) {
+		mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>view_cells<span class="ink-s2">.</span>ptr);
+		self<span class="ink-s2">.</span>view_cells_len <span class="ink-s2">=</span> needed;
+		self<span class="ink-s2">.</span>view_cells <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(xray::<span class="ink-s3">Cell</span>, needed);
+	}
+
+	<span class="ink-s3">sz</span> pixel_rows <span class="ink-s2">=</span> h <span class="ink-s2">*</span> 2;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> y <span class="ink-s2">=</span> 0; y <span class="ink-s2">&lt;</span> rows; y<span class="ink-s2">++</span>) {
+		<span class="ink-s3">sz</span> fy_top     <span class="ink-s2">=</span> y <span class="ink-s2">*</span> 2;
+		<span class="ink-s3">sz</span> fy_bot     <span class="ink-s2">=</span> y <span class="ink-s2">*</span> 2 <span class="ink-s2">+</span> 1;
+		<span class="ink-s3">sz</span> row_offset <span class="ink-s2">=</span> y <span class="ink-s2">*</span> w;
+
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> x <span class="ink-s2">=</span> 0; x <span class="ink-s2">&lt;</span> w; x<span class="ink-s2">++</span>) {
+			<span class="ink-s3">double</span> fx <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)x <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)w;
+
+			<span class="ink-s3">double</span> ca <span class="ink-s2">=</span> <span class="ink-s4">c3_cos</span>(angle);
+			<span class="ink-s3">double</span> sa <span class="ink-s2">=</span> <span class="ink-s4">c3_sin</span>(angle);
+
+			<span class="ink-s0">// Top pixel color</span>
+			<span class="ink-s3">double</span> yt     <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)fy_top <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)pixel_rows;
+			<span class="ink-s3">double</span> proj_t <span class="ink-s2">=</span> (fx <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> ca <span class="ink-s2">+</span> (yt <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> sa <span class="ink-s2">+</span> 0.5;
+			<span class="ink-s3">double</span> vt     <span class="ink-s2">=</span> 0.6 <span class="ink-s2">+</span> 0.4 <span class="ink-s2">*</span> <span class="ink-s4">c3_sin</span>(fx <span class="ink-s2">*</span> 3.0 <span class="ink-s2">+</span> t <span class="ink-s2">*</span> 0.7 <span class="ink-s2">+</span> yt <span class="ink-s2">*</span> 2.0);
+			<span class="ink-s3">double</span> ht     <span class="ink-s2">=</span> (proj_t <span class="ink-s2">*</span> 0.4 <span class="ink-s2">+</span> t <span class="ink-s2">*</span> 0.1) <span class="ink-s2">%</span> 1.0;
+			<span class="ink-s2">if</span> (ht <span class="ink-s2">&lt;</span> 0) ht <span class="ink-s2">+=</span> 1.0;
+			<span class="ink-s3">RgbColor</span> top <span class="ink-s2">=</span> <span class="ink-s4">hsv_to_rgb</span>(ht, 0.8, vt);
+
+			<span class="ink-s0">// Bottom pixel color</span>
+			<span class="ink-s3">double</span> yb     <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)fy_bot <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)pixel_rows;
+			<span class="ink-s3">double</span> proj_b <span class="ink-s2">=</span> (fx <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> ca <span class="ink-s2">+</span> (yb <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> sa <span class="ink-s2">+</span> 0.5;
+			<span class="ink-s3">double</span> vb     <span class="ink-s2">=</span> 0.6 <span class="ink-s2">+</span> 0.4 <span class="ink-s2">*</span> <span class="ink-s4">c3_sin</span>(fx <span class="ink-s2">*</span> 3.0 <span class="ink-s2">+</span> t <span class="ink-s2">*</span> 0.7 <span class="ink-s2">+</span> yb <span class="ink-s2">*</span> 2.0);
+			<span class="ink-s3">double</span> hb     <span class="ink-s2">=</span> (proj_b <span class="ink-s2">*</span> 0.4 <span class="ink-s2">+</span> t <span class="ink-s2">*</span> 0.1) <span class="ink-s2">%</span> 1.0;
+			<span class="ink-s2">if</span> (hb <span class="ink-s2">&lt;</span> 0) hb <span class="ink-s2">+=</span> 1.0;
+			<span class="ink-s3">RgbColor</span> bot <span class="ink-s2">=</span> <span class="ink-s4">hsv_to_rgb</span>(hb, 0.8, vb);
+
+			self<span class="ink-s2">.</span>view_cells[row_offset <span class="ink-s2">+</span> x] <span class="ink-s2">=</span> xray::<span class="ink-s4">half_block</span>(
+				xray::<span class="ink-s4">color_rgb</span>((<span class="ink-s3">char</span>)top<span class="ink-s2">.</span>r, (<span class="ink-s3">char</span>)top<span class="ink-s2">.</span>g, (<span class="ink-s3">char</span>)top<span class="ink-s2">.</span>b),
+				xray::<span class="ink-s4">color_rgb</span>((<span class="ink-s3">char</span>)bot<span class="ink-s2">.</span>r, (<span class="ink-s3">char</span>)bot<span class="ink-s2">.</span>g, (<span class="ink-s3">char</span>)bot<span class="ink-s2">.</span>b));
+		}
+	}
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">grid</span>(self<span class="ink-s2">.</span>view_cells, w, rows);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">SplashModel</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true });
+}</pre>

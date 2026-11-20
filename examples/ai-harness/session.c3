@@ -34,7 +34,7 @@ fn void post_string(int tag, String s) @local {
 	DString* ds = mem::new(DString);
 	*ds = dstring::new(mem);
 	ds.append_string(s);
-	milktea::g_program.send({ .kind = milktea::MsgKind.USER, .tag = tag, .user = (void*)ds });
+	milktea::g_program.send({ .kind = USER, .tag = tag, .user = (void*)ds });
 }
 
 fn sz cb_stream(void* ctx, String delta) {
@@ -54,7 +54,7 @@ fn sz cb_bash(void* ctx, String command) {
 	br.cmd = dstring::new(mem);
 	br.cmd.append_string(command);
 	br.ack = ack;
-	milktea::g_program.send({ .kind = milktea::MsgKind.USER, .tag = MSG_BASH, .user = (void*)br });
+	milktea::g_program.send({ .kind = USER, .tag = MSG_BASH, .user = (void*)br });
 	sz go = ack.pop()!!;
 	br.cmd.free();
 	mem::free(br);
@@ -63,7 +63,7 @@ fn sz cb_bash(void* ctx, String command) {
 }
 
 fn void cb_done(void* ctx, llm::Result* result) {
-	milktea::g_program.send({ .kind = milktea::MsgKind.USER, .tag = MSG_DONE, .user = (void*)result });
+	milktea::g_program.send({ .kind = USER, .tag = MSG_DONE, .user = (void*)result });
 }
 
 // ── History ────────────────────────────────────────────────────────────────

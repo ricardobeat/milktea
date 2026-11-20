@@ -89,7 +89,7 @@ fn void spheres_setup(void* raw) {
 		p.spawn_tick = self.frame + slot + @dur(rand() % 4);
 	}
 	self.fx_state = s;
-	self.phase = Phase.SPHERES;
+	self.phase = SPHERES;
 	self.phase_frame = self.frame;
 }
 

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Terminal UI made easy. Keyboard and mouse input, flex layouts, graphics and animations in under 200KB.">
+  <meta name="theme-color" content="#f96a24">
+  <title>milktea — Terminal UI made easy</title>
+  <link rel="preload" href="./fonts/molot.woff" as="font" type="font/woff" crossorigin>
+  <link rel="preload" href="./fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./fonts/geist-mono.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./site.css">
+  <script type="module" src="./site.js"></script>
+  <script>
+    // Keep old gallery links working after making the showcase the homepage.
+    if (new URLSearchParams(location.search).has('example')) location.replace('./gallery.html' + location.search);
+  </script>
+</head>
+<body>
+<a class="skip-link" href="#demos">Skip to demos</a>
+<header class="site-nav">
+  <div class="site-header wrap">
+    <a class="wordmark" href="./" aria-label="milktea home">milktea<span class="brand-cell" aria-hidden="true"></span></a>
+    <nav aria-label="Main navigation"><a href="#demos">Demos ↓</a><a href="./editor.html">Live editor ↗</a><a href="https://github.com/ricardobeat/milktea">GitHub ↗</a></nav>
+  </div>
+</header>
+<div class="poster">
+  <section class="hero wrap" aria-labelledby="title">
+    <h1 id="title">MILKTEA</h1>
+    <div class="hero-bottom">
+      <div class="hero-copy">
+        <h2 class="hero-statement">Terminal UI<br>made <span>easy.</span></h2>
+        <p class="lead">Milktea is a native TUI framework for making tiny, fast and refreshing terminal apps.</p>
+        <div class="hero-links"><a class="button" href="#demos">Live examples <span aria-hidden="true">↓</span></a><a class="text-link" href="https://github.com/ricardobeat/milktea#readme">Read the docs ↗</a></div>
+      </div>
+      <div class="cell-art" aria-hidden="true">
+        <img class="cell-cup" src="./art/cell-cup.svg" width="336" height="378" alt="">
+        <span class="cell-caption">made of cells</span>
+      </div>
+    </div>
+  </section>
+  <div class="poster-edge" aria-hidden="true"></div>
+</div>
+<main class="wrap">
+  <section class="intro" aria-labelledby="intro-title">
+    <div class="intro-copy">
+
+      <h2 id="intro-title">Based on the<br> ELM architecture</h2>
+      <p>Milktea apps are simple to write but powerful. You create a model, a view, and a handler for updates to the model state.</p>
+      <ol class="steps">
+        <li><div><strong>Model</strong><p>Application state.</p></div></li>
+        <li><div><strong>Update</strong><p>Handles input and timer messages.</p></div></li>
+        <li><div><strong>View</strong><p>Return text, a layout tree, or a cell grid.</p></div></li>
+      </ol>
+      <p>The framework handles keyboard and mouse input, flex layouts, graphics and animations, focus states, scrolling - all in under 200KB of native code.</p>
+    </div>
+    <div class="code-window">
+      <div class="code-heading"><span>Counter · C3</span><div class="counter-tabs" role="tablist" aria-label="Counter example">
+        <button id="counter-code-tab" type="button" role="tab" aria-selected="true" aria-controls="counter-code" tabindex="0">Code</button>
+        <button id="counter-preview-tab" type="button" role="tab" aria-selected="false" aria-controls="counter-preview" tabindex="-1">Preview</button>
+      </div></div>
+      <div id="counter-code" class="counter-panel" role="tabpanel" aria-labelledby="counter-code-tab" tabindex="0">
+      <!-- INTRO START: generated from intro.c3 with inkfmt --lang c3 --html -->
+<style>
+.ink{background:#272822;color:#f8f8f2;}
+.ink .ink-s0{color:#75715e;}
+.ink .ink-s1{color:#75715e;font-style:italic;}
+.ink .ink-s2{color:#f92672;font-weight:bold;}
+.ink .ink-s3{color:#66d9ef;font-weight:bold;}
+.ink .ink-s4{color:#a6e22e;}
+.ink .ink-s5{color:#a6e22e;font-weight:bold;}
+.ink .ink-s6{color:#66d9ef;}
+.ink .ink-s7{color:#f92672;}
+.ink .ink-s8{color:#ae81ff;}
+.ink .ink-s9{color:#e6db74;}
+.ink .ink-s10{color:#ae81ff;font-weight:bold;}
+.ink .ink-s11{background:#3e3d32;}
+.ink .ink-s12{font-style:italic;}
+.ink .ink-s13{font-weight:bold;}
+.ink .ink-s14{text-decoration:underline;}
+</style>
+<pre class="ink"><span class="ink-s2">struct</span> <span class="ink-s3">Counter</span> {
+  <span class="ink-s3">sz</span> value;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+  <span class="ink-s2">switch</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code) {
+    <span class="ink-s2">case</span> <span class="ink-s6">UP</span>: self<span class="ink-s2">.</span>value<span class="ink-s2">++</span>;
+    <span class="ink-s2">case</span> <span class="ink-s6">DOWN</span>: self<span class="ink-s2">.</span>value<span class="ink-s2">--</span>;
+    <span class="ink-s2">case</span> <span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+    <span class="ink-s2">default</span>:
+  }
+  <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Counter</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+  glaze::<span class="ink-s3">Style</span> style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()
+    <span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>))
+    <span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 3, 1, 3)
+    <span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>);
+
+  <span class="ink-s3">String</span> text <span class="ink-s2">=</span> string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Counter: %d&quot;</span>, self<span class="ink-s2">.</span>value);
+  <span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(text, style)<span class="ink-s2">.</span><span class="ink-s4">center</span>();
+}
+</pre>
+      <!-- INTRO END -->
+      </div>
+      <div id="counter-preview" class="counter-panel" role="tabpanel" aria-labelledby="counter-preview-tab" hidden>
+        <div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/counter.wasm" font-size="12" expandable="false" label="Counter: Arrow Up increases, Arrow Down decreases"></milktea-view><button class="restart" type="button" aria-label="Restart counter" title="Restart"><span aria-hidden="true">↻</span></button></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="demos" class="demos" aria-labelledby="demos-title">
+    <div class="section-heading"><div><h2 id="demos-title">Live examples</h2></div></div>
+    <p class="wasm-note">All the examples below are running a real milktea binary, compiled to WASM and rendered via a custom canvas renderer - no terminal emulator involved.</p>
+    <div class="simple-demos">
+      <article class="demo demo-simple" id="inputbox">
+        <div class="demo-title"><h3>Input box</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>inputbox.c3</span><div class="counter-tabs" role="tablist" aria-label="inputbox example">
+          <button id="inputbox-code-tab" type="button" role="tab" aria-selected="false" aria-controls="inputbox-code" tabindex="-1">Code</button>
+          <button id="inputbox-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="inputbox-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="inputbox-code" class="demo-code" role="tabpanel" aria-labelledby="inputbox-code-tab" tabindex="0" data-code-src="./code/inputbox.html" hidden></div>
+        <div id="inputbox-preview" class="demo-preview" role="tabpanel" aria-labelledby="inputbox-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/inputbox.wasm?v=560376d073c8" font-size="12" label="Input box: click and type, Enter submits"></milktea-view><button class="restart" type="button" aria-label="Restart input box" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>An input box component, with a custom cursor and key handling.</p>
+        <div class="demo-foot"><span><kbd>Enter</kbd> to submit</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/inputbox">View source ↗</a></div>
+      </article>
+      <article class="demo demo-simple" id="spinners">
+        <div class="demo-title"><h3>Spinners</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>spinners.c3</span><div class="counter-tabs" role="tablist" aria-label="spinners example">
+          <button id="spinners-code-tab" type="button" role="tab" aria-selected="false" aria-controls="spinners-code" tabindex="-1">Code</button>
+          <button id="spinners-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="spinners-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="spinners-code" class="demo-code" role="tabpanel" aria-labelledby="spinners-code-tab" tabindex="0" data-code-src="./code/spinners.html" hidden></div>
+        <div id="spinners-preview" class="demo-preview" role="tabpanel" aria-labelledby="spinners-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/spinners.wasm?v=b7b3256dd70d" font-size="12" label="Six animated text spinners"></milktea-view><button class="restart" type="button" aria-label="Restart spinners" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>Animated spinners built from glyphs. Each one handles their own timer</p>
+        <div class="demo-foot"><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spinners">View source ↗</a></div>
+      </article>
+      <article class="demo demo-simple" id="tabs">
+        <div class="demo-title"><h3>Tabs</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>tabs.c3</span><div class="counter-tabs" role="tablist" aria-label="tabs example">
+          <button id="tabs-code-tab" type="button" role="tab" aria-selected="false" aria-controls="tabs-code" tabindex="-1">Code</button>
+          <button id="tabs-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="tabs-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="tabs-code" class="demo-code" role="tabpanel" aria-labelledby="tabs-code-tab" tabindex="0" data-code-src="./code/tabs.html" hidden></div>
+        <div id="tabs-preview" class="demo-preview" role="tabpanel" aria-labelledby="tabs-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/tabs.wasm" font-size="12" cols="80" rows="24" label="Tabs: use the left and right arrow keys"></milktea-view><button class="restart" type="button" aria-label="Restart tabs" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>Switch between views with a styled tab bar.</p>
+        <div class="demo-foot"><span><kbd>←</kbd> <kbd>→</kbd> switch tabs</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/tabs">View source ↗</a></div>
+      </article>
+      <article class="demo demo-simple" id="progress">
+        <div class="demo-title"><h3>Progress</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>progress.c3</span><div class="counter-tabs" role="tablist" aria-label="progress example">
+          <button id="progress-code-tab" type="button" role="tab" aria-selected="false" aria-controls="progress-code" tabindex="-1">Code</button>
+          <button id="progress-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="progress-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="progress-code" class="demo-code" role="tabpanel" aria-labelledby="progress-code-tab" tabindex="0" data-code-src="./code/progress.html" hidden></div>
+        <div id="progress-preview" class="demo-preview" role="tabpanel" aria-labelledby="progress-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/progress.wasm" font-size="12" cols="80" rows="24" label="Progress bars: F speeds up, R restarts"></milktea-view><button class="restart" type="button" aria-label="Restart progress" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>Progress bars with different glyphs and colors.</p>
+        <div class="demo-foot"><span><kbd>F</kbd> faster <span>·</span> <kbd>R</kbd> restart</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/progress">View source ↗</a></div>
+      </article>
+      <article class="demo demo-simple" id="clock">
+        <div class="demo-title"><h3>Clock</h3></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>clock.c3</span><div class="counter-tabs" role="tablist" aria-label="clock example">
+          <button id="clock-code-tab" type="button" role="tab" aria-selected="false" aria-controls="clock-code" tabindex="-1">Code</button>
+          <button id="clock-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="clock-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="clock-code" class="demo-code" role="tabpanel" aria-labelledby="clock-code-tab" tabindex="0" data-code-src="./code/clock.html" hidden></div>
+        <div id="clock-preview" class="demo-preview" role="tabpanel" aria-labelledby="clock-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="7.2" cell-height="14.4" src="./build/clock.wasm" font-size="12" cols="100" rows="30" label="Animated clock with drifting clouds"></milktea-view><button class="restart" type="button" aria-label="Restart clock" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>A live clock drawn with block glyphs, drifting clouds, and stars.</p>
+        <div class="demo-foot"><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/clock">View source ↗</a></div>
+      </article>
+    <article class="demo demo-simple" id="spotlight">
+      <div class="demo-title"><div><h3>Spotlight</h3></div></div>
+      <div class="demo-browser code-window">
+        <div class="code-heading"><span>spotlight.c3</span><div class="counter-tabs" role="tablist" aria-label="spotlight example">
+          <button id="spotlight-code-tab" type="button" role="tab" aria-selected="false" aria-controls="spotlight-code" tabindex="-1">Code</button>
+          <button id="spotlight-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="spotlight-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="spotlight-code" class="demo-code" role="tabpanel" aria-labelledby="spotlight-code-tab" tabindex="0" data-code-src="./code/spotlight.html" hidden></div>
+        <div id="spotlight-preview" class="demo-preview" role="tabpanel" aria-labelledby="spotlight-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/spotlight.wasm" cols="100" rows="30" label="Interactive spotlight: move the pointer and hold to bloom"></milktea-view><button class="restart" type="button" aria-label="Restart spotlight" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+      <p>Cursor position tracking, spring-based animations</p>
+      <div class="demo-foot"><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/spotlight">View source ↗</a></div>
+    </article>
+    </div>
+
+    <div class="section-heading chapter"><div><h2>Advanced graphics</h2><p>Draw into a cell grid, layer transparent content, and animate with tweens and springs.</p></div></div>
+    <article class="demo demo-wide" id="nanobots">
+      <div class="demo-title"><div><h3>Particles</h3></div></div>
+      <div class="demo-browser code-window">
+        <div class="code-heading"><span>nanobots.c3</span><div class="counter-tabs" role="tablist" aria-label="nanobots example">
+          <button id="nanobots-code-tab" type="button" role="tab" aria-selected="false" aria-controls="nanobots-code" tabindex="-1">Code</button>
+          <button id="nanobots-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="nanobots-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="nanobots-code" class="demo-code" role="tabpanel" aria-labelledby="nanobots-code-tab" tabindex="0" data-code-src="./code/nanobots.html" hidden></div>
+        <div id="nanobots-preview" class="demo-preview" role="tabpanel" aria-labelledby="nanobots-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/nanobots.wasm" cols="140" rows="32" label="Animated particles assembling into text"></milktea-view><button class="restart" type="button" aria-label="Restart nanobots" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+      <p>Particles assemble into text, then scatter and start again. Inspired by Omarchy screensavers</p>
+      <div class="demo-foot"><span>Hold space to speed up, TAB to select animation.</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/nanobots">View source ↗</a></div>
+    </article>
+    <article class="demo demo-wide" id="splash">
+      <div class="demo-title"><div><h3>Splash</h3></div></div>
+      <div class="demo-browser code-window">
+        <div class="code-heading"><span>splash.c3</span><div class="counter-tabs" role="tablist" aria-label="splash example">
+          <button id="splash-code-tab" type="button" role="tab" aria-selected="false" aria-controls="splash-code" tabindex="-1">Code</button>
+          <button id="splash-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="splash-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="splash-code" class="demo-code" role="tabpanel" aria-labelledby="splash-code-tab" tabindex="0" data-code-src="./code/splash.html" hidden></div>
+        <div id="splash-preview" class="demo-preview" role="tabpanel" aria-labelledby="splash-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/splash.wasm" cols="140" rows="28" label="Animated colorful splash screen"></milktea-view><button class="restart" type="button" aria-label="Restart splash" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+      <div class="demo-foot"><span>Direct cell drawing at 60fps</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/splash">View source ↗</a></div>
+    </article>
+    <div class="fire-pair">
+      <article class="demo" id="color-swatches"><div class="demo-title"><div><h3>Color swatches</h3></div></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>color-swatches.c3</span><div class="counter-tabs" role="tablist" aria-label="color-swatches example">
+          <button id="color-swatches-code-tab" type="button" role="tab" aria-selected="false" aria-controls="color-swatches-code" tabindex="-1">Code</button>
+          <button id="color-swatches-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="color-swatches-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="color-swatches-code" class="demo-code" role="tabpanel" aria-labelledby="color-swatches-code-tab" tabindex="0" data-code-src="./code/color-swatches.html" hidden></div>
+        <div id="color-swatches-preview" class="demo-preview" role="tabpanel" aria-labelledby="color-swatches-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/color-swatches.wasm" cols="100" rows="30" label="Color swatches animation"></milktea-view><button class="restart" type="button" aria-label="Restart Color swatches" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>Smooth color gradients with LUV blending</p><div class="demo-foot"><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/color-swatches">Source ↗</a></div>
+      </article>
+      <article class="demo" id="doom-fire-tea"><div class="demo-title"><div><h3>Compositing</h3></div></div>
+        <div class="demo-browser code-window">
+        <div class="code-heading"><span>doom-fire-overlay.c3</span><div class="counter-tabs" role="tablist" aria-label="doom-fire-tea example">
+          <button id="doom-fire-tea-code-tab" type="button" role="tab" aria-selected="false" aria-controls="doom-fire-tea-code" tabindex="-1">Code</button>
+          <button id="doom-fire-tea-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="doom-fire-tea-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="doom-fire-tea-code" class="demo-code" role="tabpanel" aria-labelledby="doom-fire-tea-code-tab" tabindex="0" data-code-src="./code/doom-fire-tea.html" hidden></div>
+        <div id="doom-fire-tea-preview" class="demo-preview" role="tabpanel" aria-labelledby="doom-fire-tea-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/doom-fire-overlay.wasm" cols="120" rows="36" label="Doom fire composited with a TEA text mask"></milktea-view><button class="restart" type="button" aria-label="Restart compositing example" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+        <p>The same fire, seen through a text mask. Transparent cells reveal the layer below.</p><div class="demo-foot"><a class="source-link" href="https://github.com/ricardobeat/milktea/blob/HEAD/examples/doom-fire/doom-fire-overlay.c3">Source ↗</a></div>
+      </article>
+    </div>
+    <article class="demo demo-wide" id="avian-assault">
+      <div class="demo-title"><div><h3>Avian Assault</h3></div></div>
+      <div class="demo-browser code-window">
+        <div class="code-heading"><span>avian-assault.c3</span><div class="counter-tabs" role="tablist" aria-label="avian-assault example">
+          <button id="avian-assault-code-tab" type="button" role="tab" aria-selected="false" aria-controls="avian-assault-code" tabindex="-1">Code</button>
+          <button id="avian-assault-preview-tab" type="button" role="tab" aria-selected="true" aria-controls="avian-assault-preview" tabindex="0">Preview</button>
+        </div></div>
+        <div id="avian-assault-code" class="demo-code" role="tabpanel" aria-labelledby="avian-assault-code-tab" tabindex="0" data-code-src="./code/avian-assault.html" hidden></div>
+        <div id="avian-assault-preview" class="demo-preview" role="tabpanel" aria-labelledby="avian-assault-preview-tab"><div class="demo-surface"><milktea-view font="'Geist Mono', ui-monospace, monospace" cell-width="9.6" cell-height="19.2" src="./build/avian-assault.wasm" cols="160" rows="48" fit="contain" label="Avian Assault game: focus and press Enter to start"></milktea-view><button class="restart" type="button" aria-label="Restart Avian Assault" title="Restart"><span aria-hidden="true">↻</span></button></div></div>
+      </div>
+      <p>full-screen canvas, physics and full mouse input. In-game menus use layout trees.</p>
+      <div class="demo-foot"><span><kbd>Enter</kbd> start <span>·</span> drag / arrows to aim <span>·</span> <kbd>Space</kbd> launch</span><a class="source-link" href="https://github.com/ricardobeat/milktea/tree/HEAD/examples/avian-assault">View source ↗</a></div>
+    </article>
+  </section>
+  <section class="language-support" aria-labelledby="language-support-title">
+    <h2 id="language-support-title">Available for</h2>
+    <div class="language-buttons">
+      <a href="#">C</a>
+      <a href="#">C3</a>
+      <a href="#">Javascript</a>
+      <a href="#">Python</a>
+      <a href="#">Go</a>
+      <a href="#">Ruby</a>
+    </div>
+  </section>
+  <section class="your-turn" aria-labelledby="your-turn-title"><span class="end-mark" aria-hidden="true">✳</span><div><h2 id="your-turn-title">Live editor</h2><p>Write JavaScript against the WASM engine. Edit the code and run it here.</p></div><div class="end-links"><a class="button" href="./editor.html">Open editor <span aria-hidden="true">↗</span></a><a class="text-link" href="./gallery.html">All examples →</a></div></section>
+</main>
+<footer class="site-footer wrap"><a class="wordmark" href="./">milktea</a><span>C3 · terminal interfaces · MIT licensed</span><a href="https://github.com/ricardobeat/milktea">Source on GitHub ↗</a></footer>
+</body>
+</html>

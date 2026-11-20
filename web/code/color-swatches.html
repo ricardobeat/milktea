@@ -1,0 +1,306 @@
+<pre class="ink"><span class="ink-s0">// color-swatches — visual showcase of glaze colour functions.</span>
+<span class="ink-s0">// Compares color_hex, blend_luv, hsl, blend_hsl, hcl, blend_hcl.</span>
+<span class="ink-s0">// Move the mouse to drop coloured glitter. Press q to quit.</span>
+<span class="ink-s2">module</span> color_swatches;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> xray::layout;
+<span class="ink-s2">import</span> std::core::dstring;
+<span class="ink-s2">import</span> std::io;
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">MAX_GLITTER</span> <span class="ink-s2">=</span> 256;
+<span class="ink-s2">const</span> <span class="ink-s3">String</span>[6] <span class="ink-s6">SPARKLES</span> <span class="ink-s2">=</span> { <span class="ink-s9">&quot;✦&quot;</span>, <span class="ink-s9">&quot;✧&quot;</span>, <span class="ink-s9">&quot;·&quot;</span>, <span class="ink-s9">&quot;˖&quot;</span>, <span class="ink-s9">&quot;°&quot;</span>, <span class="ink-s9">&quot;•&quot;</span> };
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Particle</span> {
+	<span class="ink-s3">sz</span> col;
+	<span class="ink-s3">sz</span> row;
+	glaze::<span class="ink-s3">Color</span> color;
+	<span class="ink-s3">sz</span> life; <span class="ink-s0">// frames remaining</span>
+	<span class="ink-s3">bool</span> active;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Model</span> {
+	<span class="ink-s3">Particle</span>[<span class="ink-s6">MAX_GLITTER</span>] glitter;
+	<span class="ink-s3">sz</span> glitter_count;
+	<span class="ink-s3">sz</span> spawn_idx; <span class="ink-s0">// round-robin index</span>
+	<span class="ink-s3">sz</span> color_phase;
+	<span class="ink-s0">// Reused cell buffer, owned by the model. The View borrows its cell array</span>
+	<span class="ink-s0">// until the framework has copied it into the renderer, so the buffer must</span>
+	<span class="ink-s0">// outlive view() — building a fresh screen per frame and freeing it here</span>
+	<span class="ink-s0">// left every View referencing freed memory (use-after-free).</span>
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> screen;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(33);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s2">&amp;</span>self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_GLITTER</span>; i<span class="ink-s2">++</span>) {
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>glitter[i]<span class="ink-s2">.</span>active) {
+				self<span class="ink-s2">.</span>glitter[i]<span class="ink-s2">.</span>life<span class="ink-s2">--</span>;
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>glitter[i]<span class="ink-s2">.</span>life <span class="ink-s2">&lt;=</span> 0) self<span class="ink-s2">.</span>glitter[i]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> false;
+			}
+		}
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(33);
+	}
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) {
+		<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>) <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>) <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>code <span class="ink-s2">==</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span> <span class="ink-s2">&amp;&amp;</span> msg<span class="ink-s2">.</span>key<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE</span>) {
+		<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>action <span class="ink-s2">==</span> milktea::<span class="ink-s3">MouseAction</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MOTION</span>) {
+			<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> j <span class="ink-s2">=</span> 0; j <span class="ink-s2">&lt;</span> 3; j<span class="ink-s2">++</span>) {
+				<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>spawn_idx <span class="ink-s2">%</span> <span class="ink-s6">MAX_GLITTER</span>;
+				self<span class="ink-s2">.</span>glitter[idx]<span class="ink-s2">.</span>col <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>col <span class="ink-s2">+</span> (j <span class="ink-s2">-</span> 1);
+				self<span class="ink-s2">.</span>glitter[idx]<span class="ink-s2">.</span>row <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>mouse<span class="ink-s2">.</span>row;
+				self<span class="ink-s2">.</span>glitter[idx]<span class="ink-s2">.</span>color <span class="ink-s2">=</span> glaze::<span class="ink-s4">hcl</span>((<span class="ink-s3">double</span>)(self<span class="ink-s2">.</span>color_phase <span class="ink-s2">%</span> 360), 100.0, 65.0);
+				self<span class="ink-s2">.</span>glitter[idx]<span class="ink-s2">.</span>life <span class="ink-s2">=</span> 15 <span class="ink-s2">+</span> j <span class="ink-s2">*</span> 5;
+				self<span class="ink-s2">.</span>glitter[idx]<span class="ink-s2">.</span>active <span class="ink-s2">=</span> true;
+				self<span class="ink-s2">.</span>spawn_idx<span class="ink-s2">++</span>;
+				self<span class="ink-s2">.</span>color_phase <span class="ink-s2">+=</span> 47;
+			}
+		}
+		<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s3">sz</span> w <span class="ink-s2">=</span> milktea::<span class="ink-s4">screen_width</span>();
+	<span class="ink-s3">sz</span> h <span class="ink-s2">=</span> milktea::<span class="ink-s4">screen_height</span>();
+
+	glaze::<span class="ink-s3">Style</span> title_s <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ffffff&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+	glaze::<span class="ink-s3">Style</span> label_s <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#888888&quot;</span>));
+	glaze::<span class="ink-s3">Style</span> label_hi <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#cccccc&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+
+	glaze::<span class="ink-s3">Color</span> red  <span class="ink-s2">=</span> glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ff0000&quot;</span>);
+	glaze::<span class="ink-s3">Color</span> blue <span class="ink-s2">=</span> glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#0000ff&quot;</span>);
+	glaze::<span class="ink-s3">Color</span> grn  <span class="ink-s2">=</span> glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00ff00&quot;</span>);
+
+	<span class="ink-s3">sz</span> cols <span class="ink-s2">=</span> w <span class="ink-s2">-</span> 4;
+	<span class="ink-s2">if</span> (cols <span class="ink-s2">&lt;</span> 10) cols <span class="ink-s2">=</span> 10;
+
+	<span class="ink-s0">// ── build gradient rows ──────────────────────────────────────────────</span>
+
+	<span class="ink-s3">DString</span> row1 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			row1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">blend_luv</span>(red, blue, (<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)(cols <span class="ink-s2">-</span> 1)))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row2 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			row2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">blend_hsl</span>(red, blue, (<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)(cols <span class="ink-s2">-</span> 1)))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row3 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			row3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">blend_hcl</span>(red, blue, (<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)(cols <span class="ink-s2">-</span> 1)))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row4 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s3">sz</span> third <span class="ink-s2">=</span> cols <span class="ink-s2">/</span> 3;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			glaze::<span class="ink-s3">Color</span> c;
+			<span class="ink-s2">if</span> (i <span class="ink-s2">&lt;</span> third) {
+				c <span class="ink-s2">=</span> glaze::<span class="ink-s4">blend_luv</span>(red, grn, (<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)third);
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (i <span class="ink-s2">&lt;</span> third <span class="ink-s2">*</span> 2) {
+				c <span class="ink-s2">=</span> glaze::<span class="ink-s4">blend_luv</span>(grn, blue, (<span class="ink-s3">double</span>)(i <span class="ink-s2">-</span> third) <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)third);
+			} <span class="ink-s2">else</span> {
+				c <span class="ink-s2">=</span> glaze::<span class="ink-s4">blend_luv</span>(blue, red, (<span class="ink-s3">double</span>)(i <span class="ink-s2">-</span> third <span class="ink-s2">*</span> 2) <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)(cols <span class="ink-s2">-</span> third <span class="ink-s2">*</span> 2));
+			}
+			row4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(c)<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row5 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			row5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">hsl</span>((<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)cols, 1.0, 0.5))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row6 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> cols; i<span class="ink-s2">++</span>) {
+			row6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">hcl</span>((<span class="ink-s3">double</span>)i <span class="ink-s2">/</span> (<span class="ink-s3">double</span>)cols <span class="ink-s2">*</span> 360.0, 100.0, 60.0))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;█&quot;</span>));
+		}
+	}
+
+	<span class="ink-s3">DString</span> row7 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	<span class="ink-s3">String</span>[8] hex_colors <span class="ink-s2">=</span> { <span class="ink-s9">&quot;#ff0000&quot;</span>, <span class="ink-s9">&quot;#ff8800&quot;</span>, <span class="ink-s9">&quot;#ffff00&quot;</span>, <span class="ink-s9">&quot;#00ff00&quot;</span>, <span class="ink-s9">&quot;#00ffff&quot;</span>, <span class="ink-s9">&quot;#0000ff&quot;</span>, <span class="ink-s9">&quot;#8800ff&quot;</span>, <span class="ink-s9">&quot;#ff00ff&quot;</span> };
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> pass <span class="ink-s2">=</span> 0; pass <span class="ink-s2">&lt;</span> 2; pass<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (pass <span class="ink-s2">==</span> 1) row7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;\n  &quot;</span>);
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> 8; i<span class="ink-s2">++</span>) {
+			row7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(hex_colors[i]))<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;████&quot;</span>));
+		}
+	}
+
+	<span class="ink-s0">// ── build labels ─────────────────────────────────────────────────────</span>
+
+	<span class="ink-s3">DString</span> lbl1 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  blend_luv&quot;</span>); lbl1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;   red → blue (perceptual)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl2 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  blend_hsl&quot;</span>); lbl2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;   red → blue (hue-aware shortest path)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl3 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  blend_hcl&quot;</span>); lbl3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;   red → blue (perceptual + hue-aware)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl4 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  blend_luv&quot;</span>); lbl4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;   red → green → blue (3-stop)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl5 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  hsl&quot;</span>); lbl5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;          full hue sweep (s=1, l=0.5)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl6 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  hcl&quot;</span>); lbl6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;          full hue sweep (c=100, l=60)&quot;</span>));
+	<span class="ink-s3">DString</span> lbl7 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); lbl7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  color_hex&quot;</span>); lbl7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(label_s<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;  basic palette&quot;</span>));
+
+	<span class="ink-s3">DString</span> grad1 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad1<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row1<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad2 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad2<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row2<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad3 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad3<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row3<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad4 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad4<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row4<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad5 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad5<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row5<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad6 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad6<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row6<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">DString</span> grad7 <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>(); grad7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(<span class="ink-s9">&quot;  &quot;</span>); grad7<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(row7<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+
+	<span class="ink-s0">// ── vstack layout ────────────────────────────────────────────────────</span>
+
+	xray::<span class="ink-s3">Rect</span> area <span class="ink-s2">=</span> xray::<span class="ink-s4">new_rect</span>(0, 0, w, h);
+
+	xray::<span class="ink-s3">Rect</span> r00, r01, r02, r03, r04, r05, r06, r07, r08, r09, r10, r11;
+	xray::<span class="ink-s3">Rect</span> r12, r13, r14, r15, r16, r17, r18, r19, r20, r21, r22;
+	layout::<span class="ink-s4">vertical</span>(area, {
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r00),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r01),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r02),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r03),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r04),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r05),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r06),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r07),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r08),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r09),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r10),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r11),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r12),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r13),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r14),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r15),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r16),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r17),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r18),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r19),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r20),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(2), <span class="ink-s2">&amp;</span>r21),
+		layout::<span class="ink-s4">slot</span>(layout::<span class="ink-s4">cells</span>(1), <span class="ink-s2">&amp;</span>r22),
+	});
+
+	<span class="ink-s3">String</span> v00 <span class="ink-s2">=</span> r00<span class="ink-s2">.</span><span class="ink-s4">render</span>(title_s,       <span class="ink-s9">&quot;  COLOUR SPACE COMPARISON&quot;</span>);
+	<span class="ink-s3">String</span> v01 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r01, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v02 <span class="ink-s2">=</span> r02<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl1<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v03 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r03, grad1<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v04 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r04, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v05 <span class="ink-s2">=</span> r05<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl2<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v06 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r06, grad2<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v07 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r07, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v08 <span class="ink-s2">=</span> r08<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl3<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v09 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r09, grad3<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v10 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r10, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v11 <span class="ink-s2">=</span> r11<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl4<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v12 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r12, grad4<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v13 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r13, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v14 <span class="ink-s2">=</span> r14<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl5<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v15 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r15, grad5<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v16 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r16, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v17 <span class="ink-s2">=</span> r17<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl6<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v18 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r18, grad6<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v19 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r19, <span class="ink-s9">&quot;&quot;</span>);
+	<span class="ink-s3">String</span> v20 <span class="ink-s2">=</span> r20<span class="ink-s2">.</span><span class="ink-s4">render</span>(label_hi,     lbl7<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v21 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r21, grad7<span class="ink-s2">.</span><span class="ink-s4">str_view</span>());
+	<span class="ink-s3">String</span> v22 <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">render_in</span>(r22, <span class="ink-s9">&quot;&quot;</span>);
+
+	<span class="ink-s3">String</span> content <span class="ink-s2">=</span> v00;
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v01);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v02);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v03);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v04);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v05);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v06);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v07);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v08);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v09);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v10);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v11);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v12);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v13);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v14);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v15);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v16);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v17);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v18);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v19);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v20);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v21);
+	content <span class="ink-s2">=</span> glaze::<span class="ink-s4">join_vertical</span>(glaze::<span class="ink-s3">Position</span><span class="ink-s2">.</span><span class="ink-s6">LEFT</span>, content, v22);
+
+	<span class="ink-s0">// ── render to screen buffer + glitter overlay ────────────────────────</span>
+
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> screen <span class="ink-s2">=</span> self<span class="ink-s2">.</span>screen;
+	<span class="ink-s2">if</span> (screen <span class="ink-s2">==</span> <span class="ink-s6">null</span>) {
+		screen <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>((<span class="ink-s3">sz</span>)w, (<span class="ink-s3">sz</span>)h);
+		self<span class="ink-s2">.</span>screen <span class="ink-s2">=</span> screen;
+	} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (screen<span class="ink-s2">.</span>width <span class="ink-s2">!=</span> (<span class="ink-s3">sz</span>)w <span class="ink-s2">||</span> screen<span class="ink-s2">.</span>height <span class="ink-s2">!=</span> (<span class="ink-s3">sz</span>)h) {
+		screen<span class="ink-s2">.</span><span class="ink-s4">resize</span>((<span class="ink-s3">sz</span>)w, (<span class="ink-s3">sz</span>)h);
+	}
+	screen<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+	screen<span class="ink-s2">.</span><span class="ink-s4">render_ansi_string</span>(0, 0, content, xray::<span class="ink-s4">default_style</span>());
+
+	<span class="ink-s0">// Overlay glitter particles — fg blends additively, bg inherited from content</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> <span class="ink-s6">MAX_GLITTER</span>; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>glitter[i];
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>p<span class="ink-s2">.</span>active) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>col <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> p<span class="ink-s2">.</span>col <span class="ink-s2">&gt;=</span> w <span class="ink-s2">||</span> p<span class="ink-s2">.</span>row <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> p<span class="ink-s2">.</span>row <span class="ink-s2">&gt;=</span> h) <span class="ink-s2">continue</span>;
+
+		<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>row <span class="ink-s2">*</span> (<span class="ink-s3">sz</span>)w <span class="ink-s2">+</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>col;
+
+		<span class="ink-s0">// Fade based on remaining life</span>
+		<span class="ink-s3">double</span> fade <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)p<span class="ink-s2">.</span>life <span class="ink-s2">/</span> 20.0;
+		<span class="ink-s2">if</span> (fade <span class="ink-s2">&gt;</span> 1.0) fade <span class="ink-s2">=</span> 1.0;
+
+		<span class="ink-s3">char</span> pr <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)(<span class="ink-s3">sz</span>)((<span class="ink-s3">double</span>)p<span class="ink-s2">.</span>color<span class="ink-s2">.</span>r <span class="ink-s2">*</span> fade);
+		<span class="ink-s3">char</span> pg <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)(<span class="ink-s3">sz</span>)((<span class="ink-s3">double</span>)p<span class="ink-s2">.</span>color<span class="ink-s2">.</span>g <span class="ink-s2">*</span> fade);
+		<span class="ink-s3">char</span> pb <span class="ink-s2">=</span> (<span class="ink-s3">char</span>)(<span class="ink-s3">sz</span>)((<span class="ink-s3">double</span>)p<span class="ink-s2">.</span>color<span class="ink-s2">.</span>b <span class="ink-s2">*</span> fade);
+
+		<span class="ink-s3">String</span> ch <span class="ink-s2">=</span> <span class="ink-s6">SPARKLES</span>[i <span class="ink-s2">%</span> 6];
+		xray::<span class="ink-s3">Style</span> s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()
+			<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(pr, pg, pb))
+			<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+		screen<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>col, (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>row, xray::<span class="ink-s4">new_cell</span>(ch, 1, s));
+	}
+
+	<span class="ink-s0">// screen is owned by the model (self.screen); freed in on_destroy.</span>
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(screen);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">on_destroy</span>(<span class="ink-s2">&amp;</span>self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>screen <span class="ink-s2">!=</span> <span class="ink-s6">null</span>) {
+		self<span class="ink-s2">.</span>screen<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
+		mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>screen);
+		self<span class="ink-s2">.</span>screen <span class="ink-s2">=</span> <span class="ink-s6">null</span>;
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">Model</span> m;
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true, <span class="ink-s2">.</span>mouse_mode <span class="ink-s2">=</span> milktea::<span class="ink-s3">MouseMode</span><span class="ink-s2">.</span><span class="ink-s6">MOUSE_MODE_ALL_MOTION</span> });
+}
+</pre>

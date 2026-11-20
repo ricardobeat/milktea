@@ -8,7 +8,7 @@ struct VanishModel {
 }
 
 fn milktea::Cmd VanishModel.update(VanishModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		self.quitting = true;
 		return milktea::quit();
 	}

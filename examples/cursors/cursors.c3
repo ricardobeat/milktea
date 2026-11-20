@@ -81,7 +81,7 @@ fn glaze::Style style_input(String bc, bool focused) {
 	glaze::Style s = glaze::style()
 		.with_border(glaze::ROUNDED)
 		.border_fg(glaze::color_hex(bc))
-		.align(glaze::Position.LEFT, glaze::Position.CENTER);
+		.align(LEFT, CENTER);
 	return focused ? s.foreground(glaze::color_hex("#ffffff")) : s.foreground(glaze::color_hex("#555555"));
 }
 
@@ -116,10 +116,10 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	self.add_drawn(4, "rainbow",   "#ff00ff", &cursor_rainbow,   100);
 	self.add_drawn(5, "matrix",    "#00ff44", &cursor_matrix,     80);
 
-	self.add_native(6, "block",     "#4488ff", milktea::CursorShape.CURSOR_BLOCK,     "",        true);
-	self.add_native(7, "underline", "#44ccff", milktea::CursorShape.CURSOR_UNDERLINE, "#00ccff", true);
-	self.add_native(8, "bar",       "#ff44cc", milktea::CursorShape.CURSOR_BAR,       "#ff44cc", true);
-	self.add_native(9, "steady",    "#ffaa00", milktea::CursorShape.CURSOR_BLOCK,     "#ffaa00", false);
+	self.add_native(6, "block",     "#4488ff", CURSOR_BLOCK,     "",        true);
+	self.add_native(7, "underline", "#44ccff", CURSOR_UNDERLINE, "#00ccff", true);
+	self.add_native(8, "bar",       "#ff44cc", CURSOR_BAR,       "#ff44cc", true);
+	self.add_native(9, "steady",    "#ffaa00", CURSOR_BLOCK,     "#ffaa00", false);
 
 	return null;
 }
@@ -147,24 +147,24 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	// No tick here: an animated cursor asks for its own repaints through the
 	// interval it reports, so the app only responds to input.
 	switch (msg.kind) {
-		case milktea::MsgKind.KEY:
+		case KEY:
 			milktea::KeyMsg k = msg.key;
 			switch (k.code) {
-				case milktea::KeyCode.CTRL_C:
-				case milktea::KeyCode.ESC:
+				case CTRL_C:
+				case ESC:
 					return milktea::quit();
-				case milktea::KeyCode.RUNE:
+				case RUNE:
 					if (k.rune == 'q') return milktea::quit();
 					// delegate to the component (UTF-8-aware)
 					self.entries[self.focused].input.handle_key(k);
-				case milktea::KeyCode.BACKSPACE:
-				case milktea::KeyCode.DELETE:
-				case milktea::KeyCode.LEFT:
-				case milktea::KeyCode.RIGHT:
-				case milktea::KeyCode.HOME:
-				case milktea::KeyCode.END:
+				case BACKSPACE:
+				case DELETE:
+				case LEFT:
+				case RIGHT:
+				case HOME:
+				case END:
 					self.entries[self.focused].input.handle_key(k);
-				case milktea::KeyCode.TAB:
+				case TAB:
 					self.focused = k.shift ? (self.focused + N - 1) % N : (self.focused + 1) % N;
 				default:
 			}
@@ -206,7 +206,7 @@ fn milktea::Node* Model.entry_row(&self, sz i) {
 
 	glaze::Style name_s = glaze::style()
 		.foreground(glaze::color_hex(focused ? "#ffffff" : "#555555"))
-		.align(glaze::Position.RIGHT, glaze::Position.CENTER);
+		.align(RIGHT, CENTER);
 
 	e.input.focused = focused;
 

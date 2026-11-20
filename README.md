@@ -28,13 +28,13 @@ Store application state in the model.
 
 ```c3
 fn milktea::Cmd Counter.update(Counter* self, milktea::Msg msg) @dynamic {
-    if (msg.kind != milktea::MsgKind.KEY) return null;
+    if (msg.kind != KEY) return null;
 
     switch (msg.key.code) {
-        case milktea::KeyCode.UP:    self.value++;
-        case milktea::KeyCode.DOWN:  self.value--;
-        case milktea::KeyCode.CTRL_C:
-        case milktea::KeyCode.RUNE:
+        case UP:    self.value++;
+        case DOWN:  self.value--;
+        case CTRL_C:
+        case RUNE:
             if (msg.key.rune == 'q') return milktea::quit();
         default:
     }
@@ -171,13 +171,13 @@ Join strings containing ANSI codes:
 
 ```c3
 // Place b below a, aligned left
-String both = glaze::join_vertical(glaze::Position.LEFT, a, b);
+String both = glaze::join_vertical(LEFT, a, b);
 
 // Place b to the right of a, aligned top
 String both = glaze::join_horizontal(a, b, /*gap=*/0);
 
 // Join an array
-glaze::join_vertical_arr(glaze::Position.LEFT, pieces[..]);
+glaze::join_vertical_arr(LEFT, pieces[..]);
 ```
 
 ---
@@ -353,7 +353,7 @@ layout::vertical(layout::screen(w, h), {
     layout::slot(xray::cells(1),  &bottom),
 }, { .gap = 1 });
 
-String doc = glaze::join_vertical(glaze::Position.LEFT,
+String doc = glaze::join_vertical(LEFT,
     top.render(title_s, "  My App"),
     body.render(body_s, self.body));
 ```
@@ -379,7 +379,7 @@ fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {
 }
 
 fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynamic {
-    if (msg.kind == milktea::MsgKind.TICK) {
+    if (msg.kind == TICK) {
         self.frame++;
         return milktea::tick(80);  // schedule next tick
     }
@@ -394,7 +394,7 @@ To generate a custom message instead of a generic tick:
 const int MY_MSG = 1;
 
 fn milktea::Msg produce_msg() {
-    return { .kind = milktea::MsgKind.USER, .tag = MY_MSG };
+    return { .kind = USER, .tag = MY_MSG };
 }
 
 // In init:
@@ -420,7 +420,7 @@ Handle `WINDOW_SIZE` when a resize requires work, such as reallocating a grid or
 
 ```c3
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-    if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+    if (msg.kind == WINDOW_SIZE) {
         self.grid.resize(msg.window_size.width, msg.window_size.height);
         return null;
     }
@@ -505,7 +505,7 @@ Terminal support: placements work in kitty, WezTerm, Ghostty, Konsole, iTerm2 an
 Turn mouse tracking on with a program option:
 
 ```c3
-return milktea::@run(&model, { .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
+return milktea::@run(&model, { .mouse_mode = MOUSE_MODE_ALL_MOTION });
 ```
 
 or while the program runs, from `update`, with
@@ -515,8 +515,8 @@ pointer the same way, as does the `.mouse_cursor` option.
 Then handle mouse messages in `update`:
 
 ```c3
-if (msg.kind == milktea::MsgKind.MOUSE) {
-    if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
+if (msg.kind == MOUSE) {
+    if (msg.mouse.action == MOUSE_MOTION) {
         self.cursor_x = msg.mouse.col;
         self.cursor_y = msg.mouse.row;
     }
@@ -550,7 +550,7 @@ milktea::blur()
 Pasted text arrives as a single `MsgKind.PASTE` message, including any embedded escape sequences. `msg.paste` is valid only during the current `update` call; copy it to keep it. Bracketed paste mode is enabled automatically.
 
 ```c3
-if (msg.kind == milktea::MsgKind.PASTE) {
+if (msg.kind == PASTE) {
     // msg.paste is a String valid only during this update() call.
     // Copy it if you need it later.
     self.text.insert_string(msg.paste);
@@ -563,7 +563,7 @@ boba widgets accept paste via `handle_paste(String s)`:
 - `Textarea.handle_paste(s)` — inserts the text as-is, preserving newlines.
 
 ```c3
-case milktea::MsgKind.PASTE:
+case PASTE:
     self.input.handle_paste(msg.paste);
 ```
 
@@ -649,3 +649,24 @@ milktea was inspired by [Bubble Tea](https://github.com/charmbracelet/bubbletea)
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Browser renderer
+
+Compile the portable examples to WebAssembly and try them in a canvas gallery:
+
+```sh
+just web-build
+just web-serve
+```
+
+Open <http://localhost:8000/> for the library showcase, or
+<http://localhost:8000/gallery.html?example=counter> for the complete gallery.
+The browser uses the same
+model/update/view API and xray cell grid, with keyboard, mouse, resize, and
+paste support. Try <http://localhost:8000/inline.html> for resizable inline
+embeds with lazy loading and fullscreen controls. See [web/README.md](web/README.md) for embedding, build details,
+and the current platform limits.
+
+For JavaScript model/update/view programs, run `just web-engine` and open
+<http://localhost:8000/editor.html> for a live editor using the reusable
+milktea WASM engine. The same bindings can be imported into your own page.

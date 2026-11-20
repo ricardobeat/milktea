@@ -24,7 +24,7 @@ fn milktea::Cmd BounceModel.init(BounceModel* self) @dynamic {
 
 
 fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.ticks++;
 
 		// Bounce area is smaller than the terminal
@@ -50,15 +50,15 @@ fn milktea::Cmd BounceModel.update(BounceModel* self, milktea::Msg msg) @dynamic
 		return milktea::tick(33);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

@@ -1,0 +1,968 @@
+<pre class="ink"><span class="ink-s2">module</span> nanobots;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> xray;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::math;
+<span class="ink-s2">import</span> std::collections;
+
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">rand</span>();
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">srand</span>(<span class="ink-s3">uint</span> seed);
+<span class="ink-s2">extern</span> <span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">c3_time_ms_long</span>();
+
+<span class="ink-s0">// Rendered `milktea` from `figlet -f phm-slanted.flf` (Philippe Majerus,</span>
+<span class="ink-s0">// https://github.com/PhMajerus/FIGfonts). The font uses Unicode 13 sextant</span>
+<span class="ink-s0">// characters from the Symbols for Legacy Computing block, so each character</span>
+<span class="ink-s0">// in the file is one terminal cell that draws a slanted block — no half-</span>
+<span class="ink-s0">// height packing needed. 6 rows tall.</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">// A &quot;filled&quot; sextant (🭅, 🭋, █, 🭛, 🭡, 🭞, 🭚, ▐) is part of the</span>
+<span class="ink-s0">// text glyph; a space is empty.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">char</span>[] <span class="ink-s6">EMBED_TEXT</span> <span class="ink-s2">=</span> <span class="ink-s0">$embed</span>(<span class="ink-s9">&quot;milktea.txt&quot;</span>);
+
+<span class="ink-s0">// 48fps. Everything here was tuned at 20fps, so DT is the ratio between the</span>
+<span class="ink-s0">// two: forces and velocities are scaled by it so motion covers the same</span>
+<span class="ink-s0">// ground per second, and tick-count durations are scaled by 1/DT so they</span>
+<span class="ink-s0">// last the same wall-clock time. Damping is per-tick and exponential, so it</span>
+<span class="ink-s0">// gets pow(damp, DT) via the `decay` helper rather than a plain multiply —</span>
+<span class="ink-s0">// multiplying a damping factor by DT would make things stop faster, not</span>
+<span class="ink-s0">// slower.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">FRAME_MS</span> <span class="ink-s2">=</span> 21;        <span class="ink-s0">// ~48fps</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">DT</span> <span class="ink-s2">=</span> 20.0f <span class="ink-s2">*</span> (<span class="ink-s3">float</span>)<span class="ink-s6">FRAME_MS</span> <span class="ink-s2">/</span> 1000.0f; <span class="ink-s0">// sim-ticks per frame</span>
+<span class="ink-s0">// Sim steps per rendered frame. This is the real speed knob: raising the</span>
+<span class="ink-s0">// frame rate is mostly compensated out by @dur/DT scaling, so speed comes</span>
+<span class="ink-s0">// from advancing the sim more than once per frame. 2 = twice the pace.</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">BASE_STEPS</span> <span class="ink-s2">=</span> 2;
+
+<span class="ink-s0">// Convert a duration tuned in 20fps ticks into frames at the current rate.</span>
+<span class="ink-s2">macro</span> <span class="ink-s3">sz</span> <span class="ink-s4">@dur</span>(#ticks) <span class="ink-s2">=&gt;</span> (<span class="ink-s3">sz</span>)((<span class="ink-s3">float</span>)(#ticks) <span class="ink-s2">/</span> <span class="ink-s6">DT</span>);
+
+<span class="ink-s0">// Per-frame survival of a per-tick damping factor.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">float</span> <span class="ink-s4">decay</span>(<span class="ink-s3">float</span> per_tick) {
+	<span class="ink-s2">return</span> (<span class="ink-s3">float</span>)math::<span class="ink-s4">pow</span>((<span class="ink-s3">double</span>)per_tick, (<span class="ink-s3">double</span>)<span class="ink-s6">DT</span>);
+}
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">PARTICLES_PER_WAVE</span> <span class="ink-s2">=</span> 20; <span class="ink-s0">// 7 rounds of 20 = 140 blocks; user-tunable</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">EMIT_COOLDOWN</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(14);   <span class="ink-s0">// ticks between waves — release bots fast</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">HOLD_DURATION</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(60);   <span class="ink-s0">// ticks the finished word stays up (~3s)</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">BUILD_TIMEOUT</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(600);  <span class="ink-s0">// safety net: if a straggler somehow never</span>
+                                <span class="ink-s0">// settles, snap it home rather than stall</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">PULL_MAX</span> <span class="ink-s2">=</span> 0.9f;    <span class="ink-s0">// ceiling on the spring force, so a thrown</span>
+                                <span class="ink-s0">// bot coasts before the pull takes over</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">SPAWN_STAGGER</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(1);    <span class="ink-s0">// ticks between bots within one wave, so a wave</span>
+                                <span class="ink-s0">// sprays out over ~2s instead of popping at once</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">GRAVITY</span> <span class="ink-s2">=</span> 1.4f;     <span class="ink-s0">// cells/tick^2 in the FALL exit</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">BOUNCE</span> <span class="ink-s2">=</span> 0.32f;     <span class="ink-s0">// energy kept when a block hits the pile</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">FADE_DURATION</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(45);   <span class="ink-s0">// ticks the settled pile takes to fade out</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DISSOLVE_FLICKERS</span> <span class="ink-s2">=</span> 5; <span class="ink-s0">// noise flashes a block shows before blanking</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DISSOLVE_STEP</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(3);    <span class="ink-s0">// ticks per flicker frame</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">WIND_ACCEL</span> <span class="ink-s2">=</span> 2.2f;  <span class="ink-s0">// sideways force in the SHEAR exit</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">TOPPLE_ACCEL</span> <span class="ink-s2">=</span> 0.0016f; <span class="ink-s0">// angular accel of the falling slab</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">LINE_HOLD</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(10);       <span class="ink-s0">// ticks the hot line holds before it collapses</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DOT_HOLD</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(16);        <span class="ink-s0">// ticks the dot lingers after the flare</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">SWELL_DURATION</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(22);  <span class="ink-s0">// ticks the picture stretches and brightens</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">SWELL_MAX</span> <span class="ink-s2">=</span> 1.5f;   <span class="ink-s0">// how far the picture widens before collapsing</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">SPLAT_SPEED</span> <span class="ink-s2">=</span> 20.0f; <span class="ink-s0">// top speed of the thrown slab</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">SPLAT_WINDUP</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(14);     <span class="ink-s0">// ticks of pull-back before the release</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">SPLAT_SPLASH</span> <span class="ink-s2">=</span> 7.0f; <span class="ink-s0">// how hard blocks spray along the wall</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">BALL_BOUNCE</span> <span class="ink-s2">=</span> 0.82f; <span class="ink-s0">// energy a sphere keeps per floor bounce</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">BALL_REST</span> <span class="ink-s2">=</span> 0.7f;    <span class="ink-s0">// below this impact speed a sphere stops</span>
+<span class="ink-s2">const</span> <span class="ink-s3">float</span> <span class="ink-s6">BALL_RADIUS</span> <span class="ink-s2">=</span> 0.75f; <span class="ink-s0">// contact distance between two spheres, in</span>
+                                 <span class="ink-s0">// screen-square units (x is halved to match</span>
+                                 <span class="ink-s0">// the 2:1 cell aspect)</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">GLOW_RADIUS</span> <span class="ink-s2">=</span> 3;      <span class="ink-s0">// cells the bloom reaches past the glyphs</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">BADGE_DURATION</span> <span class="ink-s2">=</span> <span class="ink-s4">@dur</span>(30);  <span class="ink-s0">// ticks the exit name stays on screen</span>
+	                              <span class="ink-s0">// after TAB before fading from view</span>
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">DUST_COUNT</span> <span class="ink-s2">=</span> 26;      <span class="ink-s0">// motes left hanging after the word goes</span>
+
+
+<span class="ink-s0">// Each cell is one UTF-8 character. We scan the embedded text row by row</span>
+<span class="ink-s0">// to extract target positions for the particle cloud.</span>
+<span class="ink-s2">struct</span> <span class="ink-s3">Particle</span> {
+	<span class="ink-s3">sz</span> col;       <span class="ink-s0">// target cell column</span>
+	<span class="ink-s3">sz</span> row;       <span class="ink-s0">// target cell row</span>
+	<span class="ink-s3">sz</span> row_src;   <span class="ink-s0">// index into the rows[] List — the source row</span>
+	<span class="ink-s3">sz</span> byte_off;  <span class="ink-s0">// byte offset of the glyph's first byte in that row</span>
+	<span class="ink-s3">sz</span> byte_len;  <span class="ink-s0">// byte length of the glyph (1-4)</span>
+	<span class="ink-s3">float</span> x;       <span class="ink-s0">// current x (cell col as float)</span>
+	<span class="ink-s3">float</span> y;       <span class="ink-s0">// current y (cell row as float)</span>
+	<span class="ink-s3">float</span> vx;
+	<span class="ink-s3">float</span> vy;
+	<span class="ink-s3">sz</span> spawn_tick;
+	<span class="ink-s3">float</span> attract;     <span class="ink-s0">// per-bot spring constant pulling it toward its cell</span>
+	<span class="ink-s3">float</span> damp;        <span class="ink-s0">// per-bot damping — the spread in this and in attract</span>
+	                   <span class="ink-s0">// is what staggers arrival and varies the springiness</span>
+	<span class="ink-s3">float</span> wander;      <span class="ink-s0">// current wander heading, radians</span>
+	<span class="ink-s3">float</span> wander_rate; <span class="ink-s0">// how fast that heading turns</span>
+	<span class="ink-s3">bool</span> alive;
+	<span class="ink-s3">bool</span> settled;
+	<span class="ink-s3">bool</span> resting;      <span class="ink-s0">// FALL exit: landed on the pile, no longer moving</span>
+	<span class="ink-s3">sz</span> fall_col;      <span class="ink-s0">// FALL exit: column it is stacking in</span>
+	<span class="ink-s3">float</span> noise_seed;  <span class="ink-s0">// DISSOLVE exit: per-block offset into the noise glyphs</span>
+}
+
+<span class="ink-s0">// The word builds up, holds, then blows apart and rebuilds — forever.</span>
+<span class="ink-s2">enum</span> <span class="ink-s3">Phase</span> {
+	<span class="ink-s6">BUILD</span>,
+	<span class="ink-s6">HOLD</span>,
+	<span class="ink-s6">BLOW</span>,
+	<span class="ink-s6">FALL</span>,
+	<span class="ink-s6">SLICE</span>,
+	<span class="ink-s6">VORTEX</span>,
+	<span class="ink-s6">DISSOLVE</span>,
+	<span class="ink-s6">SHEAR</span>,
+	<span class="ink-s6">TOPPLE</span>,
+	<span class="ink-s6">IMPLODE</span>,
+	<span class="ink-s6">SPLAT</span>,
+	<span class="ink-s6">FIRE</span>,
+	<span class="ink-s6">SPHERES</span>,
+	<span class="ink-s6">RAINBOW</span>,
+	<span class="ink-s6">GRADIENT</span>,
+}
+
+<span class="ink-s0">// How the word leaves the screen at the end of a cycle. Picked at random</span>
+<span class="ink-s0">// each time so successive cycles don't repeat the same exit.</span>
+<span class="ink-s2">enum</span> <span class="ink-s3">Exit</span> {
+	<span class="ink-s6">EXPLODE</span>,
+	<span class="ink-s6">COLLAPSE</span>,
+	<span class="ink-s6">SLICE</span>,
+	<span class="ink-s6">VORTEX</span>,
+	<span class="ink-s6">DISSOLVE</span>,
+	<span class="ink-s6">SHEAR</span>,
+	<span class="ink-s6">TOPPLE</span>,
+	<span class="ink-s6">IMPLODE</span>,
+	<span class="ink-s6">SPLAT</span>,
+	<span class="ink-s6">FIRE</span>,
+	<span class="ink-s6">SPHERES</span>,
+	<span class="ink-s6">RAINBOW</span>,
+	<span class="ink-s6">GRADIENT</span>,
+}
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">EXIT_COUNT</span> <span class="ink-s2">=</span> 13;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Corner</span> {
+	<span class="ink-s3">sz</span> col;
+	<span class="ink-s3">sz</span> row;
+}
+
+<span class="ink-s0">// An exit effect: a self-contained animation owning all its own state,</span>
+<span class="ink-s0">// reached through four lifecycle hooks. The model is a thin dispatcher —</span>
+<span class="ink-s0">// while an effect is active it stops stepping the build/physics and just</span>
+<span class="ink-s0">// calls fx.step / fx.render each frame. &quot;Taking over&quot; the exit phase this</span>
+<span class="ink-s0">// way keeps each effect's logic and data in one file instead of scattered</span>
+<span class="ink-s0">// through the model. fx_state is owned by whichever effect is running and</span>
+<span class="ink-s0">// released by its teardown.</span>
+<span class="ink-s0">//</span>
+<span class="ink-s0">// Hooks take void* (the Model) so Effect can be declared before Model, which</span>
+<span class="ink-s0">// in turn lets Model hold an Effect field without a forward-declared struct.</span>
+<span class="ink-s0">// An effect casts its argument back to Model* on entry.</span>
+<span class="ink-s2">alias</span> <span class="ink-s3">FnFxSetup</span>    <span class="ink-s2">=</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> (<span class="ink-s3">void</span><span class="ink-s2">*</span>);
+<span class="ink-s2">alias</span> <span class="ink-s3">FnFxStep</span>     <span class="ink-s2">=</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> (<span class="ink-s3">void</span><span class="ink-s2">*</span>);
+<span class="ink-s2">alias</span> <span class="ink-s3">FnFxRender</span>   <span class="ink-s2">=</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> (<span class="ink-s3">void</span><span class="ink-s2">*</span>);
+<span class="ink-s2">alias</span> <span class="ink-s3">FnFxTeardown</span> <span class="ink-s2">=</span> <span class="ink-s2">fn</span> <span class="ink-s3">void</span> (<span class="ink-s3">void</span><span class="ink-s2">*</span>);
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Effect</span> {
+	<span class="ink-s3">String</span>  name;
+	<span class="ink-s3">FnFxSetup</span>    setup;
+	<span class="ink-s3">FnFxStep</span>     step;
+	<span class="ink-s3">FnFxRender</span>   render;
+	<span class="ink-s3">FnFxTeardown</span> teardown;
+}
+
+<span class="ink-s2">struct</span> <span class="ink-s3">Model</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> canvas;
+	<span class="ink-s3">sz</span> w;
+	<span class="ink-s3">sz</span> h;
+	<span class="ink-s3">sz</span> frame;
+	<span class="ink-s3">sz</span> last_emit_frame;
+	<span class="ink-s3">Phase</span> phase;
+	<span class="ink-s3">sz</span> phase_frame;           <span class="ink-s0">// frame the current phase started</span>
+	<span class="ink-s3">sz</span> cycle;                 <span class="ink-s0">// completed build/blow cycles</span>
+	<span class="ink-s3">sz</span> next_emit_index;       <span class="ink-s0">// cursor into self.particles[]</span>
+	<span class="ink-s3">Corner</span> corner;
+	<span class="ink-s3">Particle</span>[] particles;
+	<span class="ink-s3">sz</span> total;
+	<span class="ink-s3">sz</span> text_x;                <span class="ink-s0">// top-left col of rendered text</span>
+	<span class="ink-s3">sz</span> text_y;
+	<span class="ink-s3">sz</span> text_w;
+	<span class="ink-s3">sz</span> text_h;
+	<span class="ink-s3">char</span>[] half_mask;          <span class="ink-s0">// per-cell half-block occupancy for flying bots:</span>
+	                           <span class="ink-s0">// bit 0 = upper half, bit 1 = lower half</span>
+	xray::<span class="ink-s3">Color</span>[] half_col;    <span class="ink-s0">// colour for those cells</span>
+	<span class="ink-s3">List</span>{<span class="ink-s3">String</span>} rows;         <span class="ink-s0">// parsed source lines, indexed by row_src</span>
+	<span class="ink-s3">bool</span> rows_ready;
+	<span class="ink-s3">Exit</span> last_exit;            <span class="ink-s0">// previous cycle's exit, never picked twice</span>
+	<span class="ink-s3">bool</span> has_last_exit;        <span class="ink-s0">// false until the first exit has run</span>
+	<span class="ink-s3">bool</span> exit_forced;          <span class="ink-s0">// TAB queued a specific exit for the next run.</span>
+	                           <span class="ink-s0">// One-shot: consumed on use, so the cycle</span>
+	                           <span class="ink-s0">// after a TAB preview is random again.</span>
+	<span class="ink-s3">Exit</span> forced_exit;          <span class="ink-s0">// the queued one</span>
+	<span class="ink-s3">bool</span> exit_previewed;       <span class="ink-s0">// the badge shows a TAB pick rather than a</span>
+	                           <span class="ink-s0">// random draw — only affects its colour</span>
+	<span class="ink-s3">sz</span> preview_at;            <span class="ink-s0">// frame a queued TAB preview fires (0 = none).</span>
+	                           <span class="ink-s0">// The pause lets you read the badge and see</span>
+	                           <span class="ink-s0">// the assembled word before it goes.</span>
+	<span class="ink-s3">sz</span> badge_until;           <span class="ink-s0">// frame the exit-name badge disappears again.</span>
+	                           <span class="ink-s0">// TAB flashes the name briefly rather than</span>
+	                           <span class="ink-s0">// pinning it up for the whole cycle.</span>
+	<span class="ink-s3">float</span>[] glow;              <span class="ink-s0">// per-cell bloom intensity, built by seeding</span>
+	                           <span class="ink-s0">// the glyph cells and spreading outward</span>
+	<span class="ink-s3">float</span>[<span class="ink-s6">DUST_COUNT</span>] dust_x;  <span class="ink-s0">// motes left behind after the flash</span>
+	<span class="ink-s3">float</span>[<span class="ink-s6">DUST_COUNT</span>] dust_y;
+	<span class="ink-s3">float</span>[<span class="ink-s6">DUST_COUNT</span>] dust_v;  <span class="ink-s0">// brightness, so they twinkle out</span>
+	<span class="ink-s3">Effect</span> fx;                 <span class="ink-s0">// the active exit effect, when fx_active</span>
+	<span class="ink-s3">bool</span> fx_active;            <span class="ink-s0">// an exit effect is running and owns the phase</span>
+	<span class="ink-s3">void</span><span class="ink-s2">*</span> fx_state;            <span class="ink-s0">// the active effect's private state; owned by</span>
+	                           <span class="ink-s0">// the effect and released by its teardown</span>
+	<span class="ink-s3">sz</span> turbo_until;           <span class="ink-s0">// frame the 4x speed-up lapses. Terminals only</span>
+	                           <span class="ink-s0">// report key *release* under the kitty</span>
+	                           <span class="ink-s0">// protocol, so &quot;held&quot; is inferred from auto-</span>
+	                           <span class="ink-s0">// repeat: each space press extends this a few</span>
+	                           <span class="ink-s0">// ticks, and letting go lets it run out.</span>
+	xray::<span class="ink-s3">Color</span>[3] palette;    <span class="ink-s0">// 0=lime, 1=light blue, 2=pale yellow</span>
+}
+
+<span class="ink-s0">// Read one Unicode codepoint from the embedded file, using the standard</span>
+<span class="ink-s0">// library's UTF-8 decoder. Returns 0 on end-of-iteration, but always</span>
+<span class="ink-s0">// advances *k past the consumed bytes (or by 1 on empty input) so the</span>
+<span class="ink-s0">// caller's loop makes progress.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">long</span> <span class="ink-s4">read_codepoint</span>(<span class="ink-s3">String</span> s, <span class="ink-s3">sz</span><span class="ink-s2">*</span> k) {
+	<span class="ink-s2">if</span> (<span class="ink-s2">*</span>k <span class="ink-s2">&gt;=</span> s<span class="ink-s2">.</span>len) <span class="ink-s2">return</span> 0;
+	<span class="ink-s3">StringIterator</span> it;
+	it<span class="ink-s2">.</span>utf8 <span class="ink-s2">=</span> s;
+	it<span class="ink-s2">.</span>current <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)<span class="ink-s2">*</span>k;
+	<span class="ink-s3">sz</span> start <span class="ink-s2">=</span> <span class="ink-s2">*</span>k;
+	<span class="ink-s3">Char32</span><span class="ink-s2">?</span> cp_opt <span class="ink-s2">=</span> it<span class="ink-s2">.</span><span class="ink-s4">next</span>();
+	<span class="ink-s2">*</span>k <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)it<span class="ink-s2">.</span>current;
+	<span class="ink-s3">Char32</span> cp <span class="ink-s2">=</span> cp_opt <span class="ink-s2">??</span> (<span class="ink-s3">Char32</span>)0;
+	<span class="ink-s2">if</span> (<span class="ink-s2">*</span>k <span class="ink-s2">==</span> start) <span class="ink-s2">*</span>k <span class="ink-s2">+=</span> 1; <span class="ink-s0">// safety: always advance</span>
+	<span class="ink-s2">return</span> (<span class="ink-s3">long</span>)cp;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s4">is_sextant_filled</span>(<span class="ink-s3">long</span> cp) {
+	<span class="ink-s0">// phm-slanted draws with the Symbols for Legacy Computing block</span>
+	<span class="ink-s0">// (U+1FB00..U+1FB8B: sextants, diagonals and triangular shades) plus</span>
+	<span class="ink-s0">// the classic block elements █ ▐ ▌ ▄ ▀ from U+2580..U+259F.</span>
+	<span class="ink-s2">if</span> (cp <span class="ink-s2">&gt;=</span> 0x1FB00 <span class="ink-s2">&amp;&amp;</span> cp <span class="ink-s2">&lt;=</span> 0x1FB8B) <span class="ink-s2">return</span> true;
+	<span class="ink-s2">if</span> (cp <span class="ink-s2">&gt;=</span> 0x2580 <span class="ink-s2">&amp;&amp;</span> cp <span class="ink-s2">&lt;=</span> 0x259F) <span class="ink-s2">return</span> true;
+	<span class="ink-s2">return</span> false;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">parse_text</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s0">// Split the embedded file into rows by '\n'. Each row is a slice into</span>
+	<span class="ink-s0">// the embedded blob, so no copying (and no leaking) is needed.</span>
+	<span class="ink-s3">String</span> text <span class="ink-s2">=</span> (<span class="ink-s3">String</span>)<span class="ink-s6">EMBED_TEXT</span>;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>rows_ready) {
+		self<span class="ink-s2">.</span>rows<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+	} <span class="ink-s2">else</span> {
+		self<span class="ink-s2">.</span>rows<span class="ink-s2">.</span><span class="ink-s4">init</span>(mem);
+		self<span class="ink-s2">.</span>rows_ready <span class="ink-s2">=</span> true;
+	}
+	<span class="ink-s3">sz</span> line_start <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;=</span> text<span class="ink-s2">.</span>len; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (i <span class="ink-s2">==</span> text<span class="ink-s2">.</span>len <span class="ink-s2">||</span> text[i] <span class="ink-s2">==</span> (<span class="ink-s3">char</span>)0x0A) {
+			self<span class="ink-s2">.</span>rows<span class="ink-s2">.</span><span class="ink-s4">push</span>(text[line_start:(<span class="ink-s3">sz</span>)(i <span class="ink-s2">-</span> line_start)]);
+			line_start <span class="ink-s2">=</span> i <span class="ink-s2">+</span> 1;
+		}
+	}
+	<span class="ink-s3">List</span>{<span class="ink-s3">String</span>} rows <span class="ink-s2">=</span> self<span class="ink-s2">.</span>rows;
+	<span class="ink-s3">sz</span> row_count <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)rows<span class="ink-s2">.</span><span class="ink-s4">len</span>();
+
+	<span class="ink-s0">// First pass: bounding box and count.</span>
+	<span class="ink-s3">sz</span> min_col <span class="ink-s2">=</span> 0x7fffffff;
+	<span class="ink-s3">sz</span> max_col <span class="ink-s2">=</span> <span class="ink-s2">-</span>1;
+	<span class="ink-s3">sz</span> min_row <span class="ink-s2">=</span> 0x7fffffff;
+	<span class="ink-s3">sz</span> max_row <span class="ink-s2">=</span> <span class="ink-s2">-</span>1;
+	<span class="ink-s3">sz</span> count <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> r <span class="ink-s2">=</span> 0; r <span class="ink-s2">&lt;</span> row_count; r<span class="ink-s2">++</span>) {
+		<span class="ink-s3">String</span> line <span class="ink-s2">=</span> rows[r];
+		<span class="ink-s3">sz</span> k <span class="ink-s2">=</span> 0;
+		<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0;
+		<span class="ink-s2">while</span> (k <span class="ink-s2">&lt;</span> line<span class="ink-s2">.</span>len) {
+			<span class="ink-s3">long</span> cp <span class="ink-s2">=</span> <span class="ink-s4">read_codepoint</span>(line, <span class="ink-s2">&amp;</span>k);
+			<span class="ink-s2">if</span> (cp <span class="ink-s2">==</span> 0x20) { col<span class="ink-s2">++</span>; <span class="ink-s2">continue</span>; }
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span><span class="ink-s4">is_sextant_filled</span>(cp)) <span class="ink-s2">continue</span>;
+			<span class="ink-s2">if</span> (col <span class="ink-s2">&lt;</span> min_col) min_col <span class="ink-s2">=</span> col;
+			<span class="ink-s2">if</span> (col <span class="ink-s2">&gt;</span> max_col) max_col <span class="ink-s2">=</span> col;
+			<span class="ink-s2">if</span> (r <span class="ink-s2">&lt;</span> min_row) min_row <span class="ink-s2">=</span> r;
+			<span class="ink-s2">if</span> (r <span class="ink-s2">&gt;</span> max_row) max_row <span class="ink-s2">=</span> r;
+			count<span class="ink-s2">++</span>;
+			col<span class="ink-s2">++</span>;
+		}
+	}
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>particles<span class="ink-s2">.</span>len) {
+		mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>particles);
+		self<span class="ink-s2">.</span>particles <span class="ink-s2">=</span> {};
+	}
+	<span class="ink-s2">if</span> (max_col <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> count <span class="ink-s2">==</span> 0) { self<span class="ink-s2">.</span>total <span class="ink-s2">=</span> 0; <span class="ink-s2">return</span>; }
+	self<span class="ink-s2">.</span>text_w <span class="ink-s2">=</span> max_col <span class="ink-s2">-</span> min_col <span class="ink-s2">+</span> 1;
+	self<span class="ink-s2">.</span>text_h <span class="ink-s2">=</span> max_row <span class="ink-s2">-</span> min_row <span class="ink-s2">+</span> 1;
+	self<span class="ink-s2">.</span>text_x <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> self<span class="ink-s2">.</span>text_w) <span class="ink-s2">/</span> 2;
+	self<span class="ink-s2">.</span>text_y <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> self<span class="ink-s2">.</span>text_h) <span class="ink-s2">/</span> 2 <span class="ink-s2">-</span> 1;
+	self<span class="ink-s2">.</span>total <span class="ink-s2">=</span> count;
+	self<span class="ink-s2">.</span>particles <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(<span class="ink-s3">Particle</span>, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>total);
+
+	<span class="ink-s0">// Second pass: collect targets. byte_off/byte_len point into the source</span>
+	<span class="ink-s0">// row String so we can render the actual seXtant glyph at the cell.</span>
+	<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> r <span class="ink-s2">=</span> min_row; r <span class="ink-s2">&lt;=</span> max_row <span class="ink-s2">&amp;&amp;</span> idx <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; r<span class="ink-s2">++</span>) {
+		<span class="ink-s3">String</span> line <span class="ink-s2">=</span> rows[r];
+		<span class="ink-s3">sz</span> k <span class="ink-s2">=</span> 0;
+		<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0;
+		<span class="ink-s2">while</span> (k <span class="ink-s2">&lt;</span> line<span class="ink-s2">.</span>len <span class="ink-s2">&amp;&amp;</span> idx <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total) {
+			<span class="ink-s3">sz</span> glyph_start <span class="ink-s2">=</span> k;
+			<span class="ink-s3">long</span> cp <span class="ink-s2">=</span> <span class="ink-s4">read_codepoint</span>(line, <span class="ink-s2">&amp;</span>k);
+			<span class="ink-s2">if</span> (cp <span class="ink-s2">==</span> 0x20) { col<span class="ink-s2">++</span>; <span class="ink-s2">continue</span>; }
+			<span class="ink-s2">if</span> (<span class="ink-s2">!</span><span class="ink-s4">is_sextant_filled</span>(cp)) <span class="ink-s2">continue</span>;
+			<span class="ink-s2">if</span> (col <span class="ink-s2">&lt;</span> min_col) { col<span class="ink-s2">++</span>; <span class="ink-s2">continue</span>; }
+			<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[idx];
+			p<span class="ink-s2">.</span>col <span class="ink-s2">=</span> self<span class="ink-s2">.</span>text_x <span class="ink-s2">+</span> (col <span class="ink-s2">-</span> min_col);
+			p<span class="ink-s2">.</span>row <span class="ink-s2">=</span> self<span class="ink-s2">.</span>text_y <span class="ink-s2">+</span> (r <span class="ink-s2">-</span> min_row);
+			p<span class="ink-s2">.</span>row_src <span class="ink-s2">=</span> r;
+			p<span class="ink-s2">.</span>byte_off <span class="ink-s2">=</span> glyph_start;
+			p<span class="ink-s2">.</span>byte_len <span class="ink-s2">=</span> k <span class="ink-s2">-</span> glyph_start;
+			p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>col;
+			p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>row;
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>spawn_tick <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>attract <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>damp <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>wander <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>wander_rate <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+			p<span class="ink-s2">.</span>settled <span class="ink-s2">=</span> false;
+			idx<span class="ink-s2">++</span>;
+			col<span class="ink-s2">++</span>;
+		}
+	}
+
+	<span class="ink-s0">// Sort bottom-up, then left-to-right, so successive waves rebuild the</span>
+	<span class="ink-s0">// word row by row starting from the baseline.</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 1; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span> cur_p <span class="ink-s2">=</span> self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s3">sz</span> j <span class="ink-s2">=</span> i <span class="ink-s2">-</span> 1;
+		<span class="ink-s2">while</span> (j <span class="ink-s2">&gt;=</span> 0
+				<span class="ink-s2">&amp;&amp;</span> (self<span class="ink-s2">.</span>particles[j]<span class="ink-s2">.</span>row <span class="ink-s2">&lt;</span> cur_p<span class="ink-s2">.</span>row
+					<span class="ink-s2">||</span> (self<span class="ink-s2">.</span>particles[j]<span class="ink-s2">.</span>row <span class="ink-s2">==</span> cur_p<span class="ink-s2">.</span>row
+						<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>particles[j]<span class="ink-s2">.</span>col <span class="ink-s2">&gt;</span> cur_p<span class="ink-s2">.</span>col))) {
+			self<span class="ink-s2">.</span>particles[j <span class="ink-s2">+</span> 1] <span class="ink-s2">=</span> self<span class="ink-s2">.</span>particles[j];
+			j<span class="ink-s2">--</span>;
+		}
+		self<span class="ink-s2">.</span>particles[j <span class="ink-s2">+</span> 1] <span class="ink-s2">=</span> cur_p;
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>corner<span class="ink-s2">.</span>col <span class="ink-s2">*</span> 100 <span class="ink-s2">+</span> self<span class="ink-s2">.</span>corner<span class="ink-s2">.</span>row) {
+		<span class="ink-s2">case</span> 0: self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> 0 };
+		<span class="ink-s2">case</span> (self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1) <span class="ink-s2">*</span> 100: self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1 };
+		<span class="ink-s2">case</span> (self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1) <span class="ink-s2">*</span> 100 <span class="ink-s2">+</span> self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1: self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> 0, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1 };
+		<span class="ink-s2">case</span> (self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1): self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> 0, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> 0 };
+		<span class="ink-s2">default</span>: self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> 0, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> 0 };
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">alloc_half_buffers</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>half_mask<span class="ink-s2">.</span>len) mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>half_mask);
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>half_col<span class="ink-s2">.</span>len) mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>half_col);
+	<span class="ink-s3">sz</span> n <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)(self<span class="ink-s2">.</span>w <span class="ink-s2">*</span> self<span class="ink-s2">.</span>h);
+	self<span class="ink-s2">.</span>half_mask <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(<span class="ink-s3">char</span>, n);
+	self<span class="ink-s2">.</span>half_col <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(xray::<span class="ink-s3">Color</span>, n);
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>glow<span class="ink-s2">.</span>len) mem::<span class="ink-s4">free</span>(self<span class="ink-s2">.</span>glow);
+	self<span class="ink-s2">.</span>glow <span class="ink-s2">=</span> mem::<span class="ink-s4">new_array</span>(<span class="ink-s3">float</span>, n);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">float</span> <span class="ink-s4">rand_range</span>(<span class="ink-s3">float</span> lo, <span class="ink-s3">float</span> hi) {
+	<span class="ink-s2">return</span> lo <span class="ink-s2">+</span> (<span class="ink-s3">float</span>)(<span class="ink-s4">rand</span>() <span class="ink-s2">%</span> 100000) <span class="ink-s2">/</span> 100000.0f <span class="ink-s2">*</span> (hi <span class="ink-s2">-</span> lo);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s3">sz</span> n <span class="ink-s2">=</span> self<span class="ink-s2">.</span>total;
+	<span class="ink-s3">sz</span> start <span class="ink-s2">=</span> self<span class="ink-s2">.</span>next_emit_index;
+	<span class="ink-s3">sz</span> end <span class="ink-s2">=</span> start <span class="ink-s2">+</span> <span class="ink-s6">PARTICLES_PER_WAVE</span>;
+	<span class="ink-s2">if</span> (end <span class="ink-s2">&gt;</span> n) end <span class="ink-s2">=</span> n;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> start; i <span class="ink-s2">&lt;</span> end; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s0">// Spray: scatter the launch point widely around the corner, fire in a</span>
+		<span class="ink-s0">// fully random direction at a slightly random speed, and stagger the</span>
+		<span class="ink-s0">// bots across ticks so the wave streams out rather than popping.</span>
+		p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>corner<span class="ink-s2">.</span>col <span class="ink-s2">+</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>4.0f, 4.0f);
+		p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>corner<span class="ink-s2">.</span>row <span class="ink-s2">+</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>3.0f, 3.0f);
+
+		<span class="ink-s3">float</span> angle <span class="ink-s2">=</span> math::<span class="ink-s4">atan2</span>((<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>row <span class="ink-s2">-</span> p<span class="ink-s2">.</span>y, (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>col <span class="ink-s2">-</span> p<span class="ink-s2">.</span>x)
+			<span class="ink-s2">+</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>1.2f, 1.2f); <span class="ink-s0">// cone around the heading to its cell</span>
+		<span class="ink-s3">float</span> speed <span class="ink-s2">=</span> <span class="ink-s4">rand_range</span>(14.0f, 22.0f); <span class="ink-s0">// fired hard so they overshoot</span>
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> math::<span class="ink-s4">cos</span>(angle) <span class="ink-s2">*</span> speed;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> math::<span class="ink-s4">sin</span>(angle) <span class="ink-s2">*</span> speed <span class="ink-s2">*</span> 0.7f; <span class="ink-s0">// cells are taller than wide</span>
+
+		p<span class="ink-s2">.</span>spawn_tick <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> (i <span class="ink-s2">-</span> start) <span class="ink-s2">*</span> <span class="ink-s6">SPAWN_STAGGER</span>;
+		<span class="ink-s0">// No scripted timing: a weak, floppy spring takes far longer to bring</span>
+		<span class="ink-s0">// its bot home than a stiff one, so the word fills a cell at a time on</span>
+		<span class="ink-s0">// its own — and each bot springs in with its own character.</span>
+		p<span class="ink-s2">.</span>attract <span class="ink-s2">=</span> <span class="ink-s4">rand_range</span>(0.070f, 0.125f);
+		p<span class="ink-s2">.</span>damp <span class="ink-s2">=</span> <span class="ink-s4">rand_range</span>(0.915f, 0.945f);
+		p<span class="ink-s2">.</span>wander <span class="ink-s2">=</span> <span class="ink-s4">rand_range</span>(0.0f, 6.2831853f);
+		p<span class="ink-s2">.</span>wander_rate <span class="ink-s2">=</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>0.15f, 0.15f);
+		p<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> true;
+		p<span class="ink-s2">.</span>settled <span class="ink-s2">=</span> false;
+		self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> i <span class="ink-s2">+</span> 1;
+	}
+	self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+}
+
+<span class="ink-s2">fn</span> xray::<span class="ink-s3">Color</span> <span class="ink-s4">from_glaze</span>(glaze::<span class="ink-s3">Color</span> c) {
+	<span class="ink-s2">return</span> xray::<span class="ink-s4">color_rgb</span>(c<span class="ink-s2">.</span>r, c<span class="ink-s2">.</span>g, c<span class="ink-s2">.</span>b);
+}
+
+<span class="ink-s0">// Pick a fresh 3-stop gradient for the next cycle. Built in HCL at fixed</span>
+<span class="ink-s0">// chroma/luminance so every palette lands at a similar brightness — random</span>
+<span class="ink-s0">// RGB would throw up muddy or near-black stops.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">randomize_palette</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s0">// The three stops are spread symmetrically around a base hue with a</span>
+	<span class="ink-s0">// guaranteed minimum gap, so the word always carries visible colour travel</span>
+	<span class="ink-s0">// — the old independently-random hues could cluster into a flat wash.</span>
+	<span class="ink-s3">double</span> base <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)<span class="ink-s4">rand_range</span>(0.0f, 360.0f);
+	<span class="ink-s3">double</span> s <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)<span class="ink-s4">rand_range</span>(80.0f, 150.0f);
+	<span class="ink-s3">double</span> h0 <span class="ink-s2">=</span> base;
+	<span class="ink-s3">double</span> h1 <span class="ink-s2">=</span> base <span class="ink-s2">+</span> s;
+	<span class="ink-s3">double</span> h2 <span class="ink-s2">=</span> base <span class="ink-s2">-</span> s;
+	<span class="ink-s2">while</span> (h1 <span class="ink-s2">&lt;</span> 0.0) h1 <span class="ink-s2">+=</span> 360.0;
+	<span class="ink-s2">while</span> (h1 <span class="ink-s2">&gt;=</span> 360.0) h1 <span class="ink-s2">-=</span> 360.0;
+	<span class="ink-s2">while</span> (h2 <span class="ink-s2">&lt;</span> 0.0) h2 <span class="ink-s2">+=</span> 360.0;
+	<span class="ink-s2">while</span> (h2 <span class="ink-s2">&gt;=</span> 360.0) h2 <span class="ink-s2">-=</span> 360.0;
+
+	<span class="ink-s3">double</span> chroma <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)<span class="ink-s4">rand_range</span>(55.0f, 90.0f);
+	<span class="ink-s0">// Luminance ramps low → mid → high (or reversed) across the stops, so the</span>
+	<span class="ink-s0">// gradient is never a single flat shade and never washes out to a pale</span>
+	<span class="ink-s0">// luminance — a consistent brightness sheen runs across the word.</span>
+	<span class="ink-s3">double</span> mid <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)<span class="ink-s4">rand_range</span>(40.0f, 58.0f);
+	<span class="ink-s3">double</span> step <span class="ink-s2">=</span> (<span class="ink-s3">double</span>)<span class="ink-s4">rand_range</span>(6.0f, 14.0f);
+	<span class="ink-s3">sz</span> up <span class="ink-s2">=</span> <span class="ink-s4">rand</span>() <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0 <span class="ink-s2">?</span> 1 <span class="ink-s2">:</span> <span class="ink-s2">-</span>1;
+	<span class="ink-s3">double</span> l0 <span class="ink-s2">=</span> mid <span class="ink-s2">+</span> (<span class="ink-s3">double</span>)up <span class="ink-s2">*</span> <span class="ink-s2">-</span>step;
+	<span class="ink-s3">double</span> l1 <span class="ink-s2">=</span> mid;
+	<span class="ink-s3">double</span> l2 <span class="ink-s2">=</span> mid <span class="ink-s2">+</span> (<span class="ink-s3">double</span>)up <span class="ink-s2">*</span> step;
+	<span class="ink-s2">if</span> (l0 <span class="ink-s2">&lt;</span> 20.0) l0 <span class="ink-s2">=</span> 20.0;
+	<span class="ink-s2">if</span> (l2 <span class="ink-s2">&lt;</span> 20.0) l2 <span class="ink-s2">=</span> 20.0;
+	<span class="ink-s2">if</span> (l0 <span class="ink-s2">&gt;</span> 92.0) l0 <span class="ink-s2">=</span> 92.0;
+	<span class="ink-s2">if</span> (l2 <span class="ink-s2">&gt;</span> 92.0) l2 <span class="ink-s2">=</span> 92.0;
+
+	self<span class="ink-s2">.</span>palette[0] <span class="ink-s2">=</span> <span class="ink-s4">from_glaze</span>(glaze::<span class="ink-s4">hcl</span>(h0, chroma, l0));
+	self<span class="ink-s2">.</span>palette[1] <span class="ink-s2">=</span> <span class="ink-s4">from_glaze</span>(glaze::<span class="ink-s4">hcl</span>(h1, chroma, l1));
+	self<span class="ink-s2">.</span>palette[2] <span class="ink-s2">=</span> <span class="ink-s4">from_glaze</span>(glaze::<span class="ink-s4">hcl</span>(h2, chroma, l2));
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">all_settled</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>total <span class="ink-s2">==</span> 0) <span class="ink-s2">return</span> false;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total) <span class="ink-s2">return</span> false;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>settled) <span class="ink-s2">return</span> false;
+	}
+	<span class="ink-s2">return</span> true;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">snap_stragglers</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		p<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> true;
+		p<span class="ink-s2">.</span>settled <span class="ink-s2">=</span> true;
+	}
+	self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> self<span class="ink-s2">.</span>total;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">any_alive</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>alive) <span class="ink-s2">return</span> true;
+	}
+	<span class="ink-s2">return</span> false;
+}
+
+<span class="ink-s0">// True when every living bot is at rest — used by effects that end with a</span>
+<span class="ink-s0">// settled pile (COLLAPSE, SPLAT, TOPPLE, SPHERES) to know when to fade out.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">bool</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">all_resting</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>alive <span class="ink-s2">&amp;&amp;</span> <span class="ink-s2">!</span>p<span class="ink-s2">.</span>resting) <span class="ink-s2">return</span> false;
+	}
+	<span class="ink-s2">return</span> true;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">restart_cycle</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	self<span class="ink-s2">.</span>cycle<span class="ink-s2">++</span>;
+	self<span class="ink-s2">.</span><span class="ink-s4">randomize_palette</span>();
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>settled <span class="ink-s2">=</span> false;
+		self<span class="ink-s2">.</span>particles[i]<span class="ink-s2">.</span>resting <span class="ink-s2">=</span> false;
+	}
+	<span class="ink-s0">// Tear down any exit effect that is still running so its state isn't</span>
+	<span class="ink-s0">// carried into the next cycle.</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>fx_active) {
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>fx<span class="ink-s2">.</span>teardown) self<span class="ink-s2">.</span>fx<span class="ink-s2">.</span><span class="ink-s4">teardown</span>(self);
+		self<span class="ink-s2">.</span>fx_active <span class="ink-s2">=</span> false;
+		self<span class="ink-s2">.</span>fx_state <span class="ink-s2">=</span> <span class="ink-s6">null</span>;
+	}
+	self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> <span class="ink-s6">EMIT_COOLDOWN</span>;
+	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+	self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+	self<span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>();
+	self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update_physics</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>p<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">&lt;</span> p<span class="ink-s2">.</span>spawn_tick) <span class="ink-s2">continue</span>; <span class="ink-s0">// not sprayed out yet</span>
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>settled) {
+			p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>col;
+			p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>row;
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0;
+			<span class="ink-s2">continue</span>;
+		}
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BLOW</span>) {
+			<span class="ink-s0">// No pull, no walls — coast outward until off screen, then retire.</span>
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> <span class="ink-s4">decay</span>(0.995f);
+			p<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> <span class="ink-s4">decay</span>(0.995f);
+			p<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> 0.25f <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+			p<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.25f <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+			<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>x <span class="ink-s2">&lt;</span> <span class="ink-s2">-</span>4.0f <span class="ink-s2">||</span> p<span class="ink-s2">.</span>x <span class="ink-s2">&gt;</span> (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>w <span class="ink-s2">+</span> 4.0f
+					<span class="ink-s2">||</span> p<span class="ink-s2">.</span>y <span class="ink-s2">&lt;</span> <span class="ink-s2">-</span>4.0f <span class="ink-s2">||</span> p<span class="ink-s2">.</span>y <span class="ink-s2">&gt;</span> (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>h <span class="ink-s2">+</span> 4.0f) {
+				p<span class="ink-s2">.</span>alive <span class="ink-s2">=</span> false;
+			}
+			<span class="ink-s2">continue</span>;
+		}
+
+		<span class="ink-s3">float</span> tx <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>col;
+		<span class="ink-s3">float</span> ty <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)p<span class="ink-s2">.</span>row;
+		<span class="ink-s3">float</span> dx <span class="ink-s2">=</span> tx <span class="ink-s2">-</span> p<span class="ink-s2">.</span>x;
+		<span class="ink-s3">float</span> dy <span class="ink-s2">=</span> ty <span class="ink-s2">-</span> p<span class="ink-s2">.</span>y;
+		<span class="ink-s3">float</span> dist2 <span class="ink-s2">=</span> dx <span class="ink-s2">*</span> dx <span class="ink-s2">+</span> dy <span class="ink-s2">*</span> dy;
+		<span class="ink-s3">float</span> dist <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(dist2);
+
+		<span class="ink-s0">// Spring toward the target cell, stiffness per bot — but clamped in</span>
+		<span class="ink-s0">// magnitude. Unclamped, Hooke's law at 40 cells out is ~2.4 cells/tick</span>
+		<span class="ink-s0">// of pull, which swamps the throw within a single tick and makes every</span>
+		<span class="ink-s0">// bot beeline. Capping it lets momentum win first: a bot thrown away</span>
+		<span class="ink-s0">// from its cell coasts outward, sheds speed to drag, and only then</span>
+		<span class="ink-s0">// gets reeled in. Near the target the clamp never binds, so the</span>
+		<span class="ink-s0">// springy overshoot is untouched.</span>
+		<span class="ink-s3">float</span> fx <span class="ink-s2">=</span> dx <span class="ink-s2">*</span> p<span class="ink-s2">.</span>attract;
+		<span class="ink-s3">float</span> fy <span class="ink-s2">=</span> dy <span class="ink-s2">*</span> p<span class="ink-s2">.</span>attract;
+		<span class="ink-s3">float</span> fm2 <span class="ink-s2">=</span> fx <span class="ink-s2">*</span> fx <span class="ink-s2">+</span> fy <span class="ink-s2">*</span> fy;
+		<span class="ink-s2">if</span> (fm2 <span class="ink-s2">&gt;</span> <span class="ink-s6">PULL_MAX</span> <span class="ink-s2">*</span> <span class="ink-s6">PULL_MAX</span>) {
+			<span class="ink-s3">float</span> fm <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(fm2);
+			fx <span class="ink-s2">=</span> fx <span class="ink-s2">/</span> fm <span class="ink-s2">*</span> <span class="ink-s6">PULL_MAX</span>;
+			fy <span class="ink-s2">=</span> fy <span class="ink-s2">/</span> fm <span class="ink-s2">*</span> <span class="ink-s6">PULL_MAX</span>;
+		}
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> fx <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> fy <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+
+		<span class="ink-s0">// Free-floating wander along a slowly turning heading. It fades out</span>
+		<span class="ink-s0">// as the bot closes in, so it drifts on approach and then locks on.</span>
+		<span class="ink-s0">// Wander fades quadratically with distance, so it dominates out in</span>
+		<span class="ink-s0">// open space but dies away well before the pull does — a linear fade</span>
+		<span class="ink-s0">// left bots random-walking a few cells short of their target.</span>
+		<span class="ink-s3">float</span> w <span class="ink-s2">=</span> dist <span class="ink-s2">&gt;</span> 12.0f <span class="ink-s2">?</span> 1.0f <span class="ink-s2">:</span> dist <span class="ink-s2">/</span> 12.0f;
+		w <span class="ink-s2">=</span> w <span class="ink-s2">*</span> w;
+		p<span class="ink-s2">.</span>wander <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>wander_rate <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> math::<span class="ink-s4">cos</span>(p<span class="ink-s2">.</span>wander) <span class="ink-s2">*</span> 0.22f <span class="ink-s2">*</span> w <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> math::<span class="ink-s4">sin</span>(p<span class="ink-s2">.</span>wander) <span class="ink-s2">*</span> 0.11f <span class="ink-s2">*</span> w <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		<span class="ink-s3">float</span> noise <span class="ink-s2">=</span> 0.10f <span class="ink-s2">*</span> w;
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">+=</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>noise, noise) <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">+=</span> <span class="ink-s4">rand_range</span>(<span class="ink-s2">-</span>noise, noise) <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+
+		<span class="ink-s0">// Underdamped on purpose: a bot carries enough momentum to sail past</span>
+		<span class="ink-s0">// its cell and get pulled back, so it springs into place over a couple</span>
+		<span class="ink-s0">// of shrinking swings rather than sliding in on a straight line.</span>
+		p<span class="ink-s2">.</span>vx <span class="ink-s2">*=</span> p<span class="ink-s2">.</span>damp;
+		p<span class="ink-s2">.</span>vy <span class="ink-s2">*=</span> p<span class="ink-s2">.</span>damp;
+
+		<span class="ink-s0">// Cap is well above the launch speed so a hard throw isn't flattened</span>
+		<span class="ink-s0">// to a constant glide — the bot carries full momentum past its cell,</span>
+		<span class="ink-s0">// then the underdamped spring whips it back (rubber band).</span>
+		<span class="ink-s3">float</span> sp2 <span class="ink-s2">=</span> p<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> p<span class="ink-s2">.</span>vx <span class="ink-s2">+</span> p<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> p<span class="ink-s2">.</span>vy;
+		<span class="ink-s3">float</span> cap <span class="ink-s2">=</span> 62.0f;
+		<span class="ink-s2">if</span> (sp2 <span class="ink-s2">&gt;</span> cap <span class="ink-s2">*</span> cap) {
+			<span class="ink-s3">float</span> sp <span class="ink-s2">=</span> math::<span class="ink-s4">sqrt</span>(sp2);
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> p<span class="ink-s2">.</span>vx <span class="ink-s2">/</span> sp <span class="ink-s2">*</span> cap;
+			p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> p<span class="ink-s2">.</span>vy <span class="ink-s2">/</span> sp <span class="ink-s2">*</span> cap;
+		}
+
+		p<span class="ink-s2">.</span>x <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vx <span class="ink-s2">*</span> 0.25f <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+		p<span class="ink-s2">.</span>y <span class="ink-s2">+=</span> p<span class="ink-s2">.</span>vy <span class="ink-s2">*</span> 0.25f <span class="ink-s2">*</span> <span class="ink-s6">DT</span>;
+
+		<span class="ink-s3">float</span> max_x <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> 1);
+		<span class="ink-s3">float</span> max_y <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1);
+		<span class="ink-s0">// Absorb at the edges instead of reflecting — a bounce reads as a</span>
+		<span class="ink-s0">// rubber ball, which is exactly the wrong feel here.</span>
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>x <span class="ink-s2">&lt;</span> 0)     { p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> 0;     <span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vx <span class="ink-s2">&lt;</span> 0) p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0; }
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>y <span class="ink-s2">&lt;</span> 0)     { p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> 0;     <span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vy <span class="ink-s2">&lt;</span> 0) p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0; }
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>x <span class="ink-s2">&gt;</span> max_x) { p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> max_x; <span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vx <span class="ink-s2">&gt;</span> 0) p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0; }
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>y <span class="ink-s2">&gt;</span> max_y) { p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> max_y; <span class="ink-s2">if</span> (p<span class="ink-s2">.</span>vy <span class="ink-s2">&gt;</span> 0) p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0; }
+
+		<span class="ink-s0">// Recheck against the post-move position, not the stale pre-move one.</span>
+		<span class="ink-s3">float</span> ndx <span class="ink-s2">=</span> tx <span class="ink-s2">-</span> p<span class="ink-s2">.</span>x;
+		<span class="ink-s3">float</span> ndy <span class="ink-s2">=</span> ty <span class="ink-s2">-</span> p<span class="ink-s2">.</span>y;
+		<span class="ink-s2">if</span> (ndx <span class="ink-s2">*</span> ndx <span class="ink-s2">+</span> ndy <span class="ink-s2">*</span> ndy <span class="ink-s2">&lt;</span> 0.75f <span class="ink-s2">&amp;&amp;</span> sp2 <span class="ink-s2">&lt;</span> 4.0f) {
+			p<span class="ink-s2">.</span>x <span class="ink-s2">=</span> tx;
+			p<span class="ink-s2">.</span>y <span class="ink-s2">=</span> ty;
+			p<span class="ink-s2">.</span>vx <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>vy <span class="ink-s2">=</span> 0;
+			p<span class="ink-s2">.</span>settled <span class="ink-s2">=</span> true;
+		}
+	}
+}
+
+<span class="ink-s2">fn</span> glaze::<span class="ink-s3">Color</span> <span class="ink-s4">to_glaze</span>(xray::<span class="ink-s3">Color</span> c) {
+	<span class="ink-s2">return</span> { <span class="ink-s2">.</span>kind <span class="ink-s2">=</span> glaze::<span class="ink-s3">ColorKind</span><span class="ink-s2">.</span><span class="ink-s6">TRUECOLOR</span>, <span class="ink-s2">.</span>r <span class="ink-s2">=</span> c<span class="ink-s2">.</span>r, <span class="ink-s2">.</span>g <span class="ink-s2">=</span> c<span class="ink-s2">.</span>g, <span class="ink-s2">.</span>b <span class="ink-s2">=</span> c<span class="ink-s2">.</span>b };
+}
+
+<span class="ink-s0">// Like gradient_color but samples at an arbitrary, wrapping offset — used</span>
+<span class="ink-s0">// by SWEEP to slide the ramp under the stationary word. Wrapping (rather</span>
+<span class="ink-s0">// than clamping) is what lets it scroll indefinitely without running out.</span>
+<span class="ink-s2">fn</span> xray::<span class="ink-s3">Color</span> <span class="ink-s4">gradient_sat</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self, <span class="ink-s3">float</span> pos) {
+	<span class="ink-s3">float</span> span <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(self<span class="ink-s2">.</span>text_w <span class="ink-s2">&gt;</span> 1 <span class="ink-s2">?</span> self<span class="ink-s2">.</span>text_w <span class="ink-s2">-</span> 1 <span class="ink-s2">:</span> 1);
+	<span class="ink-s3">float</span> t <span class="ink-s2">=</span> pos <span class="ink-s2">/</span> span;
+	t <span class="ink-s2">=</span> t <span class="ink-s2">-</span> (<span class="ink-s3">float</span>)(<span class="ink-s3">sz</span>)t;      <span class="ink-s0">// fractional part</span>
+	<span class="ink-s2">if</span> (t <span class="ink-s2">&lt;</span> 0.0f) t <span class="ink-s2">+=</span> 1.0f;    <span class="ink-s0">// ...which is negative for a leftward scroll</span>
+	<span class="ink-s3">sz</span> lo <span class="ink-s2">=</span> t <span class="ink-s2">&lt;</span> 0.5f <span class="ink-s2">?</span> 0 <span class="ink-s2">:</span> 1;
+	<span class="ink-s3">double</span> u <span class="ink-s2">=</span> t <span class="ink-s2">&lt;</span> 0.5f <span class="ink-s2">?</span> (<span class="ink-s3">double</span>)t <span class="ink-s2">*</span> 2.0 <span class="ink-s2">:</span> ((<span class="ink-s3">double</span>)t <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> 2.0;
+	glaze::<span class="ink-s3">Color</span> from <span class="ink-s2">=</span> <span class="ink-s4">to_glaze</span>(self<span class="ink-s2">.</span>palette[lo]);
+	glaze::<span class="ink-s3">Color</span> to <span class="ink-s2">=</span> <span class="ink-s4">to_glaze</span>(self<span class="ink-s2">.</span>palette[lo <span class="ink-s2">+</span> 1]);
+	glaze::<span class="ink-s3">Color</span> mixed <span class="ink-s2">=</span> glaze::<span class="ink-s4">blend_luv</span>(from, to, u);
+	<span class="ink-s2">return</span> xray::<span class="ink-s4">color_rgb</span>(mixed<span class="ink-s2">.</span>r, mixed<span class="ink-s2">.</span>g, mixed<span class="ink-s2">.</span>b);
+}
+
+<span class="ink-s2">fn</span> xray::<span class="ink-s3">Color</span> <span class="ink-s4">gradient_color</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self, <span class="ink-s3">sz</span> col) {
+	<span class="ink-s0">// Map the column across the *text* span (not the screen) to a 3-stop</span>
+	<span class="ink-s0">// gradient. `col` is an absolute screen column, so subtract text_x first</span>
+	<span class="ink-s0">// and clamp — otherwise t runs past 1 and the ramp overshoots.</span>
+	<span class="ink-s3">float</span> t <span class="ink-s2">=</span> 0.0f;
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>text_w <span class="ink-s2">&gt;</span> 1) {
+		t <span class="ink-s2">=</span> (<span class="ink-s3">float</span>)(col <span class="ink-s2">-</span> self<span class="ink-s2">.</span>text_x) <span class="ink-s2">/</span> (<span class="ink-s3">float</span>)(self<span class="ink-s2">.</span>text_w <span class="ink-s2">-</span> 1);
+	}
+	<span class="ink-s2">if</span> (t <span class="ink-s2">&lt;</span> 0.0f) t <span class="ink-s2">=</span> 0.0f;
+	<span class="ink-s2">if</span> (t <span class="ink-s2">&gt;</span> 1.0f) t <span class="ink-s2">=</span> 1.0f;
+
+	<span class="ink-s0">// Blend in CIE LUV via glaze, not sRGB — a straight sRGB lerp dips in</span>
+	<span class="ink-s0">// lightness mid-ramp and reads as a seam at each stop.</span>
+	<span class="ink-s3">sz</span> lo <span class="ink-s2">=</span> t <span class="ink-s2">&lt;</span> 0.5f <span class="ink-s2">?</span> 0 <span class="ink-s2">:</span> 1;
+	<span class="ink-s3">double</span> u <span class="ink-s2">=</span> t <span class="ink-s2">&lt;</span> 0.5f <span class="ink-s2">?</span> (<span class="ink-s3">double</span>)t <span class="ink-s2">*</span> 2.0 <span class="ink-s2">:</span> ((<span class="ink-s3">double</span>)t <span class="ink-s2">-</span> 0.5) <span class="ink-s2">*</span> 2.0;
+	glaze::<span class="ink-s3">Color</span> from <span class="ink-s2">=</span> <span class="ink-s4">to_glaze</span>(self<span class="ink-s2">.</span>palette[lo]);
+	glaze::<span class="ink-s3">Color</span> to <span class="ink-s2">=</span> <span class="ink-s4">to_glaze</span>(self<span class="ink-s2">.</span>palette[lo <span class="ink-s2">+</span> 1]);
+	glaze::<span class="ink-s3">Color</span> mixed <span class="ink-s2">=</span> glaze::<span class="ink-s4">blend_luv</span>(from, to, u);
+	<span class="ink-s2">return</span> xray::<span class="ink-s4">color_rgb</span>(mixed<span class="ink-s2">.</span>r, mixed<span class="ink-s2">.</span>g, mixed<span class="ink-s2">.</span>b);
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s4">srand</span>((<span class="ink-s3">uint</span>)<span class="ink-s4">c3_time_ms_long</span>());
+	self<span class="ink-s2">.</span>w <span class="ink-s2">=</span> 80;
+	self<span class="ink-s2">.</span>h <span class="ink-s2">=</span> 24;
+	self<span class="ink-s2">.</span>frame <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> <span class="ink-s2">-</span><span class="ink-s6">EMIT_COOLDOWN</span>;
+	self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+	self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>cycle <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
+	self<span class="ink-s2">.</span>corner <span class="ink-s2">=</span> { <span class="ink-s2">.</span>col <span class="ink-s2">=</span> 0, <span class="ink-s2">.</span>row <span class="ink-s2">=</span> 0 };
+	<span class="ink-s0">// Same HCL luminance band as randomize_palette, so cycle 0 is no</span>
+	<span class="ink-s0">// brighter than the cycles that follow.</span>
+	self<span class="ink-s2">.</span>palette <span class="ink-s2">=</span> {
+		xray::<span class="ink-s4">color_rgb</span>(138, 207, 5),   <span class="ink-s0">// lime green</span>
+		xray::<span class="ink-s4">color_rgb</span>(87, 174, 228),  <span class="ink-s0">// light blue</span>
+		xray::<span class="ink-s4">color_rgb</span>(199, 189, 122), <span class="ink-s0">// pale yellow</span>
+	};
+	self<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>(80, 24);
+	self<span class="ink-s2">.</span><span class="ink-s4">alloc_half_buffers</span>();
+	self<span class="ink-s2">.</span><span class="ink-s4">parse_text</span>();
+	self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
+	<span class="ink-s2">return</span> <span class="ink-s4">arm_tick</span>(self);
+}
+
+<span class="ink-s0">// Re-arm the animation timer under a stable owner so cancel(self) can clear</span>
+<span class="ink-s0">// it. Re-arming in both the TICK and WINDOW_SIZE handlers with the default</span>
+<span class="ink-s0">// null owner leaves *two* live timers whenever a resize lands between ticks:</span>
+<span class="ink-s0">// each keeps firing a TICK and re-arming itself, so the frame clock runs</span>
+<span class="ink-s0">// double (or more) speed and resizing makes the sim faster.</span>
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s4">arm_tick</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	milktea::<span class="ink-s4">cancel</span>(self);
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(<span class="ink-s6">FRAME_MS</span>, <span class="ink-s2">&amp;</span>milktea::tick_msg, self);
+}
+
+<span class="ink-s0">// One simulation step: advance the clock, integrate, then let the current</span>
+<span class="ink-s0">// phase decide whether it's finished. Split out of update() so the turbo</span>
+<span class="ink-s0">// key can run it several times per tick.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">step</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	self<span class="ink-s2">.</span>frame<span class="ink-s2">++</span>;
+	<span class="ink-s0">// A queued TAB preview overrides the normal HOLD timeout.</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>preview_at <span class="ink-s2">!=</span> 0 <span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>preview_at) {
+		self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> 0;
+		self<span class="ink-s2">.</span><span class="ink-s4">start_exit</span>();
+		<span class="ink-s2">return</span>;
+	}
+	<span class="ink-s0">// While an exit effect is running it owns this phase: the model stops</span>
+	<span class="ink-s0">// touching the build/physics switch and just advances the effect.</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>fx_active) {
+		self<span class="ink-s2">.</span>fx<span class="ink-s2">.</span><span class="ink-s4">step</span>(self);
+		<span class="ink-s2">return</span>;
+	}
+	self<span class="ink-s2">.</span><span class="ink-s4">update_physics</span>();
+		<span class="ink-s2">switch</span> (self<span class="ink-s2">.</span>phase) {
+			<span class="ink-s2">case</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>:
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total
+						<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">&gt;=</span> <span class="ink-s6">EMIT_COOLDOWN</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>();
+					self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
+				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span><span class="ink-s4">all_settled</span>()) {
+					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+					self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+				} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">&gt;</span> <span class="ink-s6">BUILD_TIMEOUT</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">snap_stragglers</span>();
+					self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+					self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+				}
+			<span class="ink-s2">case</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>:
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>preview_at <span class="ink-s2">==</span> 0
+						<span class="ink-s2">&amp;&amp;</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">&gt;=</span> <span class="ink-s6">HOLD_DURATION</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">start_exit</span>();
+				}
+			<span class="ink-s2">default</span>:
+		}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">WINDOW_SIZE</span>) {
+		self<span class="ink-s2">.</span>w <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>width;
+		self<span class="ink-s2">.</span>h <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>window_size<span class="ink-s2">.</span>height;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>canvas <span class="ink-s2">!=</span> <span class="ink-s6">null</span>) self<span class="ink-s2">.</span>canvas<span class="ink-s2">.</span><span class="ink-s4">destroy</span>();
+		self<span class="ink-s2">.</span>canvas <span class="ink-s2">=</span> xray::<span class="ink-s4">new_screen_buffer</span>((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>w, (<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>h);
+		self<span class="ink-s2">.</span><span class="ink-s4">alloc_half_buffers</span>();
+		self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span>;
+		self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+		self<span class="ink-s2">.</span>next_emit_index <span class="ink-s2">=</span> 0;
+		self<span class="ink-s2">.</span><span class="ink-s4">parse_text</span>();
+		self<span class="ink-s2">.</span>last_emit_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">-</span> <span class="ink-s6">EMIT_COOLDOWN</span>;
+		self<span class="ink-s2">.</span><span class="ink-s4">rotate_corner</span>();
+		self<span class="ink-s2">.</span><span class="ink-s4">emit_cloud</span>();
+		<span class="ink-s2">return</span> <span class="ink-s4">arm_tick</span>(self);
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		<span class="ink-s0">// Holding space runs extra steps per frame rather than shortening the</span>
+		<span class="ink-s0">// frame, so the frame rate stays put and only the sim speeds up.</span>
+		<span class="ink-s3">sz</span> steps <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>turbo_until <span class="ink-s2">?</span> <span class="ink-s6">BASE_STEPS</span> <span class="ink-s2">*</span> 4 <span class="ink-s2">:</span> <span class="ink-s6">BASE_STEPS</span>;
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> step <span class="ink-s2">=</span> 0; step <span class="ink-s2">&lt;</span> steps; step<span class="ink-s2">++</span>) self<span class="ink-s2">.</span><span class="ink-s4">step</span>();
+		<span class="ink-s2">return</span> <span class="ink-s4">arm_tick</span>(self);
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">TAB</span>:
+			<span class="ink-s0">// Step to the next effect. If a preview is already queued and</span>
+			<span class="ink-s0">// waiting out its delay, step from *that* rather than from the</span>
+			<span class="ink-s0">// last effect actually run — otherwise every TAB during the</span>
+			<span class="ink-s0">// pause re-queues the same one and the key looks dead.</span>
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>preview_at <span class="ink-s2">!=</span> 0) {
+				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> (<span class="ink-s3">Exit</span>)(((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">EXIT_COUNT</span>);
+			} <span class="ink-s2">else</span> <span class="ink-s2">if</span> (self<span class="ink-s2">.</span>exit_previewed <span class="ink-s2">||</span> self<span class="ink-s2">.</span>has_last_exit) {
+				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> (<span class="ink-s3">Exit</span>)(((<span class="ink-s3">sz</span>)self<span class="ink-s2">.</span>last_exit <span class="ink-s2">+</span> 1) <span class="ink-s2">%</span> <span class="ink-s6">EXIT_COUNT</span>);
+			} <span class="ink-s2">else</span> {
+				self<span class="ink-s2">.</span>forced_exit <span class="ink-s2">=</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">EXPLODE</span>;
+			}
+			self<span class="ink-s2">.</span>exit_forced <span class="ink-s2">=</span> true;
+			self<span class="ink-s2">.</span>exit_previewed <span class="ink-s2">=</span> true;
+			<span class="ink-s0">// If an animation is already playing, hold a short preview (~1s) so you</span>
+			<span class="ink-s0">// can read the badge before the selected effect fires — the</span>
+			<span class="ink-s0">// running animation keeps playing in the meantime, and step()</span>
+			<span class="ink-s0">// activates the switch once preview_at passes.</span>
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>fx_active) {
+				self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s4">@dur</span>(20);
+				self<span class="ink-s2">.</span>badge_until <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s6">BADGE_DURATION</span>;
+				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			}
+			<span class="ink-s0">// Snap the word together, then hold ~2s before firing: long</span>
+			<span class="ink-s0">// enough to read the badge and see the word whole, without the</span>
+			<span class="ink-s0">// full rebuild that would make the key useless for comparing.</span>
+			self<span class="ink-s2">.</span><span class="ink-s4">snap_stragglers</span>();
+			self<span class="ink-s2">.</span>phase <span class="ink-s2">=</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>;
+			self<span class="ink-s2">.</span>phase_frame <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame;
+			self<span class="ink-s2">.</span>preview_at <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s4">@dur</span>(40);
+			self<span class="ink-s2">.</span>badge_until <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s6">BADGE_DURATION</span>;
+			<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'Q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'R') {
+				self<span class="ink-s2">.</span><span class="ink-s4">restart_cycle</span>();
+				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			}
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> ' ') {
+				<span class="ink-s0">// Each repeat pushes the deadline out; ~7 ticks is longer</span>
+				<span class="ink-s0">// than a terminal's auto-repeat interval but short enough</span>
+				<span class="ink-s0">// that releasing space drops back to normal speed at once.</span>
+				self<span class="ink-s2">.</span>turbo_until <span class="ink-s2">=</span> self<span class="ink-s2">.</span>frame <span class="ink-s2">+</span> <span class="ink-s4">@dur</span>(7);
+				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			}
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'b' <span class="ink-s2">||</span> k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'B') {
+				<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">BUILD</span> <span class="ink-s2">||</span> self<span class="ink-s2">.</span>phase <span class="ink-s2">==</span> <span class="ink-s3">Phase</span><span class="ink-s2">.</span><span class="ink-s6">HOLD</span>) {
+					self<span class="ink-s2">.</span><span class="ink-s4">start_exit</span>();
+				}
+				<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+			}
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>: <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">String</span> <span class="ink-s4">exit_name</span>(<span class="ink-s3">Exit</span> e) {
+	<span class="ink-s2">switch</span> (e) {
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">EXPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;EXPLODE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">COLLAPSE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;COLLAPSE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SLICE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SLICE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">VORTEX</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;VORTEX&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">DISSOLVE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;DISSOLVE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SHEAR</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SHEAR&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">TOPPLE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;TOPPLE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">IMPLODE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;IMPLODE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SPLAT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPLAT&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">FIRE</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;FIRE&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">SPHERES</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;SPHERES&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">RAINBOW</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;RAINBOW&quot;</span>;
+		<span class="ink-s2">case</span> <span class="ink-s3">Exit</span><span class="ink-s2">.</span><span class="ink-s6">GRADIENT</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;GRADIENT&quot;</span>;
+		<span class="ink-s2">default</span>: <span class="ink-s2">return</span> <span class="ink-s9">&quot;?&quot;</span>;
+	}
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">String</span> <span class="ink-s4">glyph_at</span>(<span class="ink-s3">List</span>{<span class="ink-s3">String</span>} rows, <span class="ink-s3">sz</span> row_src, <span class="ink-s3">sz</span> byte_off, <span class="ink-s3">sz</span> byte_len) {
+	<span class="ink-s0">// Pull the byte range from the source row String. Note the `:len` form —</span>
+	<span class="ink-s0">// C3's `a..b` range is inclusive and would grab a trailing stray byte.</span>
+	<span class="ink-s3">String</span> line <span class="ink-s2">=</span> rows[row_src];
+	<span class="ink-s2">return</span> line[byte_off:(<span class="ink-s3">sz</span>)byte_len];
+}
+
+<span class="ink-s0">// Effect name badge, top right, shown briefly after TAB. Drawn last so it</span>
+<span class="ink-s0">// stays readable and nothing paints over it. Also drawn during an active</span>
+<span class="ink-s0">// effect, so stepping effects with TAB still shows where you are.</span>
+<span class="ink-s2">fn</span> <span class="ink-s3">void</span> <span class="ink-s4">draw_badge</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) {
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>badge_until) <span class="ink-s2">return</span>;
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> sb <span class="ink-s2">=</span> self<span class="ink-s2">.</span>canvas;
+	<span class="ink-s3">Exit</span> shown <span class="ink-s2">=</span> self<span class="ink-s2">.</span>forced_exit;
+	<span class="ink-s3">String</span> label <span class="ink-s2">=</span> <span class="ink-s4">exit_name</span>(shown);
+	<span class="ink-s3">sz</span> pad <span class="ink-s2">=</span> 1;
+	<span class="ink-s3">sz</span> bw <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)label<span class="ink-s2">.</span>len <span class="ink-s2">+</span> pad <span class="ink-s2">*</span> 2;
+	<span class="ink-s3">sz</span> bx <span class="ink-s2">=</span> self<span class="ink-s2">.</span>w <span class="ink-s2">-</span> bw <span class="ink-s2">-</span> 1;
+	<span class="ink-s3">sz</span> by <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">if</span> (bx <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> self<span class="ink-s2">.</span>h <span class="ink-s2">&lt;=</span> 0) <span class="ink-s2">return</span>;
+	xray::<span class="ink-s3">Color</span> plate <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(46, 44, 62);
+	xray::<span class="ink-s3">Color</span> ink <span class="ink-s2">=</span> xray::<span class="ink-s4">color_rgb</span>(190, 180, 210);
+	xray::<span class="ink-s3">Style</span> bg <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(ink)<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(plate);
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> bw; i<span class="ink-s2">++</span>) {
+		sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)(bx <span class="ink-s2">+</span> i), (<span class="ink-s3">sz</span>)by, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s9">&quot; &quot;</span>, 1, bg));
+	}
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> label<span class="ink-s2">.</span>len; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">String</span> ch <span class="ink-s2">=</span> label[(<span class="ink-s3">sz</span>)i:1];
+		sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)(bx <span class="ink-s2">+</span> pad <span class="ink-s2">+</span> i), (<span class="ink-s3">sz</span>)by, xray::<span class="ink-s4">new_cell</span>(ch, 1, bg));
+	}
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">Model</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">Model</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	xray::<span class="ink-s3">ScreenBuffer</span><span class="ink-s2">*</span> sb <span class="ink-s2">=</span> self<span class="ink-s2">.</span>canvas;
+	sb<span class="ink-s2">.</span><span class="ink-s4">clear</span>();
+
+	xray::<span class="ink-s3">Rect</span> full <span class="ink-s2">=</span> xray::<span class="ink-s4">new_rect</span>(0, 0, self<span class="ink-s2">.</span>w, self<span class="ink-s2">.</span>h);
+	<span class="ink-s0">// Sunset: elliptical gradient focused at the bottom-centre of the screen,</span>
+	<span class="ink-s0">// so the brighter colour glows from the horizon and falls off wider</span>
+	<span class="ink-s0">// horizontally (elliptical, not radial) toward the dark top and sides.</span>
+	sb<span class="ink-s2">.</span><span class="ink-s4">fill_gradient_ellipse</span>(
+		full,
+		xray::<span class="ink-s4">color_rgb</span>(38, 16, 54),
+		xray::<span class="ink-s4">color_rgb</span>(4, 4, 10),
+		(<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>w <span class="ink-s2">/</span> 2.0f, (<span class="ink-s3">float</span>)(self<span class="ink-s2">.</span>h <span class="ink-s2">-</span> 1),
+		(<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>w <span class="ink-s2">*</span> 0.65f, (<span class="ink-s3">float</span>)self<span class="ink-s2">.</span>h <span class="ink-s2">*</span> 0.95f);
+
+	xray::<span class="ink-s3">Style</span> dot_s <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(xray::<span class="ink-s4">color_rgb</span>(30, 38, 60))<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> 0; row <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>h; row<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0; col <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>w; col<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> mod <span class="ink-s2">=</span> (col <span class="ink-s2">*</span> 7 <span class="ink-s2">+</span> row <span class="ink-s2">*</span> 13) <span class="ink-s2">%</span> 41;
+			<span class="ink-s2">if</span> (mod <span class="ink-s2">==</span> 0) {
+				sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)col, (<span class="ink-s3">sz</span>)row, xray::<span class="ink-s4">new_cell</span>(<span class="ink-s9">&quot; &quot;</span>, 1, dot_s));
+			}
+		}
+	}
+
+	<span class="ink-s0">// An exit effect owns the whole scene while it runs; defer to it. The</span>
+	<span class="ink-s0">// effect has already had the clear + background gradient painted behind</span>
+	<span class="ink-s0">// it, and draws everything else itself.</span>
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>fx_active) {
+		self<span class="ink-s2">.</span>fx<span class="ink-s2">.</span><span class="ink-s4">render</span>(self);
+		<span class="ink-s4">draw_badge</span>(self);
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(sb);
+	}
+
+	<span class="ink-s0">// In flight a bot is a half block, so it moves at twice the vertical</span>
+	<span class="ink-s0">// resolution of a cell. Two bots sharing a cell composite into a full</span>
+	<span class="ink-s0">// block, so accumulate into a mask first rather than drawing directly.</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>half_mask<span class="ink-s2">.</span>len; i<span class="ink-s2">++</span>) self<span class="ink-s2">.</span>half_mask[i] <span class="ink-s2">=</span> 0;
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>p<span class="ink-s2">.</span>alive) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>frame <span class="ink-s2">&lt;</span> p<span class="ink-s2">.</span>spawn_tick) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>settled) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>resting) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">sz</span> cell_col <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>x;
+		<span class="ink-s3">sz</span> half_row <span class="ink-s2">=</span> (<span class="ink-s3">sz</span>)(p<span class="ink-s2">.</span>y <span class="ink-s2">*</span> 2.0f);
+		<span class="ink-s3">sz</span> cell_row <span class="ink-s2">=</span> half_row <span class="ink-s2">/</span> 2;
+		<span class="ink-s2">if</span> (cell_col <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> cell_col <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>w) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (cell_row <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> cell_row <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>h) <span class="ink-s2">continue</span>;
+		<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> cell_row <span class="ink-s2">*</span> self<span class="ink-s2">.</span>w <span class="ink-s2">+</span> cell_col;
+		self<span class="ink-s2">.</span>half_mask[idx] <span class="ink-s2">|=</span> (<span class="ink-s3">char</span>)(half_row <span class="ink-s2">%</span> 2 <span class="ink-s2">==</span> 0 <span class="ink-s2">?</span> 1 <span class="ink-s2">:</span> 2);
+		xray::<span class="ink-s3">Color</span> pc <span class="ink-s2">=</span> <span class="ink-s4">gradient_color</span>(self, p<span class="ink-s2">.</span>col);
+		self<span class="ink-s2">.</span>half_col[idx] <span class="ink-s2">=</span> pc;
+	}
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> row <span class="ink-s2">=</span> 0; row <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>h; row<span class="ink-s2">++</span>) {
+		<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> col <span class="ink-s2">=</span> 0; col <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>w; col<span class="ink-s2">++</span>) {
+			<span class="ink-s3">sz</span> idx <span class="ink-s2">=</span> row <span class="ink-s2">*</span> self<span class="ink-s2">.</span>w <span class="ink-s2">+</span> col;
+			<span class="ink-s3">char</span> mask <span class="ink-s2">=</span> self<span class="ink-s2">.</span>half_mask[idx];
+			<span class="ink-s2">if</span> (mask <span class="ink-s2">==</span> 0) <span class="ink-s2">continue</span>;
+			<span class="ink-s3">String</span> g <span class="ink-s2">=</span> <span class="ink-s9">&quot;█&quot;</span>;
+			<span class="ink-s2">if</span> (mask <span class="ink-s2">==</span> 1) g <span class="ink-s2">=</span> <span class="ink-s9">&quot;▀&quot;</span>;
+			<span class="ink-s2">if</span> (mask <span class="ink-s2">==</span> 2) g <span class="ink-s2">=</span> <span class="ink-s9">&quot;▄&quot;</span>;
+			xray::<span class="ink-s3">Style</span> s2 <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(self<span class="ink-s2">.</span>half_col[idx])<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+			sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)col, (<span class="ink-s3">sz</span>)row, xray::<span class="ink-s4">new_cell</span>(g, 1, s2));
+		}
+	}
+
+	<span class="ink-s0">// draw settled particles with gradient</span>
+	<span class="ink-s2">for</span> (<span class="ink-s3">sz</span> i <span class="ink-s2">=</span> 0; i <span class="ink-s2">&lt;</span> self<span class="ink-s2">.</span>total; i<span class="ink-s2">++</span>) {
+		<span class="ink-s3">Particle</span><span class="ink-s2">*</span> p <span class="ink-s2">=</span> <span class="ink-s2">&amp;</span>self<span class="ink-s2">.</span>particles[i];
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>p<span class="ink-s2">.</span>alive <span class="ink-s2">||</span> <span class="ink-s2">!</span>p<span class="ink-s2">.</span>settled) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>col <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> p<span class="ink-s2">.</span>col <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>w) <span class="ink-s2">continue</span>;
+		<span class="ink-s2">if</span> (p<span class="ink-s2">.</span>row <span class="ink-s2">&lt;</span> 0 <span class="ink-s2">||</span> p<span class="ink-s2">.</span>row <span class="ink-s2">&gt;=</span> self<span class="ink-s2">.</span>h) <span class="ink-s2">continue</span>;
+		xray::<span class="ink-s3">Color</span> col <span class="ink-s2">=</span> <span class="ink-s4">gradient_color</span>(self, p<span class="ink-s2">.</span>col);
+		xray::<span class="ink-s3">Style</span> s2 <span class="ink-s2">=</span> xray::<span class="ink-s4">default_style</span>()<span class="ink-s2">.</span><span class="ink-s4">set_fg</span>(col)<span class="ink-s2">.</span><span class="ink-s4">set_bg</span>(xray::<span class="ink-s4">color_transparent</span>());
+		<span class="ink-s3">String</span> g <span class="ink-s2">=</span> <span class="ink-s4">glyph_at</span>(self<span class="ink-s2">.</span>rows, p<span class="ink-s2">.</span>row_src, p<span class="ink-s2">.</span>byte_off, p<span class="ink-s2">.</span>byte_len);
+		sb<span class="ink-s2">.</span><span class="ink-s4">set_cell</span>((<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>col, (<span class="ink-s3">sz</span>)p<span class="ink-s2">.</span>row, xray::<span class="ink-s4">new_cell</span>(g, 1, s2));
+	}
+
+	<span class="ink-s0">// Effect name badge, top right, shown briefly after TAB.</span>
+	<span class="ink-s4">draw_badge</span>(self);
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">canvas</span>(sb);
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">Model</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">if</span> (<span class="ink-s2">catch</span> err <span class="ink-s2">=</span> milktea::<span class="ink-s4">@run_program</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true })) {
+		io::<span class="ink-s4">printfn</span>(<span class="ink-s9">&quot;Error: %s&quot;</span>, err);
+		<span class="ink-s2">return</span> 1;
+	}
+	io::<span class="ink-s4">printn</span>(<span class="ink-s9">&quot;Goodbye!&quot;</span>);
+	<span class="ink-s2">return</span> 0;
+}
+</pre>

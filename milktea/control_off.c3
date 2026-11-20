@@ -14,7 +14,7 @@ struct ControlHooks {
 
 fn void install_control_hooks(ControlHooks hooks) {}
 fn void control_start(bool use_stdin) {}
-fn sz control_watch(PollFd[] out) => 0;
+fn sz control_watch(PollFd[] out) @feat(!MILKTEA_WEB) => 0;
 fn void control_disarm() {}
 fn bool control_busy() => false;
 fn bool control_ended() => false;

@@ -111,14 +111,14 @@ presses all arrive as a `Msg`. We `switch` on `msg.kind`.
 ```c3
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
     switch (msg.kind) {
-        case milktea::MsgKind.TICK:
+        case TICK:
             if (self.running && self.remaining > 0) {
                 self.remaining--;
                 if (self.remaining == 0) self.advance_phase();
             }
             return milktea::every(1000);   // re-arm for the next second
 
-        case milktea::MsgKind.KEY:
+        case KEY:
             return self.handle_key(msg.key);
 
         default:
@@ -159,13 +159,13 @@ quit by returning `milktea::quit()`.
 ```c3
 fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
     switch (k.code) {
-        case milktea::KeyCode.CTRL_C:
-        case milktea::KeyCode.ESC:
+        case CTRL_C:
+        case ESC:
             return milktea::quit();
-        case milktea::KeyCode.TAB:
+        case TAB:
             self.phase     = self.phase == Phase.FOCUS ? Phase.BREAK : Phase.FOCUS;
             self.remaining = phase_length(self.phase);
-        case milktea::KeyCode.RUNE:
+        case RUNE:
             switch (k.rune) {
                 case 'q': return milktea::quit();
                 case ' ': self.running = !self.running;
@@ -227,7 +227,7 @@ background — and both boxes use a rounded border tinted to match.
         .fg = accent, .bold = true,
         .border = glaze::ROUNDED, .border_color = accent,
         .pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-        .align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
+        .align_h = CENTER, .align_v = CENTER,
     };
     glaze::Style status_s = { .fg = dim };
 ```

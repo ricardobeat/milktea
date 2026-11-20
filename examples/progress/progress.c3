@@ -21,7 +21,7 @@ fn milktea::Cmd ProgressModel.init(ProgressModel* self) @dynamic {
 
 
 fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		if (!self.done) {
 			self.progress += self.speed;
 			if (self.progress >= TOTAL) {
@@ -32,13 +32,13 @@ fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dyn
 		return milktea::tick(50);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'f') self.speed = 5;
 			if (k.rune == 's') self.speed = 1;
@@ -48,7 +48,7 @@ fn milktea::Cmd ProgressModel.update(ProgressModel* self, milktea::Msg msg) @dyn
 				self.speed = 1;
 				return milktea::tick(50);
 			}
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}

@@ -18,7 +18,7 @@ fn void dissolve_setup(void* raw) {
 		p.spawn_tick = self.frame + @dur(rand() % 55);
 		p.noise_seed = rand_range(0.0f, 1000.0f);
 	}
-	self.phase = Phase.DISSOLVE;
+	self.phase = DISSOLVE;
 	self.phase_frame = self.frame;
 	self.fx_state = null;
 }

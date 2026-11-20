@@ -24,13 +24,13 @@ fn milktea::Cmd InputsModel.init(InputsModel* self) @dynamic {
 }
 
 fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.TAB:
+		case TAB:
 			self.inputs[self.focus].focused = false;
 			if (k.shift) {
 				self.focus--;
@@ -39,15 +39,15 @@ fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic
 				self.focus = (self.focus + 1) % 3;
 			}
 			self.inputs[self.focus].focused = true;
-		case milktea::KeyCode.UP:
+		case UP:
 			self.inputs[self.focus].focused = false;
 			self.focus = (self.focus - 1 + 3) % 3;
 			self.inputs[self.focus].focused = true;
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			self.inputs[self.focus].focused = false;
 			self.focus = (self.focus + 1) % 3;
 			self.inputs[self.focus].focused = true;
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			if (self.focus < 2) {
 				self.inputs[self.focus].focused = false;
 				self.focus++;
@@ -56,7 +56,7 @@ fn milktea::Cmd InputsModel.update(InputsModel* self, milktea::Msg msg) @dynamic
 				self.submitted = true;
 				return milktea::quit();
 			}
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}
@@ -74,7 +74,7 @@ const sz LABEL_GAP = 1;
 
 fn milktea::Node* InputsModel.view(InputsModel* self) @dynamic {
 	glaze::Style title_s = glaze::style().foreground(glaze::color_hex("#00d7ff")).with_bold(true);
-	glaze::Style label_s = glaze::style().align(glaze::Position.LEFT, glaze::Position.TOP);
+	glaze::Style label_s = glaze::style().align(LEFT, TOP);
 	glaze::Style hint_s  = glaze::style().foreground(glaze::color_hex("#666666"));
 
 	milktea::Node* form = milktea::vstack();

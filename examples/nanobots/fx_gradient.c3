@@ -74,7 +74,7 @@ fn xray::Color rainbow_tint(float h, float val) {
 
 fn void gradient_setup(void* raw) {
 	Model* self = (Model*)raw;
-	self.phase = Phase.GRADIENT;
+	self.phase = GRADIENT;
 	self.phase_frame = self.frame;
 	self.fx_state = null;
 }

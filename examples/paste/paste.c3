@@ -13,7 +13,7 @@ import std::core::dstring;
 // The app fills most of the screen with a Textarea; a one-line status bar at
 // the bottom reports paste events (byte and line counts) and shows a usage
 // hint while idle.  Normal typing goes through Textarea.handle_key; pasted
-// text is delivered via MsgKind.PASTE → Textarea.handle_paste.
+// text is delivered via PASTE → Textarea.handle_paste.
 // Quit: Ctrl+C only ('q' must remain typeable inside the textarea).
 
 struct PasteModel {
@@ -47,7 +47,7 @@ fn milktea::Cmd PasteModel.init(PasteModel* self) @dynamic {
 
 fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
-		case milktea::MsgKind.PASTE:
+		case PASTE:
 			// msg.paste is only valid during this dispatch call.
 			// Capture byte count and line count before calling handle_paste,
 			// which may modify the textarea but leaves the original slice intact.
@@ -65,13 +65,13 @@ fn milktea::Cmd PasteModel.update(PasteModel* self, milktea::Msg msg) @dynamic {
 			self.set_status(s);
 			return null;
 
-		case milktea::MsgKind.TICK:
+		case TICK:
 			self.ta.update(msg);
 			return null;
 
-		case milktea::MsgKind.KEY:
+		case KEY:
 			milktea::KeyMsg k = msg.key;
-			if (k.code == milktea::KeyCode.CTRL_C) return milktea::quit();
+			if (k.code == CTRL_C) return milktea::quit();
 			self.ta.handle_key(k);
 			return null;
 

@@ -18,22 +18,22 @@ fn milktea::Cmd SpinnerModel.init(SpinnerModel* self) @dynamic {
 }
 
 fn milktea::Msg on_spin() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
+	return { .kind = USER, .tag = MSG_SPIN };
 }
 
 fn milktea::Cmd SpinnerModel.update(SpinnerModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
+	if (msg.kind == USER && msg.tag == MSG_SPIN) {
 		self.frame++;
 		return milktea::tick(80, &on_spin);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

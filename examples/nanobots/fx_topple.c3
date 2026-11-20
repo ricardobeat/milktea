@@ -71,7 +71,7 @@ fn void topple_setup(void* raw) {
 		p.spawn_tick = self.frame;
 	}
 	self.fx_state = s;
-	self.phase = Phase.TOPPLE;
+	self.phase = TOPPLE;
 	self.phase_frame = self.frame;
 }
 

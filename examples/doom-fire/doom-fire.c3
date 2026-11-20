@@ -68,6 +68,8 @@ struct FireModel {
 	sz* fire;
 	sz width;
 	sz height;
+	sz decay_whole;
+	float decay_frac;
 	long startTime;
 	// Pre-allocated cell grid for direct rendering
 	xray::Cell[] view_cells;
@@ -83,12 +85,22 @@ fn void init_fire_cells() {
 	}
 }
 
+// Keep the flame tips below the top third, regardless of viewport height.
+// Fractional cooling preserves the flicker without requiring a taller grid.
+fn void FireModel.set_decay(FireModel* self) {
+	sz flame_height = max(1, self.height * 2 / 3);
+	float decay = 36.0f / (float)flame_height;
+	self.decay_whole = (sz)decay;
+	self.decay_frac = decay - (float)self.decay_whole;
+}
+
 fn milktea::Cmd FireModel.init(FireModel* self) @dynamic {
 	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
 	self.startTime = milktea::wall_time_ms();
 	self.width = 80;
 	self.height = 48;
+	self.set_decay();
 	self.fire = mem::new_array(sz, MAX_W * MAX_H);
 	for (sz i = 0; i < MAX_W * MAX_H; i++) self.fire[i] = 0;
 	for (sz x = 0; x < self.width; x++) {
@@ -115,7 +127,8 @@ fn void spread_pixel(FireModel* m, sz idx) {
 	sz dst     = idx - rnd + 1;
 	sz buf_len = m.width * m.height;
 	if (dst - m.width >= 0 && dst - m.width < buf_len) {
-		sz decay   = rnd & 1;
+		sz decay = m.decay_whole;
+		if ((float)(rand() % 1000) / 1000.0f < m.decay_frac) decay++;
 		sz new_val = pixel - decay;
 		if (new_val < 0) new_val = 0;
 		m.fire[dst - m.width] = new_val;
@@ -123,7 +136,7 @@ fn void spread_pixel(FireModel* m, sz idx) {
 }
 
 fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		sz new_w = msg.window_size.width;
 		// Keep the heat source four rows below the viewport so the flames sit lower.
 		sz new_h = (msg.window_size.height + 4) * 2;
@@ -131,6 +144,7 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		if (new_h > MAX_H) new_h = MAX_H;
 		self.width = new_w;
 		self.height = new_h;
+		self.set_decay();
 		for (sz i = 0; i < self.width * self.height; i++) {
 			self.fire[i] = 0;
 		}
@@ -145,7 +159,7 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		for (sz x = 0; x < self.width; x++) {
 			for (sz y = 0; y < self.height; y++) {
 				spread_pixel(self, y * self.width + x);
@@ -154,13 +168,13 @@ fn milktea::Cmd FireModel.update(FireModel* self, milktea::Msg msg) @dynamic {
 		return milktea::tick();
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}

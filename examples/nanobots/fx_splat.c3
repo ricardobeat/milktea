@@ -75,7 +75,7 @@ fn void splat_setup(void* raw) {
 		p.spawn_tick = self.frame;
 	}
 	self.fx_state = s;
-	self.phase = Phase.SPLAT;
+	self.phase = SPLAT;
 	self.phase_frame = self.frame;
 }
 

@@ -174,7 +174,7 @@ fn void FlappyModel.update_particles(&self) {
 // ── Game Reset / Init ─────────────────────────────────────────────────────────
 
 fn void FlappyModel.start_game(&self) {
-	self.state = GameState.PLAYING;
+	self.state = PLAYING;
 	self.score = 0;
 	self.flash_timer = 0;
 	self.world_scroll = 0.0f;
@@ -195,8 +195,8 @@ fn void FlappyModel.start_game(&self) {
 
 	// Gap size according to difficulty
 	sz gap = 17;
-	if (self.difficulty == Difficulty.EASY) gap = 21;
-	if (self.difficulty == Difficulty.HARD) gap = 13;
+	if (self.difficulty == EASY) gap = 21;
+	if (self.difficulty == HARD) gap = 13;
 
 	// Reset pipes
 	float start_x = (float)((sz)self.vbuf.width + 10);
@@ -212,7 +212,7 @@ fn void FlappyModel.start_game(&self) {
 			.gap_size = gap,
 			.scored = false,
 			.active = true,
-			.speed_y = (self.difficulty == Difficulty.HARD && i % 2 == 1) ? 0.4f : 0.0f,
+			.speed_y = (self.difficulty == HARD && i % 2 == 1) ? 0.4f : 0.0f,
 			.min_gap_y = min_y,
 			.max_gap_y = max_y,
 		};
@@ -225,8 +225,8 @@ fn milktea::Cmd FlappyModel.init(FlappyModel* self) @dynamic {
 	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
 
-	self.state = GameState.INTRO;
-	self.difficulty = Difficulty.NORMAL;
+	self.state = INTRO;
+	self.difficulty = NORMAL;
 	self.menu_selected = 0;
 	self.score = 0;
 	self.high_score = 0;
@@ -239,7 +239,7 @@ fn milktea::Cmd FlappyModel.init(FlappyModel* self) @dynamic {
 }
 
 fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.term_w = msg.window_size.width;
 		self.term_h = msg.window_size.height;
 		if (self.vbuf != null) { self.vbuf.destroy(); mem::free(self.vbuf); }
@@ -254,15 +254,15 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.ticks++;
 
 		if (self.flash_timer > 0) self.flash_timer--;
 		self.update_particles();
 
 		float scroll_spd = 0.8f;
-		if (self.state == GameState.PLAYING) {
-			scroll_spd = (self.difficulty == Difficulty.HARD) ? 1.4f : 1.0f;
+		if (self.state == PLAYING) {
+			scroll_spd = (self.difficulty == HARD) ? 1.4f : 1.0f;
 		}
 		self.world_scroll += scroll_spd;
 
@@ -270,7 +270,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 		switch (self.state) {
 			case INTRO:
 				if (self.ticks > 80) {
-					self.state = GameState.MENU;
+					self.state = MENU;
 				}
 			case MENU:
 				// gentle bobbing
@@ -297,7 +297,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 				}
 
 				// Update pipes
-				float pipe_speed = (self.difficulty == Difficulty.HARD) ? 1.4f : 1.0f;
+				float pipe_speed = (self.difficulty == HARD) ? 1.4f : 1.0f;
 				for (sz i = 0; i < MAX_PIPES; i++) {
 					if (!self.pipes[i].active) continue;
 					self.pipes[i].x -= pipe_speed;
@@ -358,7 +358,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 				self.bird.angle += 0.25f;
 				self.death_timer--;
 				if (self.death_timer <= 0) {
-					self.state = GameState.GAME_OVER;
+					self.state = GAME_OVER;
 				}
 				break;
 
@@ -371,36 +371,36 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 	}
 
 	// ── Input Handling ───────────────────────────────────────────────────────
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
 
-		if (k.code == milktea::KeyCode.CTRL_C) {
+		if (k.code == CTRL_C) {
 			return milktea::quit();
 		}
 
 		switch (self.state) {
 			case INTRO:
 				// Any key skips intro
-				self.state = GameState.MENU;
+				self.state = MENU;
 
 			case MENU:
 				switch (k.code) {
-					case milktea::KeyCode.UP:
+					case UP:
 						self.menu_selected = (self.menu_selected + 3) % 4;
-					case milktea::KeyCode.DOWN:
+					case DOWN:
 						self.menu_selected = (self.menu_selected + 1) % 4;
-					case milktea::KeyCode.ENTER:
+					case ENTER:
 						switch (self.menu_selected) {
 							case 0:
 								self.start_game();
 							case 1:
 								self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 							case 2:
-								self.state = GameState.HELP;
+								self.state = HELP;
 							case 3:
 								return milktea::quit();
 						}
-					case milktea::KeyCode.RUNE:
+					case RUNE:
 						if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
 						if (k.rune == ' ') {
 							switch (self.menu_selected) {
@@ -409,7 +409,7 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 								case 1:
 									self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 								case 2:
-									self.state = GameState.HELP;
+									self.state = HELP;
 								case 3:
 									return milktea::quit();
 							}
@@ -419,16 +419,16 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 							self.difficulty = (Difficulty)(((sz)self.difficulty + 1) % 3);
 						}
 						if (k.rune == 'h' || k.rune == 'H' || k.rune == '?') {
-							self.state = GameState.HELP;
+							self.state = HELP;
 						}
 					default:
 				}
 
 			case PLAYING:
-				if (k.code == milktea::KeyCode.UP || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'w' || k.rune == 'W' || k.rune == 'k' || k.rune == 'j'))) {
+				if (k.code == UP || (k.code == RUNE && (k.rune == ' ' || k.rune == 'w' || k.rune == 'W' || k.rune == 'k' || k.rune == 'j'))) {
 					self.bird_flap();
-				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'q' || k.rune == 'Q'))) {
-					self.state = GameState.MENU;
+				} else if (k.code == ESC || (k.code == RUNE && (k.rune == 'q' || k.rune == 'Q'))) {
+					self.state = MENU;
 				}
 
 			case DYING:
@@ -436,16 +436,16 @@ fn milktea::Cmd FlappyModel.update(FlappyModel* self, milktea::Msg msg) @dynamic
 				break;
 
 			case GAME_OVER:
-				if (k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'r' || k.rune == 'R'))) {
+				if (k.code == ENTER || (k.code == RUNE && (k.rune == ' ' || k.rune == 'r' || k.rune == 'R'))) {
 					self.start_game();
-				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'm' || k.rune == 'M' || k.rune == 'q' || k.rune == 'Q'))) {
-					self.state = GameState.MENU;
+				} else if (k.code == ESC || (k.code == RUNE && (k.rune == 'm' || k.rune == 'M' || k.rune == 'q' || k.rune == 'Q'))) {
+					self.state = MENU;
 				}
 				break;
 
 			case HELP:
-				if (k.code == milktea::KeyCode.ESC || k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'q' || k.rune == 'h'))) {
-					self.state = GameState.MENU;
+				if (k.code == ESC || k.code == ENTER || (k.code == RUNE && (k.rune == ' ' || k.rune == 'q' || k.rune == 'h'))) {
+					self.state = MENU;
 				}
 		}
 		return null;
@@ -459,8 +459,8 @@ fn void FlappyModel.bird_flap(&self) {
 }
 
 fn void FlappyModel.trigger_death(&self) {
-	if (self.state == GameState.DYING || self.state == GameState.GAME_OVER) return;
-	self.state = GameState.DYING;
+	if (self.state == DYING || self.state == GAME_OVER) return;
+	self.state = DYING;
 	self.death_timer = 24;
 	self.flash_timer = 4;
 	self.bird.vy = -2.5f;
@@ -476,8 +476,8 @@ fn void FlappyModel.draw_background(&self) {
 	sz ground_y = ph - 8;
 
 	// Sky gradient (day to sunset tones based on difficulty/mode)
-	xray::Color sky_top = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(30, 20, 60) : xray::color_rgb(35, 75, 150);
-	xray::Color sky_bot = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(180, 70, 60) : xray::color_rgb(140, 210, 245);
+	xray::Color sky_top = (self.difficulty == HARD) ? xray::color_rgb(30, 20, 60) : xray::color_rgb(35, 75, 150);
+	xray::Color sky_bot = (self.difficulty == HARD) ? xray::color_rgb(180, 70, 60) : xray::color_rgb(140, 210, 245);
 
 	for (sz y = 0; y < ground_y; y++) {
 		float t = (float)y / (float)ground_y;
@@ -511,7 +511,7 @@ fn void FlappyModel.draw_background(&self) {
 
 	// Distant Skyline / Mountain silhouettes (Parallax 0.35x)
 	float sky_scroll = self.world_scroll * 0.35f;
-	xray::Color bldg_c = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(50, 30, 65) : xray::color_rgb(60, 110, 155);
+	xray::Color bldg_c = (self.difficulty == HARD) ? xray::color_rgb(50, 30, 65) : xray::color_rgb(60, 110, 155);
 	xray::Color win_c = xray::color_rgb(255, 230, 120);
 
 	for (sz b = 0; b < 15; b++) {
@@ -536,7 +536,7 @@ fn void FlappyModel.draw_background(&self) {
 
 	// Green Hills (Parallax 0.6x)
 	float hill_scroll = self.world_scroll * 0.6f;
-	xray::Color hill_c = (self.difficulty == Difficulty.HARD) ? xray::color_rgb(45, 80, 50) : xray::color_rgb(75, 175, 80);
+	xray::Color hill_c = (self.difficulty == HARD) ? xray::color_rgb(45, 80, 50) : xray::color_rgb(75, 175, 80);
 	for (sz x = 0; x < pw; x++) {
 		float hx = (float)x + hill_scroll;
 		sz hy = ground_y - 6 - (sz)(math::sin(hx * 0.04f) * 5.0f + math::cos(hx * 0.09f) * 3.0f);
@@ -767,7 +767,7 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	self.draw_background();
 
 	// Draw pipes
-	if (self.state == GameState.PLAYING || self.state == GameState.DYING || self.state == GameState.GAME_OVER) {
+	if (self.state == PLAYING || self.state == DYING || self.state == GAME_OVER) {
 		for (sz i = 0; i < MAX_PIPES; i++) {
 			if (self.pipes[i].active) {
 				self.draw_pipe(&self.pipes[i]);
@@ -784,7 +784,7 @@ fn milktea::Node* FlappyModel.view(FlappyModel* self) @dynamic {
 	self.draw_particles();
 
 	// Draw Score HUD during game
-	if (self.state == GameState.PLAYING) {
+	if (self.state == PLAYING) {
 		self.draw_score_hud();
 	}
 
@@ -1050,8 +1050,8 @@ fn milktea::Node* FlappyModel.intro_dialog(&self) {
 
 fn milktea::Node* FlappyModel.menu_dialog(&self) {
 	String diff_str = "NORMAL";
-	if (self.difficulty == Difficulty.EASY) diff_str = "EASY";
-	if (self.difficulty == Difficulty.HARD) diff_str = "HARD (DYNAMIC!)";
+	if (self.difficulty == EASY) diff_str = "EASY";
+	if (self.difficulty == HARD) diff_str = "HARD (DYNAMIC!)";
 
 	String[4] options = {
 		"Start Game",

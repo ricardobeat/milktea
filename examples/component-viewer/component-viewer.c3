@@ -151,7 +151,7 @@ fn void Preview.mount(&self, Component c) {
 		case PROGRESS:
 			self.progress = boba::new_progress(30, 64);
 		case SPINNER:
-			self.spinner = boba::new_spinner(boba::SpinnerKind.DOTS)
+			self.spinner = boba::new_spinner(DOTS)
 				.with_color(glaze::color_hex("#00d7ff"));
 			self.spinner.init_cmd();
 		case STOPWATCH:
@@ -179,11 +179,11 @@ fn void Preview.mount(&self, Component c) {
 		case TOAST:
 			self.toast_hard = boba::new_toast();
 			self.toast_hard.message = "Hard shadow";
-			self.toast_hard.state = boba::ToastState.VISIBLE;
+			self.toast_hard.state = VISIBLE;
 			self.toast_hard.anim_step = boba::TOAST_ANIM_STEPS;
 			self.toast_blur = boba::new_toast();
 			self.toast_blur.message = "Blurred shadow";
-			self.toast_blur.state = boba::ToastState.VISIBLE;
+			self.toast_blur.state = VISIBLE;
 			self.toast_blur.anim_step = boba::TOAST_ANIM_STEPS;
 			self.float_step = 0;
 			milktea::every(FLOAT_TICK_MS, owner: &self.float_step);
@@ -300,13 +300,13 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 		Component c = (Component)i;
 		self.lst.add_item(component_name(c), component_desc(c));
 	}
-	self.preview.mount(Component.FILE_PICKER);
+	self.preview.mount(FILE_PICKER);
 	self.toast = boba::new_toast();
 	return null;
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.preview.update(msg);
 		self.toast.update(msg);
 		if (msg.owner == &self.preview.float_step) {
@@ -316,8 +316,8 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.MOUSE) {
-		if (self.preview.kind == Component.VIEWPORT) {
+	if (msg.kind == MOUSE) {
+		if (self.preview.kind == VIEWPORT) {
 			milktea::MouseMsg m = msg.mouse;
 			m.row = m.row - 1 - self.vp_screen_row;
 			m.col = m.col - 1 - self.vp_screen_col;
@@ -333,12 +333,12 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	// Preview focus mode.
 	if (self.preview_focused) {
-		if (k.code == milktea::KeyCode.ESC) {
+		if (k.code == ESC) {
 			self.preview_focused = false;
 			self.preview.set_focused(false);
 			return null;
@@ -356,17 +356,17 @@ fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (k.code == milktea::KeyCode.ENTER && component_interactive(self.preview.kind)) {
+	if (k.code == ENTER && component_interactive(self.preview.kind)) {
 		self.preview_focused = true;
 		self.preview.set_focused(true);
 		return null;
 	}
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
@@ -431,12 +431,12 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 		.padding(1, 0, 1, 2)
 		.render("Components");
 
-	String sidebar_inner = glaze::join_vertical(glaze::Position.LEFT,
+	String sidebar_inner = glaze::join_vertical(LEFT,
 		sidebar_title,
 		glaze::style().padding(0, 1, 0, 2).render(self.lst.view()));
 	glaze::Style sidebar_s = glaze::style()
 		.background(sidebar_bg)
-		.align(glaze::Position.LEFT, glaze::Position.TOP);
+		.align(LEFT, TOP);
 	String sidebar = sidebar_r.render(sidebar_s, sidebar_inner);
 
 	// ── Preview panel ──
@@ -465,11 +465,11 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	sz content_w = preview_r.w - 6; // content side padding (2+2) + margin
 	if (content_h < 4) content_h = 4;
 	if (content_w < 20) content_w = 20;
-	if (self.preview.kind == Component.TEXTAREA) {
+	if (self.preview.kind == TEXTAREA) {
 		self.preview.ta.height = content_h;
 		self.preview.ta.width = content_w;
 	}
-	if (self.preview.kind == Component.VIEWPORT) {
+	if (self.preview.kind == VIEWPORT) {
 		self.preview.vp.height = content_h / 2;
 		self.preview.vp.width = content_w;
 		self.vp_screen_row = preview_r.y + 4;
@@ -481,11 +481,11 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 		.padding(1, 2, 0, 2)
 		.render(self.preview.render());
 
-	String preview_inner = glaze::join_vertical(glaze::Position.LEFT,
+	String preview_inner = glaze::join_vertical(LEFT,
 		preview_header, preview_content);
 	glaze::Style preview_s = glaze::style()
 		.background(content_bg)
-		.align(glaze::Position.LEFT, glaze::Position.TOP);
+		.align(LEFT, TOP);
 	String preview = preview_r.render(preview_s, preview_inner);
 
 	// ── Footer ──
@@ -495,7 +495,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	glaze::Style footer_style = glaze::style()
 		.foreground(subtle)
 		.with_width(w)
-		.align(glaze::Position.CENTER, glaze::Position.CENTER);
+		.align(CENTER, CENTER);
 
 	String footer_inner;
 	if (live) {
@@ -513,8 +513,8 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	String footer = footer_style.render(footer_inner);
 
 	String middle = glaze::join_horizontal(sidebar, preview, 0);
-	String body = glaze::join_vertical(glaze::Position.LEFT, header, middle);
-	String doc  = glaze::join_vertical(glaze::Position.LEFT, body, footer);
+	String body = glaze::join_vertical(LEFT, header, middle);
+	String doc  = glaze::join_vertical(LEFT, body, footer);
 
 	// The page is one string; what floats over it goes in layers above.
 	xray::Node* root = milktea::root()
@@ -529,7 +529,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 		.add(self.toast.node());
 
 	// Toast preview: two floating toasts with different shadow styles
-	if (self.preview.kind == Component.TOAST) {
+	if (self.preview.kind == TOAST) {
 		// Triangle wave: 0 → amplitude → 0 → -amplitude → 0
 		sz quarter = FLOAT_CYCLE / 4;
 		sz step = self.preview.float_step;
@@ -565,5 +565,5 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 
 fn int main() {
 	Model m = { };
-	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_ALL_MOTION });
 }

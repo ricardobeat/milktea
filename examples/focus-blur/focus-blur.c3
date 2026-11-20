@@ -18,21 +18,21 @@ fn milktea::Cmd FocusModel.init(FocusModel* self) @dynamic {
 }
 
 fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.FOCUS) {
+	if (msg.kind == FOCUS) {
 		self.focused = true;
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.BLUR) {
+	if (msg.kind == BLUR) {
 		self.focused = false;
 		return null;
 	}
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 't') {
 				self.reporting = !self.reporting;
@@ -42,7 +42,7 @@ fn milktea::Cmd FocusModel.update(FocusModel* self, milktea::Msg msg) @dynamic {
 					milktea::disable_focus();
 				}
 			}
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}

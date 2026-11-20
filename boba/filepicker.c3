@@ -99,6 +99,8 @@ fn void FilePicker.load_dir(&self, String path) {
 	self.dir_buf = dir;
 	self.current_dir = dir.str_view();
 
+	// The browser build has no filesystem: the listing stays empty.
+	$if !$feat(MILKTEA_WEB):
 	@pool() {
 		DIRPtr d = posix::opendir(path.zstr_tcopy());
 		if (!d) return;
@@ -117,6 +119,7 @@ fn void FilePicker.load_dir(&self, String path) {
 			self.count++;
 		}
 	};
+	$endif
 	self.sort();
 }
 

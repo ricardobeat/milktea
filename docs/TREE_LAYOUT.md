@@ -37,10 +37,10 @@ layout::vstack(layout::screen(w, h), {
 	layout::slot(layout::len(1),  &status_r),
 });
 
-String doc = glaze::join_vertical(glaze::Position.LEFT,
+String doc = glaze::join_vertical(LEFT,
 	title_r.render(title_s, "Title"),
 	body_r.render(body_s, content));
-doc = glaze::join_vertical(glaze::Position.LEFT, doc, status_r.render(status_s, "Status"));
+doc = glaze::join_vertical(LEFT, doc, status_r.render(status_s, "Status"));
 ```
 
 The solver computes coordinates and then `join_vertical` throws them away.

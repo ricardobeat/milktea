@@ -50,7 +50,7 @@ fn sz rainbow_hue(Model* self, Particle* p) {
 
 fn void rainbow_setup(void* raw) {
 	Model* self = (Model*)raw;
-	self.phase = Phase.RAINBOW;
+	self.phase = RAINBOW;
 	self.phase_frame = self.frame;
 	self.fx_state = null;
 }

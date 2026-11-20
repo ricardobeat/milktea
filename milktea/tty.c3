@@ -1,4 +1,4 @@
-module milktea;
+module milktea @feat(!MILKTEA_WEB);
 import std::atomic;
 import libc;
 import std::time;
@@ -234,7 +234,7 @@ fn void parse_osc11_body(char[] body) @local {
 // iTerm2's ReportCellSize=<height>;<width>; for APC ESC_G it records that the
 // terminal speaks the kitty graphics protocol (the a=q probe is answered with
 // OK or ERR — either way the protocol is implemented).
-fn void handle_probe_string(bool is_osc, char[] body) @local {
+fn void handle_probe_string(bool is_osc, char[] body) @private {
 	if (is_osc) {
 		if (body.len > 2 && body[0] == '1' && body[1] == '1' && body[2] == ';') {
 			parse_osc11_body(body);
@@ -267,47 +267,6 @@ fn void handle_probe_string(bool is_osc, char[] body) @local {
 }
 
 
-// Replies may arrive after startup probing, or span several reader chunks.
-// Keep only a bounded capability body, but drain the complete control string
-// before returning to key parsing. A split ST must not become an Escape key.
-struct TerminalReply @private {
-	bool active;
-	bool osc;
-	bool escape;
-	bool overflow;
-	char[256] body;
-	sz len;
-}
-
-fn void TerminalReply.begin(&self, bool osc) {
-	*self = { .active = true, .osc = osc };
-}
-
-fn void TerminalReply.append(&self, char byte) {
-	if (self.len < self.body.len) { self.body[self.len++] = byte; }
-	else { self.overflow = true; }
-}
-
-fn void TerminalReply.finish(&self) {
-	if (!self.overflow) handle_probe_string(self.osc, self.body[:self.len]);
-	self.active = false;
-}
-
-fn sz TerminalReply.consume(&self, char[] bytes) {
-	for (sz i = 0; i < bytes.len; i++) {
-		char byte = bytes[i];
-		// Interrupt remains usable even if a terminal sent a truncated reply.
-		if (byte == 0x03) { self.active = false; return i; }
-		if ((self.escape && byte == '\\') || (self.osc && byte == 0x07)) {
-			self.finish();
-			return i + 1;
-		}
-		if (self.escape) { self.append(0x1b); self.escape = false; }
-		if (byte == 0x1b) { self.escape = true; }
-		else { self.append(byte); }
-	}
-	return bytes.len;
-}
 
 struct ProbeParse @private {
 	sz consumed;

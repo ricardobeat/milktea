@@ -31,7 +31,7 @@ fn void vortex_setup(void* raw) {
 		p.spawn_tick = self.frame + @dur(rand() % 12);
 	}
 	self.fx_state = s;
-	self.phase = Phase.VORTEX;
+	self.phase = VORTEX;
 	self.phase_frame = self.frame;
 }
 

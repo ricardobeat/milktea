@@ -1,0 +1,126 @@
+<pre class="ink"><span class="ink-s2">module</span> progress;
+
+<span class="ink-s2">import</span> milktea;
+<span class="ink-s2">import</span> glaze;
+<span class="ink-s2">import</span> std::io;
+<span class="ink-s2">import</span> std::core::string;
+<span class="ink-s2">import</span> std::core::dstring;
+
+<span class="ink-s2">const</span> <span class="ink-s3">sz</span> <span class="ink-s6">TOTAL</span> <span class="ink-s2">=</span> 100;
+
+<span class="ink-s2">struct</span> <span class="ink-s3">ProgressModel</span> {
+	<span class="ink-s3">sz</span> progress;
+	<span class="ink-s3">sz</span> speed;
+	<span class="ink-s3">bool</span> done;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">ProgressModel</span><span class="ink-s2">.</span><span class="ink-s4">init</span>(<span class="ink-s3">ProgressModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	self<span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 1;
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(50);
+}
+
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Cmd</span> <span class="ink-s3">ProgressModel</span><span class="ink-s2">.</span><span class="ink-s4">update</span>(<span class="ink-s3">ProgressModel</span><span class="ink-s2">*</span> self, milktea::<span class="ink-s3">Msg</span> msg) <span class="ink-s4">@dynamic</span> {
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">==</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">TICK</span>) {
+		<span class="ink-s2">if</span> (<span class="ink-s2">!</span>self<span class="ink-s2">.</span>done) {
+			self<span class="ink-s2">.</span>progress <span class="ink-s2">+=</span> self<span class="ink-s2">.</span>speed;
+			<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>progress <span class="ink-s2">&gt;=</span> <span class="ink-s6">TOTAL</span>) {
+				self<span class="ink-s2">.</span>progress <span class="ink-s2">=</span> <span class="ink-s6">TOTAL</span>;
+				self<span class="ink-s2">.</span>done <span class="ink-s2">=</span> true;
+			}
+		}
+		<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(50);
+	}
+
+	<span class="ink-s2">if</span> (msg<span class="ink-s2">.</span>kind <span class="ink-s2">!=</span> milktea::<span class="ink-s3">MsgKind</span><span class="ink-s2">.</span><span class="ink-s6">KEY</span>) <span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+	milktea::<span class="ink-s3">KeyMsg</span> k <span class="ink-s2">=</span> msg<span class="ink-s2">.</span>key;
+
+	<span class="ink-s2">switch</span> (k<span class="ink-s2">.</span>code) {
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">CTRL_C</span>:
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">RUNE</span>:
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'q') <span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'f') self<span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 5;
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 's') self<span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 1;
+			<span class="ink-s2">if</span> (k<span class="ink-s2">.</span>rune <span class="ink-s2">==</span> 'r') {
+				self<span class="ink-s2">.</span>progress <span class="ink-s2">=</span> 0;
+				self<span class="ink-s2">.</span>done <span class="ink-s2">=</span> false;
+				self<span class="ink-s2">.</span>speed <span class="ink-s2">=</span> 1;
+				<span class="ink-s2">return</span> milktea::<span class="ink-s4">tick</span>(50);
+			}
+		<span class="ink-s2">case</span> milktea::<span class="ink-s3">KeyCode</span><span class="ink-s2">.</span><span class="ink-s6">ESC</span>:
+			<span class="ink-s2">return</span> milktea::<span class="ink-s4">quit</span>();
+		<span class="ink-s2">default</span>:
+	}
+	<span class="ink-s2">return</span> <span class="ink-s6">null</span>;
+}
+
+<span class="ink-s2">fn</span> milktea::<span class="ink-s3">Node</span><span class="ink-s2">*</span> <span class="ink-s3">ProgressModel</span><span class="ink-s2">.</span><span class="ink-s4">view</span>(<span class="ink-s3">ProgressModel</span><span class="ink-s2">*</span> self) <span class="ink-s4">@dynamic</span> {
+	glaze::<span class="ink-s3">Style</span> title <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true)
+		<span class="ink-s2">.</span><span class="ink-s4">padding</span>(0, 0, 1, 0);
+
+	glaze::<span class="ink-s3">Style</span> done_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00ff00&quot;</span>))<span class="ink-s2">.</span><span class="ink-s4">with_bold</span>(true);
+
+	glaze::<span class="ink-s3">Style</span> hint <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">foreground</span>(glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#666666&quot;</span>));
+
+	glaze::<span class="ink-s3">Style</span> box_style <span class="ink-s2">=</span> glaze::<span class="ink-s4">style</span>()<span class="ink-s2">.</span><span class="ink-s4">with_border</span>(glaze::<span class="ink-s6">ROUNDED</span>)<span class="ink-s2">.</span><span class="ink-s4">padding</span>(1, 2, 1, 2);
+
+	<span class="ink-s3">sz</span> pct <span class="ink-s2">=</span> (self<span class="ink-s2">.</span>progress <span class="ink-s2">*</span> 100) <span class="ink-s2">/</span> <span class="ink-s6">TOTAL</span>;
+
+	<span class="ink-s3">DString</span> content <span class="ink-s2">=</span> dstring::<span class="ink-s4">temp</span>();
+	content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(title<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;Progress Bar&quot;</span>));
+	content<span class="ink-s2">.</span><span class="ink-s4">append_char</span>('\n');
+	content<span class="ink-s2">.</span><span class="ink-s4">append_char</span>('\n');
+
+	<span class="ink-s0">// Main progress bar</span>
+	<span class="ink-s3">String</span> bar1 <span class="ink-s2">=</span> glaze::<span class="ink-s4">progress_bar</span>(
+		40,
+		pct,
+		<span class="ink-s9">&quot;█&quot;</span>,
+		<span class="ink-s9">&quot;░&quot;</span>,
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00d7ff&quot;</span>),
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#222222&quot;</span>)
+	);
+
+	<span class="ink-s0">// Second bar with different style</span>
+	<span class="ink-s3">String</span> bar2 <span class="ink-s2">=</span> glaze::<span class="ink-s4">progress_bar</span>(
+		40,
+		pct,
+		<span class="ink-s9">&quot;■&quot;</span>,
+		<span class="ink-s9">&quot;□&quot;</span>,
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#ff00ff&quot;</span>),
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#222222&quot;</span>)
+	);
+
+	<span class="ink-s0">// Third bar with gradient feel</span>
+	<span class="ink-s3">String</span> bar3 <span class="ink-s2">=</span> glaze::<span class="ink-s4">progress_bar</span>(
+		40,
+		pct,
+		<span class="ink-s9">&quot;=&quot;</span>,
+		<span class="ink-s9">&quot;-&quot;</span>,
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#00ff88&quot;</span>),
+		glaze::<span class="ink-s4">color_hex</span>(<span class="ink-s9">&quot;#333333&quot;</span>)
+	);
+
+	content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot; Download %s %d%%\n&quot;</span>, bar1, pct));
+	content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot; Compile %s %d%%\n&quot;</span>, bar2, pct));
+	content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot; Deploy   %s %d%%\n&quot;</span>, bar3, pct));
+
+	content<span class="ink-s2">.</span><span class="ink-s4">append_char</span>('\n');
+
+	<span class="ink-s2">if</span> (self<span class="ink-s2">.</span>done) {
+		content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(done_style<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;✓ Complete!&quot;</span>));
+		content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(hint<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;  r to restart&quot;</span>));
+	} <span class="ink-s2">else</span> {
+		<span class="ink-s3">String</span> speed_label <span class="ink-s2">=</span> self<span class="ink-s2">.</span>speed <span class="ink-s2">&gt;</span> 1 <span class="ink-s2">?</span> <span class="ink-s9">&quot;fast&quot;</span> <span class="ink-s2">:</span> <span class="ink-s9">&quot;normal&quot;</span>;
+		content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(hint<span class="ink-s2">.</span><span class="ink-s4">render</span>(string::<span class="ink-s4">tformat</span>(<span class="ink-s9">&quot;Speed: %s&quot;</span>, speed_label)));
+		content<span class="ink-s2">.</span><span class="ink-s4">append_string</span>(hint<span class="ink-s2">.</span><span class="ink-s4">render</span>(<span class="ink-s9">&quot;  |  f fast  |  s slow  |  r restart  |  q quit&quot;</span>));
+	}
+
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">text</span>(box_style<span class="ink-s2">.</span><span class="ink-s4">render</span>(content<span class="ink-s2">.</span><span class="ink-s4">str_view</span>()));
+}
+
+<span class="ink-s2">fn</span> <span class="ink-s3">int</span> <span class="ink-s4">main</span>() {
+	<span class="ink-s3">ProgressModel</span> m <span class="ink-s2">=</span> { };
+	<span class="ink-s2">return</span> milktea::<span class="ink-s4">@run</span>(<span class="ink-s2">&amp;</span>m, { <span class="ink-s2">.</span>alt_screen <span class="ink-s2">=</span> true });
+}</pre>

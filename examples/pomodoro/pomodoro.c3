@@ -37,13 +37,13 @@ const sz FOCUS_SECS = 25 * 60;
 const sz BREAK_SECS = 5 * 60;
 
 fn sz phase_length(Phase p) {
-	return p == Phase.FOCUS ? FOCUS_SECS : BREAK_SECS;
+	return p == FOCUS ? FOCUS_SECS : BREAK_SECS;
 }
 
 // ── init ─────────────────────────────────────────────────────────────────────
 
 fn milktea::Cmd Model.init(&self) @dynamic {
-	self.phase     = Phase.FOCUS;
+	self.phase     = FOCUS;
 	self.remaining = phase_length(self.phase);
 	self.running   = true;
 	// every() locks to the wall clock, so the countdown stays accurate
@@ -55,14 +55,14 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 	switch (msg.kind) {
-		case milktea::MsgKind.TICK:
+		case TICK:
 			if (self.running && self.remaining > 0) {
 				self.remaining--;
 				if (self.remaining == 0) self.advance_phase();
 			}
 			return milktea::every(1000);   // re-arm for the next second
 
-		case milktea::MsgKind.KEY:
+		case KEY:
 			return self.handle_key(msg.key);
 
 		default:
@@ -71,24 +71,24 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 }
 
 fn void Model.advance_phase(&self) {
-	if (self.phase == Phase.FOCUS) {
+	if (self.phase == FOCUS) {
 		self.completed++;
-		self.phase = Phase.BREAK;
+		self.phase = BREAK;
 	} else {
-		self.phase = Phase.FOCUS;
+		self.phase = FOCUS;
 	}
 	self.remaining = phase_length(self.phase);
 }
 
 fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
-		case milktea::KeyCode.ESC:
+		case CTRL_C:
+		case ESC:
 			return milktea::quit();
-		case milktea::KeyCode.TAB:
-			self.phase     = self.phase == Phase.FOCUS ? Phase.BREAK : Phase.FOCUS;
+		case TAB:
+			self.phase     = self.phase == FOCUS ? BREAK : FOCUS;
 			self.remaining = phase_length(self.phase);
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			switch (k.rune) {
 				case 'q': return milktea::quit();
 				case ' ': self.running = !self.running;
@@ -103,7 +103,7 @@ fn milktea::Cmd Model.handle_key(&self, milktea::KeyMsg k) {
 // ── view ─────────────────────────────────────────────────────────────────────
 
 fn milktea::Node* Model.view(&self) @dynamic {
-	bool focus = self.phase == Phase.FOCUS;
+	bool focus = self.phase == FOCUS;
 
 	// Warm pastel accents — one per phase.
 	glaze::Color accent = focus
@@ -123,7 +123,7 @@ fn milktea::Node* Model.view(&self) @dynamic {
 		.fg = accent, .bold = true,
 		.border = glaze::ROUNDED, .border_color = accent,
 		.pad_top = 1, .pad_right = 2, .pad_bottom = 1, .pad_left = 2,
-		.align_h = glaze::Position.CENTER, .align_v = glaze::Position.CENTER,
+		.align_h = CENTER, .align_v = CENTER,
 	};
 	glaze::Style status_s = { .fg = dim };
 

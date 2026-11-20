@@ -38,7 +38,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		for (sz i = 0; i < MAX_GLITTER; i++) {
 			if (self.glitter[i].active) {
 				self.glitter[i].life--;
@@ -47,14 +47,14 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 		}
 		return milktea::tick(33);
 	}
-	if (msg.kind == milktea::MsgKind.KEY) {
-		if (msg.key.code == milktea::KeyCode.CTRL_C) return milktea::quit();
-		if (msg.key.code == milktea::KeyCode.ESC) return milktea::quit();
-		if (msg.key.code == milktea::KeyCode.RUNE && msg.key.rune == 'q') return milktea::quit();
+	if (msg.kind == KEY) {
+		if (msg.key.code == CTRL_C) return milktea::quit();
+		if (msg.key.code == ESC) return milktea::quit();
+		if (msg.key.code == RUNE && msg.key.rune == 'q') return milktea::quit();
 		return null;
 	}
-	if (msg.kind == milktea::MsgKind.MOUSE) {
-		if (msg.mouse.action == milktea::MouseAction.MOUSE_MOTION) {
+	if (msg.kind == MOUSE) {
+		if (msg.mouse.action == MOUSE_MOTION) {
 			for (sz j = 0; j < 3; j++) {
 				sz idx = self.spawn_idx % MAX_GLITTER;
 				self.glitter[idx].col = msg.mouse.col + (j - 1);
@@ -229,28 +229,28 @@ fn milktea::Node* Model.view(&self) @dynamic {
 	String v22 = glaze::style().render_in(r22, "");
 
 	String content = v00;
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v01);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v02);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v03);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v04);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v05);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v06);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v07);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v08);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v09);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v10);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v11);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v12);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v13);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v14);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v15);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v16);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v17);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v18);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v19);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v20);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v21);
-	content = glaze::join_vertical(glaze::Position.LEFT, content, v22);
+	content = glaze::join_vertical(LEFT, content, v01);
+	content = glaze::join_vertical(LEFT, content, v02);
+	content = glaze::join_vertical(LEFT, content, v03);
+	content = glaze::join_vertical(LEFT, content, v04);
+	content = glaze::join_vertical(LEFT, content, v05);
+	content = glaze::join_vertical(LEFT, content, v06);
+	content = glaze::join_vertical(LEFT, content, v07);
+	content = glaze::join_vertical(LEFT, content, v08);
+	content = glaze::join_vertical(LEFT, content, v09);
+	content = glaze::join_vertical(LEFT, content, v10);
+	content = glaze::join_vertical(LEFT, content, v11);
+	content = glaze::join_vertical(LEFT, content, v12);
+	content = glaze::join_vertical(LEFT, content, v13);
+	content = glaze::join_vertical(LEFT, content, v14);
+	content = glaze::join_vertical(LEFT, content, v15);
+	content = glaze::join_vertical(LEFT, content, v16);
+	content = glaze::join_vertical(LEFT, content, v17);
+	content = glaze::join_vertical(LEFT, content, v18);
+	content = glaze::join_vertical(LEFT, content, v19);
+	content = glaze::join_vertical(LEFT, content, v20);
+	content = glaze::join_vertical(LEFT, content, v21);
+	content = glaze::join_vertical(LEFT, content, v22);
 
 	// ── render to screen buffer + glitter overlay ────────────────────────
 
@@ -301,5 +301,5 @@ fn void Model.on_destroy(&self) @dynamic {
 
 fn int main() {
 	Model m;
-	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION });
+	return milktea::@run(&m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_ALL_MOTION });
 }

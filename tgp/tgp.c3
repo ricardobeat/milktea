@@ -38,7 +38,8 @@ faultdef SESSION_FULL, INVALID_GLYPH, NO_SUCH_INSTANCE;
 // is worth an order of magnitude on the wire -- measured ~11x on antialiased
 // rounded-box tiles, far more on flat ones. Compression is optional: if it
 // fails or does not help, the raw bytes go out instead.
-extern fn int compress2(char* dest, sz* dest_len, char* src, sz src_len, int level);
+// The browser has no zlib (and no kitty graphics), so it never compresses.
+extern fn int compress2(char* dest, sz* dest_len, char* src, sz src_len, int level) @feat(!MILKTEA_WEB);
 const sz Z_OK = 0;
 const sz Z_LEVEL = 6;
 
@@ -310,9 +311,11 @@ fn void base64_emit_chunks(uint id, char[] rgba, sz w, sz h) {
 	char* zbuf = mem::talloc_array(char, cap);
 	sz zlen = cap;
 	bool compressed = false;
-	if (compress2(zbuf, &zlen, &rgba[0], rgba.len, Z_LEVEL) == Z_OK && zlen < rgba.len) {
-		compressed = true;
-	}
+	$if !$feat(MILKTEA_WEB):
+		if (compress2(zbuf, &zlen, &rgba[0], rgba.len, Z_LEVEL) == Z_OK && zlen < rgba.len) {
+			compressed = true;
+		}
+	$endif
 
 	String b64 = compressed ? base64_encode(zbuf[:zlen]) : base64_encode(rgba);
 	DString cmd = dstring::temp();

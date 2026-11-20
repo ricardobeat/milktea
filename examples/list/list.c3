@@ -33,22 +33,22 @@ fn milktea::Cmd ListModel.init(ListModel* self) @dynamic {
 }
 
 fn milktea::Cmd ListModel.update(ListModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		self.lst.set_size(msg.window_size.width, msg.window_size.height);
 		return null;
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	if (self.lst.handle_key(k)) return null;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}
@@ -75,9 +75,11 @@ fn int main() {
 		io::printfn("Error: %s", err);
 		return 1;
 	}
+	$if !$feat(MILKTEA_WEB):
 	if (m.lst.selected >= 0) {
 		io::printfn("You selected: %s", m.lst.items[m.lst.selected].title);
 	}
+	$endif
 	io::printn("Bye!");
 	return 0;
 }

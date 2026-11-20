@@ -2,6 +2,7 @@ module avian_assault;
 
 import milktea;
 import xray;
+import xray::vec;
 import glaze;
 import std::io;
 import std::math;
@@ -107,7 +108,16 @@ struct ActiveBird {
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
+enum MenuAction { NONE, OPEN_MENU, PLAY, SELECT_LEVEL, HELP, EXIT, NEXT_LEVEL, RETRY }
+struct MenuButton {
+	AvianAssaultModel* model;
+	MenuAction action;
+}
+
 struct AvianAssaultModel {
+	MenuAction pending_action;
+	MenuButton[8] menu_buttons;
+	Vec{xray::ClickTarget} menu_targets;
 	sz term_w;
 	sz term_h;
 	sz ticks;
@@ -227,7 +237,7 @@ fn void AvianAssaultModel.update_particles(&self) {
 
 fn void AvianAssaultModel.load_level(&self, sz lvl) {
 	self.current_level = lvl;
-	self.state = GameState.AIMING;
+	self.state = AIMING;
 	self.birds_left = 3;
 	self.settle_timer = 0;
 	self.flash_timer = 0;
@@ -249,17 +259,17 @@ fn void AvianAssaultModel.load_level(&self, sz lvl) {
 
 	// Bird lineup
 	if (lvl == 0) {
-		self.birds_queue[0] = BirdType.RED;
-		self.birds_queue[1] = BirdType.RED;
-		self.birds_queue[2] = BirdType.CHUCK;
+		self.birds_queue[0] = RED;
+		self.birds_queue[1] = RED;
+		self.birds_queue[2] = CHUCK;
 	} else if (lvl == 1) {
-		self.birds_queue[0] = BirdType.CHUCK;
-		self.birds_queue[1] = BirdType.RED;
-		self.birds_queue[2] = BirdType.BOMB;
+		self.birds_queue[0] = CHUCK;
+		self.birds_queue[1] = RED;
+		self.birds_queue[2] = BOMB;
 	} else {
-		self.birds_queue[0] = BirdType.BOMB;
-		self.birds_queue[1] = BirdType.CHUCK;
-		self.birds_queue[2] = BirdType.RED;
+		self.birds_queue[0] = BOMB;
+		self.birds_queue[1] = CHUCK;
+		self.birds_queue[2] = RED;
 	}
 	self.prepare_next_bird();
 
@@ -269,28 +279,28 @@ fn void AvianAssaultModel.load_level(&self, sz lvl) {
 	// Construct structures
 	if (lvl == 0) {
 		// Castle 1: Classic wood two-pillar + crossbeam + roof
-		self.spawn_block((float)target_x, (float)(ground_y - 18), 4.0f, 18.0f, BlockMaterial.WOOD, 25.0f);
-		self.spawn_block((float)(target_x + 18), (float)(ground_y - 18), 4.0f, 18.0f, BlockMaterial.WOOD, 25.0f);
-		self.spawn_block((float)(target_x - 2), (float)(ground_y - 22), 26.0f, 4.0f, BlockMaterial.WOOD, 20.0f);
+		self.spawn_block((float)target_x, (float)(ground_y - 18), 4.0f, 18.0f, WOOD, 25.0f);
+		self.spawn_block((float)(target_x + 18), (float)(ground_y - 18), 4.0f, 18.0f, WOOD, 25.0f);
+		self.spawn_block((float)(target_x - 2), (float)(ground_y - 22), 26.0f, 4.0f, WOOD, 20.0f);
 
 		// Second tier
-		self.spawn_block((float)(target_x + 3), (float)(ground_y - 36), 4.0f, 14.0f, BlockMaterial.ICE, 15.0f);
-		self.spawn_block((float)(target_x + 15), (float)(ground_y - 36), 4.0f, 14.0f, BlockMaterial.ICE, 15.0f);
-		self.spawn_block((float)(target_x + 1), (float)(ground_y - 40), 20.0f, 4.0f, BlockMaterial.WOOD, 20.0f);
+		self.spawn_block((float)(target_x + 3), (float)(ground_y - 36), 4.0f, 14.0f, ICE, 15.0f);
+		self.spawn_block((float)(target_x + 15), (float)(ground_y - 36), 4.0f, 14.0f, ICE, 15.0f);
+		self.spawn_block((float)(target_x + 1), (float)(ground_y - 40), 20.0f, 4.0f, WOOD, 20.0f);
 
 		// Pigs
 		self.spawn_pig((float)(target_x + 9), (float)(ground_y - 6), 4.0f, 15.0f);
 		self.spawn_pig((float)(target_x + 9), (float)(ground_y - 28), 3.5f, 12.0f);
 	} else if (lvl == 1) {
 		// Castle 2: Stone towers & TNT in the center!
-		self.spawn_block((float)target_x, (float)(ground_y - 24), 5.0f, 24.0f, BlockMaterial.STONE, 45.0f);
-		self.spawn_block((float)(target_x + 22), (float)(ground_y - 24), 5.0f, 24.0f, BlockMaterial.STONE, 45.0f);
-		self.spawn_block((float)(target_x + 8), (float)(ground_y - 10), 10.0f, 10.0f, BlockMaterial.TNT, 5.0f);
-		self.spawn_block((float)(target_x - 2), (float)(ground_y - 28), 31.0f, 4.0f, BlockMaterial.WOOD, 20.0f);
+		self.spawn_block((float)target_x, (float)(ground_y - 24), 5.0f, 24.0f, STONE, 45.0f);
+		self.spawn_block((float)(target_x + 22), (float)(ground_y - 24), 5.0f, 24.0f, STONE, 45.0f);
+		self.spawn_block((float)(target_x + 8), (float)(ground_y - 10), 10.0f, 10.0f, TNT, 5.0f);
+		self.spawn_block((float)(target_x - 2), (float)(ground_y - 28), 31.0f, 4.0f, WOOD, 20.0f);
 
 		// Top tower
-		self.spawn_block((float)(target_x + 11), (float)(ground_y - 44), 5.0f, 16.0f, BlockMaterial.WOOD, 20.0f);
-		self.spawn_block((float)(target_x + 6), (float)(ground_y - 48), 15.0f, 4.0f, BlockMaterial.ICE, 15.0f);
+		self.spawn_block((float)(target_x + 11), (float)(ground_y - 44), 5.0f, 16.0f, WOOD, 20.0f);
+		self.spawn_block((float)(target_x + 6), (float)(ground_y - 48), 15.0f, 4.0f, ICE, 15.0f);
 
 		// Pigs
 		self.spawn_pig((float)(target_x + 13), (float)(ground_y - 22), 4.0f, 15.0f);
@@ -298,18 +308,18 @@ fn void AvianAssaultModel.load_level(&self, sz lvl) {
 		self.spawn_pig((float)(target_x + 32), (float)(ground_y - 6), 3.5f, 10.0f);
 	} else {
 		// Castle 3: Fortress with Triple Tier & Dual TNT
-		self.spawn_block((float)target_x, (float)(ground_y - 28), 5.0f, 28.0f, BlockMaterial.STONE, 50.0f);
-		self.spawn_block((float)(target_x + 14), (float)(ground_y - 28), 5.0f, 28.0f, BlockMaterial.STONE, 50.0f);
-		self.spawn_block((float)(target_x + 28), (float)(ground_y - 28), 5.0f, 28.0f, BlockMaterial.STONE, 50.0f);
+		self.spawn_block((float)target_x, (float)(ground_y - 28), 5.0f, 28.0f, STONE, 50.0f);
+		self.spawn_block((float)(target_x + 14), (float)(ground_y - 28), 5.0f, 28.0f, STONE, 50.0f);
+		self.spawn_block((float)(target_x + 28), (float)(ground_y - 28), 5.0f, 28.0f, STONE, 50.0f);
 
-		self.spawn_block((float)(target_x + 5), (float)(ground_y - 10), 9.0f, 10.0f, BlockMaterial.TNT, 5.0f);
-		self.spawn_block((float)(target_x + 19), (float)(ground_y - 10), 9.0f, 10.0f, BlockMaterial.TNT, 5.0f);
+		self.spawn_block((float)(target_x + 5), (float)(ground_y - 10), 9.0f, 10.0f, TNT, 5.0f);
+		self.spawn_block((float)(target_x + 19), (float)(ground_y - 10), 9.0f, 10.0f, TNT, 5.0f);
 
-		self.spawn_block((float)(target_x - 3), (float)(ground_y - 32), 39.0f, 4.0f, BlockMaterial.STONE, 40.0f);
+		self.spawn_block((float)(target_x - 3), (float)(ground_y - 32), 39.0f, 4.0f, STONE, 40.0f);
 
-		self.spawn_block((float)(target_x + 6), (float)(ground_y - 50), 4.0f, 18.0f, BlockMaterial.ICE, 15.0f);
-		self.spawn_block((float)(target_x + 22), (float)(ground_y - 50), 4.0f, 18.0f, BlockMaterial.ICE, 15.0f);
-		self.spawn_block((float)(target_x + 4), (float)(ground_y - 54), 24.0f, 4.0f, BlockMaterial.WOOD, 20.0f);
+		self.spawn_block((float)(target_x + 6), (float)(ground_y - 50), 4.0f, 18.0f, ICE, 15.0f);
+		self.spawn_block((float)(target_x + 22), (float)(ground_y - 50), 4.0f, 18.0f, ICE, 15.0f);
+		self.spawn_block((float)(target_x + 4), (float)(ground_y - 54), 24.0f, 4.0f, WOOD, 20.0f);
 
 		// King Pig + Guards
 		self.spawn_pig((float)(target_x + 14), (float)(ground_y - 40), 5.5f, 30.0f);
@@ -363,8 +373,8 @@ fn void AvianAssaultModel.prepare_next_bird(&self) {
 	BirdType type = self.birds_queue[idx];
 
 	float rad = 3.5f;
-	if (type == BirdType.BOMB) rad = 4.5f;
-	if (type == BirdType.CHUCK) rad = 3.2f;
+	if (type == BOMB) rad = 4.5f;
+	if (type == CHUCK) rad = 3.2f;
 
 	self.bird = (ActiveBird){
 		.x = self.sling_x,
@@ -381,24 +391,24 @@ fn void AvianAssaultModel.prepare_next_bird(&self) {
 }
 
 fn void AvianAssaultModel.launch_bird(&self, float vx, float vy) {
-	if (self.state != GameState.AIMING) return;
+	if (self.state != AIMING) return;
 	self.bird.vx = vx;
 	self.bird.vy = vy;
 	self.bird.launched = true;
-	self.state = GameState.FLYING;
+	self.state = FLYING;
 	self.birds_left--;
 }
 
 fn void AvianAssaultModel.activate_ability(&self) {
-	if (self.state != GameState.FLYING || !self.bird.alive || self.bird.used_ability) return;
+	if (self.state != FLYING || !self.bird.alive || self.bird.used_ability) return;
 	self.bird.used_ability = true;
 
-	if (self.bird.type == BirdType.CHUCK) {
+	if (self.bird.type == CHUCK) {
 		// Speed turbo boost!
 		self.bird.vx *= 2.4f;
 		self.bird.vy *= 0.6f;
 		self.spawn_explosion(self.bird.x, self.bird.y, 16, xray::color_rgb(255, 255, 100), xray::color_rgb(255, 180, 40));
-	} else if (self.bird.type == BirdType.BOMB) {
+	} else if (self.bird.type == BOMB) {
 		// Instant explosion!
 		self.trigger_bomb_explosion(self.bird.x, self.bird.y);
 		self.bird.alive = false;
@@ -447,7 +457,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 	float gravity = 0.32f;
 
 	// 1. Update Bird
-	if (self.state == GameState.FLYING && self.bird.alive) {
+	if (self.state == FLYING && self.bird.alive) {
 		self.bird.flight_ticks++;
 		self.bird.vy += gravity;
 		self.bird.x += self.bird.vx;
@@ -462,7 +472,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 			self.bird.y = (float)ground_y - self.bird.radius;
 			self.bird.vy = -self.bird.vy * 0.4f;
 			self.bird.vx *= 0.75f;
-			if (self.bird.type == BirdType.BOMB && !self.bird.used_ability) {
+			if (self.bird.type == BOMB && !self.bird.used_ability) {
 				self.trigger_bomb_explosion(self.bird.x, self.bird.y);
 				self.bird.alive = false;
 			}
@@ -483,12 +493,12 @@ fn void AvianAssaultModel.update_physics(&self) {
 				self.bird.vx *= 0.5f;
 				self.bird.vy *= 0.5f;
 
-				if (b.mat == BlockMaterial.TNT) {
+				if (b.mat == TNT) {
 					self.trigger_bomb_explosion(b.x + b.w / 2.0f, b.y + b.h / 2.0f);
 					b.alive = false;
 				}
 
-				if (self.bird.type == BirdType.BOMB) {
+				if (self.bird.type == BOMB) {
 					self.trigger_bomb_explosion(self.bird.x, self.bird.y);
 					self.bird.alive = false;
 					break;
@@ -517,7 +527,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 		// Bird stopped or out of bounds
 		if (self.bird.x > (float)((sz)self.vbuf.width + 10) || self.bird.x < -20.0f ||
 			(math::abs(self.bird.vx) < 0.15f && math::abs(self.bird.vy) < 0.2f && self.bird.y >= (float)(ground_y - 6))) {
-			self.state = GameState.SETTLING;
+			self.state = SETTLING;
 			self.settle_timer = 40;
 		}
 	}
@@ -530,7 +540,7 @@ fn void AvianAssaultModel.update_physics(&self) {
 		if (b.hp <= 0.0f) {
 			b.alive = false;
 			self.score += 50;
-			xray::Color col = (b.mat == BlockMaterial.ICE) ? xray::color_rgb(180, 230, 255) : (b.mat == BlockMaterial.STONE ? xray::color_rgb(170, 170, 170) : xray::color_rgb(190, 120, 60));
+			xray::Color col = (b.mat == ICE) ? xray::color_rgb(180, 230, 255) : (b.mat == STONE ? xray::color_rgb(170, 170, 170) : xray::color_rgb(190, 120, 60));
 			self.spawn_explosion(b.x + b.w / 2.0f, b.y + b.h / 2.0f, 12, col, xray::color_rgb(255, 255, 255));
 			continue;
 		}
@@ -627,21 +637,21 @@ fn void AvianAssaultModel.update_physics(&self) {
 	}
 
 	// 4. State Transitions (Settling -> Next bird or Won/Lost)
-	if (self.state == GameState.SETTLING) {
+	if (self.state == SETTLING) {
 		self.settle_timer--;
 		if (self.settle_timer <= 0) {
 			if (alive_pigs == 0) {
-				self.state = GameState.LEVEL_WON;
+				self.state = LEVEL_WON;
 				if (self.score > self.high_score) self.high_score = self.score;
 			} else if (self.birds_left <= 0) {
-				self.state = GameState.LEVEL_LOST;
+				self.state = LEVEL_LOST;
 			} else {
 				self.prepare_next_bird();
-				self.state = GameState.AIMING;
+				self.state = AIMING;
 			}
 		}
-	} else if (alive_pigs == 0 && (self.state == GameState.FLYING || self.state == GameState.AIMING)) {
-		self.state = GameState.LEVEL_WON;
+	} else if (alive_pigs == 0 && (self.state == FLYING || self.state == AIMING)) {
+		self.state = LEVEL_WON;
 		if (self.score > self.high_score) self.high_score = self.score;
 	}
 }
@@ -652,7 +662,7 @@ fn milktea::Cmd AvianAssaultModel.init(AvianAssaultModel* self) @dynamic {
 	ulong seed = (ulong)milktea::wall_time_ms();
 	srand((uint)seed);
 
-	self.state = GameState.INTRO;
+	self.state = INTRO;
 	self.current_level = 0;
 	self.menu_selected = 0;
 	self.score = 0;
@@ -662,8 +672,34 @@ fn milktea::Cmd AvianAssaultModel.init(AvianAssaultModel* self) @dynamic {
 	return milktea::tick(FRAME_MS);
 }
 
+fn milktea::Cmd AvianAssaultModel.activate(&self, MenuAction action) {
+	self.is_dragging = false;
+	switch (action) {
+		case OPEN_MENU: self.state = MENU;
+		case PLAY: self.load_level(self.current_level);
+		case SELECT_LEVEL: self.current_level = (self.current_level + 1) % MAX_LEVELS;
+		case HELP: self.state = HELP;
+		case EXIT: return milktea::quit();
+		case NEXT_LEVEL: self.load_level((self.current_level + 1) % MAX_LEVELS);
+		case RETRY: self.load_level(self.current_level);
+		default:
+	}
+	return null;
+}
+
 fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	// Dialogs are painted into our canvas; retain their solved hit regions.
+	if (msg.kind == MOUSE &&
+		msg.mouse.action == MOUSE_PRESS &&
+		msg.mouse.button == MOUSE_LEFT) {
+		xray::dispatch_click(self.menu_targets.data[:self.menu_targets.count], msg.mouse.col, msg.mouse.row);
+	}
+	if (self.pending_action != NONE) {
+		MenuAction action = self.pending_action;
+		self.pending_action = NONE;
+		return self.activate(action);
+	}
+	if (msg.kind == WINDOW_SIZE) {
 		self.term_w = msg.window_size.width;
 		self.term_h = msg.window_size.height;
 		if (self.vbuf != null) { self.vbuf.destroy(); mem::free(self.vbuf); }
@@ -678,16 +714,16 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.ticks++;
 		if (self.flash_timer > 0) self.flash_timer--;
 		self.update_particles();
 
-		if (self.state == GameState.INTRO && self.ticks > 80) {
-			self.state = GameState.MENU;
+		if (self.state == INTRO && self.ticks > 80) {
+			self.state = MENU;
 		}
 
-		if (self.state == GameState.AIMING || self.state == GameState.FLYING || self.state == GameState.SETTLING) {
+		if (self.state == AIMING || self.state == FLYING || self.state == SETTLING) {
 			self.update_physics();
 		}
 
@@ -695,13 +731,13 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 	}
 
 	// ── Mouse Drag & Slingshot Interaction ────────────────────────────────────
-	if (msg.kind == milktea::MsgKind.MOUSE) {
+	if (msg.kind == MOUSE) {
 		milktea::MouseMsg m = msg.mouse;
 		float mx = (float)m.col;
 		float my = (float)(m.row * 2); // terminal cell row -> pixel row
 
-		if (self.state == GameState.AIMING) {
-			if (m.action == milktea::MouseAction.MOUSE_PRESS) {
+		if (self.state == AIMING) {
+			if (m.action == MOUSE_PRESS) {
 				float dx = mx - self.sling_x;
 				float dy = my - self.sling_y;
 				if (math::sqrt(dx * dx + dy * dy) < 22.0f) {
@@ -709,7 +745,7 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 					self.drag_x = mx;
 					self.drag_y = my;
 				}
-			} else if (m.action == milktea::MouseAction.MOUSE_MOTION && self.is_dragging) {
+			} else if (m.action == MOUSE_MOTION && self.is_dragging) {
 				float dx = mx - self.sling_x;
 				float dy = my - self.sling_y;
 				float dist = math::sqrt(dx * dx + dy * dy);
@@ -721,7 +757,7 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 					self.drag_x = mx;
 					self.drag_y = my;
 				}
-			} else if (m.action == milktea::MouseAction.MOUSE_RELEASE && self.is_dragging) {
+			} else if (m.action == MOUSE_RELEASE && self.is_dragging) {
 				self.is_dragging = false;
 				float pull_x = self.sling_x - self.drag_x;
 				float pull_y = self.sling_y - self.drag_y;
@@ -731,67 +767,67 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 					self.launch_bird(pull_x * launch_spd, pull_y * launch_spd);
 				}
 			}
-		} else if (self.state == GameState.FLYING && m.action == milktea::MouseAction.MOUSE_PRESS) {
+		} else if (self.state == FLYING && m.action == MOUSE_PRESS) {
 			self.activate_ability();
 		}
 		return null;
 	}
 
 	// ── Keyboard Controls ─────────────────────────────────────────────────────
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
-		if (k.code == milktea::KeyCode.CTRL_C) return milktea::quit();
+		if (k.code == CTRL_C) return milktea::quit();
 
 		switch (self.state) {
 			case INTRO:
-				self.state = GameState.MENU;
+				self.state = MENU;
 
 			case MENU:
 				switch (k.code) {
-					case milktea::KeyCode.UP:
+					case UP:
 						self.menu_selected = (self.menu_selected + 3) % 4;
-					case milktea::KeyCode.DOWN:
+					case DOWN:
 						self.menu_selected = (self.menu_selected + 1) % 4;
-					case milktea::KeyCode.ENTER:
+					case ENTER:
 						switch (self.menu_selected) {
-							case 0: self.load_level(0);
-							case 1: self.current_level = (self.current_level + 1) % MAX_LEVELS;
-							case 2: self.state = GameState.HELP;
-							case 3: return milktea::quit();
+							case 0: return self.activate(PLAY);
+							case 1: return self.activate(SELECT_LEVEL);
+							case 2: return self.activate(HELP);
+							case 3: return self.activate(EXIT);
 						}
-					case milktea::KeyCode.RUNE:
+					case RUNE:
 						if (k.rune == 'q' || k.rune == 'Q') return milktea::quit();
 						if (k.rune == ' ') self.load_level(self.current_level);
 						if (k.rune == 'l' || k.rune == 'L') {
 							self.current_level = (self.current_level + 1) % MAX_LEVELS;
 						}
 						if (k.rune == 'h' || k.rune == 'H' || k.rune == '?') {
-							self.state = GameState.HELP;
+							self.state = HELP;
 						}
 					default:
 				}
 
 			case AIMING:
 				switch (k.code) {
-					case milktea::KeyCode.LEFT:
+					case LEFT:
 						self.key_angle += 2.5f;
 						if (self.key_angle > 85.0f) self.key_angle = 85.0f;
-					case milktea::KeyCode.RIGHT:
+					case RIGHT:
 						self.key_angle -= 2.5f;
 						if (self.key_angle < 5.0f) self.key_angle = 5.0f;
-					case milktea::KeyCode.UP:
+					case UP:
 						self.key_power += 0.05f;
 						if (self.key_power > 1.0f) self.key_power = 1.0f;
-					case milktea::KeyCode.DOWN:
+					case DOWN:
 						self.key_power -= 0.05f;
 						if (self.key_power < 0.2f) self.key_power = 0.2f;
-					case milktea::KeyCode.ENTER:
+					case ENTER:
 						float rad = self.key_angle * (3.14159265f / 180.0f);
 						float spd = self.key_power * 6.5f;
 						self.launch_bird(math::cos(rad) * spd, -math::sin(rad) * spd);
-					case milktea::KeyCode.ESC:
-						self.state = GameState.MENU;
-					case milktea::KeyCode.RUNE:
+					case ESC:
+						self.state = MENU;
+					case RUNE:
 						if (k.rune == ' ') {
 							float rad2 = self.key_angle * (3.14159265f / 180.0f);
 							float spd2 = self.key_power * 6.5f;
@@ -799,41 +835,41 @@ fn milktea::Cmd AvianAssaultModel.update(AvianAssaultModel* self, milktea::Msg m
 						} else if (k.rune == 'r' || k.rune == 'R') {
 							self.load_level(self.current_level);
 						} else if (k.rune == 'q' || k.rune == 'Q') {
-							self.state = GameState.MENU;
+							self.state = MENU;
 						}
 					default:
 				}
 
 			case FLYING:
-				if (k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && k.rune == ' ')) {
+				if (k.code == ENTER || (k.code == RUNE && k.rune == ' ')) {
 					self.activate_ability();
-				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'q' || k.rune == 'Q'))) {
-					self.state = GameState.MENU;
+				} else if (k.code == ESC || (k.code == RUNE && (k.rune == 'q' || k.rune == 'Q'))) {
+					self.state = MENU;
 				}
 
 			case SETTLING:
-				if (k.code == milktea::KeyCode.ESC) self.state = GameState.MENU;
+				if (k.code == ESC) self.state = MENU;
 
 			case LEVEL_WON:
-				if (k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'n' || k.rune == 'N'))) {
+				if (k.code == ENTER || (k.code == RUNE && (k.rune == ' ' || k.rune == 'n' || k.rune == 'N'))) {
 					sz next_lvl = (self.current_level + 1) % MAX_LEVELS;
 					self.load_level(next_lvl);
-				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'm' || k.rune == 'q'))) {
-					self.state = GameState.MENU;
+				} else if (k.code == ESC || (k.code == RUNE && (k.rune == 'm' || k.rune == 'q'))) {
+					self.state = MENU;
 				}
 				break;
 
 			case LEVEL_LOST:
-				if (k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'r' || k.rune == 'R'))) {
+				if (k.code == ENTER || (k.code == RUNE && (k.rune == ' ' || k.rune == 'r' || k.rune == 'R'))) {
 					self.load_level(self.current_level);
-				} else if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && (k.rune == 'm' || k.rune == 'q'))) {
-					self.state = GameState.MENU;
+				} else if (k.code == ESC || (k.code == RUNE && (k.rune == 'm' || k.rune == 'q'))) {
+					self.state = MENU;
 				}
 				break;
 
 			case HELP:
-				if (k.code == milktea::KeyCode.ESC || k.code == milktea::KeyCode.ENTER || (k.code == milktea::KeyCode.RUNE && (k.rune == ' ' || k.rune == 'q' || k.rune == 'h'))) {
-					self.state = GameState.MENU;
+				if (k.code == ESC || k.code == ENTER || (k.code == RUNE && (k.rune == ' ' || k.rune == 'q' || k.rune == 'h'))) {
+					self.state = MENU;
 				}
 				break;
 		}
@@ -910,10 +946,10 @@ fn void AvianAssaultModel.draw_slingshot(&self) {
 	self.vbuf.fill_rect(xray::new_rect(sx + 4, sy - 8, 3, 9), wood_c);
 
 	// Rubber bands
-	float bird_x = self.is_dragging ? self.drag_x : (self.state == GameState.AIMING ? self.sling_x : self.sling_x);
-	float bird_y = self.is_dragging ? self.drag_y : (self.state == GameState.AIMING ? self.sling_y : self.sling_y);
+	float bird_x = self.is_dragging ? self.drag_x : (self.state == AIMING ? self.sling_x : self.sling_x);
+	float bird_y = self.is_dragging ? self.drag_y : (self.state == AIMING ? self.sling_y : self.sling_y);
 
-	if (self.state == GameState.AIMING) {
+	if (self.state == AIMING) {
 		self.vbuf.draw_line(sx - 6, sy - 7, (sz)bird_x, (sz)bird_y, rubber_c);
 		self.vbuf.draw_line(sx + 5, sy - 7, (sz)bird_x, (sz)bird_y, rubber_c);
 
@@ -947,15 +983,15 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 	sz cy = (sz)by;
 
 	xray::Color body_c = xray::color_rgb(230, 40, 30);
-	if (type == BirdType.CHUCK) body_c = xray::color_rgb(255, 215, 0);
-	if (type == BirdType.BOMB) body_c = xray::color_rgb(35, 35, 40);
+	if (type == CHUCK) body_c = xray::color_rgb(255, 215, 0);
+	if (type == BOMB) body_c = xray::color_rgb(35, 35, 40);
 
 	xray::Color beak_c = xray::color_rgb(255, 140, 0);
 	xray::Color eye_c = xray::color_rgb(255, 255, 255);
 	xray::Color pupil_c = xray::color_rgb(0, 0, 0);
 	xray::Color brow_c = xray::color_rgb(20, 20, 20);
 
-	if (type == BirdType.RED) {
+	if (type == RED) {
 		// 7x7 round body
 		for (sz dy = -3; dy <= 3; dy++) {
 			for (sz dx = -3; dx <= 3; dx++) {
@@ -973,7 +1009,7 @@ fn void AvianAssaultModel.draw_bird_sprite(&self, float bx, float by, BirdType t
 		// Beak
 		self.vbuf.set_pixel(cx + 3, cy + 1, beak_c);
 		self.vbuf.set_pixel(cx + 4, cy + 1, beak_c);
-	} else if (type == BirdType.CHUCK) {
+	} else if (type == CHUCK) {
 		// Triangle body pointing right
 		for (sz dx = -3; dx <= 4; dx++) {
 			sz h = (4 - dx) / 2 + 1;
@@ -1052,13 +1088,13 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 		xray::Color col = xray::color_rgb(180, 110, 50);
 		xray::Color border_c = xray::color_rgb(120, 70, 30);
 
-		if (b.mat == BlockMaterial.ICE) {
+		if (b.mat == ICE) {
 			col = xray::color_rgb(160, 225, 255);
 			border_c = xray::color_rgb(100, 180, 230);
-		} else if (b.mat == BlockMaterial.STONE) {
+		} else if (b.mat == STONE) {
 			col = xray::color_rgb(150, 150, 155);
 			border_c = xray::color_rgb(90, 90, 95);
-		} else if (b.mat == BlockMaterial.TNT) {
+		} else if (b.mat == TNT) {
 			col = xray::color_rgb(220, 45, 35);
 			border_c = xray::color_rgb(130, 20, 15);
 		}
@@ -1076,7 +1112,7 @@ fn void AvianAssaultModel.draw_blocks(&self) {
 		}
 
 		// TNT label
-		if (b.mat == BlockMaterial.TNT && bw >= 8 && bh >= 8) {
+		if (b.mat == TNT && bw >= 8 && bh >= 8) {
 			self.vbuf.fill_rect(xray::new_rect(bx + 1, by + bh / 2 - 1, bw - 2, 3), xray::color_rgb(255, 255, 255));
 			self.vbuf.set_pixel(bx + bw / 2 - 2, by + bh / 2, xray::color_rgb(0, 0, 0));
 			self.vbuf.set_pixel(bx + bw / 2, by + bh / 2, xray::color_rgb(0, 0, 0));
@@ -1093,7 +1129,7 @@ fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 	// 1. Draw procedural world into pixel buffer
 	self.draw_background();
 
-	if (self.state != GameState.INTRO) {
+	if (self.state != INTRO) {
 		// Draw Trail
 		xray::Color trail_c = xray::color_rgba(255, 255, 255, 140);
 		for (sz i = 0; i < MAX_TRAIL; i++) {
@@ -1113,8 +1149,8 @@ fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 
 		// Draw active bird
 		if (self.bird.alive) {
-			float bx = self.is_dragging ? self.drag_x : (self.state == GameState.AIMING ? self.sling_x : self.bird.x);
-			float by = self.is_dragging ? self.drag_y : (self.state == GameState.AIMING ? self.sling_y : self.bird.y);
+			float bx = self.is_dragging ? self.drag_x : (self.state == AIMING ? self.sling_x : self.bird.x);
+			float by = self.is_dragging ? self.drag_y : (self.state == AIMING ? self.sling_y : self.bird.y);
 			self.draw_bird_sprite(bx, by, self.bird.type);
 		}
 
@@ -1163,6 +1199,8 @@ fn milktea::Node* AvianAssaultModel.view(AvianAssaultModel* self) @dynamic {
 	}
 	ui.solve(xray::new_rect(0, 0, self.screen.width, self.screen.height));
 	self.screen.paint(ui);
+	self.menu_targets.clear();
+	xray::collect_click_targets(ui, &self.menu_targets);
 
 	return milktea::canvas(self.screen);
 }
@@ -1246,14 +1284,25 @@ const String[6] ASSAULT = {
 	"╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   ",
 };
 
+fn void menu_clicked(void* ctx, String id, sz col, sz row) {
+	MenuButton* button = (MenuButton*)ctx;
+	button.model.pending_action = button.action;
+}
+
+fn milktea::Node* AvianAssaultModel.menu_button(&self, String label, MenuAction action, bool selected = false) {
+	MenuButton* button = &self.menu_buttons[(sz)action];
+	*button = { .model = self, .action = action };
+	glaze::Style style = glaze::style()
+		.foreground(selected ? xray::color_rgb(255, 245, 120) : xray::color_rgb(240, 235, 220))
+		.background(selected ? xray::color_rgb(110, 30, 25) : xray::color_rgb(45, 58, 68))
+		.with_bold(true).padding(0, 2, 0, 2);
+	return milktea::text(label, style).ref(button).on_click(&menu_clicked);
+}
+
 fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 	float pulse = (math::sin((float)self.ticks * 0.15f) + 1.0f) * 0.5f;
 	xray::Color c1 = xray::color_rgb(255, (char)(60 + pulse * 60), 30);
 	xray::Color c2 = xray::color_rgb(255, 220, 50);
-
-	// The prompt blinks without moving what is below it: at alpha 0 it keeps
-	// its place in the layout and paints nothing.
-	bool blink_on = (self.ticks / 10) % 2 == 0;
 
 	return backdrop(xray::color_rgba(28, 14, 16, 215))
 		.center()
@@ -1262,9 +1311,9 @@ fn milktea::Node* AvianAssaultModel.intro_dialog(&self) {
 			.with_align(milktea::ALIGN_CENTER)
 			.add(logo(AVIAN[..], c1, c2))
 			.add(logo(ASSAULT[..], c2, c1)))
-		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true))
-		.add(line("Press any key to enter...", xray::color_rgb(255, 230, 100))
-			.alpha(blink_on ? 255 : 0));
+		.add(line("░▒▓ RETRO PHYSICS ARCADE ▓▒░", xray::color_rgb(255, 240, 200), bold: true)
+			.alpha((self.ticks / 10) % 2 == 0 ? 255 : 0))
+		.add(self.menu_button("Enter", OPEN_MENU));
 }
 
 fn milktea::Node* AvianAssaultModel.menu_dialog(&self) {
@@ -1276,13 +1325,9 @@ fn milktea::Node* AvianAssaultModel.menu_dialog(&self) {
 	};
 
 	milktea::Node* items = milktea::vstack().with_gap(1).with_align(milktea::ALIGN_CENTER);
+	MenuAction[4] actions = { PLAY, SELECT_LEVEL, HELP, EXIT };
 	foreach (i, opt : options) {
-		bool sel = i == self.menu_selected;
-		glaze::Style s = sel
-			? glaze::style().foreground(xray::color_rgb(255, 245, 120)).with_bold(true)
-				.background(xray::color_rgba(110, 30, 25, 210))
-			: glaze::style().foreground(xray::color_rgb(240, 210, 205));
-		items.add(milktea::text(string::tformat(sel ? "▶ %s ◀" : "  %s  ", opt), s));
+		items.add(self.menu_button(opt, actions[i], i == self.menu_selected));
 	}
 
 	// A fiery red-to-orange border over a dark crimson backdrop.
@@ -1311,7 +1356,9 @@ fn milktea::Node* AvianAssaultModel.won_dialog(&self) {
 			xray::color_rgb(120, 255, 120), xray::color_rgb(255, 230, 80), true)))
 		.add(milktea::text(stars))
 		.add(stats)
-		.add(line("[SPACE] Next Level  |  [M] Menu", xray::color_rgb(220, 240, 255)));
+		.add(milktea::hstack().with_gap(2)
+			.add(self.menu_button("Next Level", NEXT_LEVEL))
+			.add(self.menu_button("Menu", OPEN_MENU)));
 }
 
 fn milktea::Node* AvianAssaultModel.lost_dialog(&self) {
@@ -1319,7 +1366,9 @@ fn milktea::Node* AvianAssaultModel.lost_dialog(&self) {
 			xray::color_rgb(255, 60, 60), xray::color_rgb(255, 140, 40))
 		.add(line(" 💀 LEVEL FAILED 💀 ", xray::color_rgb(255, 70, 70), bold: true))
 		.add(line("You ran out of birds!", xray::color_rgb(240, 200, 200)))
-		.add(line("[SPACE] Retry  |  [M] Menu", xray::color_rgb(220, 240, 255)));
+		.add(milktea::hstack().with_gap(2)
+			.add(self.menu_button("Retry", RETRY))
+			.add(self.menu_button("Menu", OPEN_MENU)));
 }
 
 const String[5] HOW_TO_PLAY = {
@@ -1336,14 +1385,14 @@ fn milktea::Node* AvianAssaultModel.help_dialog(&self) {
 		.add(milktea::text(glaze::gradient_text(" HOW TO PLAY ",
 			xray::color_rgb(100, 220, 255), xray::color_rgb(200, 150, 255), true)))
 		.add(lines(HOW_TO_PLAY[..], xray::color_rgb(220, 230, 245)))
-		.add(line("[Press SPACE or ESC to Return]", xray::color_rgb(255, 215, 100)));
+		.add(self.menu_button("Back to Menu", OPEN_MENU));
 }
 
 // ── Main Entry Point ──────────────────────────────────────────────────────────
 
 fn int main() {
 	AvianAssaultModel* m = mem::new(AvianAssaultModel);
-	if (catch err = milktea::@run_program(m, { .alt_screen = true, .mouse_mode = milktea::MouseMode.MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
+	if (catch err = milktea::@run_program(m, { .alt_screen = true, .mouse_mode = MOUSE_MODE_CELL_MOTION, .mouse_cursor = "crosshair" })) {
 		io::printfn("Error: %s", err);
 		return 1;
 	}

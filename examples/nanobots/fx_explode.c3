@@ -23,7 +23,7 @@ fn void explode_setup(void* raw) {
 		p.vx = math::cos(angle) * speed;
 		p.vy = math::sin(angle) * speed * 0.55f;
 	}
-	self.phase = Phase.BLOW;
+	self.phase = BLOW;
 	self.phase_frame = self.frame;
 	self.fx_state = null;
 }

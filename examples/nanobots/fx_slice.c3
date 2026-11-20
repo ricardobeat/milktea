@@ -37,7 +37,7 @@ fn void slice_setup(void* raw) {
 		p.spawn_tick = self.frame + SLICE_STAGGER * band;
 	}
 	self.fx_state = s;
-	self.phase = Phase.SLICE;
+	self.phase = SLICE;
 	self.phase_frame = self.frame;
 }
 

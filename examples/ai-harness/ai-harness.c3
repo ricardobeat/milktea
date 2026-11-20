@@ -24,7 +24,7 @@ fn milktea::Cmd Model.init(&self) @dynamic {
 	self.log.text.tinit();
 	self.log.view = boba::new_viewport(0, 0);
 	self.log.follow = true;
-	self.request.spinner = boba::new_spinner(boba::SpinnerKind.LINE).with_color(glaze::color_hex(ACCENT));
+	self.request.spinner = boba::new_spinner(LINE).with_color(glaze::color_hex(ACCENT));
 	self.request.last_sec = -1.0;
 
 	if (!self.session.read_api_key()) {
@@ -93,10 +93,10 @@ fn milktea::Cmd Model.handle_worker_msg(&self, milktea::Msg msg) {
 // handle_bash_key resolves a pending approval. Only y/Enter and n/ESC count;
 // every other key is swallowed so the prompt cannot be walked past.
 fn milktea::Cmd Model.handle_bash_key(&self, milktea::KeyMsg k) {
-	bool yes = k.code == milktea::KeyCode.ENTER
-		|| (k.code == milktea::KeyCode.RUNE && (k.rune == 'y' || k.rune == 'Y'));
-	bool no = k.code == milktea::KeyCode.ESC
-		|| (k.code == milktea::KeyCode.RUNE && (k.rune == 'n' || k.rune == 'N'));
+	bool yes = k.code == ENTER
+		|| (k.code == RUNE && (k.rune == 'y' || k.rune == 'Y'));
+	bool no = k.code == ESC
+		|| (k.code == RUNE && (k.rune == 'n' || k.rune == 'N'));
 	if (!yes && !no) return null;
 
 	String cmd = self.bash.command();
@@ -113,21 +113,21 @@ fn milktea::Cmd Model.handle_bash_key(&self, milktea::KeyMsg k) {
 }
 
 fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER) {
+	if (msg.kind == USER) {
 		return self.handle_worker_msg(msg);
 	}
 
 	// A bash tool is awaiting approval. This is checked before the quit keys
 	// so ESC denies the command rather than quitting the program.
 	if (self.bash.pending()) {
-		if (msg.kind == milktea::MsgKind.KEY) return self.handle_bash_key(msg.key);
+		if (msg.kind == KEY) return self.handle_bash_key(msg.key);
 		return null;
 	}
 
 	// Quit keys: ESC/Ctrl-C cancel if loading, otherwise quit.
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg qk = msg.key;
-		if (qk.code == milktea::KeyCode.ESC || qk.code == milktea::KeyCode.CTRL_C) {
+		if (qk.code == ESC || qk.code == CTRL_C) {
 			if (self.request.loading) {
 				self.request.cancel.store(1);
 				self.request.finish();
@@ -136,7 +136,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			}
 			return milktea::quit();
 		}
-		if (qk.code == milktea::KeyCode.RUNE && qk.rune == 'q' && self.input.len == 0) {
+		if (qk.code == RUNE && qk.rune == 'q' && self.input.len == 0) {
 			if (self.confirm_quit) return milktea::quit();
 			self.confirm_quit = true;
 			return null;
@@ -146,12 +146,12 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 
 	// A modal is showing: any key dismisses it.
 	if (self.dialog.showing) {
-		if (msg.kind == milktea::MsgKind.KEY) self.dialog.showing = false;
+		if (msg.kind == KEY) self.dialog.showing = false;
 		return null;
 	}
 
 	// TICK drives the spinner while loading, otherwise the caret blink.
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		if (self.request.loading) {
 			self.request.spinner.advance();
 			return milktea::tick(80);
@@ -160,16 +160,16 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 		return milktea::tick(500);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.UP:
-		case milktea::KeyCode.DOWN:
-		case milktea::KeyCode.PAGE_UP:
-		case milktea::KeyCode.PAGE_DOWN:
-		case milktea::KeyCode.HOME:
-		case milktea::KeyCode.END:
+		case UP:
+		case DOWN:
+		case PAGE_UP:
+		case PAGE_DOWN:
+		case HOME:
+		case END:
 			self.log.view.handle_key(k);
 			// Scrolling back turns off follow; scrolling to the end turns it
 			// on again, so new output resumes tracking without a keybind.
@@ -178,7 +178,7 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 			self.log.follow = self.log.view.offset >= maxo;
 			return null;
 
-		case milktea::KeyCode.ENTER:
+		case ENTER:
 			if (self.input.len > 0 && self.session.has_key() && !self.request.loading) {
 				String user_input = self.input.text();
 				self.log.text.append_string("\n> ");
@@ -189,11 +189,11 @@ fn milktea::Cmd Model.update(&self, milktea::Msg msg) @dynamic {
 				return self.kickoff();
 			}
 
-		case milktea::KeyCode.BACKSPACE: self.input.backspace();
-		case milktea::KeyCode.LEFT:      self.input.left();
-		case milktea::KeyCode.RIGHT:     self.input.right();
+		case BACKSPACE: self.input.backspace();
+		case LEFT:      self.input.left();
+		case RIGHT:     self.input.right();
 
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == '=') {
 				self.requests.open = !self.requests.open;
 				return null;

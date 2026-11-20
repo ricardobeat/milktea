@@ -16,7 +16,7 @@ fn milktea::Cmd ColorsModel.init(ColorsModel* self) @dynamic {
 }
 
 fn milktea::Cmd ColorsModel.update(ColorsModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.TICK) return milktea::quit();
+	if (msg.kind == TICK) return milktea::quit();
 	return null;
 }
 

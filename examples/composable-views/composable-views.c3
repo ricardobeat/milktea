@@ -23,31 +23,31 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Msg on_tick() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_TICK };
+	return { .kind = USER, .tag = MSG_TICK };
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TICK) {
+	if (msg.kind == USER && msg.tag == MSG_TICK) {
 		self.spin_frame++;
 		self.seconds++;
 		return milktea::tick(100, &on_tick);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.TAB:
+		case TAB:
 			self.focus = 1 - self.focus;
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'n') {
 				self.seconds = 0;
 				self.spin_frame = 0;
 			}
-		case milktea::KeyCode.ESC:
+		case ESC:
 			return milktea::quit();
 		default:
 	}
@@ -88,9 +88,9 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	String timer_raw = timer_style.render(string::tformat("Timer\n%02d:%02d", mins, secs));
 	String spin_raw  = spin_style.render(string::tformat("Spinner\n%s Loading...", spin));
 
-	String timer_view = glaze::place_pos(15, 5, glaze::Position.CENTER, glaze::Position.CENTER, timer_raw);
-	String spin_view  = glaze::place_pos(15, 5, glaze::Position.CENTER, glaze::Position.CENTER, spin_raw);
-	String joined     = glaze::join_horizontal_pos(glaze::Position.TOP, timer_view, spin_view, 2);
+	String timer_view = glaze::place_pos(15, 5, CENTER, CENTER, timer_raw);
+	String spin_view  = glaze::place_pos(15, 5, CENTER, CENTER, spin_raw);
+	String joined     = glaze::join_horizontal_pos(TOP, timer_view, spin_view, 2);
 
 	DString out = dstring::temp();
 	out.append_string(joined);

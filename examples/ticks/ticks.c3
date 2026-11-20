@@ -17,15 +17,15 @@ struct Model {
 }
 
 fn milktea::Msg on_spin() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_SPIN };
+	return { .kind = USER, .tag = MSG_SPIN };
 }
 
 fn milktea::Msg on_timer() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_TIMER };
+	return { .kind = USER, .tag = MSG_TIMER };
 }
 
 fn milktea::Msg on_step() {
-	return { .kind = milktea::MsgKind.USER, .tag = MSG_STEP };
+	return { .kind = USER, .tag = MSG_STEP };
 }
 
 fn milktea::Cmd Model.init(Model* self) @dynamic {
@@ -39,28 +39,28 @@ fn milktea::Cmd Model.init(Model* self) @dynamic {
 }
 
 fn milktea::Cmd Model.update(Model* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_SPIN) {
+	if (msg.kind == USER && msg.tag == MSG_SPIN) {
 		self.spin_frame++;
 		return milktea::tick(80, &on_spin);
 	}
 
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_TIMER) {
+	if (msg.kind == USER && msg.tag == MSG_TIMER) {
 		self.seconds++;
 		return milktea::every(1000, &on_timer);
 	}
 
-	if (msg.kind == milktea::MsgKind.USER && msg.tag == MSG_STEP) {
+	if (msg.kind == USER && msg.tag == MSG_STEP) {
 		self.step++;
 		return milktea::every(500, &on_step);
 	}
 
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 		default:
 	}
@@ -90,7 +90,7 @@ fn milktea::Node* Model.view(Model* self) @dynamic {
 	String step_view  = step_style.render(string::tformat("Steps (every 500ms)\n%d half-seconds", self.step));
 
 	String top_row   = glaze::join_horizontal(spin_view, timer_view, 2);
-	String main_view = glaze::join_vertical(glaze::Position.LEFT, top_row, step_view);
+	String main_view = glaze::join_vertical(LEFT, top_row, step_view);
 	DString out      = dstring::temp();
 	out.append_string(main_view);
 	out.append_char('\n');

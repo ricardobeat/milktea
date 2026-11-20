@@ -47,3 +47,19 @@ latency-real target="dos-app-gui" seconds="6" hz="120":
     MILKTEA_DEBUG_LATENCY=1 ./out/examples/{{target}} & app=$!; \
         build/latency-mover $app {{seconds}} {{hz}}; \
         kill $app; wait $app 2>/dev/null || true
+
+# Compile portable examples to standalone WASM (or specify example names).
+web-build *examples:
+    python3 scripts/build_web.py {{examples}}
+
+# Serve the canvas example gallery at http://localhost:8000.
+web-serve port="8000":
+    python3 -m http.server {{port}} --bind 127.0.0.1 --directory web
+
+# Exercise WASM examples and the browser runtime ABI.
+web-test:
+    node --test web/test/*.test.mjs
+
+# Compile only the reusable engine for JavaScript programs.
+web-engine:
+    python3 scripts/build_web.py --engine

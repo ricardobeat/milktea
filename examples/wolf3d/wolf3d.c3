@@ -77,7 +77,7 @@ fn void Wolf3D.allocate_buffers(Wolf3D* self) {
 }
 
 fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
-	if (msg.kind == milktea::MsgKind.WINDOW_SIZE) {
+	if (msg.kind == WINDOW_SIZE) {
 		if (self.width == msg.window_size.width && self.height == msg.window_size.height) return null;
 		self.width = msg.window_size.width;
 		self.height = msg.window_size.height;
@@ -88,11 +88,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 		return null;
 	}
 
-	if (msg.kind == milktea::MsgKind.KEY) {
+	if (msg.kind == KEY) {
 		milktea::KeyMsg k = msg.key;
-		if (k.code == milktea::KeyCode.ESC || (k.code == milktea::KeyCode.RUNE && k.rune == 'q')) return milktea::quit();
+		if (k.code == ESC || (k.code == RUNE && k.rune == 'q')) return milktea::quit();
 
-		if (k.code == milktea::KeyCode.RUNE) {
+		if (k.code == RUNE) {
 			switch (k.rune) {
 				case 'w': self.key_w = self.tick_count;
 				case 's': self.key_s = self.tick_count;
@@ -100,11 +100,11 @@ fn milktea::Cmd Wolf3D.update(Wolf3D* self, milktea::Msg msg) @dynamic {
 				case 'd': self.key_right = self.tick_count;
 			}
 		}
-		if (k.code == milktea::KeyCode.LEFT) self.key_left = self.tick_count;
-		if (k.code == milktea::KeyCode.RIGHT) self.key_right = self.tick_count;
+		if (k.code == LEFT) self.key_left = self.tick_count;
+		if (k.code == RIGHT) self.key_right = self.tick_count;
 	}
 
-	if (msg.kind == milktea::MsgKind.TICK) {
+	if (msg.kind == TICK) {
 		self.tick_count++;
 
 		float move_speed = 0.25f;

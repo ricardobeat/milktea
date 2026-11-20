@@ -229,7 +229,7 @@ fn int main() {
 	Model model;
 	if (catch err = milktea::@run_program(&model, {
 		.alt_screen = true,
-		.mouse_mode = milktea::MouseMode.MOUSE_MODE_ALL_MOTION,
+		.mouse_mode = MOUSE_MODE_ALL_MOTION,
 	})) {
 		io::printfn("Error: %s", err);
 		return 1;

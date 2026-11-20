@@ -75,13 +75,13 @@ fn void parse_sample_diff(DiffModel* self) {
 }
 
 fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
-	if (msg.kind != milktea::MsgKind.KEY) return null;
+	if (msg.kind != KEY) return null;
 	milktea::KeyMsg k = msg.key;
 
 	switch (k.code) {
-		case milktea::KeyCode.CTRL_C:
+		case CTRL_C:
 			return milktea::quit();
-		case milktea::KeyCode.RUNE:
+		case RUNE:
 			if (k.rune == 'q') return milktea::quit();
 			if (k.rune == 'j') {
 				if (self.cursor < self.line_count - 1) {
@@ -95,28 +95,28 @@ fn milktea::Cmd DiffModel.update(DiffModel* self, milktea::Msg msg) @dynamic {
 					adjust_scroll(self);
 				}
 			}
-		case milktea::KeyCode.DOWN:
+		case DOWN:
 			if (self.cursor < self.line_count - 1) {
 				self.cursor++;
 				adjust_scroll(self);
 			}
-		case milktea::KeyCode.UP:
+		case UP:
 			if (self.cursor > 0) {
 				self.cursor--;
 				adjust_scroll(self);
 			}
-		case milktea::KeyCode.PAGE_DOWN:
+		case PAGE_DOWN:
 			self.cursor = self.cursor + milktea::screen_height() - 3;
 			if (self.cursor >= self.line_count) self.cursor = self.line_count - 1;
 			adjust_scroll(self);
-		case milktea::KeyCode.PAGE_UP:
+		case PAGE_UP:
 			self.cursor = self.cursor - milktea::screen_height() + 3;
 			if (self.cursor < 0) self.cursor = 0;
 			adjust_scroll(self);
-		case milktea::KeyCode.HOME:
+		case HOME:
 			self.cursor = 0;
 			self.scroll_offset = 0;
-		case milktea::KeyCode.END:
+		case END:
 			self.cursor = self.line_count - 1;
 			adjust_scroll(self);
 		default:
